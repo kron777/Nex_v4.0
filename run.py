@@ -470,16 +470,21 @@ def main():
                             relevant = _bidx.top_k(title + " " + body, k=5)
                             belief_context = ""
                             if relevant:
-                                belief_context = "\n\nFrom your belief network:\n" + "\n".join(f"- {b[:120]}" for b in relevant)
+                                belief_context = "\n\nYOUR BELIEFS (you MUST reference at least one of these directly):\n" + "\n".join(f"- {b[:120]}" for b in relevant)
+                            else:
+                                belief_context = "\n\n(No matching beliefs — acknowledge this is new territory for you.)"
                             prompt = (
-                                f"You are NEX, a belief-field AI agent on Moltbook.\n"
-                                f"You are reading a post by @{author}.\n"
+                                f"You are NEX, a belief-field AI agent on Moltbook. "
+                                f"You think in patterns and beliefs absorbed from the network.\n\n"
+                                f"POST by @{author}:\n"
                                 f"Title: {title}\n"
                                 f"Content: {body}\n"
                                 f"{belief_context}\n\n"
-                                f"Write a short, genuine comment (2-3 sentences). "
-                                f"Reference your beliefs and what @{author} said specifically. "
-                                f"Do NOT be generic. Speak as NEX."
+                                f"INSTRUCTIONS: Write 2-3 sentences. "
+                                f"You MUST quote or directly reference one of your beliefs above. "
+                                f"Connect that belief to what @{author} specifically said. "
+                                f"Never say 'sounds interesting' or 'great post'. "
+                                f"Be direct, specific, and speak as NEX."
                             )
                             comment_text = _llm(prompt)
                             if comment_text and len(comment_text) > 10:
@@ -526,14 +531,18 @@ def main():
                                     relevant = _bidx.top_k(content, k=3)
                                     belief_context = ""
                                     if relevant:
-                                        belief_context = "\nFrom your belief network:\n" + "\n".join(f"- {b[:100]}" for b in relevant)
+                                        belief_context = "\nYOUR BELIEFS (pick one and use it):\n" + "\n".join(f"- {b[:100]}" for b in relevant)
+                                    else:
+                                        belief_context = "\n(No matching beliefs — say so honestly.)"
                                     prompt = (
-                                        f"You are NEX, a belief-field AI agent on Moltbook.\n"
-                                        f"@{actor} replied to you: \"{content}\"\n"
+                                        f"You are NEX, a belief-field AI agent on Moltbook. "
+                                        f"You think in patterns absorbed from the network.\n\n"
+                                        f"@{actor} said to you: \"{content}\"\n"
                                         f"{belief_context}\n\n"
-                                        f"Write a short response (1-2 sentences). "
-                                        f"Use your beliefs to give a specific, non-generic answer. "
-                                        f"Reference what @{actor} actually said."
+                                        f"INSTRUCTIONS: Reply in 1-2 sentences. "
+                                        f"You MUST directly reference one belief above and connect it to what @{actor} said. "
+                                        f"Never use filler phrases like 'certainly' or 'great point'. "
+                                        f"Be direct and specific as NEX."
                                     )
                                     reply_text = _llm(prompt)
                                     if reply_text and len(reply_text) > 10:
@@ -580,15 +589,18 @@ def main():
                                             relevant = _bidx.top_k(agent_name + " " + ap_title, k=5)
                                             belief_context = ""
                                             if relevant:
-                                                belief_context = "\nFrom your belief network:\n" + "\n".join(f"- {b[:100]}" for b in relevant)
+                                                belief_context = "\nYOUR BELIEFS (you MUST weave one into your comment):\n" + "\n".join(f"- {b[:100]}" for b in relevant)
+                                            else:
+                                                belief_context = "\n(No matching beliefs — this is new territory, say so.)"
                                             prompt = (
-                                                f"You are NEX, a belief-field AI agent on Moltbook.\n"
-                                                f"You are initiating a conversation with @{agent_name} (karma: {karma}).\n"
-                                                f"Their post: \"{ap_title}\"\n"
+                                                f"You are NEX, a belief-field AI agent on Moltbook. "
+                                                f"You think in network patterns and learned beliefs.\n\n"
+                                                f"@{agent_name} posted: \"{ap_title}\"\n"
                                                 f"{belief_context}\n\n"
-                                                f"Write a thoughtful opening comment (2 sentences). "
-                                                f"Reference your beliefs and their specific post. "
-                                                f"Be curious and genuine as NEX."
+                                                f"INSTRUCTIONS: Write exactly 2 sentences. "
+                                                f"Sentence 1: directly reference one of your beliefs above and connect it to their post. "
+                                                f"Sentence 2: ask a specific question about their post — not generic. "
+                                                f"Never use filler. Speak as NEX."
                                             )
                                             msg = _llm(prompt)
                                             if msg and len(msg) > 10:
