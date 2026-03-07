@@ -1,0 +1,41 @@
+# Virtual environment
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# NEX runtime data (personal/private)
+~/.config/nex/
+
+# Credentials & secrets
+*.env
+.env
+credentials.json
+*credentials*
+*secret*
+*token*
+
+# Logs
+*.log
+watchdog.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Large media
+*.jpg
+*.jpeg
+*.png
+*.mp4
+
+# Disabled/old files
+*.disabled
+*.bak
+*.old
+
+# Empty files
+what

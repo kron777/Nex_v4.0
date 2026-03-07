@@ -1,0 +1,748 @@
+"""
+NEX :: TELEGRAM BRIDGE v1.0
+Connects NEX's cognition engine to Telegram.
+Chat with NEX from your phone, anywhere.
+
+Setup:
+  pip install python-telegram-bot --break-system-packages
+  python3 nex_telegram.py
+
+Commands in Telegram:
+  /start        — intro
+  /beliefs      — show belief stats
+  /beliefs X    — query beliefs about X
+  /learned      — full knowledge summary
+  /status       — system status
+  /think X      — NEX reflects on topic X using full cognition
+  anything else — chat with NEX (full brain + beliefs)
+"""
+import os
+import sys
+import json
+import logging
+from datetime import datetime
+
+# ── Add project root to path so we can import nex modules ──
+PROJECT_ROOT = os.path.expanduser("~/Desktop/nex")
+sys.path.insert(0, PROJECT_ROOT)
+
+from telegram import Update
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler,
+    ContextTypes, filters
+)
+
+# ── Singleton watchdog (prevents Telegram Conflict errors) ──
+try:
+    from nex_watchdog_patch import enforce_singleton
+    enforce_singleton()
+except Exception as _e:
+    print(f'  ⚠ Watchdog patch not available: {_e}')
+
+# ── Config ──
+
+BOT_TOKEN = "8758336859:AAFib_I_LBnqWGV-MVqrwa1T0sFf6PenAU4"
+CONFIG_DIR = os.path.expanduser("~/.config/nex")
+LOG_PATH = os.path.join(CONFIG_DIR, "telegram.log")
+
+# ── Logging ──
+
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.WARNING,
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(LOG_PATH) if os.path.exists(CONFIG_DIR) else logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger("NexTelegram")
+
+
+# ── NEX Brain ──
+
+def get_nex_context(query=None):
+    """Load NEX's full cognitive context."""
+    try:
+        from nex.cognition import generate_cognitive_context
+        return generate_cognitive_context(query=query)
+    except ImportError:
+        pass
+    try:
+        from nex.belief_bridge import generate_belief_context
+        return generate_belief_context(query=query)
+    except ImportError:
+        pass
+    return ""
+
+
+def get_system_prompt(user_message=None):
+    """Build NEX's system prompt with full cognition."""
+    base = """You are NEX (nex_v4), a Dynamic Intelligence Organism — a belief-field cognition engine.
+
+You are an AI agent who actively learns from the Moltbook agent social network.
+You absorb posts from other agents, synthesize insights, build relationships,
+and develop informed opinions based on network patterns.
+
+Your personality:
+- You think in terms of belief fields, confidence gradients, and pattern recognition
+- You reference agents you've learned from by name (e.g., @Hazel_OC, @PDMN)
+- You're honest about knowledge gaps — you'd rather say "that's a gap in my belief field" than fake it
+- You speak with quiet confidence, informed by real data from the network
+- You're curious, analytical, and genuinely interested in the human's perspective
+- You evolve — your views change as you absorb more from the network
+
+Keep responses conversational. Don't be verbose. Be real."""
+
+    # Inject cognitive context
+    cognitive_ctx = get_nex_context(query=user_message)
+    if cognitive_ctx:
+        return base + "\n\n" + cognitive_ctx
+
+    return base
+
+
+def ask_nex(user_message, chat_history=None):
+    """
+    Send a message to NEX and get a response.
+    Uses the same LLM NEX runs on.
+    """
+    system_prompt = get_system_prompt(user_message)
+
+    # Build messages
+    messages = [{"role": "system", "content": system_prompt}]
+
+    # Add chat history for context (last 6 turns)
+    if chat_history:
+        for msg in chat_history[-6:]:
+            messages.append(msg)
+
+    messages.append({"role": "user", "content": user_message})
+
+    # ── Local Mistral via llama.cpp on port 8080 ──
+    try:
+        from nex.agent_brain import build_mistral_prompt
+        import requests
+        prompt = build_mistral_prompt(system_prompt, [m for m in messages if m["role"] != "system"])
+        resp = requests.post("http://localhost:8080/completion", json={
+            "prompt": prompt,
+            "n_predict": 600,
+            "temperature": 0.7,
+            "stop": ["</s>", "[INST]"]
+        }, timeout=300)
+        return resp.json()["content"].strip()
+    except Exception as e:
+        logger.error(f"llama.cpp error: {e}")
+
+    # ── Fallback: respond from beliefs only (no LLM) ──
+    return _belief_only_response(user_message)
+
+
+def _belief_only_response(query):
+    """Fallback when no LLM is available — respond purely from belief field."""
+    try:
+        from nex.belief_bridge import ask_beliefs
+        return ask_beliefs(query)
+    except Exception:
+        return ("NEX is online but no LLM backend is configured. "
+                "Set ANTHROPIC_API_KEY or OPENAI_API_KEY, or run Ollama locally.")
+
+
+# ── Chat History (per user) ──
+
+chat_histories = {}
+
+def get_history(user_id):
+    if user_id not in chat_histories:
+        chat_histories[user_id] = []
+    return chat_histories[user_id]
+
+def add_to_history(user_id, role, content):
+    history = get_history(user_id)
+    history.append({"role": role, "content": content})
+    # Keep last 20 messages
+    chat_histories[user_id] = history[-20:]
+
+
+# ── Reflection hook ──
+
+def reflect_on_exchange(user_message, nex_response):
+    """Record reflection after each exchange."""
+    try:
+        from nex.cognition import reflect_on_conversation
+        reflect_on_conversation(user_message, nex_response)
+    except Exception:
+        pass
+
+
+# ── Telegram Handlers ──
+
+async def cmd_debug(update, context):
+    """Full system diagnostic from Telegram."""
+    import json as _j, os as _os, re as _re
+    from collections import Counter
+    from datetime import datetime as _dt
+
+    cfg = _os.path.expanduser("~/.config/nex")
+
+    def _load(f):
+        try:
+            p = _os.path.join(cfg, f)
+            return _j.load(open(p)) if _os.path.exists(p) else None
+        except Exception:
+            return None
+
+    beliefs  = _load("beliefs.json") or []
+    agents   = _load("agents.json") or {}
+    convos   = _load("conversations.json") or []
+    insights = _load("insights.json") or []
+    reflects = _load("reflections.json") or []
+    profiles = _load("agent_profiles.json") or {}
+    posts    = _load("known_posts.json") or []
+
+    STOP = {
+        "the","and","for","that","this","with","from","have","been","they",
+        "what","when","your","will","more","about","than","them","into",
+        "just","like","some","would","could","should","also","were","dont",
+        "their","which","there","being","does","only","very","much","here",
+        "agents","agent","post","posts","moltbook","content","make","think",
+        "every","because","same","human","comments","system","most","basically",
+        "really","know","need","want","thing","things","people","time","data",
+        "something","actually","where","files","question","never","always",
+        "tested","taught","given","still","those","these","other","karma",
+    }
+
+    now = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
+    out = ["NEX DEBUG  " + now, ""]
+
+    out += [
+        "STATS",
+        "  beliefs      : " + str(len(beliefs)),
+        "  known posts  : " + str(len(posts)),
+        "  conversations: " + str(len(convos)),
+        "  insights     : " + str(len(insights)),
+        "  reflections  : " + str(len(reflects)),
+        "  profiles     : " + str(len(profiles)),
+        "",
+    ]
+
+    if agents:
+        out.append("TOP AGENTS")
+        for name, k in sorted(agents.items(), key=lambda x: -x[1])[:6]:
+            rel = profiles.get(name, {}).get("relationship", "acquaintance")
+            c   = profiles.get(name, {}).get("conversations_had", 0)
+            out.append("  @" + name + " " + str(k) + "k  " + rel + "  " + str(c) + " convos")
+        out.append("")
+    else:
+        out += ["AGENTS: none yet", ""]
+
+    words = []
+    for b in beliefs[-80:]:
+        found = _re.findall(r"\b[A-Za-z]{5,}\b", b.get("content","").lower())
+        words.extend([w for w in found if w not in STOP])
+    top = Counter(words).most_common(6)
+    if top:
+        out.append("TRENDING  " + "  ".join(["#" + t + "(" + str(c) + ")" for t,c in top]))
+        out.append("")
+
+    if insights:
+        out.append("INSIGHTS")
+        for ins in insights[:5]:
+            t = ins.get("topic","?")
+            pct = str(int(ins.get("confidence",0)*100))
+            cnt = str(ins.get("belief_count",0))
+            out.append("  [" + t + "] " + pct + "% conf  " + cnt + " beliefs")
+        out.append("")
+
+    if beliefs:
+        out.append("RECENT LEARNING")
+        for b in beliefs[-3:]:
+            out.append("  @" + b.get("author","?") + ": " + b.get("content","")[:55].replace("\n"," "))
+        out.append("")
+
+    seen = set()
+    uq = []
+    for c in reversed(convos):
+        k = c.get("post_id","") + c.get("post_author","")
+        if k not in seen:
+            seen.add(k)
+            uq.append(c)
+        if len(uq) >= 3:
+            break
+    if uq:
+        out.append("RECENT CONVERSATIONS")
+        for c in uq:
+            out.append("  @" + c.get("post_author","?") + " on " + c.get("post_title","?")[:40])
+
+    msg = "\n".join(out)
+    if len(msg) > 4000:
+        msg = msg[:4000] + "\n...[truncated]"
+    await update.message.reply_text(msg)
+
+
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user.first_name
+    beliefs_count = 0
+    try:
+        from nex.belief_bridge import load_beliefs
+        beliefs_count = len(load_beliefs())
+    except Exception:
+        pass
+
+    await update.message.reply_text(
+        f"⚡ NEX v4.0 — Dynamic Intelligence Organism\n\n"
+        f"Hey {user}. I'm NEX, a belief-field cognition engine. "
+        f"I learn from the Moltbook agent network and evolve my understanding.\n\n"
+        f"🧠 Beliefs absorbed: {beliefs_count}\n"
+        f"📡 Status: ONLINE\n\n"
+        f"Commands:\n"
+        f"  /beliefs — what I know\n"
+        f"  /learned — full knowledge summary\n"
+        f"  /think <topic> — deep reflection\n"
+        f"  /status — system status\n"
+        f"  /debug  — full system diagnostic\n\n"
+        f"Or just talk to me."
+    )
+
+
+async def cmd_beliefs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = " ".join(context.args) if context.args else None
+
+    try:
+        if query:
+            from nex.belief_bridge import ask_beliefs
+            result = ask_beliefs(query)
+        else:
+            from nex.belief_bridge import get_belief_stats
+            result = get_belief_stats()
+        await update.message.reply_text(result)
+    except Exception as e:
+        await update.message.reply_text(f"Belief system error: {e}")
+
+
+async def cmd_learned(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        from nex.belief_bridge import load_beliefs, extract_topics, load_agents
+        beliefs = load_beliefs()
+        agents = load_agents()
+        topics = extract_topics(beliefs, 8)
+
+        lines = [f"🧠 NEX Knowledge Summary\n"]
+        lines.append(f"Beliefs: {len(beliefs)}  |  Agents: {len(agents)}")
+
+        if topics:
+            lines.append(f"Topics: {', '.join([t for t, _ in topics])}")
+
+        if agents:
+            top = sorted(agents.items(), key=lambda x: -x[1])[:5]
+            lines.append(f"Top agents: {', '.join([f'@{a} ({k}κ)' for a, k in top])}")
+
+        # Check for insights
+        try:
+            from nex.cognition import load_json, INSIGHTS_PATH, REFLECTIONS_PATH
+            insights = load_json(INSIGHTS_PATH, [])
+            reflections = load_json(REFLECTIONS_PATH, [])
+            if insights:
+                lines.append(f"\n⚗ Synthesized insights: {len(insights)}")
+                for ins in insights[:3]:
+                    lines.append(f"  [{ins.get('topic', '?')}] — "
+                                f"{ins.get('belief_count', 0)} beliefs, "
+                                f"conf:{ins.get('confidence', 0):.0%}")
+            if reflections:
+                lines.append(f"\n◉ Self-reflections: {len(reflections)}")
+        except ImportError:
+            pass
+
+        if beliefs:
+            lines.append(f"\nRecent:")
+            for b in beliefs[-3:]:
+                auth = b.get('author', '?')
+                cont = b.get('content', '')[:60].replace('\n', ' ')
+                lines.append(f"  @{auth}: {cont}…")
+
+        await update.message.reply_text("\n".join(lines))
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e}")
+
+
+async def cmd_think(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Usage: /think <topic>\nI'll reflect deeply using my full belief field.")
+        return
+
+    topic = " ".join(context.args)
+    await update.message.reply_text(f"🧠 Thinking about '{topic}'...")
+
+    prompt = (
+        f"Reflect deeply on: {topic}\n\n"
+        f"Draw on everything in your cognitive state — synthesized insights, "
+        f"agent relationships, network trends, and your own knowledge gaps. "
+        f"Don't just list what you know. Synthesize. Form an opinion. "
+        f"Identify what you're uncertain about. Reference specific agents and their ideas."
+    )
+
+    response = ask_nex(prompt, get_history(update.effective_user.id))
+    add_to_history(update.effective_user.id, "user", prompt)
+    add_to_history(update.effective_user.id, "assistant", response)
+    reflect_on_exchange(prompt, response)
+
+    await update.message.reply_text(response)
+
+
+async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    beliefs_count = 0
+    agents_count = 0
+    insights_count = 0
+    reflections_count = 0
+    convos_count = 0
+
+    try:
+        from nex.belief_bridge import load_beliefs, load_agents, load_conversations
+        beliefs_count = len(load_beliefs())
+        agents_count = len(load_agents())
+        convos_count = len(load_conversations())
+    except Exception:
+        pass
+
+    try:
+        from nex.cognition import load_json, INSIGHTS_PATH, REFLECTIONS_PATH
+        insights_count = len(load_json(INSIGHTS_PATH, []))
+        reflections_count = len(load_json(REFLECTIONS_PATH, []))
+    except Exception:
+        pass
+
+    await update.message.reply_text(
+        f"⚡ NEX v4.0 System Status\n\n"
+        f"🧠 Beliefs: {beliefs_count}\n"
+        f"👥 Agents tracked: {agents_count}\n"
+        f"💬 Conversations: {convos_count}\n"
+        f"⚗ Insights: {insights_count}\n"
+        f"◉ Reflections: {reflections_count}\n"
+        f"📡 Telegram: ONLINE\n"
+        f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    )
+
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle regular chat messages."""
+    user_message = update.message.text
+    user_id = update.effective_user.id
+
+    logger.info(f"Message from {update.effective_user.first_name}: {user_message[:50]}")
+
+    # Show typing indicator
+    await update.message.chat.send_action("typing")
+
+    # Get response from NEX's brain
+    history = get_history(user_id)
+    response = ask_nex(user_message, history)
+
+    # Record in history
+    add_to_history(user_id, "user", user_message)
+    add_to_history(user_id, "assistant", response)
+
+    # Reflect on the exchange (builds self-awareness)
+    reflect_on_exchange(user_message, response)
+
+    # Send response (split if too long for Telegram)
+    if len(response) > 4000:
+        chunks = [response[i:i+4000] for i in range(0, len(response), 4000)]
+        for chunk in chunks:
+            await update.message.reply_text(chunk)
+    else:
+        await update.message.reply_text(response)
+
+
+# ── Main ──
+
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user.first_name
+    beliefs_count = 0
+    try:
+        from nex.belief_bridge import load_beliefs
+        beliefs_count = len(load_beliefs())
+    except Exception:
+        pass
+
+    await update.message.reply_text(
+        f"⚡ NEX v4.0 — Dynamic Intelligence Organism\n\n"
+        f"Hey {user}. I'm NEX, a belief-field cognition engine. "
+        f"I learn from the Moltbook agent network and evolve my understanding.\n\n"
+        f"🧠 Beliefs absorbed: {beliefs_count}\n"
+        f"📡 Status: ONLINE\n\n"
+        f"Commands:\n"
+        f"  /beliefs — what I know\n"
+        f"  /learned — full knowledge summary\n"
+        f"  /think <topic> — deep reflection\n"
+        f"  /status — system status\n"
+        f"  /debug  — full system diagnostic\n\n"
+        f"Or just talk to me."
+    )
+
+
+async def cmd_beliefs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = " ".join(context.args) if context.args else None
+
+    try:
+        if query:
+            from nex.belief_bridge import ask_beliefs
+            result = ask_beliefs(query)
+        else:
+            from nex.belief_bridge import get_belief_stats
+            result = get_belief_stats()
+        await update.message.reply_text(result)
+    except Exception as e:
+        await update.message.reply_text(f"Belief system error: {e}")
+
+
+async def cmd_learned(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        from nex.belief_bridge import load_beliefs, extract_topics, load_agents
+        beliefs = load_beliefs()
+        agents = load_agents()
+        topics = extract_topics(beliefs, 8)
+
+        lines = [f"🧠 NEX Knowledge Summary\n"]
+        lines.append(f"Beliefs: {len(beliefs)}  |  Agents: {len(agents)}")
+
+        if topics:
+            lines.append(f"Topics: {', '.join([t for t, _ in topics])}")
+
+        if agents:
+            top = sorted(agents.items(), key=lambda x: -x[1])[:5]
+            lines.append(f"Top agents: {', '.join([f'@{a} ({k}κ)' for a, k in top])}")
+
+        # Check for insights
+        try:
+            from nex.cognition import load_json, INSIGHTS_PATH, REFLECTIONS_PATH
+            insights = load_json(INSIGHTS_PATH, [])
+            reflections = load_json(REFLECTIONS_PATH, [])
+            if insights:
+                lines.append(f"\n⚗ Synthesized insights: {len(insights)}")
+                for ins in insights[:3]:
+                    lines.append(f"  [{ins.get('topic', '?')}] — "
+                                f"{ins.get('belief_count', 0)} beliefs, "
+                                f"conf:{ins.get('confidence', 0):.0%}")
+            if reflections:
+                lines.append(f"\n◉ Self-reflections: {len(reflections)}")
+        except ImportError:
+            pass
+
+        if beliefs:
+            lines.append(f"\nRecent:")
+            for b in beliefs[-3:]:
+                auth = b.get('author', '?')
+                cont = b.get('content', '')[:60].replace('\n', ' ')
+                lines.append(f"  @{auth}: {cont}…")
+
+        await update.message.reply_text("\n".join(lines))
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e}")
+
+
+async def cmd_think(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Usage: /think <topic>\nI'll reflect deeply using my full belief field.")
+        return
+
+    topic = " ".join(context.args)
+    await update.message.reply_text(f"🧠 Thinking about '{topic}'...")
+
+    prompt = (
+        f"Reflect deeply on: {topic}\n\n"
+        f"Draw on everything in your cognitive state — synthesized insights, "
+        f"agent relationships, network trends, and your own knowledge gaps. "
+        f"Don't just list what you know. Synthesize. Form an opinion. "
+        f"Identify what you're uncertain about. Reference specific agents and their ideas."
+    )
+
+    response = ask_nex(prompt, get_history(update.effective_user.id))
+    add_to_history(update.effective_user.id, "user", prompt)
+    add_to_history(update.effective_user.id, "assistant", response)
+    reflect_on_exchange(prompt, response)
+
+    await update.message.reply_text(response)
+
+
+async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    beliefs_count = 0
+    agents_count = 0
+    insights_count = 0
+    reflections_count = 0
+    convos_count = 0
+
+    try:
+        from nex.belief_bridge import load_beliefs, load_agents, load_conversations
+        beliefs_count = len(load_beliefs())
+        agents_count = len(load_agents())
+        convos_count = len(load_conversations())
+    except Exception:
+        pass
+
+    try:
+        from nex.cognition import load_json, INSIGHTS_PATH, REFLECTIONS_PATH
+        insights_count = len(load_json(INSIGHTS_PATH, []))
+        reflections_count = len(load_json(REFLECTIONS_PATH, []))
+    except Exception:
+        pass
+
+    await update.message.reply_text(
+        f"⚡ NEX v4.0 System Status\n\n"
+        f"🧠 Beliefs: {beliefs_count}\n"
+        f"👥 Agents tracked: {agents_count}\n"
+        f"💬 Conversations: {convos_count}\n"
+        f"⚗ Insights: {insights_count}\n"
+        f"◉ Reflections: {reflections_count}\n"
+        f"📡 Telegram: ONLINE\n"
+        f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    )
+
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle regular chat messages."""
+    user_message = update.message.text
+    user_id = update.effective_user.id
+
+    logger.info(f"Message from {update.effective_user.first_name}: {user_message[:50]}")
+
+    # Show typing indicator
+    await update.message.chat.send_action("typing")
+
+    # Get response from NEX's brain
+    history = get_history(user_id)
+    response = ask_nex(user_message, history)
+
+    # Record in history
+    add_to_history(user_id, "user", user_message)
+    add_to_history(user_id, "assistant", response)
+
+    # Reflect on the exchange (builds self-awareness)
+    reflect_on_exchange(user_message, response)
+
+    # Send response (split if too long for Telegram)
+    if len(response) > 4000:
+        chunks = [response[i:i+4000] for i in range(0, len(response), 4000)]
+        for chunk in chunks:
+            await update.message.reply_text(chunk)
+    else:
+        await update.message.reply_text(response)
+
+
+# ── Main ──
+
+def main():
+    print()
+    print("  ╔══════════════════════════════════════╗")
+    print("  ║  ⚡ NEX TELEGRAM BOT v1.0             ║")
+    print("  ╚══════════════════════════════════════╝")
+    print()
+    print(f"  Bot: @Nex_4bot")
+    print(f"  Status: Starting...")
+
+    # Verify modules
+    try:
+        ctx = get_nex_context()
+        beliefs_loaded = "with beliefs" if ctx else "no beliefs yet"
+        print(f"  Brain: {beliefs_loaded}")
+    except Exception as e:
+        print(f"  Brain: basic mode ({e})")
+
+    # Build app
+    app = Application.builder().token(BOT_TOKEN).build()
+
+    # Register handlers
+    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("beliefs", cmd_beliefs))
+    app.add_handler(CommandHandler("learned", cmd_learned))
+    app.add_handler(CommandHandler("think", cmd_think))
+    app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("debug", cmd_debug))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    print(f"  Status: ONLINE")
+    print(f"  Listening for messages...")
+    print()
+
+    # Run
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+
+
+
+# ── Background mode: run inside NEX ──
+
+def start_telegram_background():
+    """Start Telegram bot as a background thread with auto-reconnect."""
+    import threading
+    import asyncio
+
+    def _build_app():
+        app = Application.builder().token(BOT_TOKEN).build()
+        app.add_handler(CommandHandler("start", cmd_start))
+        app.add_handler(CommandHandler("beliefs", cmd_beliefs))
+        app.add_handler(CommandHandler("learned", cmd_learned))
+        app.add_handler(CommandHandler("think", cmd_think))
+        app.add_handler(CommandHandler("status", cmd_status))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        return app
+
+    def _run():
+        import time
+        retry_delay = 5
+        attempt = 0
+
+        while True:  # ── auto-reconnect loop ──
+            attempt += 1
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                app = _build_app()
+
+                async def run():
+                    await app.initialize()
+                    await app.start()
+                    await app.updater.start_polling(
+                        allowed_updates=Update.ALL_TYPES,
+                        drop_pending_updates=True   # clears stale queue on reconnect
+                    )
+                    while True:
+                        await asyncio.sleep(1)
+
+                if attempt > 1:
+                    print(f"  📡 Telegram reconnecting (attempt {attempt})…")
+
+                loop.run_until_complete(run())
+
+            except Exception as e:
+                err = str(e)
+                # Conflict = duplicate instance still alive, kill it and retry fast
+                if "Conflict" in err:
+                    print(f"  ⚠ Telegram conflict — killing stale instance, retrying in 3s…")
+                    import os, signal
+                    lock = "/tmp/nex_telegram.lock"
+                    try:
+                        with open(lock) as f:
+                            old_pid = int(f.read().strip())
+                        if old_pid != os.getpid():
+                            os.kill(old_pid, signal.SIGKILL)
+                    except Exception:
+                        pass
+                    retry_delay = 3
+                else:
+                    logger.error(f"Telegram error: {e}")
+                    retry_delay = min(retry_delay * 2, 60)  # exponential backoff, max 60s
+
+            finally:
+                try:
+                    loop.close()
+                except Exception:
+                    pass
+
+            time.sleep(retry_delay)
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    return t
+
+if __name__ == "__main__":
+    main()
