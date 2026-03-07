@@ -255,7 +255,7 @@ def data_thread():
             self_log.append(f"{T}Belief confidence {RS}[{bc}] {G}{avg_c:.0%}{RS}")
             self_log.append(f"{T}Topic alignment   {RS}[{bal}] {G}{avg_al:.0%}{RS}")
             self_log.append(f"{T}High confidence   {RS}{G}{hi}{RS} beliefs  {D}>70%{RS}")
-            self_log.append(f"{T}Knowledge gaps    {RS}{R}{lo}{RS} beliefs  {D}<30%{RS}")
+            self_log.append(f"{T}Knowledge gaps    {RS}{R}{len(set(gaps))}{RS} topics  {D}from reflections{RS}")
             if top_gaps: self_log.append(f"{T}Needs to learn    {RS}{R}{', '.join(top_gaps[:4])}{RS}")
             self_log.append(f"{T}Insights          {RS}{Y}{len(insights)}{RS} from {CY}{len(beliefs)}{RS} beliefs")
             self_log.append(f"{T}Reflections       {RS}{P}{len(reflections)}{RS} self-assessments")
