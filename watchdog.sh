@@ -99,6 +99,25 @@ while [ $restarts -lt $MAX_RESTARTS ]; do
         echo ""
         echo "  🐕 Restarting in ${RESTART_DELAY}s... (restart #$restarts)"
         pkill -f "nex_telegram" 2>/dev/null
+        # Clear stale Telegram session before restart
+        python3 -c "
+import asyncio, os, glob
+token = None
+src = open('/home/rr/Desktop/nex/nex_telegram.py').read()
+for line in src.split(chr(10)):
+    if 'BOT_TOKEN' in line and '=' in line and 'os.env' not in line:
+        t = line.split('=',1)[1].strip().strip(chr(39)+chr(34))
+        if len(t) > 20: token = t; break
+if token:
+    async def clear():
+        try:
+            from telegram import Bot
+            await Bot(token).delete_webhook(drop_pending_updates=True)
+            print('  [watchdog] Telegram session cleared')
+        except Exception as e:
+            print(f'  [watchdog] Telegram clear failed: {e}')
+    asyncio.run(clear())
+" 2>/dev/null
         sleep "$RESTART_DELAY"
     fi
 

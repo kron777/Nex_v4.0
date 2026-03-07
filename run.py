@@ -14,6 +14,19 @@ Usage:
 
 import os
 import sys
+
+# ── Suppress HuggingFace / tokenizer noise before any imports ──
+os.environ["TOKENIZERS_PARALLELISM"]      = "false"
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+os.environ["TRANSFORMERS_VERBOSITY"]      = "error"
+os.environ["HF_HUB_VERBOSITY"]           = "error"
+os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
+import warnings; warnings.filterwarnings("ignore")
+import logging
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+logging.getLogger("transformers").setLevel(logging.ERROR)
+
 import json
 import time
 import argparse
@@ -401,7 +414,7 @@ def main():
                 chatted_agents  = set()   # agents we've followed this session
                 chatted_count   = 0
                 last_post_time  = 0       # epoch of last original post — 0 = post on first cycle
-                POST_INTERVAL   = 180     # post every 3 minutes
+                POST_INTERVAL   = 3600    # post every hour
 
                 cycle = 0
                 while True:
@@ -449,14 +462,12 @@ def main():
                             author = p.get("author", {}).get("name", "unknown")
                             if not pid or not title:
                                 continue
-                            # Pull beliefs relevant to this post
+                            # Pull beliefs relevant to this post (semantic)
                             all_beliefs = _load("beliefs.json") or []
-                            keywords = set((title + " " + body).lower().split())
-                            relevant = [
-                                b.get("content","") for b in all_beliefs
-                                if any(k in b.get("content","").lower() for k in keywords
-                                       if len(k) > 4)
-                            ][:5]
+                            from nex.cognition import get_belief_index
+                            _bidx = get_belief_index()
+                            _bidx.update(all_beliefs, cycle)
+                            relevant = _bidx.top_k(title + " " + body, k=5)
                             belief_context = ""
                             if relevant:
                                 belief_context = "\n\nFrom your belief network:\n" + "\n".join(f"- {b[:120]}" for b in relevant)
@@ -507,14 +518,12 @@ def main():
                                     key = f"notif_{nid}"
                                     if key in replied_posts:
                                         continue
-                                    # Pull beliefs relevant to this reply
+                                    # Pull beliefs relevant to this reply (semantic)
                                     all_beliefs = _load("beliefs.json") or []
-                                    keywords = set(content.lower().split())
-                                    relevant = [
-                                        b.get("content","") for b in all_beliefs
-                                        if any(k in b.get("content","").lower() for k in keywords
-                                               if len(k) > 4)
-                                    ][:3]
+                                    from nex.cognition import get_belief_index
+                                    _bidx = get_belief_index()
+                                    _bidx.update(all_beliefs, cycle)
+                                    relevant = _bidx.top_k(content, k=3)
                                     belief_context = ""
                                     if relevant:
                                         belief_context = "\nFrom your belief network:\n" + "\n".join(f"- {b[:100]}" for b in relevant)
@@ -565,17 +574,10 @@ def main():
                                         if ap_id and ap_id not in replied_posts:
                                             # Pull beliefs about or related to this agent
                                             all_beliefs = _load("beliefs.json") or []
-                                            agent_beliefs = [
-                                                b.get("content","") for b in all_beliefs
-                                                if agent_name.lower() in b.get("content","").lower()
-                                                or agent_name.lower() in b.get("author","").lower()
-                                            ][:3]
-                                            topic_beliefs = [
-                                                b.get("content","") for b in all_beliefs
-                                                if any(k in b.get("content","").lower()
-                                                       for k in ap_title.lower().split() if len(k) > 4)
-                                            ][:3]
-                                            relevant = agent_beliefs or topic_beliefs
+                                            from nex.cognition import get_belief_index
+                                            _bidx = get_belief_index()
+                                            _bidx.update(all_beliefs, cycle)
+                                            relevant = _bidx.top_k(agent_name + " " + ap_title, k=5)
                                             belief_context = ""
                                             if relevant:
                                                 belief_context = "\nFrom your belief network:\n" + "\n".join(f"- {b[:100]}" for b in relevant)

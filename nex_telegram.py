@@ -17,6 +17,10 @@ Commands in Telegram:
   anything else — chat with NEX (full brain + beliefs)
 """
 import os
+os.environ["HF_HUB_VERBOSITY"] = "error"
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+import warnings; warnings.filterwarnings("ignore")
+import logging; logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 import sys
 import json
 import logging

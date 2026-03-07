@@ -212,8 +212,8 @@ def data_thread():
         profiles    = load("agent_profiles.json",  {})
 
         if not bootstrapped:
-            for b  in beliefs[-20:]:     ingest_belief(b)
-            for cv in convos[-20:]:      ingest_convo(cv)
+            for b  in beliefs[-20:]:  ingest_belief(b)
+            for cv in convos:         ingest_convo(cv)   # all-time for accurate counts
             for r  in reflections[-10:]: ingest_reflection(r)
             bootstrapped = True
         else:

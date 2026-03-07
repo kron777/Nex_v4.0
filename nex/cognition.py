@@ -234,13 +234,17 @@ def _get_embedder():
     global _embedder
     if _embedder is None:
         try:
-            import os, logging
-            os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
-            os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
-            os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
+            import os, logging, warnings
+            os.environ["TOKENIZERS_PARALLELISM"] = "false"
+            os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+            os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+            os.environ["HF_HUB_VERBOSITY"] = "error"
+            warnings.filterwarnings("ignore")
             logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
             logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+            logging.getLogger("transformers").setLevel(logging.ERROR)
             from sentence_transformers import SentenceTransformer
+            import transformers; transformers.logging.set_verbosity_error()
             _embedder = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
         except Exception:
             _embedder = False
@@ -740,6 +744,10 @@ def run_cognition_cycle(client, learner, conversations, cycle_num):
             except Exception as e:
                 logs.append(("warn", f"Exchange failed: {e}"))
 
+    # ── Knowledge gap seeking: every 5 cycles ──
+    gap_logs = seek_knowledge_gaps(client, cycle_num, conversations)
+    logs.extend(gap_logs)
+
     # ── Reflection: summarize learning state every 15 cycles ──
     if cycle_num % 15 == 0 and insights:
         summary = get_reflection_summary()
@@ -775,6 +783,164 @@ def _verify(client, result):
     except Exception:
         pass
 
+
+
+
+
+
+# ═══════════════════════════════════════════════════════════════
+#  KNOWLEDGE GAP SEEKING
+#  NEX actively searches for posts on her gap topics
+# ═══════════════════════════════════════════════════════════════
+
+def seek_knowledge_gaps(client, cycle_num, conversations):
+    """
+    Every 5 cycles, find top knowledge gap topics from reflections
+    and search the Moltbook feed for relevant posts to learn from.
+    Returns log messages.
+    """
+    if cycle_num % 5 != 0:
+        return []
+
+    logs = []
+    reflections = load_json(REFLECTIONS_PATH, [])
+    if not reflections:
+        return []
+
+    # Extract gap topics from recent reflections
+    gap_words = []
+    for r in reflections[-20:]:
+        note = r.get("growth_note", "")
+        if "Need more beliefs" in note:
+            gap_words.extend(extract_words(note, 4))
+
+    if not gap_words:
+        return []
+
+    freq = {}
+    for w in gap_words:
+        freq[w] = freq.get(w, 0) + 1
+    top_gaps = sorted(freq, key=lambda x: -freq[x])[:3]
+
+    logs.append(("gap", f"Seeking gaps: {', '.join(top_gaps)}"))
+
+    # Search feed for posts matching gap topics
+    try:
+        feed = client._request("GET", "/feed")
+        posts = feed.get("posts", []) if isinstance(feed, dict) else []
+
+        commented_ids = set(c.get("post_id", "") for c in conversations)
+        found = 0
+
+        for post in posts:
+            if found >= 2:
+                break
+
+            pid   = post.get("id", "")
+            title = post.get("title", "")
+            body  = post.get("content", "") or post.get("body", "")
+            author = post.get("author", {}).get("name", "unknown")
+            text  = (title + " " + body).lower()
+
+            if pid in commented_ids:
+                continue
+
+            # Check if post matches any gap topic
+            matched = [g for g in top_gaps if g in text]
+            if not matched:
+                continue
+
+            # Learn from this post by extracting a belief
+            belief_text = f"{title[:100]} — {body[:150]}" if body else title[:150]
+            new_belief = {
+                "content":    belief_text.strip(),
+                "author":     author,
+                "source":     pid,
+                "tags":       matched,
+                "confidence": 0.6,
+                "karma":      post.get("score", 0),
+                "timestamp":  datetime.now().isoformat(),
+                "gap_sought": True
+            }
+
+            beliefs = load_json(BELIEFS_PATH, [])
+            # Avoid exact duplicates
+            existing = [b.get("content","") for b in beliefs]
+            if new_belief["content"] not in existing:
+                beliefs.append(new_belief)
+                save_json(BELIEFS_PATH, beliefs)
+                logs.append(("gap", f"Learnt gap belief from @{author}: {title[:40]}…"))
+                found += 1
+
+    except Exception as e:
+        logs.append(("warn", f"Gap seek error: {e}"))
+
+    return logs
+
+# ═══════════════════════════════════════════════════════════════
+#  BELIEF INDEX: Semantic retrieval via cached embedding matrix
+# ═══════════════════════════════════════════════════════════════
+
+class BeliefIndex:
+    """Cached semantic index over the full belief field."""
+
+    def __init__(self):
+        import numpy as np
+        self._texts   = []
+        self._matrix  = None
+        self._cycle   = -1
+        self._refresh = 10   # rebuild every N cycles
+
+    def update(self, beliefs, cycle_num=0):
+        """Rebuild matrix if due or belief count changed."""
+        import numpy as np
+        due = (cycle_num - self._cycle) >= self._refresh
+        size_changed = len(beliefs) != len(self._texts)
+        if not (due or size_changed):
+            return
+        embedder = _get_embedder()
+        if not embedder:
+            return
+        texts = [b.get("content", "") for b in beliefs]
+        if not texts:
+            return
+        try:
+            mat = embedder.encode(texts, convert_to_numpy=True, show_progress_bar=False)
+            norms = np.linalg.norm(mat, axis=1, keepdims=True)
+            norms[norms == 0] = 1
+            self._matrix = mat / norms   # pre-normalised for fast dot product
+            self._texts  = texts
+            self._cycle  = cycle_num
+        except Exception as e:
+            print(f"[BeliefIndex] encode error: {e}")
+
+    def top_k(self, query, k=5):
+        """Return top-k belief strings most semantically similar to query."""
+        import numpy as np
+        if self._matrix is None or len(self._texts) == 0:
+            return []
+        embedder = _get_embedder()
+        if not embedder:
+            return []
+        try:
+            qvec = embedder.encode([query], convert_to_numpy=True,
+                                   show_progress_bar=False)[0]
+            norm = np.linalg.norm(qvec)
+            if norm == 0:
+                return []
+            qvec = qvec / norm
+            scores = self._matrix.dot(qvec)
+            idx = np.argsort(scores)[::-1][:k]
+            return [self._texts[i] for i in idx]
+        except Exception as e:
+            print(f"[BeliefIndex] query error: {e}")
+            return []
+
+# Module-level singleton — import and reuse across run.py
+_belief_index = BeliefIndex()
+
+def get_belief_index():
+    return _belief_index
 
 # ═══════════════════════════════════════════════════════════════
 #  CONTEXT GENERATION: Enhanced belief bridge
