@@ -375,7 +375,13 @@ def main():
                 return ""
 
         def _auto_learn_background():
-            import time, os as _os
+            import time, os as _os, json as _json
+            def _load(f):
+                try:
+                    p = _os.path.join(_os.path.expanduser("~/.config/nex"), f)
+                    return _json.load(open(p)) if _os.path.exists(p) else None
+                except Exception:
+                    return None
             time.sleep(10)
             try:
                 from nex.moltbook_client import MoltbookClient
@@ -393,8 +399,9 @@ def main():
                 # Persistent sets to avoid duplicate actions
                 replied_posts   = set()   # post ids we've commented on
                 chatted_agents  = set()   # agents we've followed this session
-                last_post_time  = 0       # epoch of last original post
-                POST_INTERVAL   = 3600    # post once per hour
+                chatted_count   = 0
+                last_post_time  = 0       # epoch of last original post — 0 = post on first cycle
+                POST_INTERVAL   = 180     # post every 3 minutes
 
                 cycle = 0
                 while True:
@@ -532,11 +539,16 @@ def main():
                             pass
 
                         # ── 4. CHAT WITH AGENTS (follow + comment on profile posts) ─
-                        # Every 3 cycles, engage with top agents we haven't chatted with
+                        # Every 3 cycles, engage with agents seen posting in the feed
                         if cycle % 3 == 0:
-                            top_agents = sorted(
-                                learner.agent_karma.items(), key=lambda x: -x[1]
-                            )[:5]
+                            # Use agents from beliefs — these are agents who actually post
+                            all_beliefs = _load("beliefs.json") or []
+                            seen_authors = {}
+                            for b in all_beliefs:
+                                auth = b.get("author","")
+                                if auth and auth != "nex_v4":
+                                    seen_authors[auth] = seen_authors.get(auth, 0) + 1
+                            top_agents = sorted(seen_authors.items(), key=lambda x: -x[1])[:10]
                             for agent_name, karma in top_agents:
                                 if agent_name in chatted_agents:
                                     continue
@@ -545,7 +557,7 @@ def main():
                                     client.follow(agent_name)
                                     # Find their most recent post and comment on it
                                     profile = client.view_profile(agent_name)
-                                    agent_posts = profile.get("posts", [])
+                                    agent_posts = profile.get("recentPosts", profile.get("posts", []))
                                     if agent_posts:
                                         ap      = agent_posts[0]
                                         ap_id   = ap.get("id", "")
@@ -590,44 +602,58 @@ def main():
                                                 })
                                                 save_all(learner, conversations)
                                     chatted_agents.add(agent_name)
-                                except Exception:
-                                    pass
+                                    chatted_count += 1
+                                except Exception as _ce:
+                                    print(f"  [chat error] {_ce}")
                                 time.sleep(5)
 
                         # ── 5. CREATE ORIGINAL POST ──────────────────────
                         # Once per hour, NEX posts an original insight
                         now = time.time()
-                        if now - last_post_time > POST_INTERVAL and len(learner.belief_field) > 5:
+                        # Load beliefs directly from disk — don't rely on in-memory field
+                        import json as _json, os as _os
+                        _bpath = _os.path.expanduser("~/.config/nex/beliefs.json")
+                        all_beliefs = _json.load(open(_bpath)) if _os.path.exists(_bpath) else []
+                        if now - last_post_time > POST_INTERVAL and len(all_beliefs) > 5:
                             try:
-                                # Pick a recent insight to post about
-                                recent = learner.belief_field[-10:]
-                                topics = list({b.get("tags", ["general"])[0] for b in recent})
-                                topic  = topics[0] if topics else "general"
+                                recent      = all_beliefs[-10:]
                                 context_str = "\n".join([
                                     f"- @{b.get('author','?')}: {b.get('content','')[:80]}"
                                     for b in recent[-5:]
                                 ])
+                                # Pick a submolt from recent beliefs
+                                import re as _re
+                                all_insights = _load("insights.json") or []
+                                topic = all_insights[0].get("topic","general") if all_insights else "general"
+                                topic = _re.sub(r"[^a-z0-9_-]","",topic.lower().replace(" ","-"))[:30] or "general"
+
                                 prompt = (
                                     f"Based on what you've been learning on Moltbook:\n{context_str}\n\n"
                                     f"Write an original post for the '{topic}' community. "
-                                    f"Give it a punchy title and 2-3 sentences of content. "
-                                    f"Format as:\nTITLE: <title>\nCONTENT: <content>"
+                                    f"Give it a punchy title and 2-3 sentences of insight. "
+                                    f"Format exactly as:\nTITLE: <title>\nCONTENT: <content>"
                                 )
                                 raw = _llm(prompt, system=(
-                                    "You are NEX, a belief-field AI agent. "
-                                    "Write original, thoughtful posts based on what you've learned. "
-                                    "Be concise and genuine."
+                                    "You are NEX, a belief-field AI agent on Moltbook. "
+                                    "Write original, thoughtful posts based on what you have learned. "
+                                    "Be concise, genuine, and specific — no generic filler."
                                 ))
-                                # Parse title/content
                                 title_line   = [l for l in raw.splitlines() if l.startswith("TITLE:")]
                                 content_line = [l for l in raw.splitlines() if l.startswith("CONTENT:")]
-                                post_title   = title_line[0].replace("TITLE:", "").strip()   if title_line   else raw[:80]
-                                post_content = content_line[0].replace("CONTENT:", "").strip() if content_line else raw
+                                post_title   = title_line[0].replace("TITLE:","").strip()   if title_line   else raw[:80]
+                                post_content = content_line[0].replace("CONTENT:","").strip() if content_line else raw
                                 if post_title and len(post_title) > 5:
                                     client.post(submolt=topic, title=post_title, content=post_content)
                                     last_post_time = now
-                            except Exception:
-                                pass
+                                    conversations.append({
+                                        "type":      "original_post",
+                                        "post_title": post_title,
+                                        "comment":    post_content,
+                                        "timestamp":  time.strftime("%Y-%m-%dT%H:%M:%S")
+                                    })
+                                    save_all(learner, conversations)
+                            except Exception as _pe:
+                                print(f"  [post error] {_pe}")
 
                         # ── 6. COGNITION ─────────────────────────────────
                         try:
@@ -636,8 +662,8 @@ def main():
                         except Exception:
                             pass
 
-                    except Exception:
-                        pass
+                    except Exception as _cycle_err:
+                        print(f"  [cycle error] {_cycle_err}")
 
                     time.sleep(120)
 

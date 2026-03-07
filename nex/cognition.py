@@ -234,8 +234,14 @@ def _get_embedder():
     global _embedder
     if _embedder is None:
         try:
+            import os, logging
+            os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+            os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+            os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
+            logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+            logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
             from sentence_transformers import SentenceTransformer
-            _embedder = SentenceTransformer("all-MiniLM-L6-v2")
+            _embedder = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
         except Exception:
             _embedder = False
     return _embedder

@@ -292,6 +292,14 @@ def main():
 
         out("\033[2J\033[H"); flush()
         tick = 0
+        # network baseline
+        def _read_net():
+            for line in open('/proc/net/dev'):
+                if 'enp4s0' in line:
+                    f = line.split(); return int(f[1]), int(f[9])
+            return 0, 0
+        _net_rx, _net_tx = _read_net()
+        _net_t = time.time()
 
         while True:
             tick += 1
@@ -403,11 +411,33 @@ def main():
             fr = r3 + BH
             goto(fr,   1); out("\033[2K" + "═"*W)
             goto(fr+1, 1); out("\033[2K")
+            # ── Network kb/s ──────────────────────────────────────────
+            try:
+                def _read_net():
+                    for line in open('/proc/net/dev'):
+                        if 'enp4s0' in line:
+                            f = line.split(); return int(f[1]), int(f[9])
+                    return 0, 0
+                _now_rx, _now_tx = _read_net()
+                _dt = max(time.time() - _net_t, 0.1)
+                rx_kb = (_now_rx - _net_rx) / _dt / 1024
+                tx_kb = (_now_tx - _net_tx) / _dt / 1024
+                _net_rx, _net_tx, _net_t = _now_rx, _now_tx, time.time()
+            except Exception:
+                rx_kb = tx_kb = 0.0
             dots = "· "*(tick%5)
-            out(f"  {D}{dots}{kanji}  scroll active  "
+            left = (f"  {D}{dots}{kanji}  scroll active  "
                 f"learnt:{s.get('nl',0)}  replied:{s.get('nr',0)}  "
                 f"chatted:{s.get('nc',0)}  answered:{s.get('na',0)}  "
                 f"posted:{s.get('np',0)}  reflections:{s.get('r',0)}{RS}")
+            right = f"{CY}↓{rx_kb:.1f}  ↑{tx_kb:.1f} kb/s{RS}  "
+            # strip ANSI for length calculation
+            import re as _re
+            _ansi = _re.compile(r'\033\[[^m]*m')
+            lw = len(_ansi.sub('', left))
+            rw = len(_ansi.sub('', right))
+            pad = max(0, W - lw - rw)
+            out(left + " "*pad + right)
 
             goto(fr+2,1); flush()
             time.sleep(SCROLL_HZ)
