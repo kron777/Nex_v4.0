@@ -228,30 +228,64 @@ def run_synthesis(min_beliefs=30):
 #  Self-assess after conversations, build self-awareness
 # ═══════════════════════════════════════════════════════════════
 
+# ── Embedding model (loaded once, reused) ────────────────────────────────────
+_embedder = None
+def _get_embedder():
+    global _embedder
+    if _embedder is None:
+        try:
+            from sentence_transformers import SentenceTransformer
+            _embedder = SentenceTransformer("all-MiniLM-L6-v2")
+        except Exception:
+            _embedder = False
+    return _embedder
+
+def _cosine(a, b):
+    import numpy as np
+    denom = np.linalg.norm(a) * np.linalg.norm(b)
+    if denom == 0: return 0.0
+    return float(np.dot(a, b) / denom)
+
+def _semantic_alignment(text_a, text_b):
+    embedder = _get_embedder()
+    if not embedder:
+        wa = set(extract_words(text_a, 5))
+        wb = set(extract_words(text_b, 5))
+        return len(wa & wb) / max(len(wa), 1)
+    try:
+        import numpy as np
+        vecs = embedder.encode([text_a, text_b], convert_to_numpy=True)
+        raw  = _cosine(vecs[0], vecs[1])
+        return max(0.0, min(1.0, (raw - 0.2) / 0.8))
+    except Exception:
+        wa = set(extract_words(text_a, 5))
+        wb = set(extract_words(text_b, 5))
+        return len(wa & wb) / max(len(wa), 1)
+
 def reflect_on_conversation(user_message, nex_response, beliefs_used=None):
     """
     Generate a self-reflection after a conversation turn.
-    Call this after NEX responds to the user.
+    Topic alignment measured via embedding cosine similarity.
     """
     reflections = load_json(REFLECTIONS_PATH, [])
 
-    # Analyze the exchange
-    user_topics = extract_words(user_message, 5)
+    user_topics     = extract_words(user_message, 5)
     response_topics = extract_words(nex_response, 5)
-    overlap = set(user_topics) & set(response_topics)
+    overlap         = set(user_topics) & set(response_topics)
+    beliefs_helped  = beliefs_used is not None and len(beliefs_used) > 0
 
-    # Check if beliefs were actually relevant
-    beliefs_helped = beliefs_used is not None and len(beliefs_used) > 0
+    alignment = _semantic_alignment(user_message, nex_response)
 
     reflection = {
-        "timestamp": datetime.now().isoformat(),
-        "user_asked_about": user_topics,
-        "i_discussed": response_topics,
-        "topic_alignment": len(overlap) / max(len(user_topics), 1),
-        "used_beliefs": beliefs_helped,
+        "timestamp":         datetime.now().isoformat(),
+        "user_asked_about":  user_topics,
+        "i_discussed":       response_topics,
+        "topic_alignment":   round(alignment, 4),
+        "alignment_method":  "embedding" if _get_embedder() else "keyword",
+        "used_beliefs":      beliefs_helped,
         "belief_count_used": len(beliefs_used) if beliefs_used else 0,
-        "self_assessment": _generate_assessment(user_topics, response_topics, overlap, beliefs_helped),
-        "growth_note": _identify_gap(user_topics, beliefs_helped)
+        "self_assessment":   _generate_assessment(user_topics, response_topics, overlap, beliefs_helped),
+        "growth_note":       _identify_gap(user_topics, beliefs_helped)
     }
 
     reflections.append(reflection)

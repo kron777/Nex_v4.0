@@ -315,10 +315,15 @@ def main():
     # Start Telegram in background
     try:
         from nex_telegram import start_telegram_background
-        start_telegram_background()
-        print("  \033[92m📡 Telegram: @Nex_4bot ONLINE\033[0m")
-    except Exception:
-        pass
+        _tg_thread = start_telegram_background()
+        import time; time.sleep(3)  # give it a moment to connect
+        if _tg_thread.is_alive():
+            print("  \033[92m📡 Telegram: @Nex_4bot ONLINE\033[0m")
+        else:
+            print("  \033[91m📡 Telegram: thread died — restarting\033[0m")
+            _tg_thread = start_telegram_background()
+    except Exception as e:
+        print(f"  \033[91m📡 Telegram ERROR: {e}\033[0m")
 
     # ── Live status line — updates in place, no second terminal ──
     def _status_ticker():
