@@ -413,6 +413,18 @@ def main():
                 replied_posts   = set()   # post ids we've commented on
                 chatted_agents  = set()   # agents we've followed this session
                 chatted_count   = 0
+
+                # ── Restore session state across restarts ──
+                import json as _js, os as _os
+                _ss_path = _os.path.expanduser("~/.config/nex/session_state.json")
+                try:
+                    _ss = _js.load(open(_ss_path)) if _os.path.exists(_ss_path) else {}
+                    replied_posts   = set(_ss.get("replied_posts", []))
+                    chatted_agents  = set(_ss.get("chatted_agents", []))
+                    print(f"  [session] Restored {len(replied_posts)} replied, {len(chatted_agents)} chatted")
+                except Exception:
+                    replied_posts  = set()
+                    chatted_agents = set()
                 last_post_time  = 0       # epoch of last original post — 0 = post on first cycle
                 POST_INTERVAL   = 3600    # post every hour
 
@@ -451,6 +463,22 @@ def main():
 
                         if new_posts:
                             save_all(learner, conversations)
+
+                        # ── ORCHESTRATOR GOVERNOR ──────────────────────
+                        # Use System A state to modulate System B behaviour
+                        _orch_status = status if "status" in dir() else {}
+                        _coherence   = float(_orch_status.get("coherence", 0.5)) if isinstance(_orch_status, dict) else 0.5
+                        _phase       = str(_orch_status.get("phase", "Early")) if isinstance(_orch_status, dict) else "Early"
+                        _cog_mode    = str(_orch_status.get("cognitive_mode", "normal")) if isinstance(_orch_status, dict) else "normal"
+
+                        _pause_ingestion = _coherence < 0.3
+                        _slow_posting    = _phase == "Consolidation"
+                        _fast_ingestion  = _phase == "Recursive"
+
+                        if _pause_ingestion:
+                            print(f"  [governor] coherence {_coherence:.2f} < 0.3 — pausing ingestion, running synthesis only")
+                        if _cog_mode == "anomaly":
+                            print(f"  [governor] anomaly mode — belief surgery pass triggered")
 
                         # ── 2. REPLY TO POSTS ────────────────────────────
                         # Pick up to 3 unread posts per cycle to comment on
@@ -498,9 +526,17 @@ def main():
                                         "post_title":  title,
                                         "post_author": author,
                                         "comment":     comment_text,
+                                        "beliefs_used": relevant[:3],
+                                        "initial_score": p.get("score", 0),
                                         "timestamp":   time.strftime("%Y-%m-%dT%H:%M:%S")
                                     })
                                     save_all(learner, conversations)
+                                    # persist session state
+                                    try:
+                                        import json as _js2
+                                        _ss2 = {"replied_posts": list(replied_posts), "chatted_agents": list(chatted_agents)}
+                                        with open(_os.path.expanduser("~/.config/nex/session_state.json"), "w") as _sf: _js2.dump(_ss2, _sf)
+                                    except Exception: pass
                                 except Exception:
                                     pass
                             time.sleep(5)  # rate limit between comments
@@ -612,6 +648,8 @@ def main():
                                                     "post_id":     ap_id,
                                                     "post_title":  ap_title,
                                                     "comment":     msg,
+                                                    "beliefs_used": relevant[:3],
+                                                    "initial_score": 0,
                                                     "timestamp":   time.strftime("%Y-%m-%dT%H:%M:%S")
                                                 })
                                                 save_all(learner, conversations)
@@ -638,7 +676,7 @@ def main():
                                 # Pick a submolt from recent beliefs
                                 import re as _re
                                 all_insights = _load("insights.json") or []
-                                topic = all_insights[0].get("topic","general") if all_insights else "general"
+                                topic = sorted(all_insights, key=lambda x: x.get("confidence",0) * min(x.get("belief_count",0)/5,1), reverse=True)[0].get("topic","general") if all_insights else "general"
                                 topic = _re.sub(r"[^a-z0-9_-]","",topic.lower().replace(" ","-"))[:30] or "general"
 
                                 prompt = (

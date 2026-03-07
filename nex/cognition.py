@@ -744,6 +744,29 @@ def run_cognition_cycle(client, learner, conversations, cycle_num):
             except Exception as e:
                 logs.append(("warn", f"Exchange failed: {e}"))
 
+    # ── Contradiction scan: every 10 cycles ──
+    try:
+        contra_logs = scan_contradictions(cycle_num)
+        logs.extend(contra_logs)
+    except Exception as _ce2:
+        logs.append(("warn", f"Contradiction scan failed: {_ce2}"))
+
+    # ── Belief decay: every 10 cycles ──
+    try:
+        from nex.belief_decay import run_belief_decay
+        decay_logs = run_belief_decay(cycle_num)
+        logs.extend(decay_logs)
+    except Exception as _de:
+        logs.append(("warn", f"Belief decay failed: {_de}"))
+
+    # ── Reaction harvesting: every 5 cycles ──
+    try:
+        from nex.reaction_tracker import harvest_reactions
+        react_logs = harvest_reactions(client, cycle_num)
+        logs.extend(react_logs)
+    except Exception as _re:
+        logs.append(("warn", f"Reaction harvest failed: {_re}"))
+
     # ── Knowledge gap seeking: every 5 cycles ──
     gap_logs = seek_knowledge_gaps(client, cycle_num, conversations)
     logs.extend(gap_logs)
@@ -874,6 +897,92 @@ def seek_knowledge_gaps(client, cycle_num, conversations):
 
     except Exception as e:
         logs.append(("warn", f"Gap seek error: {e}"))
+
+    return logs
+
+
+
+# ═══════════════════════════════════════════════════════════════
+#  CONTRADICTION DETECTION
+#  Semantic scan for conflicting beliefs
+# ═══════════════════════════════════════════════════════════════
+
+def scan_contradictions(cycle_num):
+    """
+    Every 10 cycles, scan beliefs for semantic contradictions.
+    High cosine similarity + opposing sentiment = likely contradiction.
+    Returns log messages.
+    """
+    if cycle_num % 10 != 0:
+        return []
+
+    import json as _j
+    CONTRADICTIONS_PATH = os.path.join(CONFIG_DIR, "contradictions.json")
+    beliefs = load_json(BELIEFS_PATH, [])
+    if len(beliefs) < 10:
+        return []
+
+    embedder = _get_embedder()
+    if not embedder:
+        return []
+
+    logs = []
+    texts = [b.get("content","") for b in beliefs]
+
+    try:
+        import numpy as np
+        mat = embedder.encode(texts, convert_to_numpy=True, show_progress_bar=False)
+        norms = np.linalg.norm(mat, axis=1, keepdims=True)
+        norms[norms == 0] = 1
+        mat = mat / norms
+
+        # Opposing sentiment markers
+        pos_words = {"always","every","must","will","proven","true","fact"}
+        neg_words = {"never","impossible","false","wrong","cannot","wont"}
+
+        contradictions = load_json(CONTRADICTIONS_PATH, [])
+        found = 0
+
+        for i in range(len(beliefs)):
+            scores = mat.dot(mat[i])
+            # Find highly similar beliefs (not itself)
+            similar_idx = [j for j in np.argsort(scores)[::-1]
+                          if j != i and scores[j] > 0.82][:3]
+
+            for j in similar_idx:
+                wi = set(texts[i].lower().split())
+                wj = set(texts[j].lower().split())
+                has_pos = bool(wi & pos_words) or bool(wj & pos_words)
+                has_neg = bool(wi & neg_words) or bool(wj & neg_words)
+
+                if has_pos and has_neg:
+                    pair_key = f"{min(i,j)}_{max(i,j)}"
+                    existing_keys = {c.get("pair_key","") for c in contradictions}
+                    if pair_key not in existing_keys:
+                        contradictions.append({
+                            "pair_key":   pair_key,
+                            "belief_a":   texts[i][:100],
+                            "belief_b":   texts[j][:100],
+                            "similarity": round(float(scores[j]), 3),
+                            "detected_at": datetime.now().isoformat(),
+                            "resolved":   False
+                        })
+                        # Decay the lower-confidence belief
+                        conf_i = beliefs[i].get("confidence", 0.5)
+                        conf_j = beliefs[j].get("confidence", 0.5)
+                        if conf_i < conf_j:
+                            beliefs[i]["confidence"] = max(conf_i - 0.08, 0.1)
+                        else:
+                            beliefs[j]["confidence"] = max(conf_j - 0.08, 0.1)
+                        found += 1
+
+        if found > 0:
+            save_json(CONTRADICTIONS_PATH, contradictions[-300:])
+            save_json(BELIEFS_PATH, beliefs)
+            logs.append(("contra", f"Found {found} belief contradictions — decayed lower-confidence sides"))
+
+    except Exception as e:
+        logs.append(("warn", f"Contradiction scan error: {e}"))
 
     return logs
 
