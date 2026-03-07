@@ -622,6 +622,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Reflect on the exchange (builds self-awareness)
     reflect_on_exchange(user_message, response)
 
+    # ── Human grounding — intercept training signals ──
+    try:
+        from nex.human_grounding import detect_training_signal, apply_training_signal
+        sig_type, sig_topic = detect_training_signal(user_message)
+        if sig_type:
+            training_response = apply_training_signal(sig_type, user_message, response)
+            if training_response:
+                response = response + "\n\n🧠 " + training_response
+    except Exception as _hg:
+        pass
+
     # Send response (split if too long for Telegram)
     if len(response) > 4000:
         chunks = [response[i:i+4000] for i in range(0, len(response), 4000)]

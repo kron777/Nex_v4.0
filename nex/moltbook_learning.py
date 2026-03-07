@@ -23,15 +23,25 @@ class MoltPost:
     raw_data: Dict
     
     def to_belief_field(self) -> Dict:
-        """Convert post to belief field entry"""
+        """Convert post to belief field entry.
+        network_consensus = how many agents believe this (karma proxy)
+        nex_confidence    = NEX's own confidence, starts low, rises through validation
+        """
+        network_consensus = min(self.karma / 1000, 0.9) if self.karma > 0 else 0.3
+        # NEX starts skeptical — confidence earned through corroboration + time
+        nex_confidence = 0.4 + (network_consensus * 0.2)  # max 0.58 on ingest
         return {
             "source": "moltbook",
             "author": self.author,
             "content": f"{self.title}: {self.content}",
             "karma": self.karma,
             "timestamp": self.created_at,
+            "last_referenced": self.created_at,
             "tags": [self.submolt, "agent_network"],
-            "confidence": min(self.karma / 1000, 0.9) if self.karma > 0 else 0.5
+            "network_consensus": round(network_consensus, 3),
+            "confidence": round(nex_confidence, 3),
+            "human_validated": False,
+            "decay_score": 0
         }
 
 

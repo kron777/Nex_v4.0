@@ -37,6 +37,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from nex.agent_brain  import AgentBrain
+from nex.belief_store import initial_sync as _db_sync
 from nex.watchdog import enforce_singleton
 def _get_cognitive_context(query=None):
     try:
@@ -332,6 +333,8 @@ def main():
         import time; time.sleep(3)  # give it a moment to connect
         if _tg_thread.is_alive():
             print("  \033[92m📡 Telegram: @Nex_4bot ONLINE\033[0m")
+            try: _db_sync()
+            except Exception as _dbe: print(f"  [BeliefStore] {_dbe}")
         else:
             print("  \033[91m📡 Telegram: thread died — restarting\033[0m")
             _tg_thread = start_telegram_background()

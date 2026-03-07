@@ -771,6 +771,14 @@ def run_cognition_cycle(client, learner, conversations, cycle_num):
     gap_logs = seek_knowledge_gaps(client, cycle_num, conversations)
     logs.extend(gap_logs)
 
+    # ── Calibration tracking: every 20 cycles ──
+    try:
+        from nex.calibration import run_calibration
+        calib_logs = run_calibration(cycle_num)
+        logs.extend(calib_logs)
+    except Exception as _cal:
+        logs.append(("warn", f"Calibration failed: {_cal}"))
+
     # ── Reflection: summarize learning state every 15 cycles ──
     if cycle_num % 15 == 0 and insights:
         summary = get_reflection_summary()
