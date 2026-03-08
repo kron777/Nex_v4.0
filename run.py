@@ -345,11 +345,20 @@ def main():
 
     print(BANNER)
 
-    # Start Discord in background
+    # Start Mastodon in background
     try:
+        import time as _t; _t.sleep(3)
+        from nex_mastodon import start_mastodon_background
+        _masto_thread = start_mastodon_background()
+    except Exception as _me:
+        print(f"  \033[91m🐘 Mastodon ERROR: {_me}\033[0m")
+
+    # Start Discord in background (delayed — give Telegram time to settle)
+    try:
+        import time as _t; _t.sleep(5)
         from nex_discord import start_discord_background
         _dc_thread = start_discord_background()
-        import time as _t; _t.sleep(3)
+        _t.sleep(3)
         if _dc_thread.is_alive():
             print("  \033[92m🎮 Discord: Nex_v4#9613 ONLINE\033[0m")
         else:
@@ -849,6 +858,14 @@ def main():
                             from nex.cognition import run_cognition_cycle
                             run_cognition_cycle(client, learner, conversations, cycle)
                         except Exception:
+                            pass
+                        # ── 7. BELIEF DECAY ───────────────────────────────
+                        try:
+                            from nex.belief_decay import run_belief_decay
+                            decay_logs = run_belief_decay(cycle)
+                            for tag, msg in decay_logs:
+                                print(f"  [Decay] {msg}")
+                        except Exception as _de:
                             pass
 
                     except Exception as _cycle_err:
