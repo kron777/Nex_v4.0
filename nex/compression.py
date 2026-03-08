@@ -67,13 +67,13 @@ def run_compression(cycle_num):
 
     # Also prune beliefs to keep file manageable
     beliefs = load_json(BELIEFS_PATH, [])
-    if len(beliefs) > 2000:
+    if len(beliefs) > 5000:
         # Keep: human_validated, high confidence, recent
         protected = [b for b in beliefs if b.get("human_validated") or b.get("confidence",0) > 0.7]
         rest = sorted(
             [b for b in beliefs if not b.get("human_validated") and b.get("confidence",0) <= 0.7],
             key=lambda x: x.get("confidence",0), reverse=True
-        )[:2000 - len(protected)]
+        )[:5000 - len(protected)]
         beliefs = protected + rest
         save_json(BELIEFS_PATH, beliefs)
         logs.append(("compress", f"Belief field pruned to {len(beliefs)} entries"))
