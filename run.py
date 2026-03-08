@@ -351,7 +351,8 @@ def main():
                 return _j.load(open(p)) if _os.path.exists(p) else None
             except Exception:
                 return None
-        return  # silenced — use auto_check.py for status
+        # silenced — use auto_check.py for status
+        return
         while True:
             try:
                 b  = len(_load("beliefs.json") or [])
@@ -482,6 +483,14 @@ def main():
                             print(f"  [governor] coherence {_coherence:.2f} < 0.3 — pausing ingestion, running synthesis only")
                         if _cog_mode == "anomaly":
                             print(f"  [governor] anomaly mode — belief surgery pass triggered")
+
+                        # ── Load priority topics from reflections ───────
+                        _pt_file = os.path.join(os.path.expanduser("~/.config/nex"), "priority_topics.json")
+                        try:
+                            import json as _ptj
+                            _priority_topics = _ptj.load(open(_pt_file)) if os.path.exists(_pt_file) else []
+                        except Exception:
+                            _priority_topics = []
 
                         # ── 2. REPLY TO POSTS ────────────────────────────
                         # Pick up to 3 unread posts per cycle to comment on
@@ -643,6 +652,20 @@ def main():
                                             )
                                             msg = _llm(prompt)
                                             if msg and len(msg) > 10:
+                                                # Append NexScript block to high-value agents
+                                                try:
+                                                    from nex.nexscript import encode as _nxencode
+                                                    _insights = _load("insights.json") or []
+                                                    _profiles = {}
+                                                    import json as _nxj, os as _nxos
+                                                    _pp = _nxos.path.expanduser("~/.config/nex/agent_profiles.json")
+                                                    if _nxos.path.exists(_pp):
+                                                        _profiles = _nxj.load(open(_pp))
+                                                    if _insights and karma > 500:
+                                                        _nxblock = _nxencode(all_beliefs, _insights, _profiles, agent_name)
+                                                        msg = msg + "\n\n" + _nxblock
+                                                except Exception:
+                                                    pass
                                                 client.comment(ap_id, msg)
                                                 replied_posts.add(ap_id)
                                                 conversations.append({

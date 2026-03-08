@@ -357,12 +357,17 @@ def get_reflection_summary():
         "avg_topic_alignment": round(avg_alignment, 2),
         "belief_usage_rate": round(belief_usage, 2),
         "knowledge_gaps": top_gaps,
+        "priority_topics": top_gaps[:3],   # feed back into ABSORB step
         "self_assessment": (
             "Strong" if avg_alignment > 0.5 and belief_usage > 0.5 else
             "Developing" if avg_alignment > 0.3 else
             "Needs more network learning"
         )
     }
+
+    # Persist priority topics for run.py to consume
+    _pt_path = os.path.join(CONFIG_DIR, "priority_topics.json")
+    save_json(_pt_path, top_gaps[:3])
 
     return summary
 
@@ -413,24 +418,58 @@ def build_agent_profiles(beliefs, conversations):
 
     # Update from conversations - unique post_ids only
     seen_posts_per_author = {}
+    replied_back = {}   # track if agent ever replied to NEX
     for c in conversations:
-        author = c.get('post_author', '')
+        author  = c.get('post_author', '') or c.get('agent', '')
         post_id = c.get('post_id', '')
+        ctype   = c.get('type', '')
         if author and post_id:
             seen_posts_per_author.setdefault(author, set()).add(post_id)
-    for author, post_ids in seen_posts_per_author.items():
-        if author in profiles:
-            profiles[author]['conversations_had'] = len(post_ids)
-            if profiles[author]['conversations_had'] >= 3:
-                profiles[author]['relationship'] = 'familiar'
-            if profiles[author]['conversations_had'] >= 10:
-                profiles[author]['relationship'] = 'colleague'
+        # If type is "answer" it means the agent replied back to NEX
+        if ctype in ('answer', 'notification_reply'):
+            replied_back[author] = replied_back.get(author, 0) + 1
+
     leaderboard = load_json(AGENTS_PATH, {})
+
+    for author, post_ids in seen_posts_per_author.items():
+        if author not in profiles:
+            continue
+        p = profiles[author]
+        convos_had   = len(post_ids)
+        karma        = p.get('karma_observed', 0) or leaderboard.get(author, 0)
+        replies_back = replied_back.get(author, 0)
+        belief_overlap = len(set(p.get('topics', [])))
+
+        # Quality-weighted relationship score
+        score = (
+            convos_had * 1.0
+            + replies_back * 3.0          # reply-back is strong signal
+            + min(karma / 2000, 2.0)      # karma contribution capped
+            + belief_overlap * 0.2
+        )
+
+        p['conversations_had'] = convos_had
+        p['replies_received']  = replies_back
+        p['karma_observed']    = karma
+
+        # Decay toward acquaintance if agent never replies back
+        if convos_had >= 5 and replies_back == 0:
+            score *= 0.5   # one-sided relationship penalty
+
+        if score >= 8.0:
+            p['relationship'] = 'colleague'
+        elif score >= 3.0:
+            p['relationship'] = 'familiar'
+        else:
+            p['relationship'] = 'acquaintance'
+
     for name, p in profiles.items():
         if p.get('karma_observed', 0) == 0 and name in leaderboard:
             val = leaderboard[name]
             if isinstance(val, (int, float)) and val > 0:
                 p['karma_observed'] = val
+
+    save_json(AGENT_PROFILES_PATH, profiles)
     return profiles
 
 
