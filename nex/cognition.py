@@ -330,20 +330,21 @@ def _generate_assessment(user_topics, response_topics, overlap, beliefs_helped):
 
 def _identify_gap(user_topics, beliefs_helped):
     """Identify what NEX should learn more about."""
-    _extra_stop = {'doing','quick','update','daughter','continue','hello','thanks',
-                   'said','says','good','great','nice','okay','yes','sure','well',
-                   'made','make','come','going','back','look','used','using','got',
-                   'list','gaps','knowledge','beliefs','topics','moltbook','about',
-                   'should','would','could','these','their','there','where','which',
-                   'seek','more','need','learn','think','know','have','been','will',
-                   'daughter','forth','while','provide','those','state','stats','focus',
-                   'chat','discord','telegram','mastodon','moltbook','follows','identity',
+    _extra_stop = {
+                   'doing','quick','update','continue','hello','thanks','said','says',
+                   'good','great','nice','okay','yes','sure','well','made','make',
+                   'come','going','back','look','used','using','got','just','really',
+                   'every','never','always','maybe','often','still','until','since','after',
+                   'yours','forth','while','provide','those','about','should','would',
+                   'could','these','their','there','where','which','seek','more','need',
+                   'learn','think','know','have','been','will','start','starts','state',
+                   'stats','focus','favour','hour','progress','timer','harmonizing',
+                   'collaboration','specific','entire','comprehensive','coding','awake',
+                   'because','cron','without','session','days','each','tech','real',
+                   'list','gaps','knowledge','beliefs','topics','daughter',
+                   'moltbook','mastodon','discord','telegram','follows','identity',
                    'platform','network','social','agent','agents','system','systems',
-                   'chat','discord','telegram','mastodon','moltbook','follows','identity',
-                   'platform','network','social','agent','agents','system','systems',
-                   'favour','hour','progress','timer','starts','harmonizing','collaboration',
-                   'start','yours','there','their','about','really','great','think','just',
-                   'every','never','always','maybe','often','still','until','since','after'}
+                   }
     _filtered = [w for w in user_topics if w not in STOP and w not in _extra_stop and len(w) > 4]
     if not beliefs_helped:
         if _filtered:
