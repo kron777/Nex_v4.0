@@ -707,9 +707,12 @@ def main():
                         try:
                             notifs = client.notifications()
                             items  = notifs.get("notifications", [])
+                            _notif_replied = 0  # per-cycle cap
                             for n in items:
+                                if _notif_replied >= 5: break
                                 nid  = n.get("id", "")
                                 ntype = n.get("type", "")
+                                key = f"notif_{nid}"  # init early
                                 # Someone replied to our comment or post
                                 if ntype in ("comment_reply", "post_comment", "mention"):
                                     post_id  = n.get("relatedPostId", n.get("post_id", ""))
@@ -737,11 +740,6 @@ def main():
                                         continue
                                     if not post_id or not content:
                                         continue
-                                    # Hard cap — max 3 notification replies per cycle
-                                    _notif_count = sum(1 for k in replied_posts if k.startswith("notif_") and k not in {f"notif_{n.get('id','')}"})
-                                    if _notif_count >= 3:
-                                        break
-                                    key = f"notif_{nid}"
                                     if key in replied_posts:
                                         continue
                                     # Detect social/greeting messages — don't force belief injection
@@ -781,6 +779,7 @@ def main():
                                         try:
                                             client.comment(post_id, reply_text, parent_id=reply_to if reply_to else None)
                                             replied_posts.add(key)
+                                            _notif_replied += 1
                                             conversations.append({
                                                 "type":      "notification_reply",
                                                 "post_id":   post_id,
