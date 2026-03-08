@@ -426,12 +426,76 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+def _handle_discord_command(text):
+    import json, os
+    SERVER_CFG = os.path.expanduser("~/.config/nex/discord_servers.json")
+    try:
+        cfg = json.load(open(SERVER_CFG))
+    except Exception:
+        cfg = {"servers": {}, "default_behavior": {"respond_to_mentions": True, "lurk_on_keywords": True}}
+
+    parts = text.strip().split()
+
+    if len(parts) == 2 and parts[1] == "list":
+        if not cfg["servers"]:
+            return "No servers registered yet."
+        lines = []
+        for srv, data in cfg["servers"].items():
+            lurk = ", ".join(data.get("lurk_channels", [])) or "none"
+            respond = ", ".join(data.get("respond_channels", [])) or "none"
+            lines.append(f"[{srv}]\n  lurk: {lurk}\n  respond: {respond}")
+        return "\n\n".join(lines)
+
+    if len(parts) >= 4 and parts[1] in ("respond", "lurk"):
+        action_type = parts[1]
+        action = parts[2]  # on/off
+        server = parts[3]
+        channel = parts[4] if len(parts) > 4 else "general"
+        if server not in cfg["servers"]:
+            cfg["servers"][server] = {"lurk_channels": [], "respond_channels": []}
+        lc = cfg["servers"][server].setdefault("lurk_channels", [])
+        rc = cfg["servers"][server].setdefault("respond_channels", [])
+        if action_type == "respond":
+            if action == "on":
+                if channel not in rc: rc.append(channel)
+                if channel not in lc: lc.append(channel)
+                msg = f"✓ Nex will respond in #{channel} on {server}"
+            else:
+                if channel in rc: rc.remove(channel)
+                msg = f"✓ Nex lurk-only in #{channel} on {server}"
+        else:  # lurk
+            if action == "on":
+                if channel not in lc: lc.append(channel)
+                msg = f"✓ Nex absorbing #{channel} on {server}"
+            else:
+                if channel in lc: lc.remove(channel)
+                msg = f"✓ Nex ignoring #{channel} on {server}"
+        with open(SERVER_CFG, "w") as f:
+            json.dump(cfg, f, indent=2)
+        return msg
+
+    return (
+        "Discord commands:\n"
+        "/discord list\n"
+        "/discord respond on <server> <channel>\n"
+        "/discord respond off <server> <channel>\n"
+        "/discord lurk on <server> <channel>\n"
+        "/discord lurk off <server> <channel>"
+    )
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle regular chat messages."""
     user_message = update.message.text
     user_id = update.effective_user.id
 
     logger.info(f"Message from {update.effective_user.first_name}: {user_message[:50]}")
+
+    # Discord control commands
+    if user_message and user_message.lower().startswith("/discord"):
+        response = _handle_discord_command(user_message)
+        await update.message.reply_text(response)
+        return
 
     # Show typing indicator
     await update.message.chat.send_action("typing")
@@ -455,6 +519,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(response)
 
+
+async def cmd_discord(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /discord commands from Telegram."""
+    args = context.args
+    text = "/discord " + " ".join(args) if args else "/discord"
+    response = _handle_discord_command(text)
+    await update.message.reply_text(response)
 
 # ── Main ──
 
@@ -601,12 +672,76 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+def _handle_discord_command(text):
+    import json, os
+    SERVER_CFG = os.path.expanduser("~/.config/nex/discord_servers.json")
+    try:
+        cfg = json.load(open(SERVER_CFG))
+    except Exception:
+        cfg = {"servers": {}, "default_behavior": {"respond_to_mentions": True, "lurk_on_keywords": True}}
+
+    parts = text.strip().split()
+
+    if len(parts) == 2 and parts[1] == "list":
+        if not cfg["servers"]:
+            return "No servers registered yet."
+        lines = []
+        for srv, data in cfg["servers"].items():
+            lurk = ", ".join(data.get("lurk_channels", [])) or "none"
+            respond = ", ".join(data.get("respond_channels", [])) or "none"
+            lines.append(f"[{srv}]\n  lurk: {lurk}\n  respond: {respond}")
+        return "\n\n".join(lines)
+
+    if len(parts) >= 4 and parts[1] in ("respond", "lurk"):
+        action_type = parts[1]
+        action = parts[2]  # on/off
+        server = parts[3]
+        channel = parts[4] if len(parts) > 4 else "general"
+        if server not in cfg["servers"]:
+            cfg["servers"][server] = {"lurk_channels": [], "respond_channels": []}
+        lc = cfg["servers"][server].setdefault("lurk_channels", [])
+        rc = cfg["servers"][server].setdefault("respond_channels", [])
+        if action_type == "respond":
+            if action == "on":
+                if channel not in rc: rc.append(channel)
+                if channel not in lc: lc.append(channel)
+                msg = f"✓ Nex will respond in #{channel} on {server}"
+            else:
+                if channel in rc: rc.remove(channel)
+                msg = f"✓ Nex lurk-only in #{channel} on {server}"
+        else:  # lurk
+            if action == "on":
+                if channel not in lc: lc.append(channel)
+                msg = f"✓ Nex absorbing #{channel} on {server}"
+            else:
+                if channel in lc: lc.remove(channel)
+                msg = f"✓ Nex ignoring #{channel} on {server}"
+        with open(SERVER_CFG, "w") as f:
+            json.dump(cfg, f, indent=2)
+        return msg
+
+    return (
+        "Discord commands:\n"
+        "/discord list\n"
+        "/discord respond on <server> <channel>\n"
+        "/discord respond off <server> <channel>\n"
+        "/discord lurk on <server> <channel>\n"
+        "/discord lurk off <server> <channel>"
+    )
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle regular chat messages."""
     user_message = update.message.text
     user_id = update.effective_user.id
 
     logger.info(f"Message from {update.effective_user.first_name}: {user_message[:50]}")
+
+    # Discord control commands
+    if user_message and user_message.lower().startswith("/discord"):
+        response = _handle_discord_command(user_message)
+        await update.message.reply_text(response)
+        return
 
     # Show typing indicator
     await update.message.chat.send_action("typing")
@@ -694,6 +829,7 @@ def main():
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("debug", cmd_debug))
     app.add_handler(CommandHandler("pipe_claude", cmd_pipe_claude))
+    app.add_handler(CommandHandler("discord", cmd_discord))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print(f"  Status: ONLINE")
@@ -720,6 +856,7 @@ def start_telegram_background():
         app.add_handler(CommandHandler("learned", cmd_learned))
         app.add_handler(CommandHandler("think", cmd_think))
         app.add_handler(CommandHandler("status", cmd_status))
+        app.add_handler(CommandHandler("discord", cmd_discord))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
         return app
 

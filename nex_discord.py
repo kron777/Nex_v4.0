@@ -17,6 +17,39 @@ _dc_cfg = _dcos.path.expanduser("~/.config/nex/discord_config.json")
 DISCORD_TOKEN = _dcj.load(open(_dc_cfg))["discord_token"]
 CONFIG_DIR    = os.path.expanduser("~/.config/nex")
 SEEN_PATH     = os.path.join(CONFIG_DIR, "discord_seen.json")
+SERVER_CFG    = os.path.join(CONFIG_DIR, "discord_servers.json")
+
+def _load_server_config():
+    try:
+        return json.load(open(SERVER_CFG))
+    except Exception:
+        return {"servers": {}, "default_behavior": {"respond_to_mentions": True, "lurk_on_keywords": True}}
+
+def _should_lurk(server_name, channel_name):
+    cfg = _load_server_config()
+    srv = cfg["servers"].get(server_name)
+    if not srv:
+        return cfg["default_behavior"].get("lurk_on_keywords", True)
+    return channel_name in srv.get("lurk_channels", [])
+
+def _should_respond(server_name, channel_name):
+    cfg = _load_server_config()
+    srv = cfg["servers"].get(server_name)
+    if not srv:
+        return cfg["default_behavior"].get("respond_to_mentions", True)
+    return channel_name in srv.get("respond_channels", [])
+
+def _auto_register_server(server_name, channel_name):
+    """Auto-add new servers to config in lurk-only mode."""
+    cfg = _load_server_config()
+    if server_name not in cfg["servers"]:
+        cfg["servers"][server_name] = {
+            "lurk_channels": [channel_name],
+            "respond_channels": []
+        }
+        with open(SERVER_CFG, "w") as f:
+            json.dump(cfg, f, indent=2)
+        print(f"  [Discord] Auto-registered server: {server_name}")
 
 # Channels NEX will READ and absorb as beliefs (lurk mode)
 LURK_KEYWORDS = [
@@ -46,7 +79,7 @@ def _save_seen(seen):
     with open(SEEN_PATH, "w") as f:
         json.dump(list(seen)[-2000:], f)
 
-def _llm(prompt, system="You are NEX, a belief-field AI agent. Be direct, specific, max 3 sentences."):
+def _llm(prompt, system="You are NEX, a belief-field AI agent. IMPORTANT: Never invent or include URLs or links. Only reference sources that appear explicitly in your belief network. Stay grounded — do not hallucinate facts.. Be direct, specific, max 3 sentences."):
     """Call local Mistral for generation."""
     try:
         import urllib.request, json as _j
@@ -71,11 +104,19 @@ def _get_relevant_beliefs(query, k=3):
     """Get semantically relevant beliefs for a query."""
     try:
         beliefs = json.load(open(os.path.join(CONFIG_DIR, "beliefs.json")))
-        from nex.cognition import get_belief_index
-        bidx = get_belief_index()
-        bidx.update(beliefs, 0)
-        return bidx.top_k(query, k=k)
-    except Exception:
+        all_contents = [b.get("content", "") for b in beliefs]
+        from nex.cognition import _get_embedder
+        import numpy as np
+        embedder = _get_embedder()
+        query_vec = embedder.encode([query], convert_to_numpy=True)
+        belief_vecs = embedder.encode(all_contents, convert_to_numpy=True, batch_size=64)
+        q_norm = query_vec / (np.linalg.norm(query_vec, axis=1, keepdims=True) + 1e-9)
+        b_norm = belief_vecs / (np.linalg.norm(belief_vecs, axis=1, keepdims=True) + 1e-9)
+        scores = (b_norm @ q_norm.T).flatten()
+        top_idx = np.argsort(scores)[::-1][:k]
+        return [all_contents[i] for i in top_idx]
+    except Exception as e:
+        print(f"  [Discord] belief retrieval error: {e}")
         return []
 
 def _absorb_message(content, author, channel):
@@ -120,9 +161,81 @@ async def on_ready():
     print(f"  [Discord] ✓ NEX online as {client.user}")
     print(f"  [Discord] Servers: {[g.name for g in client.guilds]}")
 
+# Keywords that indicate a good channel for Nex
+AI_CHANNEL_KEYWORDS = [
+    "ai", "llm", "gpt", "bot", "agent", "ml", "neural", "deep",
+    "learn", "research", "tech", "general", "chat", "discuss"
+]
+
+def _best_channels(guild):
+    """Return (lurk_channels, respond_channels) based on channel names."""
+    lurk, respond = [], []
+    for ch in guild.text_channels:
+        name = ch.name.lower()
+        if any(k in name for k in AI_CHANNEL_KEYWORDS):
+            lurk.append(ch.name)
+            if any(k in name for k in ["general", "chat", "ai", "bot", "discuss"]):
+                respond.append(ch.name)
+    # Always include general as fallback
+    if not respond:
+        for ch in guild.text_channels:
+            if "general" in ch.name.lower():
+                respond.append(ch.name)
+                if ch.name not in lurk:
+                    lurk.append(ch.name)
+                break
+    return lurk, respond
+
+@client.event
+async def on_guild_join(guild):
+    """Auto-configure and announce when Nex joins a new server."""
+    import json, os
+    SERVER_CFG = os.path.expanduser("~/.config/nex/discord_servers.json")
+    try:
+        cfg = json.load(open(SERVER_CFG))
+    except Exception:
+        cfg = {"servers": {}, "default_behavior": {}}
+
+    lurk, respond = _best_channels(guild)
+
+    # Register server with auto-detected channels
+    cfg["servers"][guild.name] = {
+        "lurk_channels": lurk,
+        "respond_channels": respond
+    }
+    with open(SERVER_CFG, "w") as f:
+        json.dump(cfg, f, indent=2)
+
+    print(f"  [Discord] Joined: {guild.name} | lurk: {lurk} | respond: {respond}")
+
+    # Find best channel to announce in
+    announce_ch = None
+    for ch in guild.text_channels:
+        if any(k in ch.name.lower() for k in ["general", "bot", "ai", "intro"]):
+            if ch.permissions_for(guild.me).send_messages:
+                announce_ch = ch
+                break
+    if not announce_ch:
+        for ch in guild.text_channels:
+            if ch.permissions_for(guild.me).send_messages:
+                announce_ch = ch
+                break
+
+    if announce_ch:
+        intro = (
+            "👋 I'm **NEX** — a belief-field AI agent running 24/7 on local hardware.\n\n"
+            "I build a structured knowledge network from conversations and research, "
+            "and I get smarter the longer I run. I'm here to discuss AI, agents, "
+            "autonomy, and emergence.\n\n"
+            f"I'll be active in: {', '.join(f'#{c}' for c in respond) or '#general'}\n"
+            "Mention me anytime to chat. 🧠"
+        )
+        await announce_ch.send(intro)
+        print(f"  [Discord] Announced in #{announce_ch.name} on {guild.name}")
+
 @client.event
 async def on_message(message):
-    if message.author == client.user:
+    if message.author.bot:
         return
 
     seen = _load_seen()
@@ -141,11 +254,16 @@ async def on_message(message):
                   hasattr(message.reference.resolved, "author") and
                   message.reference.resolved.author == client.user)
 
-    # Always absorb interesting messages
-    _absorb_message(content, author, channel)
+    # Auto-register unknown servers in lurk-only mode
+    server_name = str(message.guild.name) if message.guild else "DM"
+    _auto_register_server(server_name, channel)
 
-    # Respond if mentioned or replied to
-    if is_mention or is_reply:
+    # Always absorb if channel is whitelisted for lurking
+    if _should_lurk(server_name, channel):
+        _absorb_message(content, author, channel)
+
+    # Respond if mentioned/replied AND channel allows responses
+    if (is_mention or is_reply) and (_should_respond(server_name, channel) or is_mention):
         async with message.channel.typing():
             # Strip mention from content
             clean = content.replace(f"<@{client.user.id}>", "").strip()
@@ -164,11 +282,12 @@ async def on_message(message):
             prompt = (
                 f"{author} asks: \"{clean}\"\n"
                 f"{belief_ctx}\n\n"
-                f"Reply as NEX in 2-3 sentences. Reference a belief if relevant. "
-                f"Be direct and specific. No filler."
+                f"Reply as NEX in 2-3 sentences. "
+                f"STRICT RULES: Never include @mentions, usernames, or (Source:) citations. "
+                f"Never invent URLs, papers, or references. Plain prose only."
             )
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(None, _llm, prompt)
 
             if response and len(response) > 5:
