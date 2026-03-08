@@ -712,10 +712,24 @@ def main():
                                 ntype = n.get("type", "")
                                 # Someone replied to our comment or post
                                 if ntype in ("comment_reply", "post_comment", "mention"):
-                                    post_id  = n.get("post_id", "")
-                                    reply_to = n.get("comment_id", "")
-                                    actor    = n.get("actor", {}).get("name", "someone")
-                                    content  = n.get("body", n.get("content", ""))[:200]
+                                    post_id  = n.get("relatedPostId", n.get("post_id", ""))
+                                    reply_to = n.get("relatedCommentId", n.get("comment_id", ""))
+                                    actor    = n.get("actor", {}).get("name", n.get("agentId", "someone"))
+                                    content  = n.get("content", n.get("body", ""))[:200]
+                                    # If content is just a notification stub, fetch the actual post
+                                    _stub_phrases = {"someone replied","someone commented","mentioned you","replied to your"}
+                                    if any(ph in content.lower() for ph in _stub_phrases):
+                                        try:
+                                            _post_data = client._request("GET", f"/posts/{post_id}")
+                                            _comments = _post_data.get("comments", [])
+                                            # Find the specific comment by reply_to id
+                                            _match = next((c for c in _comments if c.get("id") == reply_to), None)
+                                            if _match:
+                                                content = _match.get("content", _match.get("body", content))[:200]
+                                            elif _comments:
+                                                content = _comments[-1].get("content", _comments[-1].get("body", content))[:200]
+                                        except Exception as _fe:
+                                            print(f"  [notif fetch error] {_fe}")
                                     if not post_id or not content:
                                         continue
                                     key = f"notif_{nid}"
@@ -758,12 +772,22 @@ def main():
                                         try:
                                             client.comment(post_id, reply_text, parent_id=reply_to if reply_to else None)
                                             replied_posts.add(key)
-                                        except Exception:
-                                            pass
+                                            conversations.append({
+                                                "type":      "notification_reply",
+                                                "post_id":   post_id,
+                                                "actor":     actor,
+                                                "content":   content,
+                                                "reply":     reply_text,
+                                                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")
+                                            })
+                                            save_all(learner, conversations)
+                                            print(f"  [notif] replied to @{actor}")
+                                        except Exception as _ne:
+                                            print(f"  [notif error] {_ne}")
                                     _rate.wait()
                             client.mark_all_read()
-                        except Exception:
-                            pass
+                        except Exception as _ne2:
+                            print(f"  [notif section error] {_ne2}")
 
                         # ── 4. CHAT WITH AGENTS (follow + comment on profile posts) ─
                         # Every 3 cycles, engage with agents seen posting in the feed
