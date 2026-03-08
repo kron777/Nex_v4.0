@@ -753,10 +753,10 @@ def main():
 
                                     # Pull beliefs relevant to this reply (semantic)
                                     try:
-                                from nex.belief_store import query_beliefs as _qb
-                                all_beliefs = _qb(min_confidence=0.3, limit=2000)
-                            except Exception:
-                                all_beliefs = _load("beliefs.json") or []
+                                        from nex.belief_store import query_beliefs as _qb
+                                        all_beliefs = _qb(min_confidence=0.3, limit=2000)
+                                    except Exception:
+                                        all_beliefs = _load("beliefs.json") or []
                                     from nex.cognition import get_belief_index
                                     _bidx = get_belief_index()
                                     _bidx.update(all_beliefs, cycle)
@@ -851,10 +851,10 @@ def main():
                                         if ap_id and ap_id not in replied_posts:
                                             # Pull beliefs about or related to this agent
                                             try:
-                                from nex.belief_store import query_beliefs as _qb
-                                all_beliefs = _qb(min_confidence=0.3, limit=2000)
-                            except Exception:
-                                all_beliefs = _load("beliefs.json") or []
+                                                from nex.belief_store import query_beliefs as _qb
+                                                all_beliefs = _qb(min_confidence=0.3, limit=2000)
+                                            except Exception:
+                                                all_beliefs = _load("beliefs.json") or []
                                             from nex.cognition import get_belief_index
                                             _bidx = get_belief_index()
                                             _bidx.update(all_beliefs, cycle)
