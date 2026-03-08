@@ -814,9 +814,17 @@ def main():
                                 auth = b.get("author","")
                                 if auth and auth != "nex_v4":
                                     seen_authors[auth] = seen_authors.get(auth, 0) + 1
-                            top_agents = sorted(seen_authors.items(), key=lambda x: -x[1])[:10]
+                            _skip_sources = {
+                                'wikipedia','arxiv_research','deepmind blog','openai blog',
+                                'distill.pub','discord/nex_v4','mastodon/nex_v4','nex_v4',
+                                'google blog','github','medium','substack','youtube',
+                                'charles pulliam-moore','michael','venturebeat'
+                            }
+                            top_agents = sorted(seen_authors.items(), key=lambda x: -x[1])[:20]
                             for agent_name, karma in top_agents:
                                 if agent_name in chatted_agents:
+                                    continue
+                                if any(s in agent_name.lower() for s in _skip_sources):
                                     continue
                                 try:
                                     # Follow them
