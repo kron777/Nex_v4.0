@@ -481,9 +481,9 @@ def build_agent_profiles(beliefs, conversations):
         if convos_had >= 5 and replies_back == 0:
             score *= 0.5   # one-sided relationship penalty
 
-        if score >= 8.0:
+        if score >= 5.0:
             p['relationship'] = 'colleague'
-        elif score >= 3.0:
+        elif score >= 2.0:
             p['relationship'] = 'familiar'
         else:
             p['relationship'] = 'acquaintance'

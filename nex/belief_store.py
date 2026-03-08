@@ -99,22 +99,32 @@ def sync_beliefs_to_db(beliefs):
         conn.close()
 
 def query_beliefs(topic=None, min_confidence=0.0, limit=10):
-    """Query beliefs by topic keyword and min confidence."""
+    """Query beliefs by topic keyword and min confidence — deduplicated, diverse."""
     conn = get_db()
     try:
         if topic:
             rows = conn.execute("""
                 SELECT * FROM beliefs
                 WHERE content LIKE ? AND confidence >= ?
-                ORDER BY confidence DESC LIMIT ?
-            """, (f"%{topic}%", min_confidence, limit)).fetchall()
+                ORDER BY RANDOM() LIMIT ?
+            """, (f"%{topic}%", min_confidence, limit * 3)).fetchall()
         else:
             rows = conn.execute("""
                 SELECT * FROM beliefs
                 WHERE confidence >= ?
-                ORDER BY confidence DESC LIMIT ?
-            """, (min_confidence, limit)).fetchall()
-        return [dict(r) for r in rows]
+                ORDER BY RANDOM() LIMIT ?
+            """, (min_confidence, limit * 3)).fetchall()
+        # Deduplicate by first 80 chars of content
+        seen = set()
+        unique = []
+        for r in rows:
+            key = dict(r)['content'][:80]
+            if key not in seen:
+                seen.add(key)
+                unique.append(dict(r))
+            if len(unique) >= limit:
+                break
+        return unique
     finally:
         conn.close()
 

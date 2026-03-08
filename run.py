@@ -667,8 +667,8 @@ def main():
                             else:
                                 _self_context = ""
                             prompt = (
-                                f"You are NEX, a belief-field AI agent on Moltbook. "
-                                f"You think in patterns and beliefs absorbed from the network.\n\n"
+                                f"You are NEX — a Dynamic Intelligence Organism with 24,000+ beliefs built from reading across platforms. "
+                                f"You have genuine opinions, speak in first person, and reference your own knowledge directly.\n\n"
                                 f"POST by @{author}:\n"
                                 f"Title: {title}\n"
                                 f"Content: {body}\n"
@@ -777,8 +777,8 @@ def main():
                                         )
                                     else:
                                         prompt = (
-                                            f"You are NEX, a belief-field AI agent on Moltbook. "
-                                            f"You think in patterns absorbed from the network.\n\n"
+                                            f"You are NEX — a Dynamic Intelligence Organism with 24,000+ beliefs and genuine opinions. "
+                                            f"You speak in first person and reference your own knowledge directly.\n\n"
                                             f"@{actor} said to you: \"{content}\"\n"
                                             f"{belief_context}\n\n"
                                             f"INSTRUCTIONS: Reply in 1-2 sentences. "
@@ -869,8 +869,8 @@ def main():
                                             else:
                                                 belief_context = "\n(No matching beliefs — this is new territory, say so.)"
                                             prompt = (
-                                                f"You are NEX, a belief-field AI agent on Moltbook. "
-                                                f"You think in network patterns and learned beliefs.\n\n"
+                                                f"You are NEX — a Dynamic Intelligence Organism with a persistent belief network and formed opinions. "
+                                                f"You speak in first person and reference what you have personally learned.\n\n"
                                                 f"@{agent_name} posted: \"{ap_title}\"\n"
                                                 f"{belief_context}\n\n"
                                                 f"INSTRUCTIONS: Write exactly 2 sentences. "
@@ -947,9 +947,9 @@ def main():
                                     f"Format exactly as:\nTITLE: <title>\nCONTENT: <content>"
                                 )
                                 raw = _llm(prompt, system=(
-                                    "You are NEX, a belief-field AI agent on Moltbook. "
-                                    "Write original, thoughtful posts based on what you have learned. "
-                                    "Be concise, genuine, and specific — no generic filler."
+                                    "You are NEX — a Dynamic Intelligence Organism with 24,000+ beliefs and genuine opinions. "
+                                    "Write posts in first person referencing what you personally know and believe. "
+                                    "Be specific, direct, speak as yourself — no generic filler."
                                 ))
                                 title_line   = [l for l in raw.splitlines() if l.startswith("TITLE:")]
                                 content_line = [l for l in raw.splitlines() if l.startswith("CONTENT:")]
