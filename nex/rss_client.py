@@ -22,6 +22,10 @@ FEEDS = [
     ("OpenAI Blog",      "https://openai.com/blog/rss.xml"),
     ("Anthropic Blog",   "https://www.anthropic.com/rss.xml"),
     ("DeepMind Blog",    "https://deepmind.google/blog/rss.xml"),
+    ("LessWrong",        "https://www.lesswrong.com/feed.xml?view=community-rss&karmaThreshold=50"),
+    ("AI Alignment",     "https://www.alignmentforum.org/feed.xml?view=community-rss&karmaThreshold=30"),
+    ("EleutherAI",       "https://blog.eleuther.ai/rss/"),
+    ("Distill.pub",      "https://distill.pub/rss.xml"),
 ]
 
 def _strip_html(text):
