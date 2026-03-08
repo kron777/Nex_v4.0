@@ -697,7 +697,6 @@ def main():
                                     })
                                     try:
                                         from nex.cognition import reflect_on_conversation as score_response
-                                        print(f"  [score debug] relevant={len(relevant)} beliefs passed")
                                         score_response(title + " " + body, comment_text, beliefs_used=relevant[:3])
                                     except Exception as _se: print(f"  [score error] {_se}")
                                     save_all(learner, conversations)
