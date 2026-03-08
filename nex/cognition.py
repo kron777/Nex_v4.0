@@ -783,6 +783,25 @@ def run_cognition_cycle(client, learner, conversations, cycle_num):
             except Exception as e:
                 logs.append(("warn", f"Exchange failed: {e}"))
 
+    # ── Research loop (contradiction resolver): every 15 cycles ──
+    if cycle_num % 15 == 0:
+        try:
+            from nex.research_loop import detect_contradictions, spawn_question, load_convos
+            _rl_convos = load_convos()
+            _contras = detect_contradictions(_rl_convos)
+            if _contras:
+                import random as _rand
+                _q = spawn_question(_rand.choice(_contras))
+                try:
+                    _resp = client._request("POST", "/chat", {"message": _q[:200]})
+                    _ans  = _resp.get("reply","") if isinstance(_resp, dict) else ""
+                    if _ans:
+                        logs.append(("research", f"Research Q: {_q[:50]}… A: {_ans[:60]}…"))
+                except Exception:
+                    pass
+        except Exception as _rle:
+            pass
+
     # ── Contradiction scan: every 10 cycles ──
     try:
         contra_logs = scan_contradictions(cycle_num)

@@ -74,9 +74,10 @@ class MoltbookLearner:
             'twentyy':20,'thrree':3,'fivve':5
         }
         found = []
-        for word, val in word_map.items():
+        for word, val in sorted(word_map.items(), key=lambda x: -len(x[0])):
             if word in text:
                 found.append(val)
+                text = text.replace(word, " ", 1)  # consume match
             if len(found) >= 2:
                 break
         if len(found) >= 2:

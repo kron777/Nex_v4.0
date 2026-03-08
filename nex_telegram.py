@@ -644,6 +644,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ── Main ──
 
+
+async def cmd_pipe_claude(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Run N rounds of NEX-Claude dialogue. Usage: /pipe_claude 5 60"""
+    args = context.args
+    rounds   = int(args[0]) if args and args[0].isdigit() else 5
+    interval = int(args[1]) if len(args) > 1 and args[1].isdigit() else 60
+    await update.message.reply_text(f"🧠 Starting Claude pipeline: {rounds} rounds, {interval}s apart...")
+    try:
+        import sys, os
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from claude_pipeline import start_pipeline_background
+        def _cb(msg):
+            import asyncio
+            asyncio.run_coroutine_threadsafe(
+                update.message.reply_text(msg),
+                context.application.loop if hasattr(context.application, "loop") else asyncio.get_event_loop()
+            )
+        start_pipeline_background(rounds=rounds, interval=interval, status_cb=None)
+        await update.message.reply_text(f"✅ Pipeline running in background — {rounds} rounds of {interval}s")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Pipeline error: {e}")
+
 def main():
     print()
     print("  ╔══════════════════════════════════════╗")
@@ -671,6 +693,7 @@ def main():
     app.add_handler(CommandHandler("think", cmd_think))
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("debug", cmd_debug))
+    app.add_handler(CommandHandler("pipe_claude", cmd_pipe_claude))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print(f"  Status: ONLINE")
