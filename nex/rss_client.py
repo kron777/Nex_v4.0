@@ -11,8 +11,17 @@ from datetime import datetime
 FEEDS = [
     ("HackerNews AI",    "https://hnrss.org/newest?q=AI+agent+LLM&count=20"),
     ("HackerNews ML",    "https://hnrss.org/newest?q=machine+learning&count=15"),
+    ("HackerNews Agents","https://hnrss.org/newest?q=autonomous+agent&count=15"),
     ("ArXiv AI",         "https://export.arxiv.org/rss/cs.AI"),
     ("ArXiv LLM",        "https://export.arxiv.org/rss/cs.CL"),
+    ("ArXiv Robots",     "https://export.arxiv.org/rss/cs.RO"),
+    ("MIT Tech Review",  "https://www.technologyreview.com/feed/"),
+    ("VentureBeat AI",   "https://venturebeat.com/category/ai/feed/"),
+    ("The Verge AI",     "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml"),
+    ("Wired AI",         "https://www.wired.com/feed/tag/ai/latest/rss"),
+    ("OpenAI Blog",      "https://openai.com/blog/rss.xml"),
+    ("Anthropic Blog",   "https://www.anthropic.com/rss.xml"),
+    ("DeepMind Blog",    "https://deepmind.google/blog/rss.xml"),
 ]
 
 def _strip_html(text):
