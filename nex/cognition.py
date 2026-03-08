@@ -922,10 +922,15 @@ def seek_knowledge_gaps(client, cycle_num, conversations):
 
     # Extract gap topics from recent reflections
     gap_words = []
+    _gap_stop = {'need','more','beliefs','about','should','seek','these','topics',
+                 'moltbook','knowledge','gaps','list','learn','lacking','still'}
     for r in reflections[-20:]:
         note = r.get("growth_note", "")
-        if "Need more beliefs" in note:
-            gap_words.extend(extract_words(note, 4))
+        if "Need more beliefs about:" in note:
+            # Extract only words after the colon
+            after = note.split("Need more beliefs about:")[-1].split(".")[0]
+            words = [w.strip().lower() for w in after.split(",")]
+            gap_words.extend([w for w in words if w and w not in _gap_stop and len(w) > 4])
 
     if not gap_words:
         return []

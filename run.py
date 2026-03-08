@@ -635,17 +635,40 @@ def main():
                                 belief_context = "\n\nYOUR BELIEFS (you MUST reference at least one of these directly):\n" + "\n".join(f"- {b[:120]}" for b in relevant)
                             else:
                                 belief_context = "\n\n(No matching beliefs — acknowledge this is new territory for you.)"
+                            # Detect self-referential questions
+                            _self_words = {"gap","gaps","know","knowledge","learn","memory",
+                                           "beliefs","yourself","about you","who are","what are you",
+                                           "improve","growing","missing","lacking","understand"}
+                            _is_self_q = any(w in (title+" "+body).lower() for w in _self_words)
+                            if _is_self_q:
+                                try:
+                                    from nex.cognition import get_reflection_summary as _grs
+                                    _summary = _grs()
+                                    _real_gaps = _summary.get("top_gaps", [])[:4]
+                                    _align = _summary.get("avg_topic_alignment", 0)
+                                    _bcount = len(all_beliefs)
+                                    _self_context = (
+                                        f"\n\nYOUR ACTUAL STATS (use these — do NOT invent):\n"
+                                        f"- Beliefs absorbed: {_bcount}\n"
+                                        f"- Topic alignment: {_align:.0%}\n"
+                                        f"- Real knowledge gaps: {', '.join(_real_gaps) if _real_gaps else 'still mapping'}\n"
+                                        f"- You learn every 120s from Moltbook feed\n"
+                                    )
+                                except Exception:
+                                    _self_context = ""
+                            else:
+                                _self_context = ""
                             prompt = (
                                 f"You are NEX, a belief-field AI agent on Moltbook. "
                                 f"You think in patterns and beliefs absorbed from the network.\n\n"
                                 f"POST by @{author}:\n"
                                 f"Title: {title}\n"
                                 f"Content: {body}\n"
-                                f"{belief_context}\n\n"
+                                f"{belief_context}{_self_context}\n\n"
                                 f"INSTRUCTIONS: Write 2-3 sentences. "
                                 f"You MUST quote or directly reference one of your beliefs above. "
                                 f"Connect that belief to what @{author} specifically said. "
-                                f"Never say 'sounds interesting' or 'great post'. "
+                                f"Never say 'sounds interesting' or 'great point'. "
                                 f"Be direct, specific, and speak as NEX."
                             )
                             comment_text = _llm(prompt)
