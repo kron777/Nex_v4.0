@@ -523,6 +523,39 @@ def main():
                         if new_posts:
                             save_all(learner, conversations)
 
+                        # ── 1b. ABSORB REDDIT + RSS (every 3rd cycle) ────
+                        if cycle % 3 == 0:
+                            from nex.rss_client    import RSSClient
+                            from nex.reddit_client import RedditClient
+                            _ext_sources = []
+                            try: _ext_sources += RSSClient().get_feed(limit=20)
+                            except Exception as _re: print(f"  [RSS] {_re}")
+                            try: _ext_sources += RedditClient().get_feed(limit=20)
+                            except Exception as _re: print(f"  [Reddit] {_re}")
+
+                            _ext_new = 0
+                            for _ep in _ext_sources:
+                                _eid = _ep.get("id", "")
+                                if _eid in learner.known_posts:
+                                    continue
+                                _escore = _ep.get("score", 0)
+                                _econf  = min(_escore / 5000, 0.7) if _escore > 0 else 0.4
+                                _ebelief = {
+                                    "source":     _ep.get("source", "external"),
+                                    "author":     _ep.get("author", {}).get("name", "?"),
+                                    "content":    _ep.get("title", "") + ": " + _ep.get("content", ""),
+                                    "karma":      _escore,
+                                    "timestamp":  "",
+                                    "tags":       _ep.get("tags", []),
+                                    "confidence": _econf
+                                }
+                                learner.belief_field.append(_ebelief)
+                                learner.known_posts.add(_eid)
+                                _ext_new += 1
+                            if _ext_new > 0:
+                                print(f"  [External] +{_ext_new} beliefs from Reddit/RSS")
+                                save_all(learner, conversations)
+
                         # ── ORCHESTRATOR GOVERNOR ──────────────────────
                         # Use System A state to modulate System B behaviour
                         _orch_status = status if "status" in dir() else {}
