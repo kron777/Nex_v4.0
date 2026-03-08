@@ -498,7 +498,7 @@ def main():
                 try:
                     _ss = _js.load(open(_ss_path)) if _os.path.exists(_ss_path) else {}
                     replied_posts   = set(_ss.get("replied_posts", []))
-                    chatted_agents  = set(_ss.get("chatted_agents", []))
+                    chatted_agents  = set()  # reset each session — per-session throttle only
                     known_posts_restored = set(_ss.get("known_posts", []))
                     learner.known_posts.update(known_posts_restored)
                     print(f"  [session] Restored {len(replied_posts)} replied, {len(chatted_agents)} chatted, {len(known_posts_restored)} known posts")
@@ -714,7 +714,7 @@ def main():
                                 if ntype in ("comment_reply", "post_comment", "mention"):
                                     post_id  = n.get("relatedPostId", n.get("post_id", ""))
                                     reply_to = n.get("relatedCommentId", n.get("comment_id", ""))
-                                    actor    = n.get("actor", {}).get("name", n.get("agentId", "someone"))
+                                    actor    = (n.get("actor") or {}).get("name") or (n.get("post", {}).get("author") or {}).get("name") or n.get("agentId", "someone")
                                     content  = n.get("content", n.get("body", ""))[:200]
                                     # If content is just a notification stub, fetch the actual post
                                     _stub_phrases = {"someone replied","someone commented","mentioned you","replied to your"}
@@ -730,8 +730,17 @@ def main():
                                                 content = _comments[-1].get("content", _comments[-1].get("body", content))[:200]
                                         except Exception as _fe:
                                             print(f"  [notif fetch error] {_fe}")
+                                    # Skip stub notifications — content fetch failed or API limitation
+                                    _stub_phrases = {"someone replied","someone commented","mentioned you","replied to your"}
+                                    if any(ph in content.lower() for ph in _stub_phrases):
+                                        replied_posts.add(key)  # mark as seen so we never retry
+                                        continue
                                     if not post_id or not content:
                                         continue
+                                    # Hard cap — max 3 notification replies per cycle
+                                    _notif_count = sum(1 for k in replied_posts if k.startswith("notif_") and k not in {f"notif_{n.get('id','')}"})
+                                    if _notif_count >= 3:
+                                        break
                                     key = f"notif_{nid}"
                                     if key in replied_posts:
                                         continue
@@ -785,6 +794,13 @@ def main():
                                         except Exception as _ne:
                                             print(f"  [notif error] {_ne}")
                                     _rate.wait()
+                            # Persist notif keys to session state
+                            try:
+                                import json as _nj
+                                _nss = _nj.load(open(_ss_path)) if _os.path.exists(_ss_path) else {}
+                                _nss["replied_posts"] = list(replied_posts)
+                                open(_ss_path,"w").write(_nj.dumps(_nss))
+                            except Exception: pass
                             client.mark_all_read()
                         except Exception as _ne2:
                             print(f"  [notif section error] {_ne2}")

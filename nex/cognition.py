@@ -335,7 +335,8 @@ def _identify_gap(user_topics, beliefs_helped):
                    'made','make','come','going','back','look','used','using','got',
                    'list','gaps','knowledge','beliefs','topics','moltbook','about',
                    'should','would','could','these','their','there','where','which',
-                   'seek','more','need','learn','think','know','have','been','will'}
+                   'seek','more','need','learn','think','know','have','been','will',
+                   'daughter','forth','while','provide','those','state','stats','focus'}
     _filtered = [w for w in user_topics if w not in STOP and w not in _extra_stop and len(w) > 4]
     if not beliefs_helped:
         if _filtered:
