@@ -337,6 +337,10 @@ def _identify_gap(user_topics, beliefs_helped):
                    'should','would','could','these','their','there','where','which',
                    'seek','more','need','learn','think','know','have','been','will',
                    'daughter','forth','while','provide','those','state','stats','focus',
+                   'chat','discord','telegram','mastodon','moltbook','follows','identity',
+                   'platform','network','social','agent','agents','system','systems',
+                   'chat','discord','telegram','mastodon','moltbook','follows','identity',
+                   'platform','network','social','agent','agents','system','systems',
                    'favour','hour','progress','timer','starts','harmonizing','collaboration',
                    'start','yours','there','their','about','really','great','think','just',
                    'every','never','always','maybe','often','still','until','since','after'}
