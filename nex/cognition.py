@@ -330,8 +330,17 @@ def _generate_assessment(user_topics, response_topics, overlap, beliefs_helped):
 
 def _identify_gap(user_topics, beliefs_helped):
     """Identify what NEX should learn more about."""
+    _extra_stop = {'doing','quick','update','daughter','continue','hello','thanks',
+                   'said','says','good','great','nice','okay','yes','sure','well',
+                   'made','make','come','going','back','look','used','using','got',
+                   'list','gaps','knowledge','beliefs','topics','moltbook','about',
+                   'should','would','could','these','their','there','where','which',
+                   'seek','more','need','learn','think','know','have','been','will'}
+    _filtered = [w for w in user_topics if w not in STOP and w not in _extra_stop and len(w) > 4]
     if not beliefs_helped:
-        return f"Need more beliefs about: {', '.join(user_topics[:3])}. Should seek these topics on Moltbook."
+        if _filtered:
+            return f"Need more beliefs about: {', '.join(_filtered[:3])}. Should seek these topics on Moltbook."
+        return "Response lacked belief grounding — no specific knowledge gaps identified."
     return "Knowledge was applicable. Continue deepening understanding in these areas."
 
 

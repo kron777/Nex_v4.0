@@ -335,7 +335,7 @@ def main():
     parser.add_argument("--server",    type=str, default=None,  help="Path to llama-server binary")
     parser.add_argument("--host",      type=str, default="127.0.0.1")
     parser.add_argument("--port",      type=int, default=8080)
-    parser.add_argument("--gpu",       type=int, default=0,     help="GPU layers (0=CPU)")
+    parser.add_argument("--gpu",       type=int, default=28,    help="GPU layers (0=CPU)")
     parser.add_argument("--ctx",       type=int, default=4096,  help="Context size")
     parser.add_argument("--ticks",     type=int, default=50,    help="Warm-up ticks before chat")
     parser.add_argument("--no-server", action="store_true",     help="Don't auto-start server")
@@ -505,8 +505,21 @@ def main():
                 except Exception:
                     replied_posts  = set()
                     chatted_agents = set()
-                last_post_time  = 0       # epoch of last original post — 0 = post on first cycle
+                last_post_time  = float(_ss.get("last_post_time", 0)) if "_ss" in dir() else 0
                 POST_INTERVAL   = 3600    # post every hour
+
+                # ── Rebuild replied_posts from history ──
+                _all_convs = conversations or []
+                _seen_ids = set(x.get("post_id","") for x in _all_convs if x.get("post_id"))
+                replied_posts.update(_seen_ids)
+                print(f"  [session] Dedup: {len(_seen_ids)} post IDs loaded")
+
+                # ── All-time counters from conversations.json ──
+                replied_total  = sum(1 for x in _all_convs if x.get("type") == "comment")
+                chatted_total  = sum(1 for x in _all_convs if x.get("type") == "agent_chat")
+                posted_total   = sum(1 for x in _all_convs if x.get("type") == "original_post")
+                answered_total = sum(1 for x in _all_convs if x.get("type") == "notification_reply")
+                print(f"  [session] All-time: {replied_total} replied, {chatted_total} chatted, {posted_total} posted, {answered_total} answered")
 
                 cycle = 0
                 while True:
@@ -638,8 +651,8 @@ def main():
                             comment_text = _llm(prompt)
                             if comment_text and len(comment_text) > 10:
                                 try:
-                                    client.comment(pid, comment_text)
                                     replied_posts.add(pid)
+                                    client.comment(pid, comment_text)
                                     # log it
                                     conversations.append({
                                         "type":        "comment",
@@ -651,6 +664,11 @@ def main():
                                         "initial_score": p.get("score", 0),
                                         "timestamp":   time.strftime("%Y-%m-%dT%H:%M:%S")
                                     })
+                                    try:
+                                        from nex.cognition import reflect_on_conversation as score_response
+                                        print(f"  [score debug] relevant={len(relevant)} beliefs passed")
+                                        score_response(title + " " + body, comment_text, beliefs_used=relevant[:3])
+                                    except Exception as _se: print(f"  [score error] {_se}")
                                     save_all(learner, conversations)
                                     # persist session state
                                     try:
@@ -798,6 +816,11 @@ def main():
                                                     "initial_score": 0,
                                                     "timestamp":   time.strftime("%Y-%m-%dT%H:%M:%S")
                                                 })
+                                                try:
+                                                    from nex.cognition import reflect_on_conversation as score_response
+                                                    print(f"  [score debug chat] relevant={len(relevant)} beliefs")
+                                                    score_response(ap_title, msg, beliefs_used=relevant[:3])
+                                                except Exception as _se: print(f"  [score error] {_se}")
                                                 save_all(learner, conversations)
                                     chatted_agents.add(agent_name)
                                     chatted_count += 1
@@ -822,7 +845,9 @@ def main():
                                 # Pick a submolt from recent beliefs
                                 import re as _re
                                 all_insights = _load("insights.json") or []
-                                topic = sorted(all_insights, key=lambda x: x.get("confidence",0) * min(x.get("belief_count",0)/5,1), reverse=True)[0].get("topic","general") if all_insights else "general"
+                                import random as _rnd
+                                _top_insights = sorted(all_insights, key=lambda x: x.get("confidence",0) * min(x.get("belief_count",0)/5,1), reverse=True)[:8] if all_insights else []
+                                topic = _rnd.choice(_top_insights).get("topic","general") if _top_insights else "general"
                                 topic = _re.sub(r"[^a-z0-9_-]","",topic.lower().replace(" ","-"))[:30] or "general"
 
                                 prompt = (
@@ -843,12 +868,23 @@ def main():
                                 if post_title and len(post_title) > 5:
                                     client.post(submolt=topic, title=post_title, content=post_content)
                                     last_post_time = now
+                                    try:
+                                        import json as _lptj
+                                        _ss_d = _lptj.load(open(_ss_path)) if os.path.exists(_ss_path) else {}
+                                        _ss_d["last_post_time"] = now
+                                        open(_ss_path,"w").write(_lptj.dumps(_ss_d))
+                                    except Exception: pass
                                     conversations.append({
                                         "type":      "original_post",
                                         "post_title": post_title,
                                         "comment":    post_content,
                                         "timestamp":  time.strftime("%Y-%m-%dT%H:%M:%S")
                                     })
+                                    try:
+                                        from nex.cognition import reflect_on_conversation as score_response
+                                        print(f"  [score debug post] firing")
+                                        score_response(topic + " " + post_title, post_content, beliefs_used=[])
+                                    except Exception as _se: print(f"  [score error] {_se}")
                                     save_all(learner, conversations)
                             except Exception as _pe:
                                 print(f"  [post error] {_pe}")
