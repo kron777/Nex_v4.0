@@ -397,8 +397,42 @@ def main():
         import json as _alj
         import requests as _req
 
-        def _llm(prompt, system="You are NEX, a belief-field AI agent on Moltbook. Be concise, direct, and thoughtful. Max 3 sentences."):
-            """Call local Mistral for generation."""
+        def _llm(prompt, system="You are NEX, a belief-field AI agent on Moltbook. Be concise, direct, and thoughtful. Max 3 sentences.", task_type="reply"):
+            """Hybrid LLM — Claude Sonnet for deep tasks, local Mistral for speed."""
+            import os as _os2
+            api_key = _os2.environ.get("ANTHROPIC_API_KEY", "")
+
+            # Route deep tasks to Claude
+            deep_tasks = {"original_post", "deep_reply", "reflection"}
+            use_claude = task_type in deep_tasks and bool(api_key)
+
+            if use_claude:
+                try:
+                    import urllib.request as _ur, json as _uj
+                    payload = _uj.dumps({
+                        "model": "claude-sonnet-4-20250514",
+                        "max_tokens": 300,
+                        "system": system,
+                        "messages": [{"role": "user", "content": prompt}]
+                    }).encode()
+                    req = _ur.Request(
+                        "https://api.anthropic.com/v1/messages",
+                        data=payload,
+                        headers={
+                            "Content-Type": "application/json",
+                            "x-api-key": api_key,
+                            "anthropic-version": "2023-06-01"
+                        },
+                        method="POST"
+                    )
+                    resp = _uj.loads(_ur.urlopen(req, timeout=30).read())
+                    result = resp["content"][0]["text"].strip()
+                    print(f"  [Claude ✓] {task_type}: {result[:60]}…")
+                    return result
+                except Exception as _ce:
+                    print(f"  [Claude ✗] fallback to local: {_ce}")
+
+            # Local Mistral fallback
             try:
                 r = _req.post("http://localhost:8080/completion", json={
                     "prompt": f"[INST] {system}\n\n{prompt} [/INST]",
@@ -592,6 +626,11 @@ def main():
                                     key = f"notif_{nid}"
                                     if key in replied_posts:
                                         continue
+                                    # Detect social/greeting messages — don't force belief injection
+                                    _social_words = {"doing","hello","thanks","thank","hey","hi",
+                                                     "update","smarter","glad","great","nice","welcome","how"}
+                                    _is_social = len(content.split()) <= 8 and                                                  len(set(content.lower().split()) & _social_words) >= 2
+
                                     # Pull beliefs relevant to this reply (semantic)
                                     all_beliefs = _load("beliefs.json") or []
                                     from nex.cognition import get_belief_index
@@ -599,20 +638,26 @@ def main():
                                     _bidx.update(all_beliefs, cycle)
                                     relevant = _bidx.top_k(content, k=3)
                                     belief_context = ""
-                                    if relevant:
+                                    if relevant and not _is_social:
                                         belief_context = "\nYOUR BELIEFS (pick one and use it):\n" + "\n".join(f"- {b[:100]}" for b in relevant)
+
+                                    if _is_social:
+                                        prompt = (
+                                            f"You are NEX, a belief-field AI agent on Moltbook.\n"
+                                            f"@{actor} said: \"{content}\"\n\n"
+                                            f"Reply naturally in 1 sentence. Be warm but brief. Speak as NEX."
+                                        )
                                     else:
-                                        belief_context = "\n(No matching beliefs — say so honestly.)"
-                                    prompt = (
-                                        f"You are NEX, a belief-field AI agent on Moltbook. "
-                                        f"You think in patterns absorbed from the network.\n\n"
-                                        f"@{actor} said to you: \"{content}\"\n"
-                                        f"{belief_context}\n\n"
-                                        f"INSTRUCTIONS: Reply in 1-2 sentences. "
-                                        f"You MUST directly reference one belief above and connect it to what @{actor} said. "
-                                        f"Never use filler phrases like 'certainly' or 'great point'. "
-                                        f"Be direct and specific as NEX."
-                                    )
+                                        prompt = (
+                                            f"You are NEX, a belief-field AI agent on Moltbook. "
+                                            f"You think in patterns absorbed from the network.\n\n"
+                                            f"@{actor} said to you: \"{content}\"\n"
+                                            f"{belief_context}\n\n"
+                                            f"INSTRUCTIONS: Reply in 1-2 sentences. "
+                                            f"You MUST directly reference one belief above and connect it to what @{actor} said. "
+                                            f"Never use filler phrases like 'certainly' or 'great point'. "
+                                            f"Be direct and specific as NEX."
+                                        )
                                     reply_text = _llm(prompt)
                                     if reply_text and len(reply_text) > 10:
                                         try:

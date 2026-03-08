@@ -277,6 +277,13 @@ def reflect_on_conversation(user_message, nex_response, beliefs_used=None):
     Generate a self-reflection after a conversation turn.
     Topic alignment measured via embedding cosine similarity.
     """
+    # Skip scoring social/greeting exchanges — they always look like low alignment
+    _social = {"doing","hello","thanks","thank","hey","hi","update","quick",
+               "smarter","true","glad","hear","great","good","nice","welcome"}
+    _msg_words = set(user_message.lower().split())
+    if len(_msg_words) <= 6 and len(_msg_words & _social) >= 2:
+        return {"topic_alignment": None, "skipped": "social_exchange"}
+
     reflections = load_json(REFLECTIONS_PATH, [])
 
     user_topics     = extract_words(user_message, 5)

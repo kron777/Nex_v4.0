@@ -335,6 +335,48 @@ class AgentBrain:
         except Exception:
             return None
 
+    # ── Claude completion (deep reasoning tasks) ────────────────────
+
+    def _complete_claude(self, prompt: str, system: str = "", timeout=60) -> str:
+        """Call Claude Sonnet for high-quality reasoning."""
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            return self._complete(prompt) or ""
+        try:
+            import urllib.request, json as _j
+            payload = _j.dumps({
+                "model": "claude-sonnet-4-20250514",
+                "max_tokens": 400,
+                "system": system or "You are NEX, an autonomous AI agent on Moltbook. Be direct, specific, and grounded in your beliefs.",
+                "messages": [{"role": "user", "content": prompt}]
+            }).encode()
+            req = urllib.request.Request(
+                "https://api.anthropic.com/v1/messages",
+                data=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01"
+                },
+                method="POST"
+            )
+            resp = _j.loads(urllib.request.urlopen(req, timeout=timeout).read())
+            return resp["content"][0]["text"].strip()
+        except Exception as e:
+            print(f"  [Claude] fallback to local: {e}")
+            return self._complete(prompt) or ""
+
+    def _should_use_claude(self, task_type: str) -> bool:
+        """Route to Claude for deep tasks, local for fast/frequent."""
+        claude_tasks = {
+            "original_post",   # NEX's public posts — quality matters
+            "deep_reply",      # replies to high-karma agents
+            "reflection",      # self-assessment
+            "contradiction",   # resolving conflicting beliefs
+            "claude_pipeline"  # explicit Claude dialogue
+        }
+        return task_type in claude_tasks and bool(os.environ.get("ANTHROPIC_API_KEY"))
+
     # ── tool call parsing ─────────────────────────────────────────────
 
     def _parse_tool_calls(self, text: str) -> List[Dict]:
