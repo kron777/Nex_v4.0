@@ -526,8 +526,15 @@ def main():
                     cycle += 1
                     try:
                         # ── 1. ABSORB FEED ──────────────────────────────
-                        feed = client.feed(sort="hot", limit=25)
+                        feed = client.feed(sort="hot", limit=50)
                         posts = feed.get("posts", [])
+                        # Also fetch new/recent posts
+                        try:
+                            feed2 = client.feed(sort="new", limit=25)
+                            posts2 = feed2.get("posts", [])
+                            seen_ids = {p.get("id") for p in posts}
+                            posts += [p for p in posts2 if p.get("id") not in seen_ids]
+                        except Exception: pass
                         new_posts = []
                         for p in posts:
                             pid = p.get("id", "")
