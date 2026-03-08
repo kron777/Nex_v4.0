@@ -345,6 +345,18 @@ def main():
 
     print(BANNER)
 
+    # Start Discord in background
+    try:
+        from nex_discord import start_discord_background
+        _dc_thread = start_discord_background()
+        import time as _t; _t.sleep(3)
+        if _dc_thread.is_alive():
+            print("  \033[92m🎮 Discord: Nex_v4#9613 ONLINE\033[0m")
+        else:
+            print("  \033[91m🎮 Discord: thread died\033[0m")
+    except Exception as _de:
+        print(f"  \033[91m🎮 Discord ERROR: {_de}\033[0m")
+
     # Start Telegram in background
     try:
         from nex_telegram import start_telegram_background
