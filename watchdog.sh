@@ -12,7 +12,9 @@ cd ~/Desktop/nex
 source venv/bin/activate
 
 # ── Config ──────────────────────────────────────────────────────
-LLAMA_SERVER="/media/rr/4TBDATA/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/llama.cpp/build/bin/llama-server"
+LLAMA_SERVER="/media/rr/4TBDATA/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/llama.cpp/build-rocm/bin/llama-server"
+export HSA_OVERRIDE_GFX_VERSION=10.3.0
+export HSA_OVERRIDE_GFX_VERSION=10.3.0
 LLAMA_MODEL="/media/rr/4TBDATA/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf"
 PORT=8080
 RESTART_DELAY=5
@@ -69,7 +71,7 @@ ensure_llama() {
         --host 127.0.0.1 \
         --port "$PORT" \
         -c 4096 \
-        -ngl 0 \
+        -ngl 28 \
         --log-disable \
         >> "$LOG" 2>&1 &
     LLAMA_PID=$!
