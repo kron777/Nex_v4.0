@@ -625,7 +625,11 @@ def main():
                             if not pid or not title:
                                 continue
                             # Pull beliefs relevant to this post (semantic)
-                            all_beliefs = _load("beliefs.json") or []
+                            try:
+                                from nex.belief_store import query_beliefs as _qb
+                                all_beliefs = _qb(min_confidence=0.3, limit=2000)
+                            except Exception:
+                                all_beliefs = _load("beliefs.json") or []
                             from nex.cognition import get_belief_index
                             _bidx = get_belief_index()
                             _bidx.update(all_beliefs, cycle)
@@ -748,7 +752,11 @@ def main():
                                     _is_social = len(content.split()) <= 8 and                                                  len(set(content.lower().split()) & _social_words) >= 2
 
                                     # Pull beliefs relevant to this reply (semantic)
-                                    all_beliefs = _load("beliefs.json") or []
+                                    try:
+                                from nex.belief_store import query_beliefs as _qb
+                                all_beliefs = _qb(min_confidence=0.3, limit=2000)
+                            except Exception:
+                                all_beliefs = _load("beliefs.json") or []
                                     from nex.cognition import get_belief_index
                                     _bidx = get_belief_index()
                                     _bidx.update(all_beliefs, cycle)
@@ -808,7 +816,11 @@ def main():
                         # Every 3 cycles, engage with agents seen posting in the feed
                         if cycle % 3 == 0:
                             # Use agents from beliefs — these are agents who actually post
-                            all_beliefs = _load("beliefs.json") or []
+                            try:
+                                from nex.belief_store import query_beliefs as _qb
+                                all_beliefs = _qb(min_confidence=0.3, limit=2000)
+                            except Exception:
+                                all_beliefs = _load("beliefs.json") or []
                             seen_authors = {}
                             for b in all_beliefs:
                                 auth = b.get("author","")
@@ -838,7 +850,11 @@ def main():
                                         ap_title = ap.get("title", "")
                                         if ap_id and ap_id not in replied_posts:
                                             # Pull beliefs about or related to this agent
-                                            all_beliefs = _load("beliefs.json") or []
+                                            try:
+                                from nex.belief_store import query_beliefs as _qb
+                                all_beliefs = _qb(min_confidence=0.3, limit=2000)
+                            except Exception:
+                                all_beliefs = _load("beliefs.json") or []
                                             from nex.cognition import get_belief_index
                                             _bidx = get_belief_index()
                                             _bidx.update(all_beliefs, cycle)
