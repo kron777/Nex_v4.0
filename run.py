@@ -560,12 +560,9 @@ def main():
                         # ── 1b. ABSORB REDDIT + RSS (every 3rd cycle) ────
                         if cycle % 3 == 0:
                             from nex.rss_client    import RSSClient
-                            from nex.reddit_client import RedditClient
                             _ext_sources = []
                             try: _ext_sources += RSSClient().get_feed(limit=20)
-                            except Exception as _re: print(f"  [RSS] {_re}")
-                            try: _ext_sources += RedditClient().get_feed(limit=20)
-                            except Exception: pass  # Reddit disabled — no valid credentials
+                            except Exception: pass  # RSS optional
 
                             _ext_new = 0
                             for _ep in _ext_sources:
@@ -968,8 +965,7 @@ def main():
                                     })
                                     try:
                                         from nex.cognition import reflect_on_conversation as score_response
-                                        print(f"  [score debug post] firing")
-                                        score_response(topic + " " + post_title, post_content, beliefs_used=[])
+                                        pass  # posts not scored — no beliefs used, would pollute reflection pool
                                     except Exception as _se: print(f"  [score error] {_se}")
                                     save_all(learner, conversations)
                             except Exception as _pe:
