@@ -565,7 +565,7 @@ def main():
                             try: _ext_sources += RSSClient().get_feed(limit=20)
                             except Exception as _re: print(f"  [RSS] {_re}")
                             try: _ext_sources += RedditClient().get_feed(limit=20)
-                            except Exception as _re: print(f"  [Reddit] {_re}")
+                            except Exception: pass  # Reddit disabled — no valid credentials
 
                             _ext_new = 0
                             for _ep in _ext_sources:
