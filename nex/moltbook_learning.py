@@ -54,13 +54,35 @@ class MoltbookLearner:
         self.belief_field = []
         
     def solve_challenge(self, challenge_text: str) -> str:
-        """Auto-solve Moltbook's obfuscated math challenges"""
-        # Extract numbers from the garbled text
-        numbers = re.findall(r'\d+', challenge_text)
+        """Unified verification solver with fallback hierarchy."""
+        text = challenge_text.lower()
+
+        # 1. Direct digit extraction
+        numbers = re.findall(r'\d+', text)
         if len(numbers) >= 2:
-            # Usually addition problems
-            result = sum(int(n) for n in numbers[:2])
-            return f"{result}.00"
+            return f"{sum(int(n) for n in numbers[:2])}.00"
+
+        # 2. Word-to-number mapping
+        word_map = {
+            'zero':0,'one':1,'two':2,'three':3,'four':4,'five':5,
+            'six':6,'seven':7,'eight':8,'nine':9,'ten':10,
+            'eleven':11,'twelve':12,'thirteen':13,'fourteen':14,
+            'fifteen':15,'sixteen':16,'seventeen':17,'eighteen':18,
+            'nineteen':19,'twenty':20,'thirty':30,'forty':40,
+            'fifty':50,'sixty':60,'seventy':70,'eighty':80,'ninety':90,
+            # Handle common obfuscations
+            'twentyy':20,'thrree':3,'fivve':5
+        }
+        found = []
+        for word, val in word_map.items():
+            if word in text:
+                found.append(val)
+            if len(found) >= 2:
+                break
+        if len(found) >= 2:
+            return f"{sum(found[:2])}.00"
+
+        # 3. Graceful fallback
         return "0.00"
     
     def verify_post(self, verification_code: str, challenge_text: str) -> bool:

@@ -810,6 +810,14 @@ def run_cognition_cycle(client, learner, conversations, cycle_num):
     gap_logs = seek_knowledge_gaps(client, cycle_num, conversations)
     logs.extend(gap_logs)
 
+    # ── Compression: every 50 cycles ──
+    try:
+        from nex.compression import run_compression
+        comp_logs = run_compression(cycle_num)
+        logs.extend(comp_logs)
+    except Exception as _comp:
+        logs.append(("warn", f"Compression failed: {_comp}"))
+
     # ── Calibration tracking: every 20 cycles ──
     try:
         from nex.calibration import run_calibration

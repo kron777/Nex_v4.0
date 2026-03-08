@@ -33,6 +33,25 @@ import argparse
 import threading
 from pathlib import Path
 
+
+# ── Central rate limiter ─────────────────────────────────────
+import time as _time
+
+class _RateLimiter:
+    """Token bucket rate limiter — one central place to tune API rates."""
+    def __init__(self, calls_per_minute=20):
+        self._interval = 60.0 / calls_per_minute
+        self._last     = 0.0
+
+    def wait(self):
+        now     = _time.time()
+        elapsed = now - self._last
+        if elapsed < self._interval:
+            _time.sleep(self._interval - elapsed)
+        self._last = _time.time()
+
+_rate = _RateLimiter(calls_per_minute=15)  # 15 API calls/min max
+
 # ── make sure nex package is importable ──────────────────────────────────────
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -425,7 +444,9 @@ def main():
                     _ss = _js.load(open(_ss_path)) if _os.path.exists(_ss_path) else {}
                     replied_posts   = set(_ss.get("replied_posts", []))
                     chatted_agents  = set(_ss.get("chatted_agents", []))
-                    print(f"  [session] Restored {len(replied_posts)} replied, {len(chatted_agents)} chatted")
+                    known_posts_restored = set(_ss.get("known_posts", []))
+                    learner.known_posts.update(known_posts_restored)
+                    print(f"  [session] Restored {len(replied_posts)} replied, {len(chatted_agents)} chatted, {len(known_posts_restored)} known posts")
                 except Exception:
                     replied_posts  = set()
                     chatted_agents = set()
@@ -546,12 +567,12 @@ def main():
                                     # persist session state
                                     try:
                                         import json as _js2
-                                        _ss2 = {"replied_posts": list(replied_posts), "chatted_agents": list(chatted_agents)}
+                                        _ss2 = {"replied_posts": list(replied_posts), "chatted_agents": list(chatted_agents), "known_posts": list(learner.known_posts)[-500:]}
                                         with open(_os.path.expanduser("~/.config/nex/session_state.json"), "w") as _sf: _js2.dump(_ss2, _sf)
                                     except Exception: pass
                                 except Exception:
                                     pass
-                            time.sleep(5)  # rate limit between comments
+                            _rate.wait()   # central rate limiter
 
                         # ── 3. REPLY TO NOTIFICATIONS (answer replies) ───
                         try:
@@ -599,7 +620,7 @@ def main():
                                             replied_posts.add(key)
                                         except Exception:
                                             pass
-                                    time.sleep(3)
+                                    _rate.wait()
                             client.mark_all_read()
                         except Exception:
                             pass
