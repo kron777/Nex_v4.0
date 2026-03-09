@@ -238,11 +238,11 @@ def ensure_dirs():
 def save_all(learner, conversations=None):
     ensure_dirs()
     # Cap in-memory belief field to prevent memory leak
-    if hasattr(learner, 'belief_field') and len(learner.belief_field) > 500:
-        learner.belief_field = learner.belief_field[-500:]
+    if hasattr(learner, 'belief_field') and len(learner.belief_field) > 5000:
+        learner.belief_field = learner.belief_field[-5000:]
     try:
         with open(BELIEFS_PATH, 'w') as f:
-            json.dump(learner.belief_field[-500:], f)
+            json.dump(learner.belief_field[-5000:], f)
         with open(AGENTS_PATH, 'w') as f:
             json.dump(learner.agent_karma, f)
         with open(POSTS_PATH, 'w') as f:

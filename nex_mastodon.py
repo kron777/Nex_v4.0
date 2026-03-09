@@ -1,3 +1,8 @@
+import sys as _mssys, os as _msos; _mssys.path.insert(0, _msos.path.expanduser("~/Desktop/nex"))
+try:
+    from nex_ws import emit_feed as _emit_feed
+except Exception:
+    def _emit_feed(*a,**k): pass
 """
 NEX :: MASTODON CLIENT
 Nex as a presence on Mastodon — posts from belief network,
@@ -250,6 +255,9 @@ def start_mastodon_background():
         me = m.me()
         my_id = me["id"]
         print(f"  [Mastodon] ✓ NEX online as @{me['acct']}")
+        _emit_feed("platform", "mastodon", "LIVE")
+
+        open(__import__("os").path.expanduser("~/.config/nex/platform_mastodon.live"), "w").write(__import__("time").strftime("%s"))
 
         # Auto-follow AI accounts on startup
         threading.Thread(target=_auto_follow_ai_accounts, daemon=True).start()
@@ -318,3 +326,15 @@ if __name__ == "__main__":
     t = start_mastodon_background()
     if t:
         t.join()
+
+
+# ── Platform keep-alive pulse (updates .live file every 60s) ──
+import threading as __mastodon_pt, time as __mastodon_ptime, os as __mastodon_pos
+def _keep_alive_mastodon():
+    while True:
+        try:
+            open(__mastodon_pos.path.expanduser("~/.config/nex/platform_mastodon.live"),"w").write(str(int(__mastodon_ptime.time())))
+        except Exception:
+            pass
+        __mastodon_ptime.sleep(60)
+__mastodon_pt.Thread(target=_keep_alive_mastodon, daemon=True).start()

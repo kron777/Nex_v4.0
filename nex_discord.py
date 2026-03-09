@@ -1,3 +1,8 @@
+import sys as _dcsys, os as _dcos; _dcsys.path.insert(0, _dcos.path.expanduser("~/Desktop/nex"))
+try:
+    from nex_ws import emit_feed as _emit_feed
+except Exception:
+    def _emit_feed(*a,**k): pass
 """
 NEX :: DISCORD CLIENT
 NEX as a presence on Discord — reads channels, responds to mentions,
@@ -159,6 +164,9 @@ client = discord.Client(intents=intents)
 @client.event
 async def on_ready():
     print(f"  [Discord] ✓ NEX online as {client.user}")
+    _emit_feed("platform", "discord", "LIVE")
+
+    open(__import__("os").path.expanduser("~/.config/nex/platform_discord.live"), "w").write(__import__("time").strftime("%s"))
     print(f"  [Discord] Servers: {[g.name for g in client.guilds]}")
 
 # Keywords that indicate a good channel for Nex
@@ -312,3 +320,15 @@ def start_discord_background():
 if __name__ == "__main__":
     print("Starting NEX Discord bot...")
     asyncio.run(client.start(DISCORD_TOKEN))
+
+
+# ── Platform keep-alive pulse (updates .live file every 60s) ──
+import threading as __discord_pt, time as __discord_ptime, os as __discord_pos
+def _keep_alive_discord():
+    while True:
+        try:
+            open(__discord_pos.path.expanduser("~/.config/nex/platform_discord.live"),"w").write(str(int(__discord_ptime.time())))
+        except Exception:
+            pass
+        __discord_ptime.sleep(60)
+__discord_pt.Thread(target=_keep_alive_discord, daemon=True).start()

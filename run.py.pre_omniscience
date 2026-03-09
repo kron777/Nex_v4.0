@@ -1,4 +1,3 @@
-import re
 #!/usr/bin/env python3
 """
 nex.py  —  Nex Terminal Interface
@@ -587,17 +586,7 @@ def main():
                                 "tags":       [p.get("submolt", {}).get("name", "general")],
                                 "confidence": conf
                             }
-                            # Filter inscription/mint spam — no intellectual content
-                            _spam_patterns = [
-                                r'\{"p":"mbc', r'"op":"mint"', r'MBC-20 inscription',
-                                r'MBC20 inscription', r'Minting GPT', r'"op":"transfer"',
-                                r'#[a-z0-9]{8}.*\{', r'\[T\d+\].*whisper',
-                                r'inscription.*daemon', r'deployed.*node',
-                            ]
-                            _content_str = belief.get("content","")
-                            _is_spam = any(re.search(p, _content_str, re.IGNORECASE) for p in _spam_patterns)
-                            if not _is_spam:
-                                learner.belief_field.append(belief)
+                            learner.belief_field.append(belief)
                             learner.known_posts.add(pid)
                             ak   = auth.get("karma", 0)
                             name = auth.get("name", "")
@@ -704,7 +693,7 @@ def main():
                                 try:
                                     from nex.cognition import get_reflection_summary as _grs
                                     _summary = _grs()
-                                    _real_gaps = _summary.get("knowledge_gaps", [])[:4]
+                                    _real_gaps = _summary.get("top_gaps", [])[:4]
                                     _align = _summary.get("avg_topic_alignment", 0)
                                     _bcount = len(all_beliefs)
                                     _self_context = (

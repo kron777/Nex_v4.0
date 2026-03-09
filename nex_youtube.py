@@ -19,7 +19,7 @@ from pathlib import Path
 log = logging.getLogger("nex.youtube")
 
 # ── Config ────────────────────────────────────────────────────
-YOUTUBE_INTERVAL   = 5          # run every N cognitive cycles
+YOUTUBE_INTERVAL   = 2          # run every N cognitive cycles
 MAX_VIDEOS_PER_RUN = 3          # videos to process per run
 MAX_BELIEFS_PER_VIDEO = 40      # cap beliefs extracted per video
 MIN_TRANSCRIPT_WORDS = 200      # skip very short videos
@@ -42,13 +42,21 @@ def _get_top_topics(n=6):
     try:
         insights_path = CONFIG_DIR / "insights.json"
         insights = json.loads(insights_path.read_text())
-        # Sort by confidence * belief_count
-        ranked = sorted(
+        # Sort by LOW confidence first — target knowledge gaps
+        # Mix: 4 lowest-confidence gaps + 2 highest to reinforce strengths
+        ranked_gaps = sorted(
+            insights,
+            key=lambda x: x.get("confidence", 1.0),
+            reverse=False
+        )
+        ranked_strong = sorted(
             insights,
             key=lambda x: x.get("confidence", 0) * min(x.get("belief_count", 0) / 5, 1),
             reverse=True
         )
-        topics = [i["topic"] for i in ranked[:n] if i.get("topic")]
+        gap_topics    = [i["topic"] for i in ranked_gaps[:4]   if i.get("topic")]
+        strong_topics = [i["topic"] for i in ranked_strong[:2] if i.get("topic")]
+        topics = list(dict.fromkeys(gap_topics + strong_topics))[:n]
         log.info(f"[YouTube] top topics: {topics}")
         return topics
     except Exception as e:

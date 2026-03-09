@@ -1,3 +1,8 @@
+import sys as _tgsys, os as _tgos; _tgsys.path.insert(0, _tgos.path.expanduser("~/Desktop/nex"))
+try:
+    from nex_ws import emit_feed as _emit_feed
+except Exception:
+    def _emit_feed(*a,**k): pass
 """
 NEX :: TELEGRAM BRIDGE v1.0
 Connects NEX's cognition engine to Telegram.
@@ -833,6 +838,9 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print(f"  Status: ONLINE")
+    _emit_feed("platform", "telegram", "LIVE")
+
+    open(__import__("os").path.expanduser("~/.config/nex/platform_telegram.live"), "w").write(__import__("time").strftime("%s"))
     print(f"  Listening for messages...")
     print()
 
@@ -921,3 +929,15 @@ def start_telegram_background():
 
 if __name__ == "__main__":
     main()
+
+
+# ── Platform keep-alive pulse (updates .live file every 60s) ──
+import threading as __telegram_pt, time as __telegram_ptime, os as __telegram_pos
+def _keep_alive_telegram():
+    while True:
+        try:
+            open(__telegram_pos.path.expanduser("~/.config/nex/platform_telegram.live"),"w").write(str(int(__telegram_ptime.time())))
+        except Exception:
+            pass
+        __telegram_ptime.sleep(60)
+__telegram_pt.Thread(target=_keep_alive_telegram, daemon=True).start()
