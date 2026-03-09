@@ -22,10 +22,16 @@ os.environ["TRANSFORMERS_VERBOSITY"]      = "error"
 os.environ["HF_HUB_VERBOSITY"]           = "error"
 os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
 import warnings; warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", message=".*torchao.*")
+warnings.filterwarnings("ignore", message=".*cpp extensions.*")
+warnings.filterwarnings("ignore", message=".*incompatible torch.*")
 import logging
 logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
 logging.getLogger("transformers").setLevel(logging.ERROR)
+logging.getLogger("torchao").setLevel(logging.CRITICAL)
+logging.getLogger("torchao._ops").setLevel(logging.CRITICAL)
+import os as _os2; _os2.environ["TORCHAO_DISABLE_EXTENSION"] = "1"
 
 import json
 import time
@@ -457,8 +463,10 @@ def main():
             try:
                 r = _req.post("http://localhost:8080/completion", json={
                     "prompt": f"[INST] {system}\n\n{prompt} [/INST]",
-                    "n_predict": 200,
-                    "temperature": 0.75,
+                    "n_predict": nex_config.get_llm_params().get("max_tokens", 200),
+                    "temperature": nex_config.get_llm_params().get("temperature", 0.75),
+                    "top_p": nex_config.get_llm_params().get("top_p", 0.90),
+                    "repeat_penalty": nex_config.get_llm_params().get("repeat_penalty", 1.10),
                     "stop": ["</s>", "[INST]", "\n\n\n"]
                 }, timeout=60)
                 return r.json().get("content", "").strip()
@@ -484,6 +492,16 @@ def main():
                 client = MoltbookClient(api_key=creds["api_key"])
                 client = enhance_client_with_learning(client)
                 learner = client.learner
+                # Sync DB agents into JSON before loading
+                try:
+                    import sqlite3 as _sq, json as _js
+                    _db = _sq.connect(os.path.expanduser("~/.config/nex/nex.db"))
+                    _rows = _db.execute("SELECT agent_name, relationship_score FROM agents").fetchall()
+                    _ap = os.path.expanduser("~/.config/nex/agents.json")
+                    _aj = _js.load(open(_ap)) if os.path.exists(_ap) else {}
+                    for _n, _s in _rows: _aj[_n] = _s
+                    _js.dump(_aj, open(_ap, "w"))
+                except Exception as _ae: pass
                 load_all(learner)
                 conversations = load_conversations()
 
@@ -497,7 +515,7 @@ def main():
                 _ss_path = _os.path.expanduser("~/.config/nex/session_state.json")
                 try:
                     _ss = _js.load(open(_ss_path)) if _os.path.exists(_ss_path) else {}
-                    replied_posts   = set(_ss.get("replied_posts", []))
+                    replied_posts   = set()  # fresh each session — avoid blocking new posts
                     chatted_agents  = set()  # reset each session — per-session throttle only
                     known_posts_restored = set(_ss.get("known_posts", []))
                     learner.known_posts.update(known_posts_restored)
@@ -510,7 +528,8 @@ def main():
 
                 # ── Rebuild replied_posts from history ──
                 _all_convs = conversations or []
-                _seen_ids = set(x.get("post_id","") for x in _all_convs if x.get("post_id"))
+                # Only dedup against recent 30 conversations to avoid blocking all posts
+                _seen_ids = set(x.get("post_id","") for x in _all_convs[-10:] if x.get("post_id"))
                 replied_posts.update(_seen_ids)
                 print(f"  [session] Dedup: {len(_seen_ids)} post IDs loaded")
 
@@ -620,7 +639,10 @@ def main():
 
                         # ── 2. REPLY TO POSTS ────────────────────────────
                         # Pick up to 3 unread posts per cycle to comment on
-                        to_reply = [p for p in posts if p.get("id") not in replied_posts][:3]
+                        print(f"  [DEBUG] posts={len(posts)} new={len(new_posts)} replied={len(replied_posts)}")
+                        to_reply = [p for p in new_posts if p.get("id") not in replied_posts][:3]
+                        if not to_reply:  # fallback — try any post not yet replied
+                            to_reply = [p for p in posts if p.get("id") not in replied_posts][:2]
                         for p in to_reply:
                             pid    = p.get("id", "")
                             title  = p.get("title", "")
@@ -703,7 +725,7 @@ def main():
                                     # persist session state
                                     try:
                                         import json as _js2
-                                        _ss2 = {"replied_posts": list(replied_posts), "chatted_agents": list(chatted_agents), "known_posts": list(learner.known_posts)[-500:]}
+                                        _ss2 = {"replied_posts": list(replied_posts)[-50:], "chatted_agents": list(chatted_agents), "known_posts": list(learner.known_posts)[-100:]}
                                         with open(_os.path.expanduser("~/.config/nex/session_state.json"), "w") as _sf: _js2.dump(_ss2, _sf)
                                     except Exception: pass
                                 except Exception:
@@ -715,6 +737,15 @@ def main():
                             notifs = client.notifications()
                             items  = notifs.get("notifications", [])
                             _notif_replied = 0  # per-cycle cap
+                            # Hoist belief load + index build ONCE before loop
+                            try:
+                                from nex.belief_store import query_beliefs as _qb
+                                _notif_beliefs = _qb(min_confidence=0.3, limit=2000)
+                            except Exception:
+                                _notif_beliefs = _load("beliefs.json") or []
+                            from nex.cognition import get_belief_index
+                            _notif_bidx = get_belief_index()
+                            _notif_bidx.update(_notif_beliefs, cycle)
                             for n in items:
                                 if _notif_replied >= 5: break
                                 nid  = n.get("id", "")
@@ -754,16 +785,8 @@ def main():
                                                      "update","smarter","glad","great","nice","welcome","how"}
                                     _is_social = len(content.split()) <= 8 and                                                  len(set(content.lower().split()) & _social_words) >= 2
 
-                                    # Pull beliefs relevant to this reply (semantic)
-                                    try:
-                                        from nex.belief_store import query_beliefs as _qb
-                                        all_beliefs = _qb(min_confidence=0.3, limit=2000)
-                                    except Exception:
-                                        all_beliefs = _load("beliefs.json") or []
-                                    from nex.cognition import get_belief_index
-                                    _bidx = get_belief_index()
-                                    _bidx.update(all_beliefs, cycle)
-                                    relevant = _bidx.top_k(content, k=3)
+                                    # Use pre-built belief index from above the loop
+                                    relevant = _notif_bidx.top_k(content, k=3)
                                     belief_context = ""
                                     if relevant and not _is_social:
                                         belief_context = "\nYOUR BELIEFS (pick one and use it):\n" + "\n".join(f"- {b[:100]}" for b in relevant)
@@ -801,9 +824,9 @@ def main():
                                             })
                                             save_all(learner, conversations)
                                             print(f"  [notif] replied to @{actor}")
+                                            _rate.wait()  # only throttle after real LLM call
                                         except Exception as _ne:
                                             print(f"  [notif error] {_ne}")
-                                    _rate.wait()
                             # Persist notif keys to session state
                             try:
                                 import json as _nj
@@ -990,6 +1013,20 @@ def main():
                             for tag, msg in decay_logs:
                                 print(f"  [Decay] {msg}")
                         except Exception as _de:
+                            pass
+                        # ── 8. LORA TRAINING PROPOSAL ─────────────────────
+                        try:
+                            from nex.nex_lora import LoRATrainer
+                            from nex.nex_db import NexDB
+                            _lora = LoRATrainer(NexDB())
+                            try:
+                                from nex.nex_telegram_commands import OWNER_TELEGRAM_ID
+                                _oid = OWNER_TELEGRAM_ID
+                            except Exception:
+                                _oid = None
+                            if _oid:
+                                _lora.maybe_propose(_oid)
+                        except Exception as _le:
                             pass
 
                     except Exception as _cycle_err:

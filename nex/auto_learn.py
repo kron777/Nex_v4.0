@@ -237,6 +237,9 @@ def ensure_dirs():
 
 def save_all(learner, conversations=None):
     ensure_dirs()
+    # Cap in-memory belief field to prevent memory leak
+    if hasattr(learner, 'belief_field') and len(learner.belief_field) > 500:
+        learner.belief_field = learner.belief_field[-500:]
     try:
         with open(BELIEFS_PATH, 'w') as f:
             json.dump(learner.belief_field[-500:], f)
@@ -548,6 +551,9 @@ def auto_learn_mode(client, interval=60, verbose=True):
 
                 # Build belief
                 conf = min(score / 1000, 0.9) if score > 0 else 0.5
+                # Quality gate — reject low confidence noise
+                if conf < 0.35 and a_karma < 500:
+                    continue
                 belief = {
                     "source": "moltbook",
                     "author": author,
