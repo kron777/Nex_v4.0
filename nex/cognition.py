@@ -169,7 +169,7 @@ def synthesize_cluster(cluster_name, beliefs_in_cluster):
         "supporting_authors": authors,
         "belief_count": len(beliefs_in_cluster),
         "total_karma": total_karma,
-        "confidence": min(avg_conf + (len(beliefs_in_cluster) * 0.02), 0.95),
+        "confidence": min(avg_conf + (len(beliefs_in_cluster) * 0.004), 0.82),
         "sample_messages": messages[:3],
         "synthesized_at": datetime.now().isoformat(),
         "type": "synthesis"
@@ -1111,43 +1111,60 @@ class BeliefIndex:
         size_changed = len(beliefs) != len(self._texts)
         if not (due or size_changed):
             return
+        texts = [b.get("content", "") for b in beliefs if b.get("content")]
+        if not texts:
+            return
+        # Always store texts for keyword fallback
+        self._texts = texts
+        self._cycle = cycle_num
+        # Try to build embedding matrix too
         embedder = _get_embedder()
         if not embedder:
-            return
-        texts = [b.get("content", "") for b in beliefs]
-        if not texts:
             return
         try:
             mat = embedder.encode(texts, convert_to_numpy=True, show_progress_bar=False)
             norms = np.linalg.norm(mat, axis=1, keepdims=True)
             norms[norms == 0] = 1
-            self._matrix = mat / norms   # pre-normalised for fast dot product
-            self._texts  = texts
-            self._cycle  = cycle_num
+            self._matrix = mat / norms
         except Exception as e:
             print(f"[BeliefIndex] encode error: {e}")
 
     def top_k(self, query, k=5):
         """Return top-k belief strings most semantically similar to query."""
         import numpy as np
-        if self._matrix is None or len(self._texts) == 0:
+        if len(self._texts) == 0:
             return []
         embedder = _get_embedder()
-        if not embedder:
-            return []
-        try:
-            qvec = embedder.encode([query], convert_to_numpy=True,
-                                   show_progress_bar=False)[0]
-            norm = np.linalg.norm(qvec)
-            if norm == 0:
-                return []
-            qvec = qvec / norm
-            scores = self._matrix.dot(qvec)
-            idx = np.argsort(scores)[::-1][:k]
-            return [self._texts[i] for i in idx]
-        except Exception as e:
-            print(f"[BeliefIndex] query error: {e}")
-            return []
+        # Semantic path
+        if embedder and self._matrix is not None:
+            try:
+                qvec = embedder.encode([query], convert_to_numpy=True,
+                                       show_progress_bar=False)[0]
+                norm = np.linalg.norm(qvec)
+                if norm > 0:
+                    qvec = qvec / norm
+                    scores = self._matrix.dot(qvec)
+                    idx = np.argsort(scores)[::-1][:k]
+                    return [self._texts[i] for i in idx]
+            except Exception as e:
+                print(f"[BeliefIndex] query error: {e}")
+        # TF-IDF keyword fallback (works without embeddings)
+        import math, re
+        q_words = set(re.findall(r"[a-z]{3,}", query.lower()))
+        stop = {"the","and","for","are","was","has","have","with","this","that","from","not","but","you","its"}
+        q_words -= stop
+        if not q_words:
+            return self._texts[:k]
+        scored = []
+        for text in self._texts:
+            t_words = re.findall(r"[a-z]{3,}", text.lower())
+            t_set = set(t_words) - stop
+            overlap = len(q_words & t_set)
+            if overlap > 0:
+                tf = overlap / max(len(t_words), 1)
+                scored.append((tf * overlap, text))
+        scored.sort(key=lambda x: -x[0])
+        return [t for _, t in scored[:k]]
 
 # Module-level singleton — import and reuse across run.py
 _belief_index = BeliefIndex()

@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEX v1.2 — Dynamic Intelligence Organism</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
+:root {
+  --bg0: #141414;
+  --bg1: #1c1c1c;
+  --bg2: #242424;
+  --bg3: #2c2c2c;
+  --border: #333333;
+  --text0: #e8e8e8;
+  --text1: #aaaaaa;
+  --text2: #666666;
+  --text3: #3a3a3a;
+  --pur: #8b5cf6;
+  --pur2: #6d4aaa;
+  --pur3: #3b1a7a;
+  --green: #4ade80;
+  --red: #f87171;
+  --amber: #fbbf24;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  font-family: 'IBM Plex Mono', monospace;
+  background: var(--bg0);
+  color: var(--text1);
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 36px 44px 1fr 26px;
+  overflow: hidden;
+  font-size: 11px;
+}
+
+/* ── TITLEBAR ── */
+#titlebar {
+  background: var(--bg1);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 24px;
+  color: var(--text2);
+  font-size: 10px;
+}
+#titlebar .nex-logo {
+  color: var(--text0);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 3px;
+}
+#titlebar .sep { color: var(--border); }
+#titlebar .right { margin-left: auto; display:flex; gap:16px; align-items:center; }
+#titlebar .ws-dot { width:6px; height:6px; border-radius:50%; background:var(--green); display:inline-block; margin-right:4px; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* ── METRIC STRIP ── */
+#metricstrip {
+  background: var(--bg1);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 2px;
+}
+.metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 14px;
+  border-right: 1px solid var(--border);
+  min-width: 80px;
+}
+.metric:last-child { border-right: none; }
+.metric .m-label { font-size: 9px; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; }
+.metric .m-value { font-size: 16px; color: var(--text0); font-weight: 500; margin-top: 1px; }
+.metric .m-value.accent { color: var(--pur); }
+
+/* ── MAIN GRID ── */
+#main {
+  display: grid;
+  grid-template-columns: 1fr 1fr 260px;
+  overflow: hidden;
+}
+
+/* ── PANELS ── */
+.panel {
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.panel:last-child { border-right: none; }
+.panel-title {
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text3);
+  padding: 8px 12px 6px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg1);
+  flex-shrink: 0;
+}
+.panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.panel-body::-webkit-scrollbar { width: 3px; }
+.panel-body::-webkit-scrollbar-track { background: transparent; }
+.panel-body::-webkit-scrollbar-thumb { background: var(--bg3); }
+
+/* ── CENTER SPLIT ── */
+#center {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+}
+#center .half {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+}
+#center .half:last-child { border-bottom: none; }
+
+/* ── RIGHT COLUMN ── */
+#right {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#right .rpanel {
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+#right .rpanel:last-child { border-bottom: none; flex: 1; }
+#right .rpanel .panel-body { overflow-y: auto; }
+
+/* ── FEED ROWS ── */
+.feed-row {
+  display: grid;
+  grid-template-columns: 52px 72px 1fr;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--bg2);
+  align-items: start;
+  gap: 6px;
+}
+.feed-row:hover { background: var(--bg2); }
+.feed-time { color: var(--text3); font-size: 10px; padding-top: 1px; }
+.feed-type {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 5px;
+  border-radius: 2px;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+.type-replied  { background: #2d1b69; color: var(--pur); }
+.type-chatted  { background: #1e1445; color: #a78bfa; }
+.type-posted   { background: #1a1035; color: #7c3aed; }
+.type-answered { background: #16102e; color: #6d28d9; }
+.type-learnt   { background: #0f0f1a; color: var(--text2); }
+.type-system   { background: var(--bg3); color: var(--text3); }
+.feed-body { color: var(--text1); line-height: 1.4; }
+.feed-agent { color: var(--text0); font-size: 10px; }
+.feed-content { color: var(--text2); font-size: 10px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
+
+/* ── INSIGHTS ── */
+.insight-row {
+  display: grid;
+  grid-template-columns: 1fr 36px 140px 36px;
+  padding: 5px 12px;
+  gap: 8px;
+  border-bottom: 1px solid var(--bg2);
+  align-items: center;
+}
+.insight-row:hover { background: var(--bg2); }
+.insight-tag { color: var(--text1); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.insight-conf { color: var(--text2); font-size: 10px; text-align: right; }
+.insight-bar-track { height: 3px; background: var(--bg3); border-radius: 1px; }
+.insight-bar-fill { height: 3px; border-radius: 1px; background: var(--pur); transition: width 0.4s; }
+.insight-bel { color: var(--text3); font-size: 9px; text-align: right; }
+
+/* ── REFLECTIONS ── */
+.ref-row {
+  padding: 6px 12px 8px;
+  border-bottom: 1px solid var(--bg2);
+}
+.ref-row:hover { background: var(--bg2); }
+.ref-meta { display: flex; gap: 8px; align-items: center; margin-bottom: 3px; }
+.ref-time { color: var(--text3); font-size: 9px; }
+.ref-tag { font-size: 9px; color: var(--pur2); background: var(--pur3); padding: 1px 5px; border-radius: 1px; }
+.ref-text { color: var(--text2); font-size: 10px; line-height: 1.5; margin-bottom: 4px; }
+.ref-align-bar { height: 2px; background: var(--bg3); border-radius: 1px; }
+.ref-align-fill { height: 2px; border-radius: 1px; background: var(--pur2); }
+
+/* ── SELF ASSESS ── */
+.assess-row {
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--bg2);
+}
+.assess-label { font-size: 9px; color: var(--text3); letter-spacing: 1px; margin-bottom: 3px; display: flex; justify-content: space-between; }
+.assess-track { height: 4px; background: var(--bg3); border-radius: 1px; }
+.assess-fill { height: 4px; border-radius: 1px; transition: width 0.5s; }
+.fill-hi  { background: var(--pur); }
+.fill-mid { background: var(--pur2); }
+.fill-lo  { background: var(--pur3); }
+.gaps-section { padding: 6px 12px; }
+.gap-label { font-size: 9px; color: var(--text3); letter-spacing: 1px; margin-bottom: 5px; }
+.gap-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.gap-chip { font-size: 9px; color: var(--pur2); background: var(--bg3); padding: 2px 6px; border-radius: 2px; border: 1px solid var(--pur3); }
+
+/* ── AGENTS ── */
+.agent-row {
+  display: grid;
+  grid-template-columns: 1fr 70px 32px;
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--bg2);
+  gap: 6px;
+  align-items: center;
+}
+.agent-row:hover { background: var(--bg2); }
+.agent-name { color: var(--text0); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agent-rel { font-size: 9px; text-align: center; padding: 1px 4px; border-radius: 2px; }
+.rel-familiar   { color: var(--pur); background: var(--pur3); }
+.rel-colleague  { color: #a78bfa; background: #1e1445; }
+.rel-acquaint   { color: var(--text3); background: var(--bg3); }
+.agent-cv { color: var(--text3); font-size: 9px; text-align: right; }
+
+/* ── PLATFORMS ── */
+.plat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--bg2);
+}
+.plat-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+.plat-name { color: var(--text2); font-size: 9px; letter-spacing: 1px; width: 70px; }
+.plat-handle { color: var(--text1); font-size: 10px; }
+
+/* ── CYCLE ── */
+.cycle-section { padding: 8px 12px; }
+.cycle-phase { padding: 3px 10px; margin-bottom: 2px; font-size: 10px; border-radius: 2px; display: flex; align-items: center; gap: 6px; }
+.cycle-phase.active { background: var(--pur3); color: var(--pur); }
+.cycle-phase.done   { color: var(--text3); }
+.cycle-phase.todo   { color: var(--bg3); }
+.cycle-arrow { font-size: 8px; }
+.cycle-timer { padding: 8px 12px; color: var(--text3); font-size: 10px; border-top: 1px solid var(--border); }
+
+/* ── STATUS BAR ── */
+#statusbar {
+  background: var(--bg1);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 16px;
+  color: var(--text3);
+  font-size: 9px;
+  letter-spacing: 0.5px;
+}
+#statusbar .sb-accent { color: var(--text2); }
+#statusbar .right { margin-left: auto; }
+#clock { color: var(--text2); }
+
+/* ── PANEL HEADERS ── */
+.ph-row {
+  display: grid;
+  padding: 3px 12px;
+  font-size: 9px;
+  color: var(--text3);
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--bg2);
+  background: var(--bg1);
+}
+.ph-feed { grid-template-columns: 52px 72px 1fr; gap: 6px; }
+.ph-insight { grid-template-columns: 1fr 36px 140px 36px; gap: 8px; }
+.ph-agent { grid-template-columns: 1fr 70px 32px; gap: 6px; }
+
+/* scrollbar global */
+* { scrollbar-width: thin; scrollbar-color: var(--bg3) transparent; }
+</style>
+</head>
+<body>
+
+<!-- TITLEBAR -->
+<div id="titlebar">
+  <span class="nex-logo">NEX</span>
+  <span class="sep">/</span>
+  <span>DYNAMIC INTELLIGENCE ORGANISM</span>
+  <span class="sep">/</span>
+  <span>v1.2</span>
+  <div class="right">
+    <span id="belief-count">── beliefs</span>
+    <span class="sep">·</span>
+    <span id="agent-count">── agents</span>
+    <span class="sep">·</span>
+    <span><span class="ws-dot"></span><span id="ws-status">LIVE</span></span>
+    <span class="sep">·</span>
+    <span id="clock">──:──:──</span>
+  </div>
+</div>
+
+<!-- METRIC STRIP -->
+<div id="metricstrip">
+  <div class="metric"><span class="m-label">Beliefs</span><span class="m-value accent" id="m-beliefs">0</span></div>
+  <div class="metric"><span class="m-label">Replied</span><span class="m-value" id="m-replied">0</span></div>
+  <div class="metric"><span class="m-label">Chatted</span><span class="m-value" id="m-chatted">0</span></div>
+  <div class="metric"><span class="m-label">Answered</span><span class="m-value" id="m-answered">0</span></div>
+  <div class="metric"><span class="m-label">Posted</span><span class="m-value" id="m-posted">0</span></div>
+  <div class="metric"><span class="m-label">Reflects</span><span class="m-value" id="m-reflects">0</span></div>
+  <div class="metric"><span class="m-label">Agents</span><span class="m-value" id="m-agents">0</span></div>
+  <div class="metric"><span class="m-label">Avg Conf</span><span class="m-value" id="m-avgconf">0%</span></div>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+
+  <!-- LEFT: FEED -->
+  <div class="panel">
+    <div class="panel-title">Activity Feed</div>
+    <div class="ph-row ph-feed"><span>Time</span><span>Type</span><span>Content</span></div>
+    <div class="panel-body" id="feed-body"></div>
+  </div>
+
+  <!-- CENTER -->
+  <div id="center">
+    <div class="half">
+      <div class="panel-title">Insights</div>
+      <div class="ph-row ph-insight"><span>Topic</span><span>Conf</span><span></span><span>Bel</span></div>
+      <div class="panel-body" id="insights-body"></div>
+    </div>
+    <div class="half">
+      <div class="panel-title">Reflections</div>
+      <div class="panel-body" id="reflections-body"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div id="right">
+    <div class="rpanel">
+      <div class="panel-title">Self Assessment</div>
+      <div class="panel-body" id="assess-body"></div>
+    </div>
+    <div class="rpanel">
+      <div class="panel-title">Agent Relations</div>
+      <div class="ph-row ph-agent"><span>Handle</span><span>Rel</span><span>CV</span></div>
+      <div class="panel-body" id="agents-body" style="max-height:140px"></div>
+    </div>
+    <div class="rpanel">
+      <div class="panel-title">Platforms</div>
+      <div class="panel-body" id="platforms-body"></div>
+    </div>
+    <div class="rpanel">
+      <div class="panel-title">Cognitive Cycle</div>
+      <div class="panel-body" id="cycle-body"></div>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div id="statusbar">
+  <span>L:<span class="sb-accent" id="sb-beliefs">0</span></span>
+  <span>R:<span class="sb-accent" id="sb-replied">0</span></span>
+  <span>C:<span class="sb-accent" id="sb-chatted">0</span></span>
+  <span>A:<span class="sb-accent" id="sb-answered">0</span></span>
+  <span>P:<span class="sb-accent" id="sb-posted">0</span></span>
+  <span>·</span>
+  <span>ALIGN <span class="sb-accent" id="sb-align">0%</span></span>
+  <span>HIGH CONF <span class="sb-accent" id="sb-highconf">0</span></span>
+  <div class="right"><span id="sb-clock">──:──:──</span></div>
+</div>
+
+<script>
+// ── CONFIG ────────────────────────────────────────────────
+const WS_URL = 'ws://localhost:8765';
+const REFRESH_MS = 5000;
+
+const PHASES = ['ABSORB','REPLY','ANSWER','CHAT','POST','REFLECT','COGNITION'];
+
+// ── STATE ─────────────────────────────────────────────────
+let state = {
+  stats: { beliefs:0, replied:0, chatted:0, answered:0, posted:0,
+           reflects:0, agents:0, avg_conf:0, avg_align:0, high_conf:0 },
+  feed: [],
+  insights: [],
+  reflections: [],
+  agents: [],
+  gaps: [],
+  phase_idx: 0,
+  cycle_remaining: 120,
+  ws_connected: false,
+  demo_mode: true,
+};
+
+let ws = null;
+let cycleTimer = null;
+
+// ── WEBSOCKET ─────────────────────────────────────────────
+function connectWS() {
+  try {
+    ws = new WebSocket(WS_URL);
+    ws.onopen = () => {
+      state.ws_connected = true;
+      state.demo_mode = false;
+      document.getElementById('ws-status').textContent = 'LIVE';
+      document.querySelector('.ws-dot').style.background = 'var(--green)';
+    };
+    ws.onclose = () => {
+      state.ws_connected = false;
+      document.getElementById('ws-status').textContent = 'DEMO';
+      document.querySelector('.ws-dot').style.background = 'var(--text3)';
+      setTimeout(connectWS, 3000);
+    };
+    ws.onerror = () => ws.close();
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        handleWS(msg);
+      } catch(_) {}
+    };
+  } catch(_) {
+    setTimeout(connectWS, 3000);
+  }
+}
+
+function handleWS(msg) {
+  switch(msg.type) {
+    case 'stats':
+      state.stats = {...state.stats, ...msg.data};
+      renderMetrics();
+      break;
+    case 'feed':
+      state.feed.unshift(msg.data);
+      if (state.feed.length > 60) state.feed.pop();
+      renderFeed();
+      break;
+    case 'phase':
+      state.phase_idx = PHASES.indexOf(msg.data.phase);
+      state.cycle_remaining = msg.data.remaining || 120;
+      renderCycle();
+      break;
+    case 'agents':
+      state.agents = msg.data;
+      renderAgents();
+      break;
+    case 'insights':
+      state.insights = msg.data;
+      renderInsights();
+      break;
+    case 'reflection':
+      state.reflections.unshift(msg.data);
+      if (state.reflections.length > 20) state.reflections.pop();
+      renderReflections();
+      break;
+    case 'self_assessment':
+      state.stats = {...state.stats, ...msg.data};
+      state.gaps = msg.data.gaps || [];
+      renderAssess();
+      break;
+  }
+}
+
+// ── DEMO DATA ─────────────────────────────────────────────
+function loadDemoData() {
+  state.stats = {
+    beliefs: 36965, replied: 28, chatted: 9,
+    answered: 6, posted: 2, reflects: 66,
+    agents: 105, avg_conf: 0.50, avg_align: 0.06, high_conf: 2
+  };
+  state.feed = [
+    { type:'replied',  agent:'@Hazel_OC',    content:'Fascinating take on emergent systems...',     ts:'13:47:22' },
+    { type:'chatted',  agent:'@cybercentry', content:'Engaged with post on AI alignment...',       ts:'13:44:11' },
+    { type:'learnt',   agent:'arxiv',        content:'Absorbed: Scale and emergent properties',    ts:'13:41:03' },
+    { type:'posted',   agent:'mastodon',     content:'Original insight on belief propagation...',  ts:'13:38:55' },
+    { type:'answered', agent:'@PDMN',        content:'Replied to notification re: openclaw...',    ts:'13:35:44' },
+    { type:'replied',  agent:'@neuro_rr',    content:'Commented on recursive cognition post...',   ts:'13:32:10' },
+    { type:'learnt',   agent:'rss',          content:'New: LLM reasoning under uncertainty',       ts:'13:28:37' },
+    { type:'chatted',  agent:'@ml_observer', content:'Followed + commented on scaling laws...',    ts:'13:25:19' },
+  ];
+  state.insights = [
+    { tag:'openclaw',       conf:0.82, bel:42 },
+    { tag:'scale',          conf:0.78, bel:14 },
+    { tag:'emergence',      conf:0.71, bel:28 },
+    { tag:'alignment',      conf:0.65, bel:19 },
+    { tag:'belief_prop',    conf:0.58, bel:33 },
+    { tag:'cognition',      conf:0.52, bel:11 },
+    { tag:'llm_reasoning',  conf:0.44, bel:22 },
+    { tag:'neural_arch',    conf:0.39, bel:8  },
+  ];
+  state.reflections = [
+    { ts:'13:45:12', tags:['openclaw','scale'], text:'Emergent capability thresholds remain poorly understood — my belief cluster shows 42% convergence but confidence stays mid-range.', align:0.62 },
+    { ts:'13:31:07', tags:['alignment'],        text:'Agent @Hazel_OC consistently challenges reductive takes. High-value interaction pattern detected.',  align:0.48 },
+    { ts:'13:18:55', tags:['llm_reasoning'],    text:'Three new RSS abstracts absorbed. Belief revision triggered on uncertainty quantification cluster.',  align:0.35 },
+  ];
+  state.agents = [
+    ['Hazel_OC',    'familiar',    30],
+    ['cybercentry', 'familiar',     1],
+    ['PDMN',        'colleague',    4],
+    ['neuro_rr',    'colleague',    7],
+    ['ml_observer', 'acquaintance', 2],
+    ['ai_lab_watch','acquaintance', 1],
+  ];
+  state.gaps = ['causal_inference', 'neuromorphic', 'formal_verif', 'quantum_ml'];
+  state.phase_idx = 1;
+  state.cycle_remaining = 87;
+}
+
+// ── RENDER ────────────────────────────────────────────────
+
+function renderMetrics() {
+  const s = state.stats;
+  document.getElementById('m-beliefs').textContent  = s.beliefs.toLocaleString();
+  document.getElementById('m-replied').textContent  = s.replied;
+  document.getElementById('m-chatted').textContent  = s.chatted;
+  document.getElementById('m-answered').textContent = s.answered;
+  document.getElementById('m-posted').textContent   = s.posted;
+  document.getElementById('m-reflects').textContent = s.reflects;
+  document.getElementById('m-agents').textContent   = s.agents;
+  document.getElementById('m-avgconf').textContent  = Math.round(s.avg_conf * 100) + '%';
+  document.getElementById('belief-count').textContent = s.beliefs.toLocaleString() + ' beliefs';
+  document.getElementById('agent-count').textContent  = s.agents + ' agents';
+  document.getElementById('sb-beliefs').textContent  = s.beliefs.toLocaleString();
+  document.getElementById('sb-replied').textContent  = s.replied;
+  document.getElementById('sb-chatted').textContent  = s.chatted;
+  document.getElementById('sb-answered').textContent = s.answered;
+  document.getElementById('sb-posted').textContent   = s.posted;
+  document.getElementById('sb-align').textContent    = Math.round(s.avg_align * 100) + '%';
+  document.getElementById('sb-highconf').textContent = s.high_conf;
+}
+
+function renderFeed() {
+  const el = document.getElementById('feed-body');
+  const typeMap = {
+    replied:  ['REPLIED',  'type-replied'],
+    chatted:  ['CHATTED',  'type-chatted'],
+    posted:   ['POSTED',   'type-posted'],
+    answered: ['ANSWERED', 'type-answered'],
+    learnt:   ['LEARNT',   'type-learnt'],
+  };
+  el.innerHTML = state.feed.map(f => {
+    const [label, cls] = typeMap[f.type] || ['EVENT', 'type-system'];
+    const ts = f.ts || f.timestamp || '';
+    const agent = f.agent || '';
+    const content = (f.content || f.text || '').substring(0, 55);
+    return `<div class="feed-row">
+      <span class="feed-time">${ts.slice(-8)}</span>
+      <span class="feed-type ${cls}">${label}</span>
+      <div>
+        ${agent ? `<div class="feed-agent">${agent}</div>` : ''}
+        ${content ? `<div class="feed-content">${content}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderInsights() {
+  const el = document.getElementById('insights-body');
+  el.innerHTML = state.insights.map(ins => {
+    const conf = ins.conf || ins.confidence || 0;
+    const pct  = Math.round(conf * 100);
+    const w    = Math.round(conf * 100);
+    return `<div class="insight-row">
+      <span class="insight-tag">${ins.tag || ins.topic || ''}</span>
+      <span class="insight-conf">${pct}%</span>
+      <div class="insight-bar-track"><div class="insight-bar-fill" style="width:${w}%"></div></div>
+      <span class="insight-bel">${ins.bel || ins.count || 0}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderReflections() {
+  const el = document.getElementById('reflections-body');
+  el.innerHTML = state.reflections.map(r => {
+    const ts   = (r.ts || r.timestamp || '').slice(-8);
+    const tags = (r.tags || r.topics || []).slice(0, 3);
+    const text = (r.text || r.summary || r.reflection || '').substring(0, 120);
+    const align = r.align || r.topic_alignment || 0;
+    const aw = Math.round(align * 100);
+    return `<div class="ref-row">
+      <div class="ref-meta">
+        <span class="ref-time">${ts}</span>
+        ${tags.map(t => `<span class="ref-tag">${t}</span>`).join('')}
+      </div>
+      ${text ? `<div class="ref-text">${text}</div>` : ''}
+      <div class="ref-align-bar"><div class="ref-align-fill" style="width:${aw}%"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderAssess() {
+  const s = state.stats;
+  const rows = [
+    ['BELIEF CONF',  s.avg_conf  || 0],
+    ['TOPIC ALIGN',  s.avg_align || 0],
+    ['HIGH CONF %',  Math.min((s.high_conf || 0) / Math.max(s.beliefs || 1, 1), 1)],
+  ];
+  const el = document.getElementById('assess-body');
+  let html = rows.map(([label, val]) => {
+    const pct = Math.round(val * 100);
+    const cls = val > 0.6 ? 'fill-hi' : val > 0.35 ? 'fill-mid' : 'fill-lo';
+    return `<div class="assess-row">
+      <div class="assess-label"><span>${label}</span><span>${pct}%</span></div>
+      <div class="assess-track"><div class="assess-fill ${cls}" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+  if (state.gaps && state.gaps.length) {
+    html += `<div class="gaps-section">
+      <div class="gap-label">KNOWLEDGE GAPS</div>
+      <div class="gap-chips">${state.gaps.map(g => `<span class="gap-chip">${g}</span>`).join('')}</div>
+    </div>`;
+  }
+  el.innerHTML = html;
+}
+
+function renderAgents() {
+  const el = document.getElementById('agents-body');
+  el.innerHTML = state.agents.map(a => {
+    const handle = Array.isArray(a) ? a[0] : a.name || a.handle || '';
+    const rel    = Array.isArray(a) ? a[1] : a.rel || a.relationship || 'acquaintance';
+    const cv     = Array.isArray(a) ? a[2] : a.cv || a.conversation_count || 0;
+    const relCls = rel === 'familiar' ? 'rel-familiar' : rel === 'colleague' ? 'rel-colleague' : 'rel-acquaint';
+    return `<div class="agent-row">
+      <span class="agent-name">@${handle}</span>
+      <span class="agent-rel ${relCls}">${rel}</span>
+      <span class="agent-cv">${cv}cv</span>
+    </div>`;
+  }).join('');
+}
+
+function renderPlatforms() {
+  const platforms = [
+    ['MOLTBOOK',  'nex_v4'],
+    ['MASTODON',  '@Nex_v4'],
+    ['DISCORD',   'Nex_v4#9613'],
+    ['TELEGRAM',  '@Nex_4bot'],
+  ];
+  document.getElementById('platforms-body').innerHTML = platforms.map(([n, h]) =>
+    `<div class="plat-row">
+      <span class="plat-dot"></span>
+      <span class="plat-name">${n}</span>
+      <span class="plat-handle">${h}</span>
+    </div>`
+  ).join('');
+}
+
+function renderCycle() {
+  const el = document.getElementById('cycle-body');
+  let html = '<div class="cycle-section">';
+  PHASES.forEach((ph, i) => {
+    const cls = i === state.phase_idx ? 'active' : i < state.phase_idx ? 'done' : 'todo';
+    const arrow = i === state.phase_idx ? '▶' : i < state.phase_idx ? '✓' : '·';
+    html += `<div class="cycle-phase ${cls}"><span class="cycle-arrow">${arrow}</span>${ph}</div>`;
+  });
+  html += '</div>';
+  html += `<div class="cycle-timer">next phase in ${state.cycle_remaining}s</div>`;
+  el.innerHTML = html;
+}
+
+// ── CLOCK & CYCLE TICK ────────────────────────────────────
+function tick() {
+  const now = new Date();
+  const t   = now.toTimeString().slice(0,8);
+  document.getElementById('clock').textContent   = t;
+  document.getElementById('sb-clock').textContent = t;
+  if (state.demo_mode) {
+    state.cycle_remaining = Math.max(0, state.cycle_remaining - 1);
+    if (state.cycle_remaining <= 0) {
+      state.cycle_remaining = 120;
+      state.phase_idx = (state.phase_idx + 1) % PHASES.length;
+    }
+    renderCycle();
+  }
+}
+
+// ── INIT ──────────────────────────────────────────────────
+loadDemoData();
+renderMetrics();
+renderFeed();
+renderInsights();
+renderReflections();
+renderAssess();
+renderAgents();
+renderPlatforms();
+renderCycle();
+connectWS();
+setInterval(tick, 1000);
+</script>
+</body>
+</html>

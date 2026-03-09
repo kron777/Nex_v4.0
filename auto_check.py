@@ -43,6 +43,12 @@ running      = True
 def TW():
     try:    return os.get_terminal_size().columns
     except: return 120
+def TH():
+    try:    return os.get_terminal_size().lines
+    except: return 40
+def TH():
+    try:    return os.get_terminal_size().lines
+    except: return 40
 def strip_ansi(s):
     return re.sub(r"\033\[[0-9;]*m","",s)
 def vis(s):
@@ -306,6 +312,12 @@ def main():
             W     = TW()
             half  = W // 2
             third = W // 3
+            # Dynamic box height — leave room for footer (3 lines) + header (10)
+            _th   = TH()
+            BOX_ROWS = max(3, (_th - 10 - 7) // 3 - 2)
+            # Dynamic box height — fill terminal
+            _th   = TH()
+            BOX_ROWS = max(3, (_th - 12 - 3) // 3 - 2)
             BH    = BOX_ROWS + 2
             kanji = KANJI[tick % len(KANJI)]
             now_s = datetime.now().strftime("%H:%M:%S")
@@ -425,21 +437,44 @@ def main():
                 _net_rx, _net_tx, _net_t = _now_rx, _now_tx, time.time()
             except Exception:
                 rx_kb = tx_kb = 0.0
-            dots = "· "*(tick%5)
-            left = (f"  {D}{dots}{kanji}  scroll active  "
-                f"learnt:{s.get('nl',0)}  replied:{s.get('nr',0)}  "
-                f"chatted:{s.get('nc',0)}  answered:{s.get('na',0)}  "
-                f"posted:{s.get('np',0)}  reflections:{s.get('r',0)}{RS}")
-            right = f"{CY}↓{rx_kb:.1f}  ↑{tx_kb:.1f} kb/s{RS}  "
-            # strip ANSI for length calculation
             import re as _re
             _ansi = _re.compile(r'\033\[[^m]*m')
-            lw = len(_ansi.sub('', left))
-            rw = len(_ansi.sub('', right))
-            pad = max(0, W - lw - rw)
-            out(left + " "*pad + right)
+            def _pw(s): return len(_ansi.sub('',s))
+            def _pad(l,r,w):
+                p = max(0, w - _pw(l) - _pw(r))
+                return l + " "*p + r
 
-            goto(fr+2,1); flush()
+            dots = "· "*(tick%5)
+
+            # Footer line 1 — counters
+            _items = [
+                ("LEARNT",   s.get("nl",0), G),
+                ("REPLIED",  s.get("nr",0), Y),
+                ("CHATTED",  s.get("nc",0), M),
+                ("ANSWERED", s.get("na",0), T),
+                ("POSTED",   s.get("np",0), P),
+                ("REFLECTS", s.get("r",0),  CY),
+                ("BELIEFS",  s.get("b",0),  CY),
+                ("AGENTS",   s.get("ag",0), G),
+            ]
+            col = (W - 2) // len(_items)
+            out("  ")
+            for label, val, colour in _items:
+                entry = f"{D}{label}{RS} {colour}{B}{val}{RS}"
+                pad   = max(1, col - len(f"{label} {val}") - 1)
+                out(entry + " "*pad)
+
+            # Footer line 2 — pulse + net
+            goto(fr+2,1); out("\033[2K")
+            pulse = [G+"●"+RS, Y+"○"+RS, CY+"◉"+RS][tick%3]
+            f2l = f"  {pulse} {D}{kanji}{RS}  {D}NEX ACTIVE{RS}  {D}{datetime.now().strftime('%H:%M:%S')}{RS}"
+            f2r = f"{CY}↓{rx_kb:.1f}  ↑{tx_kb:.1f} kb/s{RS}  "
+            out(_pad(f2l, f2r, W))
+
+            # Clear any overflow lines
+            for _cl in range(fr+3, fr+8):
+                goto(_cl,1); out("\033[2K")
+            goto(fr+3,1); flush()
             time.sleep(SCROLL_HZ)
 
     except KeyboardInterrupt:
