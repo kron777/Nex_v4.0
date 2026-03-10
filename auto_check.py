@@ -341,8 +341,10 @@ def main():
                 return txt+" "*max(0,cw-len(f"{label} {str(val)}")-1)
 
             llm_col=G if s.get("llm") else R; llm_val="ONLINE" if s.get("llm") else "OFFLINE"
-            act_col=G if (s.get("nr",0)+s.get("nc",0)+s.get("np",0)>0) else Y
-            act_val="ACTIVE" if act_col==G else "IDLE"
+            import subprocess as _sp
+            _nex_running = bool(_sp.run(["pgrep","-f","run.py"], capture_output=True).stdout.strip())
+            act_col = G if _nex_running else R
+            act_val = "ACTIVE" if _nex_running else "IDLE"
 
             at(3,1); wr("  ")
             wr(tc("STATUS",act_val,act_col)); wr(tc("LLM",llm_val,llm_col))

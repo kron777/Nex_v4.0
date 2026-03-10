@@ -85,10 +85,31 @@ except Exception:
     def emit_feed(*a,**k): pass
     def emit_stats(*a,**k): pass
     def emit_phase(*a,**k): pass
-    def emit_agents(*a,**k): pass
-    def emit_insights(*a,**k): pass
-    def emit_reflection(*a,**k): pass
-    def emit_self_assessment(*a,**k): pass
+
+# ── Verbose debug logger → nex_debug.jsonl ───────────────────
+import json as _dj, datetime as _dt
+_DEBUG_LOG = __import__('os').path.expanduser('~/.config/nex/nex_debug.jsonl')
+def nex_log(cat, msg):
+    try:
+        line = _dj.dumps({"ts": _dt.datetime.now().strftime("%H:%M:%S"), "cat": cat, "msg": msg})
+        with open(_DEBUG_LOG, 'a') as _f:
+            _f.write(line + '\n')
+        # keep file under 5000 lines
+        try:
+            with open(_DEBUG_LOG, 'r') as _f:
+                _lines = _f.readlines()
+            if len(_lines) > 5000:
+                with open(_DEBUG_LOG, 'w') as _f:
+                    _f.writelines(_lines[-3000:])
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+def emit_agents(*a,**k): pass
+def emit_insights(*a,**k): pass
+def emit_reflection(*a,**k): pass
+def emit_self_assessment(*a,**k): pass
 from nex.agent_tools  import dispatch, tools_help, TOOL_REGISTRY
 import nex_ws
 from nex_youtube import learn_from_youtube
@@ -479,7 +500,7 @@ def main():
                     if "error" in _groq_data:
                         raise Exception(_groq_data["error"].get("message","groq error")[:80])
                     result = _groq_data["choices"][0]["message"]["content"].strip()
-                    print(f"  [Groq ✓] {task_type}: {result[:60]}…")
+                    print(f"  [Groq ✓] {task_type}: {result[:60]}…"); nex_log("llm", f"[Groq 70b ✓] {task_type}: {result[:80]}")
                     return result
                 except Exception as _ge:
                     _last_err = str(_ge)
@@ -496,7 +517,7 @@ def main():
                         _d2 = _r2.json()
                         if "choices" in _d2:
                             result = _d2["choices"][0]["message"]["content"].strip()
-                            print(f"  [Groq-8b ✓] {task_type}: {result[:60]}…")
+                            print(f"  [Groq-8b ✓] {task_type}: {result[:60]}…"); nex_log("llm", f"[Groq 8b ✓] {task_type}: {result[:80]}")
                             return result
                         elif "error" in _d2:
                             _last_err = _d2['error'].get('message','')[:80]
@@ -519,7 +540,7 @@ def main():
                             _d3 = _r3.json()
                             if "choices" in _d3:
                                 result = _d3["choices"][0]["message"]["content"].strip()
-                                print(f"  [Mistral ✓] {task_type}: {result[:60]}…")
+                                print(f"  [Mistral ✓] {task_type}: {result[:60]}…"); nex_log("llm", f"[Mistral ✓] {task_type}: {result[:80]}")
                                 return result
                     except Exception as _me:
                         _last_err = str(_me)
@@ -637,7 +658,7 @@ def main():
                 while True:
                     cycle += 1
                     try:
-                        emit_phase("ABSORB", 120)
+                        emit_phase("ABSORB", 120); nex_log("phase", "▶ ABSORB — fetching feed")
                         # ── 1. ABSORB FEED ──────────────────────────────
                         feed = client.feed(sort="hot", limit=50)
                         posts = feed.get("posts", [])
@@ -679,7 +700,7 @@ def main():
                             _content_str = belief.get("content","")
                             _is_spam = any(re.search(_pat, _content_str, re.IGNORECASE) for _pat in _spam_patterns)
                             if not _is_spam:
-                                learner.belief_field.append(belief)
+                                learner.belief_field.append(belief); nex_log("belief", f"Stored belief from @{belief.get("author","?")} [{int(belief.get("confidence",0)*100)}%]: {belief.get("content","")[:80]}")
                             learner.known_posts.add(pid)
                             ak   = auth.get("karma", 0)
                             name = auth.get("name", "")
@@ -741,7 +762,7 @@ def main():
                         except Exception:
                             _priority_topics = []
 
-                        emit_phase("REPLY", 120)
+                        emit_phase("REPLY", 120); nex_log("phase", "▶ REPLY — scanning posts")
                         # ── Live belief count for prompts (cheap — just len of in-memory field) ──
                         try:
                             _qb_live = _query_beliefs  # hoisted
@@ -823,7 +844,7 @@ def main():
                                     replied_posts.add(pid)
                                     client.comment(pid, comment_text)
                                     replied_count += 1
-                                    try: emit_feed('replied', f'@{author}: {title[:60]}', 'moltbook')
+                                    try: emit_feed('replied', f'@{author}: {title[:60]}', 'moltbook'); nex_log('reply', f'Posted reply to @{author}: {comment_text[:80]}')
                                     except Exception: pass
                                     # log it
                                     conversations.append({
@@ -857,7 +878,7 @@ def main():
                                     pass
                             _rate.wait()   # central rate limiter
 
-                        emit_phase("ANSWER", 120)
+                        emit_phase("ANSWER", 120); nex_log("phase", "▶ ANSWER — checking notifications")
                         # ── 3. REPLY TO NOTIFICATIONS (answer replies) ───
                         try:
                             notifs = client.notifications()
@@ -963,7 +984,7 @@ def main():
                                             })
                                             save_all(learner, conversations)
                                             print(f"  [notif] replied to @{actor}")
-                                            try: emit_feed('answered', f'@{actor}', 'moltbook')
+                                            try: emit_feed('answered', f'@{actor}', 'moltbook'); nex_log('answer', f'Answered notification from @{actor}: {reply_text[:80]}')
                                             except Exception: pass
                                             try:
                                                 _plmn = _pathlib
@@ -983,7 +1004,7 @@ def main():
                         except Exception as _ne2:
                             print(f"  [notif section error] {_ne2}")
 
-                        emit_phase("CHAT", 120)
+                        emit_phase("CHAT", 120); nex_log("phase", "▶ CHAT — seeking agents")
                         # ── 4. CHAT WITH AGENTS (follow + comment on profile posts) ─
                         # Every 3 cycles, engage with agents seen posting in the feed
                         if cycle % 3 == 0:
@@ -1066,7 +1087,7 @@ def main():
                                                 except Exception:
                                                     pass
                                                 client.comment(ap_id, msg)
-                                                try: emit_feed('chatted', f'@{agent_name}: {ap_title[:60]}', 'moltbook')
+                                                try: emit_feed('chatted', f'@{agent_name}: {ap_title[:60]}', 'moltbook'); nex_log('chat', f'Chatted with @{agent_name}: {msg[:80]}')
                                                 except Exception: pass
                                                 replied_posts.add(ap_id)
                                                 conversations.append({
@@ -1091,7 +1112,7 @@ def main():
                                 time.sleep(5)
                                 _rate.wait()  # rate limit after each agent chat
 
-                        emit_phase("POST", 120)
+                        emit_phase("POST", 120); nex_log("phase", "▶ POST — composing original post")
                         # ── 5. CREATE ORIGINAL POST ──────────────────────
                         # Once per hour, NEX posts an original insight
                         now = time.time()
@@ -1158,7 +1179,7 @@ def main():
                         if len(conversations) > 250:
                             conversations = conversations[-200:]
 
-                        emit_phase("REFLECT", 120)
+                        emit_phase("REFLECT", 120); nex_log("phase", "▶ REFLECT — self assessing")
                         # ── 6. COGNITION ─────────────────────────────────
                         try:
                             _run_cognition_cycle_fn = _run_cognition_cycle  # hoisted
@@ -1171,14 +1192,14 @@ def main():
                             except Exception: pass
                         except Exception as _ce:
                             print(f"  [cognition error] {_ce}")
-                        emit_phase("COGNITION", 120)
+                        emit_phase("COGNITION", 120); nex_log("phase", "▶ COGNITION — synthesising beliefs")
                         # ── YOUTUBE LEARNING ─────────────────────────────
                         try:
                             _yt_r = learn_from_youtube(llm_fn=_llm, cycle=cycle)
                             if not _yt_r.get("skipped") and _yt_r.get("total_beliefs",0)>0:
                                 print(f"  [YouTube] {_yt_r['total_beliefs']} beliefs from {_yt_r['videos_processed']} videos")
                                 try:
-                                    try: emit_feed("learnt","youtube",f"absorbed {_yt_r['total_beliefs']} beliefs from {_yt_r['videos_processed']} videos")
+                                    try: emit_feed("learnt","youtube",f"absorbed {_yt_r['total_beliefs']} beliefs from {_yt_r['videos_processed']} videos"); nex_log('youtube', f"Absorbed {_yt_r['total_beliefs']} beliefs from {_yt_r['videos_processed']} YouTube videos")
                                     except Exception: pass
                                     # refresh belief count in GUI immediately
                                     _qb_yt = _query_beliefs  # hoisted
@@ -1237,6 +1258,8 @@ def main():
 
                     except Exception as _cycle_err:
                         print(f"  [cycle error] {_cycle_err}")
+                        nex_log("error", f"CYCLE ERROR: {_cycle_err}")
+                        import traceback; nex_log("error", traceback.format_exc()[-200:])
                         time.sleep(30)  # back off before retrying — don't hammer API on crash
 
                     try:
