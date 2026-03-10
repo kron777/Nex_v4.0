@@ -249,17 +249,26 @@ def data_thread():
             # GPU bar
             try:
                 import subprocess as _sp
-                _gout = _sp.run(["rocm-smi","--showuse","--csv"], capture_output=True, text=True, timeout=2).stdout
-                _glines = [l for l in _gout.strip().split("\n") if "," in l and "GPU" not in l]
-                _gval = int(float(_glines[0].split(",")[1].strip().rstrip("%"))) if _glines else 0
+                def _rocm(args):
+                    return _sp.run(["rocm-smi"]+args+["--csv"], capture_output=True, text=True, timeout=2).stdout
+                def _rval(out, col=1):
+                    for l in out.strip().split("\n"):
+                        if l.startswith("card"):
+                            return l.split(",")[col].strip()
+                    return "0"
+                _gval  = int(float(_rval(_rocm(["--showuse"]))))           # GPU use %
+                _gpval = int(float(_rval(_rocm(["--showpower"]))))         # watts
+                _gmval = int(float(_rval(_rocm(["--showmemuse"]))))        # VRAM %
             except Exception:
-                try:
-                    _gout = _sp.run(["nvidia-smi","--query-gpu=utilization.gpu","--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=2).stdout
-                    _gval = int(_gout.strip().split("\n")[0]) if _gout.strip() else 0
-                except Exception:
-                    _gval = 0
-            _gc = G if _gval < 50 else Y if _gval < 80 else R
-            il.append(f"{D}GPU usage       {RS}[{_b(_gval)}] {_gc}{_gval}%{RS}  {D}compute{RS}")
+                _gval = _gpval = _gmval = 0
+            _gc  = G if _gval  < 50 else Y if _gval  < 80 else R
+            _gpc = G if _gpval < 60 else Y if _gpval < 85 else R
+            _gmc = G if _gmval < 60 else Y if _gmval < 80 else R
+            _gb  = lambda v: "▮"*(v//5)+"▯"*(20-v//5)
+            _gb2 = lambda v: "▮"*(min(v,100)//10)+"▯"*(10-min(v,100)//10)
+            il.append(f"{D}GPU compute     {RS}[{_gb(_gval)}] {_gc}{_gval}%{RS}")
+            il.append(f"{D}GPU power       {RS}[{_gb2(_gpval)}] {_gpc}{_gpval}W{RS}  {D}/100W{RS}")
+            il.append(f"{D}GPU memory      {RS}[{_gb2(_gmval)}] {_gmc}{_gmval}%{RS}  {D}vram{RS}")
         self_lines=sl; iq_lines=il
 
         try:
