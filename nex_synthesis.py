@@ -64,7 +64,7 @@ class SynthesisGraph:
             if BELIEFS_PATH.exists():
                 data = json.loads(BELIEFS_PATH.read_text())
                 if isinstance(data, list):
-                    beliefs += data[-300:]
+                    beliefs += data[-500:]  # [PATCH v10.1] expanded from -300
         except Exception:
             pass
         try:
@@ -264,10 +264,8 @@ def get_synthesis_graph() -> SynthesisGraph:
     return _graph
 
 def run_synthesis_cycle(cycle: int = 0) -> int:
-    """Build 2 new cross-domain edges per cycle."""
-    if cycle % 2 != 0:
-        return 0
-    edges = _graph.build_edges(n_pairs=2)
+    """Build 5 new cross-domain edges every cycle. [PATCH v10.1: was 2 pairs, even cycles only]"""
+    edges = _graph.build_edges(n_pairs=5)
     if edges > 0:
         stats = _graph.get_stats()
         print(f"  [synthesis] +{edges} edges → total: {stats['edges']} edges, {stats['nodes']} nodes")

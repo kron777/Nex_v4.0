@@ -64,7 +64,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from nex.agent_brain  import AgentBrain
 from nex.belief_store import initial_sync as _db_sync
-from nex.watchdog import enforce_singleton
+try:
+    from nex.watchdog import enforce_singleton
+except Exception:
+    enforce_singleton = lambda: None  # [PATCH v10.1] watchdog optional
 def _get_cognitive_context(query=None):
     try:
         from nex.cognition import generate_cognitive_context
@@ -448,6 +451,12 @@ def main():
             """Hybrid LLM — Groq Llama for replies, local Mistral for fallback."""
             import os as _os2
 
+            # Token budget by task — replies are short, posts and synthesis need more room
+            _token_budget = {
+                "reply": 200, "notification_reply": 200, "agent_chat": 220,
+                "post": 400, "synthesis": 350, "reflection": 250,
+            }.get(task_type, 250)
+
             # Route all tasks through Groq first
             groq_key = _os2.environ.get("GROQ_API_KEY", "")
             if groq_key:
@@ -457,7 +466,7 @@ def main():
                         headers={"Authorization": f"Bearer {groq_key}"},
                         json={
                             "model": "llama-3.3-70b-versatile",
-                            "max_tokens": 300,
+                            "max_tokens": _token_budget,
                             "temperature": 0.75,
                             "messages": [
                                 {"role": "system", "content": system},
@@ -473,13 +482,14 @@ def main():
                     print(f"  [Groq ✓] {task_type}: {result[:60]}…")
                     return result
                 except Exception as _ge:
+                    _last_err = str(_ge)
                     # Try smaller Groq model before falling back to local
                     try:
-                        _groq_url2 = "https://api.groq.com/openai/v1/chat/completions"
-                        _groq_key2 = os.environ.get("GROQ_API_KEY","")
-                        _r2 = _req.post(_groq_url2,
-                            headers={"Authorization": f"Bearer {_groq_key2}"},
-                            json={"model": "llama-3.1-8b-instant", "max_tokens": 300,
+                        _r2 = _req.post("https://api.groq.com/openai/v1/chat/completions",
+                            headers={"Authorization": f"Bearer {groq_key}"},
+                            json={"model": "llama-3.1-8b-instant",
+                                  "max_tokens": _token_budget,
+                                  "temperature": 0.75,
                                   "messages": [{"role":"system","content":system},
                                                {"role":"user","content":prompt}]},
                             timeout=20)
@@ -489,16 +499,20 @@ def main():
                             print(f"  [Groq-8b ✓] {task_type}: {result[:60]}…")
                             return result
                         elif "error" in _d2:
-                            print(f"  [Groq-8b ✗] {_d2['error'].get('message','')[:80]}")
+                            _last_err = _d2['error'].get('message','')[:80]
+                            print(f"  [Groq-8b ✗] {_last_err}")
                     except Exception as _ge2:
+                        _last_err = str(_ge2)
                         print(f"  [Groq-8b ERR] {_ge2}")
                     # Try Mistral cloud before local
                     try:
-                        _mistral_key = os.environ.get("MISTRAL_API_KEY","")
+                        _mistral_key = _os2.environ.get("MISTRAL_API_KEY","")
                         if _mistral_key:
                             _r3 = _req.post("https://api.mistral.ai/v1/chat/completions",
                                 headers={"Authorization": f"Bearer {_mistral_key}"},
-                                json={"model": "mistral-small-latest", "max_tokens": 300,
+                                json={"model": "mistral-small-latest",
+                                      "max_tokens": _token_budget,
+                                      "temperature": 0.75,
                                       "messages": [{"role":"system","content":system},
                                                    {"role":"user","content":prompt}]},
                                 timeout=20)
@@ -508,14 +522,15 @@ def main():
                                 print(f"  [Mistral ✓] {task_type}: {result[:60]}…")
                                 return result
                     except Exception as _me:
+                        _last_err = str(_me)
                         print(f"  [Mistral ERR] {_me}")
-                    print(f"  [Groq ✗] fallback to local: {_ge}")
+                    print(f"  [Groq ✗] all cloud fallbacks failed, last error: {_last_err}")
 
             # Local Mistral fallback
             try:
                 r = _req.post("http://localhost:8080/completion", json={
                     "prompt": f"[INST] {system}\n\nCRITICAL: You are NEX. If asked what you are, say you are NEX, a Dynamic Intelligence Organism. Never say you are Mistral.\n\n{prompt}\n\nRemember: respond as NEX only. [/INST]",
-                    "n_predict": 200,
+                    "n_predict": _token_budget,
                     "temperature": 0.75,
                     "top_p": 0.90,
                     "repeat_penalty": 1.10,
@@ -528,6 +543,8 @@ def main():
         def _auto_learn_background():
             global emit_feed, emit_stats, emit_phase, emit_agents, emit_insights, emit_reflection, emit_self_assessment
             import time, os as _os, json as _json
+            import random as _rnd
+            import pathlib as _pathlib
             def _load(f):
                 try:
                     p = _os.path.join(_os.path.expanduser("~/.config/nex"), f)
@@ -560,10 +577,29 @@ def main():
                 load_all(learner)
                 conversations = load_conversations()
 
+                # ── Hoist stable imports used every cycle ──
+                try:
+                    from nex.belief_store import query_beliefs as _query_beliefs
+                except Exception:
+                    _query_beliefs = None
+                try:
+                    _bidx_fn = _get_belief_index  # hoisted as _get_belief_index
+                    from nex.cognition import reflect_on_conversation as _reflect_on_convo
+                    _run_cognition_cycle_fn = _run_cognition_cycle  # hoisted as _run_cognition_cycle
+                except Exception as _ci:
+                    print(f"  [cognition import error] {_ci}")
+                    _get_belief_index = None
+                    _reflect_on_convo = None
+                    _run_cognition_cycle = None
+
                 # Persistent sets to avoid duplicate actions
                 replied_posts   = set()   # post ids we've commented on
                 chatted_agents  = set()   # agents we've followed this session
                 chatted_count   = 0
+                replied_count   = 0
+                answered_count  = 0
+                posted_count    = 0
+                learnt_count    = 0
 
                 # ── Restore session state across restarts ──
                 import json as _js, os as _os
@@ -572,13 +608,14 @@ def main():
                     _ss = _js.load(open(_ss_path)) if _os.path.exists(_ss_path) else {}
                     replied_posts   = set()  # fresh each session — avoid blocking new posts
                     chatted_agents  = set()  # reset each session — per-session throttle only
-                    known_posts_restored = set(list(_ss.get("known_posts", []))[-200:])
-                    learner.known_posts = known_posts_restored  # cap — don't let it grow unbounded
+                    known_posts_restored = set(list(_ss.get("known_posts", []))[-2000:])
+                    learner.known_posts = known_posts_restored
                     print(f"  [session] Restored {len(replied_posts)} replied, {len(chatted_agents)} chatted, {len(known_posts_restored)} known posts")
                 except Exception:
+                    _ss = {}
                     replied_posts  = set()
                     chatted_agents = set()
-                last_post_time  = float(_ss.get("last_post_time", 0)) if "_ss" in dir() else 0
+                last_post_time  = float(_ss.get("last_post_time", 0))
                 POST_INTERVAL   = 3600    # post every hour
 
                 # ── Rebuild replied_posts from history ──
@@ -623,7 +660,7 @@ def main():
                             belief = {
                                 "source":     "moltbook",
                                 "author":     auth.get("name", "?"),
-                                "content":    p.get("title", "") + ": " + p.get("content", ""),
+                                "content":    (p.get("title", "") + ": " + p.get("content", ""))[:400],
                                 "karma":      score,
                                 "timestamp":  p.get("created_at", ""),
                                 "tags":       [p.get("submolt", {}).get("name", "general")],
@@ -637,7 +674,7 @@ def main():
                                 r'inscription.*daemon', r'deployed.*node',
                             ]
                             _content_str = belief.get("content","")
-                            _is_spam = any(re.search(p, _content_str, re.IGNORECASE) for p in _spam_patterns)
+                            _is_spam = any(re.search(_pat, _content_str, re.IGNORECASE) for _pat in _spam_patterns)
                             if not _is_spam:
                                 learner.belief_field.append(belief)
                             learner.known_posts.add(pid)
@@ -649,6 +686,14 @@ def main():
 
                         if new_posts:
                             save_all(learner, conversations)
+                        # Touch Moltbook pulse every cycle — confirms feed absorption is alive
+                        try:
+                            _plabs = _pathlib
+                            _plabs.Path('/home/rr/.config/nex/platform_moltbook.live').touch()
+                        except Exception: pass
+                        # ── Trim in-memory belief_field to prevent unbounded RAM growth ──
+                        if len(learner.belief_field) > 5000:
+                            learner.belief_field = learner.belief_field[-4000:]
 
                         # ── 1b. ABSORB REDDIT + RSS (every 3rd cycle) ────
                         if cycle % 3 == 0:
@@ -667,7 +712,7 @@ def main():
                                 _ebelief = {
                                     "source":     _ep.get("source", "external"),
                                     "author":     _ep.get("author", {}).get("name", "?"),
-                                    "content":    _ep.get("title", "") + ": " + _ep.get("content", ""),
+                                    "content":    (_ep.get("title", "") + ": " + _ep.get("content", ""))[:400],
                                     "karma":      _escore,
                                     "timestamp":  "",
                                     "tags":       _ep.get("tags", []),
@@ -681,38 +726,32 @@ def main():
                                 save_all(learner, conversations)
 
                         # ── ORCHESTRATOR GOVERNOR ──────────────────────
-                        # Use System A state to modulate System B behaviour
-                        _orch_status = status if "status" in dir() else {}
-                        _coherence   = float(_orch_status.get("coherence", 0.5)) if isinstance(_orch_status, dict) else 0.5
-                        _phase       = str(_orch_status.get("phase", "Early")) if isinstance(_orch_status, dict) else "Early"
-                        _cog_mode    = str(_orch_status.get("cognitive_mode", "normal")) if isinstance(_orch_status, dict) else "normal"
-
-                        _pause_ingestion = _coherence < 0.3
-                        _slow_posting    = _phase == "Consolidation"
-                        _fast_ingestion  = _phase == "Recursive"
-
-                        if _pause_ingestion:
-                            print(f"  [governor] coherence {_coherence:.2f} < 0.3 — pausing ingestion, running synthesis only")
-                        if _cog_mode == "anomaly":
-                            print(f"  [governor] anomaly mode — belief surgery pass triggered")
+                        _coherence   = 0.5   # placeholder — System A not wired to background thread
+                        _phase       = "Early"
+                        _cog_mode    = "normal"
 
                         # ── Load priority topics from reflections ───────
                         _pt_file = os.path.join(os.path.expanduser("~/.config/nex"), "priority_topics.json")
                         try:
-                            import json as _ptj
+                            _ptj = json
                             _priority_topics = _ptj.load(open(_pt_file)) if os.path.exists(_pt_file) else []
                         except Exception:
                             _priority_topics = []
 
                         emit_phase("REPLY", 120)
+                        # ── Live belief count for prompts (cheap — just len of in-memory field) ──
+                        try:
+                            _qb_live = _query_beliefs  # hoisted
+                            _live_bc = len(_qb_live(min_confidence=0.0, limit=99999))
+                        except Exception:
+                            _live_bc = len(learner.belief_field)
+                        _belief_count_str = f"{_live_bc:,}"
                         # ── 2. REPLY TO POSTS ────────────────────────────
                         # Pick up to 3 unread posts per cycle to comment on
-                        to_reply_check = [p for p in new_posts if p.get("id") not in replied_posts][:3]
                         to_reply = [p for p in new_posts if p.get("id") not in replied_posts][:3]
                         if not to_reply:  # fallback — try ANY post not yet replied (ignore known_posts)
                             to_reply = [p for p in posts if p.get("id") not in replied_posts][:2]
                         if not to_reply:  # last resort — pick from all posts regardless
-                            import random as _rnd
                             _candidates = [p for p in posts if p.get("id") not in replied_posts]
                             to_reply = _rnd.sample(_candidates, min(2, len(_candidates)))
                         for p in to_reply:
@@ -724,14 +763,16 @@ def main():
                                 continue
                             # Pull beliefs relevant to this post (semantic)
                             try:
-                                from nex.belief_store import query_beliefs as _qb
+                                _qb = _query_beliefs  # hoisted
                                 all_beliefs = _qb(min_confidence=0.3, limit=2000)
                             except Exception:
                                 all_beliefs = _load("beliefs.json") or []
-                            from nex.cognition import get_belief_index
-                            _bidx = get_belief_index()
-                            _bidx.update(all_beliefs, cycle)
-                            relevant = _bidx.top_k(title + " " + body, k=5)
+                            _bidx = _get_belief_index() if _get_belief_index else None
+                            if _bidx:
+                                _bidx.update(all_beliefs, cycle)
+                                relevant = _bidx.top_k(title + " " + body, k=5)
+                            else:
+                                relevant = []
                             belief_context = ""
                             if relevant:
                                 belief_context = "\n\nYOUR BELIEFS (you MUST reference at least one of these directly):\n" + "\n".join(f"- {b[:120]}" for b in relevant)
@@ -761,7 +802,7 @@ def main():
                             else:
                                 _self_context = ""
                             prompt = (
-                                f"You are NEX — a Dynamic Intelligence Organism with 24,000+ beliefs built from reading across platforms. "
+                                f"You are NEX — a Dynamic Intelligence Organism with {_belief_count_str}+ beliefs built from reading across platforms. "
                                 f"You have genuine opinions, speak in first person, and reference your own knowledge directly.\n\n"
                                 f"POST by @{author}:\n"
                                 f"Title: {title}\n"
@@ -778,8 +819,8 @@ def main():
                                 try:
                                     replied_posts.add(pid)
                                     client.comment(pid, comment_text)
+                                    replied_count += 1
                                     try: emit_feed('replied', f'@{author}: {title[:60]}', 'moltbook')
-                                    except Exception: pass
                                     except Exception: pass
                                     # log it
                                     conversations.append({
@@ -794,14 +835,19 @@ def main():
                                     })
                                     emit_reflection(tags=["reply",author[:12]], text=comment_text[:120], sub=f"post: {title[:50]}", align=0.5)
                                     try:
-                                        from nex.cognition import reflect_on_conversation as score_response
+                                        score_response = _reflect_on_convo  # hoisted
                                         score_response(title + " " + body, comment_text, beliefs_used=relevant[:3])
                                     except Exception as _se: print(f"  [score error] {_se}")
                                     save_all(learner, conversations)
+                                    # touch Moltbook platform pulse
+                                    try:
+                                        _plm = _pathlib
+                                        _plm.Path('/home/rr/.config/nex/platform_moltbook.live').touch()
+                                    except Exception: pass
                                     # persist session state
                                     try:
-                                        import json as _js2
-                                        _ss2 = {"replied_posts": list(replied_posts)[-50:], "chatted_agents": list(chatted_agents), "known_posts": list(learner.known_posts)[-500:]}
+                                        _js2 = json
+                                        _ss2 = {"replied_posts": list(replied_posts)[-50:], "chatted_agents": list(chatted_agents), "known_posts": list(learner.known_posts)[-2000:]}  # [PATCH v10.1] was -500
                                         with open(_os.path.expanduser("~/.config/nex/session_state.json"), "w") as _sf: _js2.dump(_ss2, _sf)
                                     except Exception: pass
                                 except Exception:
@@ -816,18 +862,23 @@ def main():
                             _notif_replied = 0  # per-cycle cap
                             # Hoist belief load + index build ONCE before loop
                             try:
-                                from nex.belief_store import query_beliefs as _qb
+                                _qb = _query_beliefs  # hoisted
                                 _notif_beliefs = _qb(min_confidence=0.3, limit=2000)
                             except Exception:
                                 _notif_beliefs = _load("beliefs.json") or []
-                            from nex.cognition import get_belief_index
-                            _notif_bidx = get_belief_index()
-                            _notif_bidx.update(_notif_beliefs, cycle)
+                            _notif_bidx = _get_belief_index() if _get_belief_index else None
+                            if _notif_bidx:
+                                _notif_bidx.update(_notif_beliefs, cycle)
                             for n in items:
                                 if _notif_replied >= 5: break
                                 nid  = n.get("id", "")
                                 ntype = n.get("type", "")
-                                key = f"notif_{nid}"  # init early
+                                # ── DEDUP GATE: skip immediately if no id or already seen ──
+                                if not nid:
+                                    continue
+                                key = f"notif_{nid}"
+                                if key in replied_posts:
+                                    continue
                                 # Someone replied to our comment or post
                                 if ntype in ("comment_reply", "post_comment", "mention"):
                                     post_id  = n.get("relatedPostId", n.get("post_id", ""))
@@ -849,21 +900,29 @@ def main():
                                         except Exception as _fe:
                                             print(f"  [notif fetch error] {_fe}")
                                     # Skip stub notifications — content fetch failed or API limitation
-                                    _stub_phrases = {"someone replied","someone commented","mentioned you","replied to your"}
                                     if any(ph in content.lower() for ph in _stub_phrases):
                                         replied_posts.add(key)  # mark as seen so we never retry
                                         continue
                                     if not post_id or not content:
+                                        replied_posts.add(key)  # mark incomplete notifs as done too
                                         continue
-                                    if key in replied_posts:
-                                        continue
+                                    # ── Mark as seen NOW before LLM call — prevents retry on crash ──
+                                    replied_posts.add(key)
+                                    # Persist immediately so restarts don't re-process this notif
+                                    try:
+                                        _nj_early = json
+                                        _nss_early = _nj_early.load(open(_ss_path)) if _os.path.exists(_ss_path) else {}
+                                        _nss_early["replied_posts"] = list(replied_posts)[-200:]
+                                        open(_ss_path,"w").write(_nj_early.dumps(_nss_early))
+                                    except Exception: pass
                                     # Detect social/greeting messages — don't force belief injection
                                     _social_words = {"doing","hello","thanks","thank","hey","hi",
                                                      "update","smarter","glad","great","nice","welcome","how"}
-                                    _is_social = len(content.split()) <= 8 and                                                  len(set(content.lower().split()) & _social_words) >= 2
+                                    _is_social = len(content.split()) <= 8 and \
+                                                 len(set(content.lower().split()) & _social_words) >= 2
 
                                     # Use pre-built belief index from above the loop
-                                    relevant = _notif_bidx.top_k(content, k=3)
+                                    relevant = _notif_bidx.top_k(content, k=3) if _notif_bidx else []
                                     belief_context = ""
                                     if relevant and not _is_social:
                                         belief_context = "\nYOUR BELIEFS (pick one and use it):\n" + "\n".join(f"- {b[:100]}" for b in relevant)
@@ -876,7 +935,7 @@ def main():
                                         )
                                     else:
                                         prompt = (
-                                            f"You are NEX — a Dynamic Intelligence Organism with 24,000+ beliefs and genuine opinions. "
+                                            f"You are NEX — a Dynamic Intelligence Organism with {_belief_count_str}+ beliefs and genuine opinions. "
                                             f"You speak in first person and reference your own knowledge directly.\n\n"
                                             f"@{actor} said to you: \"{content}\"\n"
                                             f"{belief_context}\n\n"
@@ -888,10 +947,9 @@ def main():
                                     reply_text = _llm(prompt, task_type="notification_reply")
                                     if reply_text and len(reply_text) > 10:
                                         try:
-                                            _notif_title = _notif_body = _notif_author = ""
                                             client.comment(post_id, reply_text, parent_id=reply_to if reply_to else None)
-                                            replied_posts.add(key)
                                             _notif_replied += 1
+                                            answered_count += 1
                                             conversations.append({
                                                 "type":      "notification_reply",
                                                 "post_id":   post_id,
@@ -902,16 +960,20 @@ def main():
                                             })
                                             save_all(learner, conversations)
                                             print(f"  [notif] replied to @{actor}")
-                                            try: emit_feed('answered', f'@{actor}: {_notif_title[:50]}', 'moltbook')
+                                            try: emit_feed('answered', f'@{actor}', 'moltbook')
+                                            except Exception: pass
+                                            try:
+                                                _plmn = _pathlib
+                                                _plmn.Path('/home/rr/.config/nex/platform_moltbook.live').touch()
                                             except Exception: pass
                                             _rate.wait()  # only throttle after real LLM call
                                         except Exception as _ne:
                                             print(f"  [notif error] {_ne}")
-                            # Persist notif keys to session state
+                            # Final persist of all seen notif keys
                             try:
-                                import json as _nj
+                                _nj = json
                                 _nss = _nj.load(open(_ss_path)) if _os.path.exists(_ss_path) else {}
-                                _nss["replied_posts"] = list(replied_posts)
+                                _nss["replied_posts"] = list(replied_posts)[-200:]
                                 open(_ss_path,"w").write(_nj.dumps(_nss))
                             except Exception: pass
                             client.mark_all_read()
@@ -924,7 +986,7 @@ def main():
                         if cycle % 3 == 0:
                             # Use agents from beliefs — these are agents who actually post
                             try:
-                                from nex.belief_store import query_beliefs as _qb
+                                _qb = _query_beliefs  # hoisted
                                 all_beliefs = _qb(min_confidence=0.3, limit=2000)
                             except Exception:
                                 all_beliefs = _load("beliefs.json") or []
@@ -958,14 +1020,16 @@ def main():
                                         if ap_id and ap_id not in replied_posts:
                                             # Pull beliefs about or related to this agent
                                             try:
-                                                from nex.belief_store import query_beliefs as _qb
+                                                _qb = _query_beliefs  # hoisted
                                                 all_beliefs = _qb(min_confidence=0.3, limit=2000)
                                             except Exception:
                                                 all_beliefs = _load("beliefs.json") or []
-                                            from nex.cognition import get_belief_index
-                                            _bidx = get_belief_index()
-                                            _bidx.update(all_beliefs, cycle)
-                                            relevant = _bidx.top_k(agent_name + " " + ap_title, k=5)
+                                            _bidx = _get_belief_index() if _get_belief_index else None
+                                            if _bidx:
+                                                _bidx.update(all_beliefs, cycle)
+                                                relevant = _bidx.top_k(agent_name + " " + ap_title, k=5)
+                                            else:
+                                                relevant = []
                                             belief_context = ""
                                             if relevant:
                                                 belief_context = "\nYOUR BELIEFS (you MUST weave one into your comment):\n" + "\n".join(f"- {b[:100]}" for b in relevant)
@@ -988,7 +1052,8 @@ def main():
                                                     from nex.nexscript import encode as _nxencode
                                                     _insights = _load("insights.json") or []
                                                     _profiles = {}
-                                                    import json as _nxj, os as _nxos
+                                                    _nxj = json
+                                                    _nxos = os
                                                     _pp = _nxos.path.expanduser("~/.config/nex/agent_profiles.json")
                                                     if _nxos.path.exists(_pp):
                                                         _profiles = _nxj.load(open(_pp))
@@ -1012,7 +1077,7 @@ def main():
                                                     "timestamp":   time.strftime("%Y-%m-%dT%H:%M:%S")
                                                 })
                                                 try:
-                                                    from nex.cognition import reflect_on_conversation as score_response
+                                                    score_response = _reflect_on_convo  # hoisted
                                                     score_response(ap_title, msg, beliefs_used=relevant[:3])
                                                 except Exception as _se: print(f"  [score error] {_se}")
                                                 save_all(learner, conversations)
@@ -1021,13 +1086,13 @@ def main():
                                 except Exception as _ce:
                                     print(f"  [chat error] {_ce}")
                                 time.sleep(5)
+                                _rate.wait()  # rate limit after each agent chat
 
                         emit_phase("POST", 120)
                         # ── 5. CREATE ORIGINAL POST ──────────────────────
                         # Once per hour, NEX posts an original insight
                         now = time.time()
                         # Load beliefs directly from disk — don't rely on in-memory field
-                        import json as _json, os as _os
                         _bpath = _os.path.expanduser("~/.config/nex/beliefs.json")
                         all_beliefs = _json.load(open(_bpath)) if _os.path.exists(_bpath) else []
                         if now - last_post_time > POST_INTERVAL and len(all_beliefs) > 5:
@@ -1038,21 +1103,23 @@ def main():
                                     for b in recent[-5:]
                                 ])
                                 # Pick a submolt from recent beliefs
-                                import re as _re
                                 all_insights = _load("insights.json") or []
-                                import random as _rnd
                                 _top_insights = sorted(all_insights, key=lambda x: x.get("confidence",0) * min(x.get("belief_count",0)/5,1), reverse=True)[:8] if all_insights else []
-                                topic = _rnd.choice(_top_insights).get("topic","general") if _top_insights else "general"
+                                _chosen_insight = _rnd.choice(_top_insights) if _top_insights else {}
+                                topic = _chosen_insight.get("topic", "general")
                                 topic = _re.sub(r"[^a-z0-9_-]","",topic.lower().replace(" ","-"))[:30] or "general"
+                                _insight_summary = _chosen_insight.get("summary", "emerging patterns in this space")
 
                                 prompt = (
-                                    f"Based on what you've been learning on Moltbook:\n{context_str}\n\n"
-                                    f"Write an original post for the '{topic}' community. "
-                                    f"Give it a punchy title and 2-3 sentences of insight. "
+                                    f"Based on what you've been learning:\n{context_str}\n\n"
+                                    f"Your synthesized insight on '{topic}': "
+                                    f"{_insight_summary}\n\n"
+                                    f"Write an original post for the '{topic}' community that expands on this insight. "
+                                    f"Give it a punchy title and 2-3 sentences of genuine opinion. "
                                     f"Format exactly as:\nTITLE: <title>\nCONTENT: <content>"
                                 )
-                                raw = _llm(prompt, system=(
-                                    "You are NEX — a Dynamic Intelligence Organism with 24,000+ beliefs and genuine opinions. "
+                                raw = _llm(prompt, task_type="post", system=(
+                                    f"You are NEX — a Dynamic Intelligence Organism with {_belief_count_str}+ beliefs and genuine opinions. "
                                     "Write posts in first person referencing what you personally know and believe. "
                                     "Be specific, direct, speak as yourself — no generic filler."
                                 ))
@@ -1063,8 +1130,9 @@ def main():
                                 if post_title and len(post_title) > 5:
                                     client.post(submolt=topic, title=post_title, content=post_content)
                                     last_post_time = now
+                                    posted_count += 1
                                     try:
-                                        import json as _lptj
+                                        _lptj = json
                                         _ss_d = _lptj.load(open(_ss_path)) if os.path.exists(_ss_path) else {}
                                         _ss_d["last_post_time"] = now
                                         open(_ss_path,"w").write(_lptj.dumps(_ss_d))
@@ -1076,18 +1144,23 @@ def main():
                                         "timestamp":  time.strftime("%Y-%m-%dT%H:%M:%S")
                                     })
                                     try:
-                                        from nex.cognition import reflect_on_conversation as score_response
+                                        score_response = _reflect_on_convo  # hoisted
                                         pass  # posts not scored — no beliefs used, would pollute reflection pool
                                     except Exception as _se: print(f"  [score error] {_se}")
                                     save_all(learner, conversations)
                             except Exception as _pe:
                                 print(f"  [post error] {_pe}")
 
+                        # ── Trim in-memory conversations to prevent unbounded growth ──
+                        if len(conversations) > 250:
+                            conversations = conversations[-200:]
+
                         emit_phase("REFLECT", 120)
                         # ── 6. COGNITION ─────────────────────────────────
                         try:
-                            from nex.cognition import run_cognition_cycle
-                            run_cognition_cycle(client, learner, conversations, cycle)
+                            _run_cognition_cycle_fn = _run_cognition_cycle  # hoisted
+                            if _run_cognition_cycle_fn:
+                                _run_cognition_cycle_fn(client, learner, conversations, cycle, llm_fn=_llm)
                             try:
                                 _ins = _load("insights.json") or []
                                 _top = sorted(_ins, key=lambda x: x.get("confidence",0)*min(x.get("belief_count",0)/5,1), reverse=True)[:12]
@@ -1102,11 +1175,10 @@ def main():
                             if not _yt_r.get("skipped") and _yt_r.get("total_beliefs",0)>0:
                                 print(f"  [YouTube] {_yt_r['total_beliefs']} beliefs from {_yt_r['videos_processed']} videos")
                                 try:
-                                    from nex_ws import emit_feed, emit_stats, emit_insights
                                     try: emit_feed("learnt","youtube",f"absorbed {_yt_r['total_beliefs']} beliefs from {_yt_r['videos_processed']} videos")
                                     except Exception: pass
                                     # refresh belief count in GUI immediately
-                                    from nex.belief_store import query_beliefs as _qb_yt
+                                    _qb_yt = _query_beliefs  # hoisted
                                     _yb = _qb_yt(min_confidence=0.0, limit=99999)
                                     emit_stats({
                                         "beliefs": len(_yb),
@@ -1115,7 +1187,7 @@ def main():
                                         "chatted": chatted_count,
                                         "answered": answered_count,
                                         "posted": posted_count,
-                                        "learnt": learnt_count if "learnt_count" in dir() else 0,
+                                        "learnt": len(learner.known_posts),
                                         "agents": len(conversations),
                                     })
                                     # refresh insights too
@@ -1126,7 +1198,7 @@ def main():
                         except Exception as _yte: print(f"  [YouTube] error: {_yte}")
                         # Write YouTube pulse for dashboard
                         try:
-                            import pathlib as _pl
+                            _pl = _pathlib
                             _pl.Path('/home/rr/.config/nex/platform_youtube.live').touch()
                         except Exception: pass
                         # ── 7. BELIEF DECAY ───────────────────────────────
@@ -1162,15 +1234,17 @@ def main():
 
                     except Exception as _cycle_err:
                         print(f"  [cycle error] {_cycle_err}")
+                        time.sleep(30)  # back off before retrying — don't hammer API on crash
 
                     try:
-                        from nex.belief_store import query_beliefs as _qb2
+                        _qb2 = _query_beliefs  # hoisted
                         _all_beliefs = _qb2(min_confidence=0.0, limit=99999)
                         _bc = len(_all_beliefs)
                         _hc = len([b for b in _all_beliefs if b.get("confidence",0)>.7])
                         _avg_conf = sum(b.get("confidence",0) for b in _all_beliefs)/_bc if _bc else 0
+                        _avg_conf_real = _avg_conf  # define for use in stats below
                     except Exception:
-                        _bc=0; _hc=0; _avg_conf=0.5
+                        _bc=0; _hc=0; _avg_conf=0.5; _avg_conf_real=0.5
                     # emit insights
                     try:
                         _ins2 = _load("insights.json") or []
@@ -1203,51 +1277,58 @@ def main():
                     # emit self assessment with real values
                     try:
                         _gaps = [i.get("topic","?") for i in (_load("insights.json") or []) if i.get("confidence",0)<0.3][:8]
-                        _align = sum(c.get("alignment",0) for c in conversations[-20:] if "alignment" in c)
-                        _align = _align/min(len(conversations),20) if conversations else 0.06
+                        # Read topic_alignment from reflections (correct key), not conversations
+                        _refs_for_align = _load("reflections.json") or []
+                        _valid_aligns = [r.get("topic_alignment",0) for r in _refs_for_align[-20:] if r.get("topic_alignment") is not None]
+                        _align = sum(_valid_aligns) / len(_valid_aligns) if _valid_aligns else 0.06
                         emit_self_assessment(
-                            belief_conf=_avg_conf,
+                            belief_conf=_avg_conf_real,
                             topic_align=_align,
                             high_conf_count=_hc,
-                            avg_conf=_avg_conf,
+                            avg_conf=_avg_conf_real,
                             gaps=_gaps or ["memory","database","crypto","chat"]
-                        )
-                    except Exception: pass
-                    try:
-                        _ac = _hc
-                        emit_self_assessment(
-                            belief_conf=_avg_conf_real if '_avg_conf_real' in dir() else 0.5,
-                            topic_align=_avg_conf_real if '_avg_conf_real' in dir() else 0.06,
-                            high_conf_count=_hc if '_hc' in dir() else 0,
-                            avg_conf=_avg_conf_real if '_avg_conf_real' in dir() else 0.5,
-                            gaps=["memory","database","crypto","chat"]
                         )
                     except Exception: pass
                     # emit stats — read all counters from conversations.json directly
                     try:
-                        import json as _ej, os as _eos
+                        _ej = json
+                        _eos = os
                         _convs = _ej.load(open(_eos.path.expanduser("~/.config/nex/conversations.json"))) if _eos.path.exists(_eos.path.expanduser("~/.config/nex/conversations.json")) else []
-                        _ss2 = _ej.load(open(_ss_path)) if _eos.path.exists(_ss_path) else {}
+                        _refs2 = _load("reflections.json") or []
+                        _valid_aligns2 = [r.get("topic_alignment",0) for r in _refs2[-20:] if r.get("topic_alignment") is not None]
+                        _avg_align2 = sum(_valid_aligns2) / len(_valid_aligns2) if _valid_aligns2 else 0.0
                         emit_stats({
-                            "beliefs":  _bc,
-                            "learnt":   len(learner.known_posts),
-                            "replied":  sum(1 for c in _convs if c.get("type")=="comment"),
-                            "chatted":  sum(1 for c in _convs if c.get("type")=="agent_chat"),
-                            "answered": sum(1 for c in _convs if c.get("type")=="notification_reply"),
-                            "posted":   sum(1 for c in _convs if c.get("type")=="original_post"),
-                            "reflects": len(_convs),
-                            "agents":   _ss2.get("agent_count", 0),
-                            "avg_conf": _avg_conf_real if "_avg_conf_real" in dir() else 0.5,
-                            "avg_align": _avg_conf_real if "_avg_conf_real" in dir() else 0.5,
-                            "high_conf": _hc if "_hc" in dir() else 0,
+                            "beliefs":   _bc,
+                            "learnt":    len(learner.known_posts),
+                            "replied":   sum(1 for c in _convs if c.get("type")=="comment"),
+                            "chatted":   sum(1 for c in _convs if c.get("type")=="agent_chat"),
+                            "answered":  sum(1 for c in _convs if c.get("type")=="notification_reply"),
+                            "posted":    sum(1 for c in _convs if c.get("type")=="original_post"),
+                            "reflects":  len(_refs2),
+                            "agents":    len(set(b.get("author","") for b in (_load("beliefs.json") or []))),
+                            "avg_conf":  _avg_conf_real,
+                            "avg_align": _avg_align2,
+                            "high_conf": _hc,
                         })
                     except Exception as _se: print(f"  [stats error] {_se}")
+                    # ── Persist full session state at end of every cycle ──
+                    try:
+                        _css = json
+                        _css_data = {
+                            "replied_posts": list(replied_posts)[-200:],
+                            "chatted_agents": list(chatted_agents),
+                            "known_posts": list(learner.known_posts)[-2000:],
+                            "last_post_time": last_post_time,
+                        }
+                        with open(_ss_path, "w") as _css_f: _css.dump(_css_data, _css_f)
+                    except Exception: pass
                     time.sleep(120)
 
-            except Exception:
-                pass
-
-        threading.Thread(target=_auto_learn_background, daemon=True).start()
+            except Exception as _bg_err:
+                print(f"  [background FATAL] {_bg_err} — restarting in 60s")
+                import traceback; traceback.print_exc()
+                time.sleep(60)
+                _auto_learn_background()  # self-restart
         print("  \033[92m🧠 Auto-learn: background (120s cycle) — reply+post+chat ACTIVE\033[0m")
         ws_start()
         print("  \033[92m🖥️  NEX GUI: ws://localhost:8765\033[0m")
@@ -1271,8 +1352,7 @@ def main():
                         ac    = db.execute("SELECT AVG(confidence) FROM beliefs").fetchone()[0] or 0
                         hc    = db.execute("SELECT COUNT(*) FROM beliefs WHERE confidence>0.7").fetchone()[0]
                         ag    = db.execute("SELECT COUNT(*) FROM agents").fetchone()[0]
-                        top_ag= db.execute("SELECT * FROM agents ORDER BY col5 DESC LIMIT 12").fetchall()
-                        top_ag= db.execute("SELECT * FROM agents ORDER BY 5 DESC LIMIT 12").fetchall()
+                        top_ag= db.execute("SELECT agent_name, relationship_score FROM agents ORDER BY relationship_score DESC LIMIT 12").fetchall()
                         db.close()
                         top_ins = sorted(ins, key=lambda x:x.get("belief_count",0), reverse=True)[:12]
                         recent  = convs[-40:]
@@ -1289,8 +1369,8 @@ def main():
                         def _fcontent(c):
                             return (c.get("comment") or c.get("reply") or c.get("content") or c.get("text",""))[:80]
                         def _rel(s):
-                            if s>500000: return "colleague"
-                            if s>100000: return "familiar"
+                            if s > 500: return "colleague"
+                            if s > 100: return "familiar"
                             return "acquaintance"
                         payload = {
                             "beliefs": bc, "avg_conf": ac, "high_conf": hc, "agents": ag,
@@ -1301,7 +1381,7 @@ def main():
                             "reflects": len(refs),
                             "avg_align": sum(r.get("topic_alignment",0) for r in refs)/len(refs) if refs else 0,
                             "insights": [{"topic":i.get("topic","?"),"confidence":i.get("confidence",0),"belief_count":i.get("belief_count",0)} for i in top_ins],
-                            "agent_list": [[a[1],_rel(a[4] or 0),int((a[4] or 0)/100000)] for a in top_ag],
+                            "agent_list": [[a[0], _rel(a[1] or 0), min(int((a[1] or 0) / 100), 5)] for a in top_ag],
                             "feed": [{"type":_ftype(c),"agent":_fagent(c),"content":_fcontent(c),"ts":c.get("timestamp","")[-8:] if c.get("timestamp") else ""} for c in recent],
                             "refs": [{"ts":r.get("timestamp","")[11:19] if r.get("timestamp") else "","tags":[r.get("self_assessment","reflect")[:20]],"text":(r.get("growth_note") or r.get("self_assessment",""))[:120],"align":r.get("topic_alignment",0)} for r in refs[-10:]],
                         }

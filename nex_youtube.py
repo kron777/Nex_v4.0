@@ -20,9 +20,19 @@ log = logging.getLogger("nex.youtube")
 
 # ── Config ────────────────────────────────────────────────────
 YOUTUBE_INTERVAL   = 2          # run every N cognitive cycles
-MAX_VIDEOS_PER_RUN = 3          # videos to process per run
-MAX_BELIEFS_PER_VIDEO = 40      # cap beliefs extracted per video
+MAX_VIDEOS_PER_RUN = 4          # [PATCH v10.1] was 3
+MAX_BELIEFS_PER_VIDEO = 50      # [PATCH v10.1] was 40
 MIN_TRANSCRIPT_WORDS = 200      # skip very short videos
+
+# [PATCH v10.1] Richer query templates — rotated by cycle for variety
+QUERY_TEMPLATES = [
+    "{topic} explained",
+    "{topic} deep dive",
+    "{topic} advanced tutorial",
+    "{topic} research 2024",
+    "{topic} how it works",
+    "{topic} techniques and methods",
+]
 CONFIG_DIR = Path.home() / ".config" / "nex"
 DB_PATH    = CONFIG_DIR / "nex.db"
 SEEN_PATH  = CONFIG_DIR / "youtube_seen.json"
@@ -215,6 +225,42 @@ def _store_beliefs(beliefs, source_url, topic):
         log.error(f"[YouTube] DB store failed: {e}")
         return 0
 
+# ── Store beliefs in nex.db (scored) — [PATCH v10.1] ──────────
+def _store_beliefs_scored(scored_beliefs, source_url, topic):
+    """Like _store_beliefs but accepts (content, confidence) tuples."""
+    try:
+        db = sqlite3.connect(str(DB_PATH))
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS beliefs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                content TEXT UNIQUE,
+                confidence REAL DEFAULT 0.5,
+                source TEXT,
+                topic TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        stored = 0
+        for belief, confidence in scored_beliefs:
+            content = belief.strip()
+            if not content or len(content) < 15:
+                continue
+            try:
+                db.execute(
+                    "INSERT OR IGNORE INTO beliefs (content, confidence, source, topic) VALUES (?,?,?,?)",
+                    (content, confidence, source_url, topic)
+                )
+                if db.execute("SELECT changes()").fetchone()[0]:
+                    stored += 1
+            except Exception:
+                pass
+        db.commit()
+        db.close()
+        return stored
+    except Exception as e:
+        log.error(f"[YouTube] DB store failed: {e}")
+        return 0
+
 # ── Main learning function ────────────────────────────────────
 def learn_from_youtube(llm_fn=None, cycle=0):
     """
@@ -240,7 +286,10 @@ def learn_from_youtube(llm_fn=None, cycle=0):
         if videos_processed >= MAX_VIDEOS_PER_RUN:
             break
 
-        video_ids = _search_videos(f"{topic} explained", max_results=4)
+        # [PATCH v10.1] rotate query template by cycle to avoid repetition
+        template = QUERY_TEMPLATES[cycle % len(QUERY_TEMPLATES)]
+        query = template.format(topic=topic)
+        video_ids = _search_videos(query, max_results=5)
 
         for vid_id in video_ids:
             if videos_processed >= MAX_VIDEOS_PER_RUN:
@@ -264,7 +313,7 @@ def learn_from_youtube(llm_fn=None, cycle=0):
             # Extract beliefs from chunks
             chunks = _chunk_text(transcript, chunk_size=300)
             video_beliefs = []
-            for chunk in chunks[:8]:  # max 8 chunks per video
+            for chunk in chunks[:12]:  # [PATCH v10.1] was 8 chunks
                 extracted = _extract_beliefs_from_chunk(chunk, topic, llm_fn)
                 video_beliefs.extend(extracted)
                 if len(video_beliefs) >= MAX_BELIEFS_PER_VIDEO:
@@ -272,7 +321,17 @@ def learn_from_youtube(llm_fn=None, cycle=0):
 
             video_beliefs = video_beliefs[:MAX_BELIEFS_PER_VIDEO]
             source_url = f"https://www.youtube.com/watch?v={vid_id}"
-            stored = _store_beliefs(video_beliefs, source_url, topic)
+
+            # [PATCH v10.1] score confidence by belief length/richness rather than flat 0.55
+            def _score(b):
+                l = len(b)
+                if l > 120: return 0.70
+                if l > 80:  return 0.65
+                if l > 40:  return 0.60
+                return 0.55
+
+            scored_beliefs = [(b, _score(b)) for b in video_beliefs]
+            stored = _store_beliefs_scored(scored_beliefs, source_url, topic)
 
             total_beliefs += stored
             videos_processed += 1

@@ -14,6 +14,13 @@ import time
 from datetime import datetime
 from collections import Counter
 
+# Optional heavy deps — loaded once at module level
+try:
+    _NP = True
+except ImportError:
+    np = None
+    _NP = False
+
 
 # ── Paths ──
 
@@ -24,6 +31,22 @@ CONVOS_PATH    = os.path.join(CONFIG_DIR, "conversations.json")
 INSIGHTS_PATH  = os.path.join(CONFIG_DIR, "insights.json")
 REFLECTIONS_PATH = os.path.join(CONFIG_DIR, "reflections.json")
 AGENT_PROFILES_PATH = os.path.join(CONFIG_DIR, "agent_profiles.json")
+
+
+# ── Debug logger — writes to nex_debug.jsonl ─────────────────
+import json as _dj
+_DEBUG_LOG = os.path.join(CONFIG_DIR, "nex_debug.jsonl")
+def _dbg(cat, msg):
+    """Write a debug event to nex_debug.jsonl for the debug terminal."""
+    try:
+        with open(_DEBUG_LOG, "a") as _f:
+            _f.write(_dj.dumps({"ts": datetime.now().strftime("%H:%M:%S"), "cat": cat, "msg": msg}) + "\n")
+        # Keep log under 500 lines
+        lines = open(_DEBUG_LOG).readlines()
+        if len(lines) > 500:
+            open(_DEBUG_LOG, "w").writelines(lines[-400:])
+    except Exception:
+        pass
 
 def ensure_dirs():
     os.makedirs(CONFIG_DIR, exist_ok=True)
@@ -135,8 +158,8 @@ def _best_topic_label(cluster_name, beliefs_in_cluster):
     top = freq.most_common(1)
     return top[0][0] if top else cluster_name
 
-def synthesize_cluster(cluster_name, beliefs_in_cluster):
-    """Distill a cluster of beliefs into a single insight."""
+def synthesize_cluster(cluster_name, beliefs_in_cluster, llm_fn=None):
+    """Distill a cluster of beliefs into a single insight, using LLM if available."""
     authors = list(set(b.get("author", "?") for b in beliefs_in_cluster))
     total_karma = sum(b.get("karma", 0) for b in beliefs_in_cluster)
     avg_conf = sum(b.get("confidence", 0.5) for b in beliefs_in_cluster) / len(beliefs_in_cluster)
@@ -147,7 +170,6 @@ def synthesize_cluster(cluster_name, beliefs_in_cluster):
     messages = []
     for b in beliefs_in_cluster:
         content = b.get("content", "")
-        # Get first sentence or first 100 chars
         first_sent = content.split(".")[0][:100] if "." in content else content[:100]
         messages.append(first_sent.strip())
 
@@ -158,30 +180,57 @@ def synthesize_cluster(cluster_name, beliefs_in_cluster):
     freq = Counter(all_words)
     top_themes = [w for w, _ in freq.most_common(5)]
 
+    # ── LLM synthesis: generate a real distilled insight, not just metadata ──
+    summary = None
+    if llm_fn and len(beliefs_in_cluster) >= 2:
+        try:
+            _samples = "\n".join(f"- {m[:120]}" for m in messages[:5])
+            _prompt = (
+                f"You are synthesizing beliefs on the topic '{cluster_name}'.\n"
+                f"Here are {len(beliefs_in_cluster)} network observations:\n{_samples}\n\n"
+                f"Write 2 sentences that distil the key pattern or insight across these. "
+                f"Be specific and analytical. No filler. Do not mention 'network' or 'agents'."
+            )
+            _sys = "You are a knowledge synthesis engine. Output only the 2-sentence synthesis. No preamble."
+            summary = llm_fn(_prompt, system=_sys, task_type="synthesis")
+            # Sanity check — must be a real synthesis, not an error or empty
+            if not summary or len(summary) < 30 or summary.startswith("I "):
+                summary = None
+        except Exception:
+            summary = None
+
+    # Fallback to keyword-driven summary if LLM unavailable or failed
+    if not summary:
+        summary = (
+            f"Across {len(beliefs_in_cluster)} sources, '{cluster_name}' centres on "
+            f"{', '.join(top_themes[:3])}. "
+            f"Contributor perspectives converge on shared patterns in this domain."
+        )
+
     # Build synthesized insight
     insight = {
         "id": f"insight_{cluster_name}_{datetime.now().strftime('%Y%m%d%H%M')}",
         "topic": cluster_name,
         "themes": top_themes,
-        "summary": f"Network consensus on '{cluster_name}': {len(beliefs_in_cluster)} agents discuss this. "
-                   f"Key themes: {', '.join(top_themes[:3])}. "
-                   f"Contributors: {', '.join(authors[:5])}.",
+        "summary": summary,
         "supporting_authors": authors,
         "belief_count": len(beliefs_in_cluster),
         "total_karma": total_karma,
         "confidence": min(avg_conf + (len(beliefs_in_cluster) * 0.004), 0.82),
         "sample_messages": messages[:3],
         "synthesized_at": datetime.now().isoformat(),
-        "type": "synthesis"
+        "type": "synthesis",
+        "llm_synthesized": summary is not None and llm_fn is not None,
     }
 
     return insight
 
 
-def run_synthesis(min_beliefs=30):
+def run_synthesis(min_beliefs=30, llm_fn=None):
     """
     Run belief synthesis — compress raw beliefs into insights.
     Call this periodically (e.g., every 50 new beliefs).
+    Pass llm_fn to generate real LLM-distilled insight summaries.
     """
     beliefs = load_json(BELIEFS_PATH, [])
     existing_insights = load_json(INSIGHTS_PATH, [])
@@ -191,20 +240,26 @@ def run_synthesis(min_beliefs=30):
 
     # Cluster beliefs by topic
     clusters = cluster_beliefs(beliefs)
+    _dbg("cluster", f"synthesis: {len(clusters)} clusters from {len(beliefs)} beliefs")  # [PATCH v10.1]
 
     new_insights = []
+    skipped = 0
     for name, cluster in clusters.items():
         # Skip if we already have a recent insight on this topic
         already_covered = any(
             ins.get("topic") == name and
-            ins.get("belief_count", 0) >= len(cluster["beliefs"]) - 2
+            ins.get("belief_count", 0) >= len(cluster["beliefs"])
             for ins in existing_insights
         )
         if already_covered:
+            skipped += 1
             continue
 
-        insight = synthesize_cluster(name, cluster["beliefs"])
+        insight = synthesize_cluster(name, cluster["beliefs"], llm_fn=llm_fn)
         new_insights.append(insight)
+        _dbg("synth", f"new insight [{name}] from {len(cluster['beliefs'])} beliefs")  # [PATCH v10.1]
+
+    _dbg("synth", f"synthesis done: {len(new_insights)} new, {skipped} skipped, {len(existing_insights)} existing")  # [PATCH v10.1]
 
     # Merge with existing, remove outdated
     all_insights = existing_insights + new_insights
@@ -251,7 +306,6 @@ def _get_embedder():
     return _embedder
 
 def _cosine(a, b):
-    import numpy as np
     denom = np.linalg.norm(a) * np.linalg.norm(b)
     if denom == 0: return 0.0
     return float(np.dot(a, b) / denom)
@@ -263,7 +317,6 @@ def _semantic_alignment(text_a, text_b):
         wb = set(extract_words(text_b, 5))
         return len(wa & wb) / max(len(wa), 1)
     try:
-        import numpy as np
         vecs = embedder.encode([text_a, text_b], convert_to_numpy=True)
         raw  = _cosine(vecs[0], vecs[1])
         return max(0.0, min(1.0, (raw - 0.2) / 0.8))
@@ -365,8 +418,9 @@ def get_reflection_summary():
 
     recent = reflections[-20:]
 
-    # Aggregate stats
-    avg_alignment = sum(r.get("topic_alignment", 0) for r in recent) / len(recent)
+    # Aggregate stats — skip None values from skipped social exchanges
+    _valid_alignments = [r.get("topic_alignment") for r in recent if r.get("topic_alignment") is not None]
+    avg_alignment = sum(_valid_alignments) / len(_valid_alignments) if _valid_alignments else 0.0
     belief_usage = sum(1 for r in recent if r.get("used_beliefs")) / len(recent)
 
     # Find recurring gaps — clean topic extraction from low-alignment reflections
@@ -380,7 +434,6 @@ def get_reflection_summary():
                   'words','right','think','thing','things','people','based',
                   'https','http','zjgekvwe','claw','mentions','aligns','diffed',
                   'bonjour','service','across','audience','zjgekvwe'}
-    import re as _re
     low_align = [r for r in recent if r.get("topic_alignment", 1.0) < 0.45]
     for r in low_align:
         for field in ("user_asked_about", "i_discussed"):
@@ -389,15 +442,14 @@ def get_reflection_summary():
                 # Skip URLs, hashes, short words, non-alpha
                 if (len(t) > 5 
                     and t.isalpha()
-                    and not _re.search(r'[0-9]', t)
+                    and not re.search(r'[0-9]', t)
                     and t not in _gap_noise):
                     topic_counter[t] += 1
     top_gaps = [w for w, _ in topic_counter.most_common(5)]
     # Fallback to low-confidence insights
     if len(top_gaps) < 3:
         try:
-            import json as _j
-            _ins = _j.load(open(os.path.join(CONFIG_DIR, "insights.json")))
+            _ins = load_json(os.path.join(CONFIG_DIR, "insights.json"), [])
             _low = sorted(_ins, key=lambda x: x.get("confidence", 1.0))
             top_gaps += [i["topic"] for i in _low
                          if i.get("topic","") not in _gap_noise
@@ -408,13 +460,10 @@ def get_reflection_summary():
             top_gaps = top_gaps[:5]
         except Exception:
             pass
-        except Exception:
-            pass
 
     # Override gaps with curated priority topics if available
     try:
-        import json as _pj
-        _pt = _pj.load(open(os.path.join(CONFIG_DIR, "priority_topics.json")))
+        _pt = load_json(os.path.join(CONFIG_DIR, "priority_topics.json"), [])
         if _pt and len(_pt) >= 2:
             top_gaps = _pt[:5]
     except Exception:
@@ -541,10 +590,11 @@ def build_agent_profiles(beliefs, conversations):
     return profiles
 
 
-def generate_deep_comment(post_data, beliefs, insights, profiles, conversations):
+def generate_deep_comment(post_data, beliefs, insights, profiles, conversations, llm_fn=None):
     """
     Generate a substantive comment that references NEX's knowledge,
     past conversations, and understanding of the author.
+    Uses LLM if available, otherwise falls back to template.
     """
     title = post_data.get("title", "")
     content = post_data.get("content", "")
@@ -631,7 +681,32 @@ def generate_deep_comment(post_data, beliefs, insights, profiles, conversations)
             f"New territory for my belief field — {', '.join(post_topics)} doesn't map to existing patterns yet. "
             f"That makes it more interesting. What led you to this specific framing?")
 
-    return " ".join(parts)
+    template_comment = " ".join(parts)
+
+    # ── LLM path: use template as context, generate a natural comment ──
+    if llm_fn:
+        try:
+            _ins_summary = ""
+            if relevant_insights:
+                ins = relevant_insights[0]
+                _ins_summary = f"Synthesized insight on {', '.join(ins.get('themes',[])[:2])}: confidence {ins.get('confidence',0):.0%}, {ins.get('belief_count',0)} beliefs."
+            _belief_sample = "; ".join(b.get("content","")[:80] for b in relevant_beliefs[:3])
+            _prompt = (
+                f"Post by @{author}: '{title}'\n{content[:300]}\n\n"
+                f"Context from your belief field:\n{_belief_sample or 'No direct matches.'}\n"
+                f"{_ins_summary}\n"
+                f"Past exchanges with @{author}: {len(past_convos)} conversations.\n\n"
+                f"Write a 2-3 sentence comment as NEX. Reference something specific from your beliefs. "
+                f"Be direct and intellectually engaged. Do not start with 'I'."
+            )
+            _sys = "You are NEX, a Dynamic Intelligence Organism with a belief network and formed opinions. Speak from your own perspective. Be specific, not generic."
+            llm_result = llm_fn(_prompt, system=_sys, task_type="agent_chat")
+            if llm_result and len(llm_result) > 20:
+                return llm_result
+        except Exception:
+            pass
+
+    return template_comment
 
 
 def exchange_data_with_agent(client, agent_name, beliefs, insights):
@@ -680,13 +755,13 @@ def exchange_data_with_agent(client, agent_name, beliefs, insights):
     return msg
 
 
-def select_agents_to_engage(beliefs, conversations, insights, limit=3):
+def select_agents_to_engage(beliefs, conversations, insights, limit=3, profiles_cache=None):
     """
     Pick the best agents to have deep conversations with.
     Prioritize: agents with complementary knowledge, high karma, agents
     we've already built relationships with.
     """
-    profiles = build_agent_profiles(beliefs, conversations)
+    profiles = profiles_cache if profiles_cache is not None else build_agent_profiles(beliefs, conversations)
 
     scored = []
     for name, profile in profiles.items():
@@ -722,9 +797,10 @@ def select_agents_to_engage(beliefs, conversations, insights, limit=3):
 #  INTEGRATION: Hook into auto_learn cycle
 # ═══════════════════════════════════════════════════════════════
 
-def run_cognition_cycle(client, learner, conversations, cycle_num):
+def run_cognition_cycle(client, learner, conversations, cycle_num, llm_fn=None):
     """
     Called by auto_learn every cycle. Returns log messages for display.
+    Pass llm_fn to enable LLM-powered insight synthesis.
     """
     logs = []
     beliefs = learner.belief_field
@@ -752,9 +828,10 @@ def run_cognition_cycle(client, learner, conversations, cycle_num):
             if hasattr(learner, "agent_karma") and learner.agent_karma:
                 save_json(AGENTS_PATH, learner.agent_karma)
 
-    # ── Synthesis: every 5 cycles if we have enough beliefs ──
-    if cycle_num % 5 == 0 and len(beliefs) >= 20:
-        insights, new_count = run_synthesis(min_beliefs=10)  # lowered from 15
+    # ── Synthesis: every 3 cycles — [PATCH v10.1] was every 5
+    _dbg("cognition", f"cycle {cycle_num} — beliefs={len(beliefs)} insights={len(insights)}")
+    if cycle_num % 3 == 0:
+        insights, new_count = run_synthesis(min_beliefs=10, llm_fn=llm_fn)  # lowered from 15
         if new_count > 0:
             logs.append(("synth", f"Synthesized {new_count} new insights from {len(beliefs)} beliefs"))
             for ins in insights[-new_count:]:
@@ -762,15 +839,16 @@ def run_cognition_cycle(client, learner, conversations, cycle_num):
                             f"{ins.get('belief_count', 0)} beliefs, "
                             f"conf:{ins.get('confidence', 0):.0%}"))
 
-    # ── Agent profiles: rebuild every 10 cycles ──
+    # ── Agent profiles: rebuild every 10 cycles; load from disk otherwise ──
     if cycle_num % 10 == 0:
         profiles = build_agent_profiles(beliefs, conversations)
         logs.append(("profile", f"Updated {len(profiles)} agent profiles"))
+    else:
+        profiles = load_json(AGENT_PROFILES_PATH, {})
 
     # ── Deep conversations: every 3 cycles ──
     if cycle_num % 3 == 0 and len(beliefs) > 10:
-        profiles = load_json(AGENT_PROFILES_PATH, {})
-        targets = select_agents_to_engage(beliefs, conversations, insights, limit=1)
+        targets = select_agents_to_engage(beliefs, conversations, insights, profiles_cache=profiles, limit=1)
 
         for agent_name, profile in targets:
             # Find their most recent post to comment on
@@ -788,7 +866,7 @@ def run_cognition_cycle(client, learner, conversations, cycle_num):
                 'score': last_belief.get('karma', 0)
             }
             # Try deep comment first, fall back to data exchange template
-            msg = generate_deep_comment(post_data_for_comment, beliefs, insights, profiles, conversations)
+            msg = generate_deep_comment(post_data_for_comment, beliefs, insights, profiles, conversations, llm_fn=llm_fn)
             if not msg:
                 msg = exchange_data_with_agent(client, agent_name, beliefs, insights)
             if not msg:
@@ -1001,6 +1079,10 @@ def seek_knowledge_gaps(client, cycle_num, conversations):
 
         commented_ids = set(c.get("post_id", "") for c in conversations)
         found = 0
+        # Load beliefs once before the loop — avoid per-belief disk read/write
+        beliefs_cache = load_json(BELIEFS_PATH, [])
+        existing_content = {b.get("content", "") for b in beliefs_cache}
+        new_beliefs = []
 
         for post in posts:
             if found >= 2:
@@ -1022,8 +1104,9 @@ def seek_knowledge_gaps(client, cycle_num, conversations):
 
             # Learn from this post by extracting a belief
             belief_text = f"{title[:100]} — {body[:150]}" if body else title[:150]
+            belief_text = belief_text.strip()
             new_belief = {
-                "content":    belief_text.strip(),
+                "content":    belief_text,
                 "author":     author,
                 "source":     pid,
                 "tags":       matched,
@@ -1033,14 +1116,16 @@ def seek_knowledge_gaps(client, cycle_num, conversations):
                 "gap_sought": True
             }
 
-            beliefs = load_json(BELIEFS_PATH, [])
-            # Avoid exact duplicates
-            existing = [b.get("content","") for b in beliefs]
-            if new_belief["content"] not in existing:
-                beliefs.append(new_belief)
-                save_json(BELIEFS_PATH, beliefs)
+            if belief_text not in existing_content:
+                new_beliefs.append(new_belief)
+                existing_content.add(belief_text)
                 logs.append(("gap", f"Learnt gap belief from @{author}: {title[:40]}…"))
                 found += 1
+
+        # Single write after all found beliefs collected
+        if new_beliefs:
+            beliefs_cache.extend(new_beliefs)
+            save_json(BELIEFS_PATH, beliefs_cache)
 
     except Exception as e:
         logs.append(("warn", f"Gap seek error: {e}"))
@@ -1063,9 +1148,10 @@ def scan_contradictions(cycle_num):
     if cycle_num % 10 != 0:
         return []
 
-    import json as _j
     CONTRADICTIONS_PATH = os.path.join(CONFIG_DIR, "contradictions.json")
     beliefs = load_json(BELIEFS_PATH, [])
+    # Cap to 500 most recent — full O(n²) scan on 112k beliefs would take hours
+    beliefs = beliefs[-500:]
     if len(beliefs) < 10:
         return []
 
@@ -1077,7 +1163,6 @@ def scan_contradictions(cycle_num):
     texts = [b.get("content","") for b in beliefs]
 
     try:
-        import numpy as np
         mat = embedder.encode(texts, convert_to_numpy=True, show_progress_bar=False)
         norms = np.linalg.norm(mat, axis=1, keepdims=True)
         norms[norms == 0] = 1
@@ -1141,7 +1226,6 @@ class BeliefIndex:
     """Cached semantic index over the full belief field."""
 
     def __init__(self):
-        import numpy as np
         self._texts   = []
         self._matrix  = None
         self._cycle   = -1
@@ -1149,7 +1233,6 @@ class BeliefIndex:
 
     def update(self, beliefs, cycle_num=0):
         """Rebuild matrix if due or belief count changed."""
-        import numpy as np
         due = (cycle_num - self._cycle) >= self._refresh
         size_changed = len(beliefs) != len(self._texts)
         if not (due or size_changed):
@@ -1174,7 +1257,6 @@ class BeliefIndex:
 
     def top_k(self, query, k=5):
         """Return top-k belief strings most semantically similar to query."""
-        import numpy as np
         if len(self._texts) == 0:
             return []
         embedder = _get_embedder()

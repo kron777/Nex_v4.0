@@ -19,13 +19,13 @@ DECAY_PROFILES = {
     "slow":       0.001,    # history, philosophy, biology
     "normal":     0.005,    # technology, culture, code
     "fast":       0.02,     # social media trends, agent behaviour
-    "ephemeral":  0.1,      # today's posts, current events (expire 24h)
+    "ephemeral":  0.1,      # today's posts, current events
 }
 
 CATEGORY_TTL = {
-    "ephemeral": 86400,     # 24 hours in seconds
-    "fast":      604800,    # 7 days
-    "normal":    None,      # no expiry
+    "ephemeral": 259200,    # [PATCH v10.1] 72h was 24h — gives synthesis time to process
+    "fast":      1209600,   # [PATCH v10.1] 14 days was 7 days
+    "normal":    None,
     "slow":      None,
     "eternal":   None,
 }
@@ -70,25 +70,29 @@ def classify_belief(content: str) -> str:
         f"Categories:\n"
         f"  eternal   — timeless facts: physics, math, logic, fundamental science\n"
         f"  slow      — stable knowledge: history, philosophy, biology, culture\n"
-        f"  normal    — technology, code, general knowledge\n"
-        f"  fast      — social trends, agent behaviour, platform dynamics\n"
-        f"  ephemeral — today's events, specific posts, current news\n\n"
+        f"  normal    — technology, AI knowledge, code, agent architecture, LLMs\n"
+        f"  fast      — social trends, viral content, platform drama\n"
+        f"  ephemeral — today\'s specific posts, breaking news, live prices\n\n"
+        f"IMPORTANT: AI agent behaviour, LLM architecture, memory systems = normal not fast\n"
         f"Belief: \"{content[:200]}\"\n\n"
         f"Reply with ONE word only: eternal, slow, normal, fast, or ephemeral"
     )
     result = _groq(prompt)
     if result and result in DECAY_PROFILES:
         return result
-    # Fallback: keyword heuristics
+    # Fallback: keyword heuristics [PATCH v10.1] — AI/agent knowledge moved to normal
     content_lower = content.lower()
-    if any(w in content_lower for w in ["minting","posted","today","just","now","update","price"]):
+    if any(w in content_lower for w in ["minting","posted","today","breaking","live price","just announced"]):
         return "ephemeral"
     if any(w in content_lower for w in ["quantum","physics","theorem","proof","constant","law of"]):
         return "eternal"
-    if any(w in content_lower for w in ["history","philosophy","evolution","civilization"]):
+    if any(w in content_lower for w in ["history","philosophy","evolution","civilization","ancient"]):
         return "slow"
-    if any(w in content_lower for w in ["trend","viral","agent","platform","token","nft"]):
+    if any(w in content_lower for w in ["viral","trending","this week","yesterday","nft","meme"]):
         return "fast"
+    # AI/agent/platform knowledge is normal — do not decay fast
+    if any(w in content_lower for w in ["agent","llm","model","alignment","memory","architecture","token","platform"]):
+        return "normal"
     return "normal"
 
 
@@ -158,7 +162,7 @@ def boost_eternal_beliefs():
         db = sqlite3.connect(DB_PATH)
         db.execute("""
             UPDATE beliefs
-            SET confidence = MIN(confidence * 1.002, 0.95)
+            SET confidence = MIN(confidence * 1.01, 0.95)  -- [PATCH v10.1] was 1.002, 5x faster boost
             WHERE decay_category = 'eternal'
             AND confidence > 0.3
         """)
@@ -183,7 +187,7 @@ def run_decay_cycle():
     try:
         db = sqlite3.connect(DB_PATH)
         unclassified = db.execute(
-            "SELECT rowid, content FROM beliefs WHERE decay_category IS NULL OR decay_category = 'normal' LIMIT 20"
+            "SELECT rowid, content FROM beliefs WHERE decay_category IS NULL LIMIT 30"  # [PATCH v10.1] was re-classifying normal beliefs wastefully
         ).fetchall()
         db.close()
         for rowid, content in unclassified:

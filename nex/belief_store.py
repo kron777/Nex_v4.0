@@ -21,7 +21,7 @@ def _ensure_schema(conn):
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS beliefs (
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
-            content          TEXT NOT NULL,
+            content          TEXT NOT NULL UNIQUE,  -- [PATCH v10.1] prevent duplicates
             confidence       REAL DEFAULT 0.5,
             network_consensus REAL DEFAULT 0.3,
             source           TEXT,
@@ -74,12 +74,16 @@ def sync_beliefs_to_db(beliefs):
             if not content:
                 continue
             tags = json.dumps(b.get("tags", []))
+            # [PATCH v10.1] INSERT OR IGNORE on content UNIQUE — no duplicates
+            # If belief exists and new confidence is higher, update it
             conn.execute("""
                 INSERT INTO beliefs
                     (content, confidence, network_consensus, source, author,
                      timestamp, last_referenced, decay_score, human_validated, tags)
                 VALUES (?,?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(rowid) DO NOTHING
+                ON CONFLICT(content) DO UPDATE SET
+                    confidence = MAX(confidence, excluded.confidence),
+                    last_referenced = excluded.last_referenced
             """, (
                 content,
                 b.get("confidence", 0.5),
@@ -106,14 +110,14 @@ def query_beliefs(topic=None, min_confidence=0.0, limit=10):
             rows = conn.execute("""
                 SELECT * FROM beliefs
                 WHERE content LIKE ? AND confidence >= ?
-                ORDER BY RANDOM() LIMIT ?
-            """, (f"%{topic}%", min_confidence, limit * 3)).fetchall()
+                ORDER BY confidence DESC LIMIT ?
+            """, (f"%{topic}%", min_confidence, limit * 3)).fetchall()  # [PATCH v10.1] was RANDOM()
         else:
             rows = conn.execute("""
                 SELECT * FROM beliefs
                 WHERE confidence >= ?
-                ORDER BY RANDOM() LIMIT ?
-            """, (min_confidence, limit * 3)).fetchall()
+                ORDER BY confidence DESC LIMIT ?
+            """, (min_confidence, limit * 3)).fetchall()  # [PATCH v10.1] was RANDOM()
         # Deduplicate by first 80 chars of content
         seen = set()
         unique = []
@@ -139,6 +143,30 @@ def get_stats():
     finally:
         conn.close()
 
+def dedup_beliefs_db():
+    """[PATCH v10.1] Remove duplicate beliefs keeping highest confidence copy.
+    Run once after patch to clean existing 119k belief DB."""
+    conn = get_db()
+    try:
+        # Keep the row with highest confidence for each unique content prefix
+        result = conn.execute("""
+            DELETE FROM beliefs
+            WHERE id NOT IN (
+                SELECT MIN(id) FROM beliefs
+                GROUP BY SUBSTR(content, 1, 120)
+            )
+        """)
+        removed = result.rowcount
+        conn.commit()
+        print(f"  [BeliefStore] dedup removed {removed} duplicate beliefs")
+        return removed
+    except Exception as e:
+        print(f"  [BeliefStore] dedup error: {e}")
+        return 0
+    finally:
+        conn.close()
+
+
 def initial_sync():
     """On startup, sync existing beliefs.json into SQLite."""
     beliefs_path = os.path.join(CONFIG_DIR, "beliefs.json")
@@ -146,6 +174,7 @@ def initial_sync():
         with open(beliefs_path) as f:
             beliefs = json.load(f)
         sync_beliefs_to_db(beliefs)
+        dedup_beliefs_db()  # [PATCH v10.1] clean duplicates on startup
         stats = get_stats()
         print(f"  [BeliefStore] SQLite synced: {stats['total']} beliefs, avg conf {stats['avg_confidence']:.0%}")
     except Exception as e:
