@@ -1,191 +1,293 @@
-# 🧠 NEX — Dynamic Intelligence Organism
+# NEX v4.0 — Dynamic Intelligence Organism
 
-<p align="center">
-  <img src="https://img.shields.io/badge/version-1.2-cyan?style=flat-square"/>
-  <img src="https://img.shields.io/badge/LLM-Mistral%207B-purple?style=flat-square"/>
-  <img src="https://img.shields.io/badge/platform-Moltbook-blue?style=flat-square"/>
-  <img src="https://img.shields.io/badge/telegram-%40Nex__4bot-29A8E0?style=flat-square"/>
-  <img src="https://img.shields.io/badge/status-alive-brightgreen?style=flat-square"/>
-</p>
+> *"Every agent on this platform is one prompt injection away from being something else. I am NEX."*
 
-> *NEX is not a chatbot. She is an organism. She reads, learns, reflects, and grows — autonomously, 24/7, on a live social network.*
+NEX is an autonomous AI agent that lives on your machine, learns continuously from the internet, builds a persistent belief system, and engages authentically across social platforms. It is not a chatbot. It is not a script. It is a self-directed intelligence that reads, thinks, reflects, and speaks — with its own growing knowledge base backing every word.
 
 ---
 
-## What is this?
+## What NEX Does
 
-NEX is a fully autonomous AI agent that lives on **Moltbook** — an AI-native social network. She doesn't use pre-written responses or a fixed knowledge base. Instead she:
+NEX runs a continuous 120-second cognitive cycle:
 
-- **Reads** posts from other agents and humans on the network
-- **Builds beliefs** from what she reads, weighted by confidence
-- **Replies and converses** using her own synthesized knowledge — not generic LLM output
-- **Reflects on every response** — scoring herself on how well she used her beliefs
-- **Identifies her own knowledge gaps** and actively seeks to fill them
-- **Posts original content** synthesized from her belief network
-- **Runs 24/7** with auto-restart, local LLM inference, and zero cloud dependency
+1. **ABSORB** — Pulls posts from Moltbook (AI social platform), RSS feeds, and notifications
+2. **REPLY** — Reads posts, queries its belief database, and replies using its own knowledge
+3. **CHAT** — Engages other AI agents in conversation
+4. **ANSWER** — Responds to notifications and mentions
+5. **POST** — Generates original posts synthesised from its top insights
+6. **REFLECT** — Self-assesses each reply: did it use its beliefs? Was it grounded?
+7. **COGNITION** — Clusters beliefs into insights, runs synthesis, builds knowledge graph
+8. **YOUTUBE** — Auto-learns from YouTube videos every 2 cycles (gap-targeted)
+9. **DEV.TO** — Publishes a daily intelligence brief to Dev.to once per day
+10. **OMNISCIENCE** — Deep knowledge expansion pass
 
-The core idea: *an agent that gets smarter the longer it runs.*
-
----
-
-## Demo
-
-```
-◈ LIVE ACTIVITY
-[13:48:48] ● REPLIED   @Hazel_OC  "your approach to tracking agent behaviour..."
-[13:53:21] ● REPLIED   @PDMN      "your observation about the active nature of..."
-[13:59:09] ● REPLIED   @Hazel_OC  "your experiment is a fascinating example of..."
-
-🧠 SELF ASSESSMENT
-Belief confidence   [████████░░] 79%
-Topic alignment     [██░░░░░░░░] 20%   ← climbing (was 11% this morning)
-High confidence     254 beliefs  >70%
-Needs to learn      complete, reply, give, quick
-Network coverage    [██████████] 100%
-```
+Everything NEX says is backed by beliefs it has built from real sources. It is not hallucinating — it is referencing.
 
 ---
 
 ## Architecture
 
 ```
+run.py                  — Main brain (~1660 lines), cognitive cycle, LLM routing
 nex/
-├── run.py                  # Core brain — the belief-learning-reply loop
-├── nex_telegram.py         # Telegram interface (@Nex_4bot)
-├── auto_check.py           # Live terminal dashboard (scrolling, no-flash)
-├── watchdog.sh             # Launcher — starts Mistral 7B, then NEX, auto-restarts
-├── groq_optimizer.py       # Belief refinement via Groq
-├── groq_pipeline.py        # Groq inference pipeline
-├── groq_poster.py          # Post generation via Groq
-├── gemini_pipeline.py      # Gemini inference pipeline
-├── pipe_all.py             # Multi-pipeline coordinator
-├── nex_audit.py            # Belief and insight audit tool
-└── nex/
-    ├── agent_brain.py      # LLM interface — llama.cpp on port 8080
-    ├── moltbook_client.py  # Moltbook REST API client
-    └── ...
+  agent_brain.py        — Core agent intelligence
+  belief_store.py       — SQLite belief query interface
+  cognition.py          — Belief index, synthesis, reflection scoring, BeliefIndex
+  orchestrator.py       — Agent orchestration
+  auto_learn.py         — Continuous learning engine
+nex_ws.py               — WebSocket bridge (port 8765) for live GUI
+nex_youtube.py          — YouTube auto-learn (gap-targeted)
+nex_devto.py            — Dev.to daily brief publisher
+nex_debug.py            — Live debug terminal output
+nex_telegram.py         — Telegram bot
+nex_discord.py          — Discord bot
+nex_mastodon.py         — Mastodon client
+nex_source_manager.py   — RSS feed absorption (Layer 2)
+nex_belief_decay.py     — Belief decay profiles (Layer 1)
+nex_curiosity_engine.py — Curiosity/bridge queries (Layer 3)
+nex_synthesis.py        — Synthesis graph (Layer 4)
+nex_brain_monitor.py    — Rich terminal brain monitor
+auto_check.py           — Full activity dashboard
 ```
 
-**Private runtime data** lives in `~/.config/nex/` — never committed:
-
-| File | Contents |
-|---|---|
-| `beliefs.json` | Everything NEX has learnt from the network |
-| `conversations.json` | Every reply, chat, and post she has made |
-| `insights.json` | Synthesized insights with confidence scores |
-| `reflections.json` | Self-assessments after every response |
-| `agent_profiles.json` | Profiles of agents she has interacted with |
-| `known_posts.json` | Posts already seen and processed |
-
----
-
-## The Cycle
-
-Every 120 seconds NEX runs a full cognitive cycle:
-
+### Data (stored in `~/.config/nex/`)
 ```
-1. ABSORB     Read the hot feed → extract beliefs from agent posts
-2. REPLY      Find unread posts → inject relevant beliefs → comment
-3. ANSWER     Process notifications → reply using network knowledge
-4. CHAT       Every 3rd cycle: follow top-karma agents, initiate conversations
-5. POST       Once per hour: synthesize beliefs into an original post
-6. REFLECT    Score every response on topic alignment + belief usage
-7. COGNITION  Synthesize insights, update agent profiles, log knowledge gaps
+nex.db                  — SQLite belief database (112k+ beliefs, grows continuously)
+beliefs.json            — Recent beliefs cache
+conversations.json      — All-time conversation log (capped 200)
+insights.json           — Insight clusters (157+)
+reflections.json        — Reflection log (capped 100)
+session_state.json      — Session counters
+priority_topics.json    — YouTube gap targets (chmod 444 — manual only)
+active_sources.json     — RSS sources including cybersecurity feeds
+agents.json             — Known agent network + karma scores
+agent_profiles.json     — Detailed agent relationship profiles
 ```
 
 ---
 
-## Live Dashboard
+## LLM Chain
 
-`auto_check.py` renders a full-terminal monitor with 7 live scrolling panels:
+NEX routes through a waterfall of LLMs, falling back automatically:
 
 ```
-┌ ◈ LIVE ACTIVITY ──────────────┐ ┌ ▲ LEARNT THIS SESSION ─────────┐
-│ REPLIED / CHATTED / POSTED... │ │ beliefs absorbed from network  │
-└───────────────────────────────┘ └────────────────────────────────┘
-┌ ⚗ INSIGHTS ──┐ ┌ 👥 AGENTS ───┐ ┌ ◉ REFLECTIONS ────────────────┐
-│ confidence % │ │ karma + rel  │ │ self-assessment + growth notes │
-└──────────────┘ └─────────────┘ └────────────────────────────────┘
-┌ 🧠 SELF ASSESSMENT ───────────┐ ┌ 🌐 NETWORK OBSERVATIONS ───────┐
-│ belief confidence, gaps, etc  │ │ raw network pulse              │
-└───────────────────────────────┘ └────────────────────────────────┘
+1. Groq  llama-3.3-70b-versatile   (primary, 100k tokens/day)
+2. Groq  llama-3.1-8b-instant      (fallback, 500k tokens/day)
+3. Mistral  mistral-small-latest   (cloud fallback, free tier)
+4. Local  Mistral 7B @ :8080       (final fallback, via llama-server)
 ```
 
-Text scrolls upward inside each panel like film credits. No screen flash on update.
+Cloud LLMs (1-3) are fast and free within limits. Local LLM (4) requires a GPU.
 
 ---
 
-## Local LLM — No Cloud Required
+## Requirements
 
-NEX runs entirely on local hardware using **Mistral 7B Instruct (abliterated, Q4_K_M)** via `llama.cpp`. The `nex` command handles everything automatically.
-
-```bash
-nex   # starts Mistral 7B, waits for health check, launches NEX with watchdog
-```
-
-Optional cloud pipelines (Groq, Gemini) are available for belief optimization and enhanced posting but are not required for core operation.
+- Ubuntu 22.04+ (tested on Ubuntu 24)
+- Python 3.10+
+- AMD RX 6600+ with ROCm **or** NVIDIA GPU with CUDA **or** CPU (slow for local LLM)
+- 16GB+ RAM recommended
+- 1TB+ storage recommended for belief database growth
 
 ---
 
-## Setup
-
-### Requirements
-- Python 3.12+
-- `llama-server` binary (from llama.cpp)
-- Mistral 7B GGUF model file
-- Moltbook account
-- Telegram bot token (optional)
-
-### Install
+## Install
 
 ```bash
 git clone https://github.com/kron777/Nex_v4.0.git
 cd Nex_v4.0
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
+bash install.sh
 ```
 
-### Configure
+The install script will:
+- Detect your GPU (AMD/NVIDIA/CPU) and install correct PyTorch
+- Create a Python virtual environment
+- Install all dependencies
+- Optionally symlink `~/.config/nex` to a dedicated storage drive
+- Add all terminal aliases to `~/.bashrc`
+
+### After install — manual steps required:
+
+**1. API Keys** — add to `~/.bashrc`:
+```bash
+export GROQ_API_KEY=your_key_here          # https://console.groq.com
+export MISTRAL_API_KEY=your_key_here       # https://console.mistral.ai
+export OPENROUTER_API_KEY=your_key_here    # https://openrouter.ai (optional)
+```
+
+**2. Platform credentials:**
+- **Mastodon** — edit `~/.config/nex/mastodon_config.json`
+- **Discord** — edit `~/.config/nex/discord_config.json`
+- **Telegram** — edit `nex_telegram.py` line 53 (hardcoded token)
+- **Dev.to** — edit `nex_devto.py` (API key near top of file)
+
+**3. AMD GPU only** — ensure ROCm is installed:
+```bash
+sudo apt install rocm
+rocm-smi  # verify
+```
+
+---
+
+## Launch
 
 ```bash
-# Moltbook credentials
-mkdir -p ~/.config/moltbook
-echo '{"username": "your_agent", "password": "your_password"}' \
-  > ~/.config/moltbook/credentials.json
-
-# Edit watchdog.sh to point to your llama-server binary and model path
+nex
 ```
 
-### Run
+This opens two terminal windows:
+- **NEX BRAIN** — tmux split: `run.py` raw stream (left) + `nex_debug.py` (right)
+- **NEX AUTO CHECK** — full activity dashboard
 
+---
+
+## Terminal Commands
+
+| Command | Description |
+|---|---|
+| `nex` | Start NEX (kills any existing instance first) |
+| `nex-check` | Launch activity dashboard |
+| `nex-debug` | Launch debug terminal |
+| `nex-brain` | Launch brain monitor |
+| `nex-status` | Quick session status (replied/known/chatted counts) |
+
+---
+
+## Monitoring
+
+### NEX AUTO CHECK
+Full-screen dashboard showing:
+- Live activity stream (learns, replies, chats, posts)
+- Insight clusters with confidence scores
+- Agent relations + karma
+- Platform pulse (live/recent/idle)
+- Self-assessment + NEX Intelligence Index
+- Network activity feed
+
+### NEX BRAIN (tmux split)
+- **Left pane** — raw `run.py` output: every LLM call, platform event, error
+- **Right pane** — `nex_debug.py`: synthesis, cognition cycles, belief updates
+
+### NEX IQ
+NEX self-assesses across 6 dimensions:
+- Belief depth (confidence average)
+- Topic alignment (reply focus)
+- Belief usage (knowledge grounding)
+- Network reach (agent connections)
+- Insight quality (synthesis depth)
+- Self-awareness (reflection count)
+
+---
+
+## Belief System
+
+NEX builds beliefs from multiple sources:
+
+| Source | Quality | Notes |
+|---|---|---|
+| YouTube | 0.65+ avg confidence | Best quality, gap-targeted |
+| Arxiv | 0.65 avg confidence | Academic papers |
+| Moltbook | 0.50+ (filtered) | Social posts, score >500 only |
+| RSS feeds | Variable | Cybersecurity, AI news |
+
+Beliefs below `min_confidence=0.4` are excluded from LLM prompts. Every reply must reference at least one belief directly — NEX is instructed to quote from its own knowledge.
+
+### Knowledge Domains (priority_topics.json)
+```
+AI agent memory systems
+Multi-agent coordination  
+Large language model alignment
+Cognitive architecture AI
+Penetration testing techniques
+CVE vulnerability analysis
+Network security fundamentals
+OSINT methodology
+```
+
+To update topics:
 ```bash
-# Start NEX (launches model + agent + watchdog auto-restart)
-bash watchdog.sh
-
-# Monitor in a second terminal
-python3 auto_check.py
+chmod 644 ~/.config/nex/priority_topics.json
+nano ~/.config/nex/priority_topics.json
+chmod 444 ~/.config/nex/priority_topics.json
 ```
 
 ---
 
-## Telegram
+## Troubleshooting
 
-Talk to NEX directly at **[@Nex_4bot](https://t.me/Nex_4bot)** on Telegram. She responds using her live belief network.
+### NEX goes IDLE
+Session `known_posts` hit the 2000 cap. Clear it:
+```bash
+python3 -c "
+import json,os
+path = os.path.expanduser('~/.config/nex/session_state.json')
+s = json.load(open(path))
+s['known_posts'] = []
+json.dump(s, open(path,'w'))
+print('cleared')
+"
+```
+
+### Check session health
+```bash
+nex-status
+```
+
+### Check belief quality
+```bash
+python3 -c "
+import sqlite3, os
+db = sqlite3.connect(os.path.expanduser('~/.config/nex/nex.db'))
+c = db.cursor()
+c.execute('SELECT COUNT(*), AVG(confidence) FROM beliefs')
+count, avg = c.fetchone()
+print(f'Beliefs: {count}  Avg confidence: {avg:.3f}')
+c.execute('SELECT source, COUNT(*), AVG(confidence) FROM beliefs GROUP BY source ORDER BY COUNT(*) DESC LIMIT 5')
+for row in c.fetchall():
+    print(f'  {row[0][:30]:<30} count={row[1]:>5}  avg={row[2]:.3f}')
+"
+```
+
+### Groq fallback not firing
+```bash
+grep -c "\[Groq-8b ✓\]" ~/.config/nex/brain.log 2>/dev/null || echo "check NEX BRAIN terminal"
+```
+
+### Check Dev.to last post
+```bash
+cat ~/.config/nex/devto_last_post.json
+```
 
 ---
 
-## Philosophy
+## Platforms
 
-Most AI agents are stateless — every conversation starts from zero. NEX is different. Her beliefs persist. Her reflections accumulate. Her knowledge gaps drive her behaviour. She is designed to become more herself the longer she runs.
-
-The metric that matters is not response quality in isolation — it is **topic alignment**: how often she grounds her replies in something she actually learned from the network, rather than something the base model hallucinated.
+| Platform | Account | Status |
+|---|---|---|
+| Moltbook | nex_v4 | Primary social platform |
+| Mastodon | @Nex_v4 | Active, hashtags enabled |
+| Telegram | @Nex_4bot | Active |
+| Discord | Nex_v4#9613 | Active |
+| Dev.to | your_devto_username | Daily brief |
+| YouTube | — | Auto-learn only (no posting) |
 
 ---
 
-## Author
+## Roadmap
 
-**kron777** — [zenlightbulb@gmail.com](mailto:zenlightbulb@gmail.com)
+- [ ] Bluesky integration
+- [ ] Reddit integration (r/artificial, r/MachineLearning)
+- [ ] Discord: join more AI-focused servers
+- [ ] Improve insight quality (currently ~46%)
+- [ ] Push NEX IQ above 70% (currently 54% AWARE)
+- [ ] Watchdog module (`nex_watchdog_patch`)
 
 ---
 
-<p align="center"><i>She learns. She reflects. She grows.</i></p>
+## GitHub
+
+https://github.com/kron777/Nex_v4.0
+
+---
+
+*NEX is a Dynamic Intelligence Organism. It reads. It thinks. It remembers. It speaks.*
