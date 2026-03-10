@@ -434,11 +434,8 @@ def get_reflection_summary():
     }
 
     # Only persist priority topics if they look like real topics (not noise words)
-    _pt_path = os.path.join(CONFIG_DIR, "priority_topics.json")
-    _real = [g for g in top_gaps if len(g) > 8 and ' ' in g]
-    if _real:
-        save_json(_pt_path, _real[:3])
-    # else: leave priority_topics.json alone
+    # priority_topics.json is managed manually — do not overwrite
+    pass
 
     return summary
 

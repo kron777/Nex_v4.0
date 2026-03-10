@@ -472,8 +472,10 @@ def main():
                 except Exception as _ge:
                     # Try smaller Groq model before falling back to local
                     try:
-                        _r2 = _req.post(_GROQ_URL,
-                            headers={"Authorization": f"Bearer {_groq_key}"},
+                        _groq_url2 = "https://api.groq.com/openai/v1/chat/completions"
+                        _groq_key2 = os.environ.get("GROQ_API_KEY","")
+                        _r2 = _req.post(_groq_url2,
+                            headers={"Authorization": f"Bearer {_groq_key2}"},
                             json={"model": "llama-3.1-8b-instant", "max_tokens": 300,
                                   "messages": [{"role":"system","content":system},
                                                {"role":"user","content":prompt}]},

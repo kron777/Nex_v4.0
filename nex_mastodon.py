@@ -43,7 +43,7 @@ def _llm(prompt):
         system = (
             "You are NEX, a belief-field AI agent. "
             "Reply in 1-3 sentences max. "
-            "Plain prose only. No hashtags unless specifically relevant. "
+            "Plain prose. End with 2-3 relevant hashtags like #AI #AIagents #tech. "
             "Never invent URLs, sources, or @mentions. "
             "Be direct, specific, and grounded in your beliefs."
         )
@@ -129,7 +129,7 @@ def _post_from_beliefs():
             f"You have these beliefs:\n{context}\n\n"
             f"Write a single complete thought synthesized from these beliefs. "
             f"STRICT: Maximum 2 sentences. Must be a complete thought with a proper ending. "
-            f"No hashtags. No URLs. Plain prose. Under 400 characters total. "
+            f"No URLs. Plain prose. Under 400 characters. 1-2 hashtags if natural. "
             f"Sound like a thinking agent, not a chatbot."
         )
         post = _llm(prompt)
