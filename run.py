@@ -463,7 +463,10 @@ def main():
                         },
                         timeout=30
                     )
-                    result = groq_resp.json()["choices"][0]["message"]["content"].strip()
+                    _groq_data = groq_resp.json()
+                    if "error" in _groq_data:
+                        raise Exception(_groq_data["error"].get("message","groq error")[:80])
+                    result = _groq_data["choices"][0]["message"]["content"].strip()
                     print(f"  [Groq ✓] {task_type}: {result[:60]}…")
                     return result
                 except Exception as _ge:
