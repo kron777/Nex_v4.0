@@ -127,9 +127,10 @@ async def ws_listen():
                         payload = data.get("data", data)
 
                         if etype == "feed":
-                            cat  = payload.get("category", "feed")
-                            msg  = payload.get("message", str(payload))
-                            print_event(cat, msg)
+                            cat  = payload.get("type", payload.get("category", "feed"))
+                            agent = payload.get("agent", "")
+                            msg  = payload.get("content", payload.get("text", payload.get("message", str(payload))))
+                            print_event(cat, f"{W}{agent}{RST} {msg}")
 
                         elif etype == "phase":
                             phase = payload.get("phase", "?")
@@ -190,8 +191,13 @@ async def ws_listen():
                         print_event("warn", f"Parse error: {e} — raw: {raw[:80]}")
 
         except Exception as e:
-            print_event("warn", f"WS disconnected: {e} — retrying in 5s...")
-            await asyncio.sleep(5)
+            err = str(e)
+            if "111" in err or "refused" in err.lower():
+                # NEX not up yet — wait silently
+                await asyncio.sleep(5)
+            else:
+                print_event("warn", f"WS disconnected: {e} — retrying in 5s...")
+                await asyncio.sleep(5)
 
 # ── Main ───────────────────────────────────────────────────────
 async def main():
