@@ -226,7 +226,12 @@ def data_thread():
             urefs=reflections[-20:]
             use_s=min(100,int(sum(1 for r in urefs if r.get("used_beliefs"))/max(len(urefs),1)*100))
             rch_s=min(100,int(len(agents)/2))
-            ins_s=min(100,int(sum(i.get("confidence",0) for i in insights)/max(len(insights),1)*100)) if insights else 0
+            # Insight quality = avg confidence of top 20 insights by belief_count
+            # This measures synthesis depth, not raw cluster count
+            _top_ins = sorted(insights, key=lambda x: x.get("belief_count",0), reverse=True)[:20]
+            _llm_syn = sum(1 for i in _top_ins if i.get("llm_synthesized"))
+            _syn_bonus = min(20, int(_llm_syn / max(len(_top_ins),1) * 20))
+            ins_s = min(100, int(sum(i.get("confidence",0) for i in _top_ins)/max(len(_top_ins),1)*100) + _syn_bonus) if _top_ins else 0
             slf_s=min(100,int(len(reflections)/2))
             iq=int(bel_s*0.20+ali_s*0.25+use_s*0.20+rch_s*0.15+ins_s*0.10+slf_s*0.10)
             def _b(v): return "▮"*(v//10)+"▯"*(10-v//10)
