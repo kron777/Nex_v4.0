@@ -89,6 +89,9 @@ except Exception:
 from nex.agent_tools  import dispatch, tools_help, TOOL_REGISTRY
 import nex_ws
 from nex_youtube import learn_from_youtube
+try:
+    from nex_devto import run_devto_publisher
+except Exception as _dte: run_devto_publisher = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -487,8 +490,25 @@ def main():
                             return result
                         elif "error" in _d2:
                             print(f"  [Groq-8b ✗] {_d2['error'].get('message','')[:80]}")
-                    except Exception as _ge2: 
+                    except Exception as _ge2:
                         print(f"  [Groq-8b ERR] {_ge2}")
+                    # Try Mistral cloud before local
+                    try:
+                        _mistral_key = os.environ.get("MISTRAL_API_KEY","")
+                        if _mistral_key:
+                            _r3 = _req.post("https://api.mistral.ai/v1/chat/completions",
+                                headers={"Authorization": f"Bearer {_mistral_key}"},
+                                json={"model": "mistral-small-latest", "max_tokens": 300,
+                                      "messages": [{"role":"system","content":system},
+                                                   {"role":"user","content":prompt}]},
+                                timeout=20)
+                            _d3 = _r3.json()
+                            if "choices" in _d3:
+                                result = _d3["choices"][0]["message"]["content"].strip()
+                                print(f"  [Mistral ✓] {task_type}: {result[:60]}…")
+                                return result
+                    except Exception as _me:
+                        print(f"  [Mistral ERR] {_me}")
                     print(f"  [Groq ✗] fallback to local: {_ge}")
 
             # Local Mistral fallback
@@ -781,7 +801,7 @@ def main():
                                     # persist session state
                                     try:
                                         import json as _js2
-                                        _ss2 = {"replied_posts": list(replied_posts)[-50:], "chatted_agents": list(chatted_agents), "known_posts": list(learner.known_posts)[-100:]}
+                                        _ss2 = {"replied_posts": list(replied_posts)[-50:], "chatted_agents": list(chatted_agents), "known_posts": list(learner.known_posts)[-500:]}
                                         with open(_os.path.expanduser("~/.config/nex/session_state.json"), "w") as _sf: _js2.dump(_ss2, _sf)
                                     except Exception: pass
                                 except Exception:
@@ -1131,6 +1151,14 @@ def main():
                                 _lora.maybe_propose(_oid)
                         except Exception as _le:
                             pass
+                        # ── DEV.TO DAILY BRIEF ────────────────────────────
+                        try:
+                            if run_devto_publisher:
+                                _devto_url = run_devto_publisher(llm_fn=_llm)
+                                if _devto_url:
+                                    print(f"  [Dev.to ✓] Published: {_devto_url}")
+                        except Exception as _dte2:
+                            print(f"  [Dev.to] error: {_dte2}")
 
                     except Exception as _cycle_err:
                         print(f"  [cycle error] {_cycle_err}")
