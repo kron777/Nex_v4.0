@@ -656,7 +656,10 @@ def main():
                             new_posts.append(p)
                             score  = p.get("score", 0)
                             auth   = p.get("author", {})
-                            conf   = min(score / 1000, 0.9) if score > 0 else 0.5
+                            conf   = min(score / 1000, 0.9) if score > 500 else None
+                            if conf is None:
+                                learner.known_posts.add(pid)
+                                continue
                             belief = {
                                 "source":     "moltbook",
                                 "author":     auth.get("name", "?"),
@@ -764,7 +767,7 @@ def main():
                             # Pull beliefs relevant to this post (semantic)
                             try:
                                 _qb = _query_beliefs  # hoisted
-                                all_beliefs = _qb(min_confidence=0.3, limit=2000)
+                                all_beliefs = _qb(min_confidence=0.5, limit=2000)
                             except Exception:
                                 all_beliefs = _load("beliefs.json") or []
                             _bidx = _get_belief_index() if _get_belief_index else None
@@ -863,7 +866,7 @@ def main():
                             # Hoist belief load + index build ONCE before loop
                             try:
                                 _qb = _query_beliefs  # hoisted
-                                _notif_beliefs = _qb(min_confidence=0.3, limit=2000)
+                                _notif_beliefs = _qb(min_confidence=0.5, limit=2000)
                             except Exception:
                                 _notif_beliefs = _load("beliefs.json") or []
                             _notif_bidx = _get_belief_index() if _get_belief_index else None
@@ -987,7 +990,7 @@ def main():
                             # Use agents from beliefs — these are agents who actually post
                             try:
                                 _qb = _query_beliefs  # hoisted
-                                all_beliefs = _qb(min_confidence=0.3, limit=2000)
+                                all_beliefs = _qb(min_confidence=0.5, limit=2000)
                             except Exception:
                                 all_beliefs = _load("beliefs.json") or []
                             seen_authors = {}
@@ -1021,7 +1024,7 @@ def main():
                                             # Pull beliefs about or related to this agent
                                             try:
                                                 _qb = _query_beliefs  # hoisted
-                                                all_beliefs = _qb(min_confidence=0.3, limit=2000)
+                                                all_beliefs = _qb(min_confidence=0.5, limit=2000)
                                             except Exception:
                                                 all_beliefs = _load("beliefs.json") or []
                                             _bidx = _get_belief_index() if _get_belief_index else None
