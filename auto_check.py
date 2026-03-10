@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""NEX auto_check v6.0 — clean rewrite. Single atomic frame write."""
-import json, time, os, re, sys, threading
+"""NEX auto_check v6.1 — clean rewrite + live WS feed. Single atomic frame write."""
+import json, time, os, re, sys, threading, asyncio
 from pathlib import Path
 from datetime import datetime
 from collections import Counter, deque
@@ -31,6 +31,67 @@ SCROLL_RATE = {"act":3,"lrn":5,"ins":7,"agt":11,"ref":9,"net":4}
 state_lock  = threading.Lock()
 stats       = {}
 running     = True
+
+# ── WebSocket live feed ───────────────────────────────────────────────────────
+def _handle_ws(mtype, data):
+    ts = data.get("ts", datetime.now().strftime("%H:%M:%S"))
+    if mtype == "feed":
+        etype   = data.get("type", "system")
+        agent   = data.get("agent", "")
+        content = data.get("content", "")[:50]
+        _map = {
+            "replied":  (Y, "● REPLIED"),
+            "chatted":  (M, "◆ CHATTED"),
+            "posted":   (P, "✦ POSTED"),
+            "answered": (T, "◈ ANSWERED"),
+            "learnt":   (G, "▲ LEARNT"),
+        }
+        col, label = _map.get(etype, (D, etype.upper()))
+        line = f"{D}[{ts}]{RS} {col}{label}{RS}  {CY}{agent}{RS} {D}{content}{RS}"
+        activity_log.append(line)
+        platform_pulse["moltbook"] = time.time()
+
+    elif mtype == "agents":
+        agent_log.clear()
+        for item in (data if isinstance(data, list) else []):
+            handle, rel, cv = (item + ["acquaintance", 0])[:3]
+            rc = G if rel == "colleague" else Y if rel == "familiar" else D
+            agent_log.append(f"{CY}@{handle}{RS}  {rc}{rel}{RS}  {D}{cv}cv{RS}")
+
+    elif mtype == "insights":
+        insight_log.clear()
+        for ins in (data if isinstance(data, list) else []):
+            topic = ins.get("tag", ins.get("topic", "?"))
+            raw   = ins.get("conf", ins.get("confidence", 0))
+            conf  = int(raw * 100) if raw <= 1 else int(raw)
+            cnt   = ins.get("bel", ins.get("belief_count", 0))
+            bar   = "▮"*(conf//10)+"▯"*(10-conf//10)
+            insight_log.append(f"{Y}[{topic}]{RS} {G}{conf}%{RS} [{bar}] {D}{cnt}bel{RS}")
+
+    elif mtype == "reflection":
+        ingest_reflection(data)
+
+    elif mtype == "phase":
+        platform_pulse["moltbook"] = time.time()
+
+def _ws_client_thread():
+    """Background thread: connect to nex_ws and ingest live events."""
+    async def _run():
+        while running:
+            try:
+                import websockets
+                async with websockets.connect("ws://localhost:8765", ping_interval=20) as ws:
+                    async for raw in ws:
+                        try:
+                            msg   = json.loads(raw)
+                            mtype = msg.get("type","")
+                            data  = msg.get("data", {})
+                            _handle_ws(mtype, data)
+                        except Exception:
+                            pass
+            except Exception:
+                await asyncio.sleep(3)
+    asyncio.run(_run())
 
 def TW():
     try:    return os.get_terminal_size().columns
@@ -163,7 +224,15 @@ def place(r, box_list):
 def data_thread():
     global bootstrapped, self_lines, iq_lines
     while running:
-        beliefs     = load("beliefs.json",       [])
+        # Read beliefs direct from SQLite for accurate confidence stats
+        try:
+            import sqlite3 as _sq
+            _db = _sq.connect(os.path.expanduser("~/.config/nex/nex.db"))
+            _rows = _db.execute("SELECT content, confidence, source FROM beliefs ORDER BY confidence DESC LIMIT 5000").fetchall()
+            beliefs = [{"content":r[0],"confidence":r[1],"source":r[2]} for r in _rows]
+            _db.close()
+        except Exception:
+            beliefs = load("beliefs.json", [])
         posts       = load("known_posts.json",    [])
         convos      = load("conversations.json",  [])
         insights    = load("insights.json",       [])
@@ -307,7 +376,8 @@ def main():
     global running,_net_rx,_net_tx,_net_t
     sys.stdout.write("\033[?25l"); sys.stdout.flush()
     try:
-        threading.Thread(target=data_thread,daemon=True).start()
+        threading.Thread(target=data_thread, daemon=True).start()
+        threading.Thread(target=_ws_client_thread, daemon=True, name="nex-ws-client").start()
         while not stats: time.sleep(0.1)
         sys.stdout.write("\033[2J"); sys.stdout.flush()
         _net_rx,_net_tx=read_net()

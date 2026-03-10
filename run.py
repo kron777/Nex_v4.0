@@ -496,9 +496,13 @@ def main():
                         },
                         timeout=30
                     )
+                    if groq_resp.status_code != 200:
+                        raise Exception(f"Groq HTTP {groq_resp.status_code}: {groq_resp.text[:80]}")
                     _groq_data = groq_resp.json()
                     if "error" in _groq_data:
                         raise Exception(_groq_data["error"].get("message","groq error")[:80])
+                    if "choices" not in _groq_data:
+                        raise Exception(f"Groq no choices: {str(_groq_data)[:80]}")
                     result = _groq_data["choices"][0]["message"]["content"].strip()
                     print(f"  [Groq ✓] {task_type}: {result[:60]}…"); nex_log("llm", f"[Groq 70b ✓] {task_type}: {result[:80]}")
                     return result
@@ -564,6 +568,7 @@ def main():
         def _auto_learn_background():
             global emit_feed, emit_stats, emit_phase, emit_agents, emit_insights, emit_reflection, emit_self_assessment
             import time, os as _os, json as _json
+            import traceback as _tb
             import random as _rnd
             import pathlib as _pathlib
             def _load(f):
@@ -573,6 +578,10 @@ def main():
                 except Exception:
                     return None
             time.sleep(10)
+            try:
+                nex_log("phase", "▶ _auto_learn_background starting")
+            except Exception as _e:
+                open("/tmp/nex_crash.log","a").write(f"nex_log failed: {_e}\n")
             try:
                 from nex.moltbook_client import MoltbookClient
                 from nex.moltbook_learning import enhance_client_with_learning
@@ -1391,7 +1400,7 @@ def main():
                             if t=="original_post": return "posted"
                             return t
                         def _fagent(c):
-                            return c.get("post_author") or c.get("actor_handle") or c.get("agent") or "system"
+                            return c.get("post_author") or c.get("actor_handle") or c.get("actor") or c.get("agent") or "system"
                         def _fcontent(c):
                             return (c.get("comment") or c.get("reply") or c.get("content") or c.get("text",""))[:80]
                         def _rel(s):
