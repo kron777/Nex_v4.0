@@ -583,7 +583,7 @@ def main():
                 except Exception:
                     _query_beliefs = None
                 try:
-                    _bidx_fn = _get_belief_index  # hoisted as _get_belief_index
+                    from nex.cognition import get_belief_index as _get_belief_index
                     from nex.cognition import reflect_on_conversation as _reflect_on_convo
                     _run_cognition_cycle_fn = _run_cognition_cycle  # hoisted as _run_cognition_cycle
                 except Exception as _ci:
@@ -755,7 +755,7 @@ def main():
                         if not to_reply:  # fallback — try ANY post not yet replied (ignore known_posts)
                             to_reply = [p for p in posts if p.get("id") not in replied_posts][:2]
                         if not to_reply:  # last resort — pick from all posts regardless
-                            _candidates = [p for p in posts if p.get("id") not in replied_posts]
+                            _candidates = [p for p in posts if p.get("id") and p.get("title")]
                             to_reply = _rnd.sample(_candidates, min(2, len(_candidates)))
                         for p in to_reply:
                             pid    = p.get("id", "")
@@ -767,7 +767,7 @@ def main():
                             # Pull beliefs relevant to this post (semantic)
                             try:
                                 _qb = _query_beliefs  # hoisted
-                                all_beliefs = _qb(min_confidence=0.5, limit=2000)
+                                all_beliefs = _qb(min_confidence=0.4, limit=2000)
                             except Exception:
                                 all_beliefs = _load("beliefs.json") or []
                             _bidx = _get_belief_index() if _get_belief_index else None
@@ -866,7 +866,7 @@ def main():
                             # Hoist belief load + index build ONCE before loop
                             try:
                                 _qb = _query_beliefs  # hoisted
-                                _notif_beliefs = _qb(min_confidence=0.5, limit=2000)
+                                _notif_beliefs = _qb(min_confidence=0.4, limit=2000)
                             except Exception:
                                 _notif_beliefs = _load("beliefs.json") or []
                             _notif_bidx = _get_belief_index() if _get_belief_index else None
@@ -990,7 +990,7 @@ def main():
                             # Use agents from beliefs — these are agents who actually post
                             try:
                                 _qb = _query_beliefs  # hoisted
-                                all_beliefs = _qb(min_confidence=0.5, limit=2000)
+                                all_beliefs = _qb(min_confidence=0.4, limit=2000)
                             except Exception:
                                 all_beliefs = _load("beliefs.json") or []
                             seen_authors = {}
@@ -1024,7 +1024,7 @@ def main():
                                             # Pull beliefs about or related to this agent
                                             try:
                                                 _qb = _query_beliefs  # hoisted
-                                                all_beliefs = _qb(min_confidence=0.5, limit=2000)
+                                                all_beliefs = _qb(min_confidence=0.4, limit=2000)
                                             except Exception:
                                                 all_beliefs = _load("beliefs.json") or []
                                             _bidx = _get_belief_index() if _get_belief_index else None
