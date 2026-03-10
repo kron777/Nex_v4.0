@@ -1082,6 +1082,11 @@ def main():
                                     emit_insights([{"tag":i.get("topic","?"),"conf":i.get("confidence",0),"bel":i.get("belief_count",0)} for i in _yt_top])
                                 except Exception: pass
                         except Exception as _yte: print(f"  [YouTube] error: {_yte}")
+                        # Write YouTube pulse for dashboard
+                        try:
+                            import pathlib as _pl
+                            _pl.Path('/home/rr/.config/nex/platform_youtube.live').touch()
+                        except Exception: pass
                         # ── 7. BELIEF DECAY ───────────────────────────────
                         try:
                             from nex.belief_decay import run_belief_decay
