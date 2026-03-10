@@ -350,6 +350,9 @@ def _identify_gap(user_topics, beliefs_helped):
         if _filtered:
             return f"Need more beliefs about: {', '.join(_filtered[:3])}. Should seek these topics on Moltbook."
         return "Response lacked belief grounding — no specific knowledge gaps identified."
+    # Even with beliefs used, flag topics for deeper learning
+    if _filtered:
+        return f"Need more beliefs about: {', '.join(_filtered[:3])}. Knowledge applicable but gaps remain."
     return "Knowledge was applicable. Continue deepening understanding in these areas."
 
 

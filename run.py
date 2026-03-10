@@ -467,6 +467,20 @@ def main():
                     print(f"  [Groq ✓] {task_type}: {result[:60]}…")
                     return result
                 except Exception as _ge:
+                    # Try smaller Groq model before falling back to local
+                    try:
+                        _r2 = _req.post(_GROQ_URL,
+                            headers={"Authorization": f"Bearer {_groq_key}"},
+                            json={"model": "llama3-8b-8192", "max_tokens": 300,
+                                  "messages": [{"role":"system","content":system},
+                                               {"role":"user","content":prompt}]},
+                            timeout=20)
+                        _d2 = _r2.json()
+                        if "choices" in _d2:
+                            result = _d2["choices"][0]["message"]["content"].strip()
+                            print(f"  [Groq-8b ✓] {task_type}: {result[:60]}…")
+                            return result
+                    except Exception: pass
                     print(f"  [Groq ✗] fallback to local: {_ge}")
 
             # Local Mistral fallback

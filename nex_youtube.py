@@ -40,6 +40,13 @@ def _save_seen(seen):
 # ── Get NEX's top topics from insights.json ───────────────────
 def _get_top_topics(n=6):
     try:
+        # Check priority_topics.json first — pre-computed real gaps
+        pt_path = CONFIG_DIR / "priority_topics.json"
+        if pt_path.exists():
+            pt = json.loads(pt_path.read_text())
+            if pt and len(pt) >= 2:
+                log.info(f"[YouTube] priority topics: {pt}")
+                return pt[:n]
         insights_path = CONFIG_DIR / "insights.json"
         insights = json.loads(insights_path.read_text())
         # Sort by LOW confidence first — target knowledge gaps
@@ -57,6 +64,15 @@ def _get_top_topics(n=6):
         gap_topics    = [i["topic"] for i in ranked_gaps[:4]   if i.get("topic")]
         strong_topics = [i["topic"] for i in ranked_strong[:2] if i.get("topic")]
         topics = list(dict.fromkeys(gap_topics + strong_topics))[:n]
+        # Enrich gap topics with context for better YouTube searches
+        enriched = []
+        for t in topics:
+            if len(t) <= 4 or t in ("claim","value","mount","wrong","smart"):
+                # Too generic — combine with "AI agents" for better results
+                enriched.append(f"AI agents {t}")
+            else:
+                enriched.append(t)
+        topics = enriched[:n]
         log.info(f"[YouTube] top topics: {topics}")
         return topics
     except Exception as e:
