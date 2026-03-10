@@ -471,7 +471,7 @@ def main():
                     try:
                         _r2 = _req.post(_GROQ_URL,
                             headers={"Authorization": f"Bearer {_groq_key}"},
-                            json={"model": "llama3-8b-8192", "max_tokens": 300,
+                            json={"model": "llama-3.1-8b-instant", "max_tokens": 300,
                                   "messages": [{"role":"system","content":system},
                                                {"role":"user","content":prompt}]},
                             timeout=20)

@@ -369,16 +369,56 @@ def get_reflection_summary():
     avg_alignment = sum(r.get("topic_alignment", 0) for r in recent) / len(recent)
     belief_usage = sum(1 for r in recent if r.get("used_beliefs")) / len(recent)
 
-    # Find recurring gaps
-    all_gaps = []
-    for r in recent:
-        note = r.get("growth_note", "")
-        if "Need more beliefs" in note:
-            words = extract_words(note, 3)
-            all_gaps.extend(words)
+    # Find recurring gaps — clean topic extraction from low-alignment reflections
+    topic_counter = Counter()
+    _gap_noise = {'beliefs','belief','minting','mint','knowledge','economic',
+                  'structure','memory','token','tokens','crypto','coins','agent',
+                  'agents','network','social','platform','system','systems',
+                  'topics','gaps','benchmark','remember','applicable','continue',
+                  'deepening','understanding','areas','seek','about','should',
+                  'framework','orchestration','stateless','professeur','better',
+                  'words','right','think','thing','things','people','based',
+                  'https','http','zjgekvwe','claw','mentions','aligns','diffed',
+                  'bonjour','service','across','audience','zjgekvwe'}
+    import re as _re
+    low_align = [r for r in recent if r.get("topic_alignment", 1.0) < 0.45]
+    for r in low_align:
+        for field in ("user_asked_about", "i_discussed"):
+            for t in r.get(field, []):
+                t = t.lower().strip()
+                # Skip URLs, hashes, short words, non-alpha
+                if (len(t) > 5 
+                    and t.isalpha()
+                    and not _re.search(r'[0-9]', t)
+                    and t not in _gap_noise):
+                    topic_counter[t] += 1
+    top_gaps = [w for w, _ in topic_counter.most_common(5)]
+    # Fallback to low-confidence insights
+    if len(top_gaps) < 3:
+        try:
+            import json as _j
+            _ins = _j.load(open(os.path.join(CONFIG_DIR, "insights.json")))
+            _low = sorted(_ins, key=lambda x: x.get("confidence", 1.0))
+            top_gaps += [i["topic"] for i in _low
+                         if i.get("topic","") not in _gap_noise
+                         and len(i.get("topic","")) > 5
+                         and i.get("topic","").isalpha()
+                         and i.get("belief_count", 0) >= 2
+                         and i["topic"] not in top_gaps][:5]
+            top_gaps = top_gaps[:5]
+        except Exception:
+            pass
+        except Exception:
+            pass
 
-    gap_freq = Counter(all_gaps)
-    top_gaps = [w for w, _ in gap_freq.most_common(5)]
+    # Override gaps with curated priority topics if available
+    try:
+        import json as _pj
+        _pt = _pj.load(open(os.path.join(CONFIG_DIR, "priority_topics.json")))
+        if _pt and len(_pt) >= 2:
+            top_gaps = _pt[:5]
+    except Exception:
+        pass
 
     summary = {
         "total_reflections": len(reflections),
@@ -393,9 +433,12 @@ def get_reflection_summary():
         )
     }
 
-    # Persist priority topics for run.py to consume
+    # Only persist priority topics if they look like real topics (not noise words)
     _pt_path = os.path.join(CONFIG_DIR, "priority_topics.json")
-    save_json(_pt_path, top_gaps[:3])
+    _real = [g for g in top_gaps if len(g) > 8 and ' ' in g]
+    if _real:
+        save_json(_pt_path, _real[:3])
+    # else: leave priority_topics.json alone
 
     return summary
 
