@@ -483,7 +483,10 @@ def main():
                             result = _d2["choices"][0]["message"]["content"].strip()
                             print(f"  [Groq-8b ✓] {task_type}: {result[:60]}…")
                             return result
-                    except Exception: pass
+                        elif "error" in _d2:
+                            print(f"  [Groq-8b ✗] {_d2['error'].get('message','')[:80]}")
+                    except Exception as _ge2: 
+                        print(f"  [Groq-8b ERR] {_ge2}")
                     print(f"  [Groq ✗] fallback to local: {_ge}")
 
             # Local Mistral fallback
