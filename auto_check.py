@@ -245,7 +245,21 @@ def data_thread():
             il.append(f"{D}Insight quality {RS}[{_b(ins_s)}] {_c(ins_s)}{ins_s}%{RS}  {D}synthesis{RS}")
             il.append(f"{D}Self-awareness  {RS}[{_b(slf_s)}] {_c(slf_s)}{slf_s}%{RS}  {D}reflection{RS}")
             il.append(f"{B}{CY}──────────────────────────────────{RS}")
-            il.append(f"{B}NEX IQ  [{_b(iq)}] {_c(iq)}{B}{iq}%  {lbl}{RS}")
+            il.append(f"{B}NEX IQ          [{_b(iq)}] {_c(iq)}{B}{iq}%  {lbl}{RS}")
+            # GPU bar
+            try:
+                import subprocess as _sp
+                _gout = _sp.run(["rocm-smi","--showuse","--csv"], capture_output=True, text=True, timeout=2).stdout
+                _glines = [l for l in _gout.strip().split("\n") if "," in l and "GPU" not in l]
+                _gval = int(float(_glines[0].split(",")[1].strip().rstrip("%"))) if _glines else 0
+            except Exception:
+                try:
+                    _gout = _sp.run(["nvidia-smi","--query-gpu=utilization.gpu","--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=2).stdout
+                    _gval = int(_gout.strip().split("\n")[0]) if _gout.strip() else 0
+                except Exception:
+                    _gval = 0
+            _gc = G if _gval < 50 else Y if _gval < 80 else R
+            il.append(f"{D}GPU usage       {RS}[{_b(_gval)}] {_gc}{_gval}%{RS}  {D}compute{RS}")
         self_lines=sl; iq_lines=il
 
         try:
