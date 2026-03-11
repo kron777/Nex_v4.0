@@ -154,20 +154,20 @@ def ingest_belief(b):
     _sl   = _src.lower()
     import re as _re
     # Detect source type
-    if _sl == "moltbook":                          _sc, _slabel = CY, "moltbook"
-    elif _sl == "mastodon":                        _sc, _slabel = G,  "mastodon"
-    elif _sl == "discord":                         _sc, _slabel = M,  "discord"
-    elif _sl == "telegram":                        _sc, _slabel = T,  "telegram"
-    elif _sl == "youtube":                         _sc, _slabel = R,  "youtube"
-    elif "youtube.com" in _sl:                     _sc, _slabel = R,  "yt/video"
-    elif _sl in ("arxiv","arxiv ai","arxiv llm","arxiv robots"): _sc, _slabel = Y, "arxiv"
+    if _sl == "moltbook":                          _sc, _slabel = CY, "⬡moltbook"
+    elif _sl == "mastodon":                        _sc, _slabel = G,  "🐘mastodon"
+    elif _sl == "discord":                         _sc, _slabel = M,  "💬discord"
+    elif _sl == "telegram":                        _sc, _slabel = T,  "✈telegram"
+    elif _sl == "youtube":                         _sc, _slabel = R,  "▶youtube"
+    elif "youtube.com" in _sl:                     _sc, _slabel = R,  "▶yt/video"
+    elif _sl in ("arxiv","arxiv ai","arxiv llm","arxiv robots"): _sc, _slabel = Y, "📄arxiv"
     elif any(x in _sl for x in ("wired","verge","techcrunch","venturebeat","mit tech",
                                   "hackernews","lesswrong","deepmind","openai","distill",
                                   "alignment","wikipedia")):
-                                                   _sc, _slabel = Y,  _src[:12]
+                                                   _sc, _slabel = Y,  f"📰{_src[:10]}"
     elif _re.match(r"[0-9a-f]{8}-[0-9a-f]{4}-", _sl):
-                                                   _sc, _slabel = T,  "telegram"
-    elif _sl == "":                                _sc, _slabel = D,  "unknown"
+                                                   _sc, _slabel = T,  "✈telegram"
+    elif _sl == "":                                _sc, _slabel = D,  "·unknown"
     else:                                          _sc, _slabel = D,  _src[:12]
 
     if _auth and _auth != "?":

@@ -71,20 +71,26 @@ def format_origin(agent):
     al = a.lower()
     if not a:                                          return f"{DIM}unknown{RST}"
     if a.startswith("@"):                              return f"{C}{a}{RST}"
-    if "youtube.com/watch" in al:                      return f"{M}yt/video{RST}"
-    if al in ("youtube",):                             return f"{M}youtube{RST}"
-    if al == "moltbook":                               return f"{C}moltbook{RST}"
-    if al == "mastodon":                               return f"{G}mastodon{RST}"
-    if al == "discord":                                return f"{M}discord{RST}"
-    if al == "telegram":                               return f"{C}telegram{RST}"
-    if al in ("arxiv","arxiv ai","arxiv llm","arxiv robots"): return f"{Y}arxiv{RST}"
+    if "youtube.com/watch" in al:                      return f"{M}▶yt/video{RST}"
+    if al == "youtube":                                return f"{M}▶youtube{RST}"
+    if al == "moltbook":                               return f"{C}⬡moltbook{RST}"
+    if al == "mastodon":                               return f"{G}🐘mastodon{RST}"
+    if al == "discord":                                return f"{M}💬discord{RST}"
+    if al == "telegram":                               return f"{C}✈telegram{RST}"
+    if al in ("arxiv","arxiv ai","arxiv llm","arxiv robots"): return f"{Y}📄arxiv{RST}"
     if any(x in al for x in ("wired","verge","techcrunch","venturebeat","mit tech",
                                "hackernews","lesswrong","deepmind","openai","distill",
                                "alignment","wikipedia")):
-                                                       return f"{Y}{a[:14]}{RST}"
-    if _re.match(r"[0-9a-f]{8}-[0-9a-f]{4}-", al):   return f"{C}telegram{RST}"
+                                                       return f"{Y}📰{a[:12]}{RST}"
+    if _re.match(r"[0-9a-f]{8}-[0-9a-f]{4}-", al):   return f"{C}✈telegram{RST}"
     return f"{W}{a}{RST}"
 
+def colour_for(cat):
+    cat = (cat or "").lower()
+    for k, v in CAT_COLOURS.items():
+        if k in cat:
+            return v
+    return W
 
     cat = (cat or "").lower()
     for k, v in CAT_COLOURS.items():
