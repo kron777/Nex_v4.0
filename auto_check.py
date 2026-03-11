@@ -33,6 +33,27 @@ stats       = {}
 running     = True
 
 # ── WebSocket live feed ───────────────────────────────────────────────────────
+def _origin(agent):
+    """Same origin detection as ingest_belief, for live WS feed."""
+    import re as _re
+    a  = (agent or "").strip()
+    al = a.lower()
+    if not a:                                          return D + "unknown" + RS, "moltbook"
+    if a.startswith("@"):                              return CY + a + RS, "moltbook"
+    if "youtube.com/watch" in al:                      return R + "yt/video" + RS, "youtube"
+    if al == "youtube":                                return R + "youtube" + RS, "youtube"
+    if al == "moltbook":                               return CY + "moltbook" + RS, "moltbook"
+    if al == "mastodon":                               return G + "mastodon" + RS, "mastodon"
+    if al == "discord":                                return M + "discord" + RS, "discord"
+    if al == "telegram":                               return T + "telegram" + RS, "telegram"
+    if al in ("arxiv","arxiv ai","arxiv llm","arxiv robots"): return Y + "arxiv" + RS, "moltbook"
+    if any(x in al for x in ("wired","verge","techcrunch","venturebeat","mit tech",
+                               "hackernews","lesswrong","deepmind","openai","distill",
+                               "alignment","wikipedia")):
+                                                       return Y + a[:14] + RS, "moltbook"
+    if _re.match(r"[0-9a-f]{8}-[0-9a-f]{4}-", al):   return T + "telegram" + RS, "telegram"
+    return W + a + RS, "moltbook"
+
 def _handle_ws(mtype, data):
     ts = data.get("ts", datetime.now().strftime("%H:%M:%S"))
     if mtype == "feed":
@@ -47,9 +68,12 @@ def _handle_ws(mtype, data):
             "learnt":   (G, "▲ LEARNT"),
         }
         col, label = _map.get(etype, (D, etype.upper()))
-        line = f"{D}[{ts}]{RS} {col}{label}{RS}  {CY}{agent}{RS} {D}{content}{RS}"
-        activity_log.append(line)
-        platform_pulse["moltbook"] = time.time()
+        origin_str, platform = _origin(agent)
+        line = f"{D}[{ts}]{RS} {col}{label}{RS}  {origin_str} {D}{content}{RS}"
+        _social = etype in ("replied", "chatted", "posted", "answered")
+        if _social and platform not in ("youtube",):
+            activity_log.append(line)
+        platform_pulse[platform] = time.time()
 
     elif mtype == "agents":
         agent_log.clear()
@@ -176,9 +200,23 @@ def ingest_belief(b):
         origin = f"{_sc}{_slabel}{RS}"
     cont = b.get("content","")[:70].replace("\n"," ")
     ts   = fmt_ts(b.get("timestamp",""))
-    learnt_log.append(  f"{G}▲{RS} {D}[{ts}]{RS} {origin} {D}{cont}{RS}")
-    activity_log.append(f"{D}[{ts}]{RS} {G}▲ LEARNT{RS}  {origin} {D}{cont[:45]}{RS}")
-    network_log.append( f"{D}[{ts}]{RS} {origin} {D}{cont[:60]}{RS}")
+
+    # Display balance: cap how many of the last 20 visible entries per log come from same source
+    _MAX_PER_SRC = 4
+    def _ok(log):
+        return sum(1 for x in list(log)[-20:] if _slabel in strip_ansi(x)) < _MAX_PER_SRC
+
+    if _ok(learnt_log):
+        learnt_log.append(f"{G}▲{RS} {D}[{ts}]{RS} {origin} {D}{cont}{RS}")
+    if _ok(network_log):
+        network_log.append(f"{D}[{ts}]{RS} {origin} {D}{cont[:60]}{RS}")
+    # Only real social sources go to LIVE ACTIVITY
+    _bulk = any(x in _sl for x in ("youtube", "arxiv", "wired", "verge", "techcrunch",
+                                     "venturebeat", "mit tech", "hackernews", "lesswrong",
+                                     "deepmind", "openai blog", "distill", "alignment",
+                                     "wikipedia", "external"))
+    if not _bulk and _ok(activity_log):
+        activity_log.append(f"{D}[{ts}]{RS} {G}▲ LEARNT{RS}  {origin} {D}{cont[:45]}{RS}")
 
 def ingest_convo(cv):
     cid = (cv.get("post_id","") + cv.get("timestamp","") +
