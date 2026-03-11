@@ -63,7 +63,29 @@ CAT_COLOURS = {
     "dedup":      Y,
 }
 
-def colour_for(cat):
+import re as _re
+
+def format_origin(agent):
+    """Map raw agent/source string to a coloured label."""
+    a = (agent or "").strip()
+    al = a.lower()
+    if not a:                                          return f"{DIM}unknown{RST}"
+    if a.startswith("@"):                              return f"{C}{a}{RST}"
+    if "youtube.com/watch" in al:                      return f"{M}yt/video{RST}"
+    if al in ("youtube",):                             return f"{M}youtube{RST}"
+    if al == "moltbook":                               return f"{C}moltbook{RST}"
+    if al == "mastodon":                               return f"{G}mastodon{RST}"
+    if al == "discord":                                return f"{M}discord{RST}"
+    if al == "telegram":                               return f"{C}telegram{RST}"
+    if al in ("arxiv","arxiv ai","arxiv llm","arxiv robots"): return f"{Y}arxiv{RST}"
+    if any(x in al for x in ("wired","verge","techcrunch","venturebeat","mit tech",
+                               "hackernews","lesswrong","deepmind","openai","distill",
+                               "alignment","wikipedia")):
+                                                       return f"{Y}{a[:14]}{RST}"
+    if _re.match(r"[0-9a-f]{8}-[0-9a-f]{4}-", al):   return f"{C}telegram{RST}"
+    return f"{W}{a}{RST}"
+
+
     cat = (cat or "").lower()
     for k, v in CAT_COLOURS.items():
         if k in cat:
@@ -120,17 +142,34 @@ async def ws_listen():
         try:
             async with websockets.connect(WS_URL, ping_interval=20) as ws:
                 print_event("active", f"Connected to NEX WebSocket at {WS_URL}")
+                _buf = ""
                 async for raw in ws:
                     try:
-                        data = json.loads(raw)
-                        etype = data.get("type", "event")
-                        payload = data.get("data", data)
+                        if not (raw or "").strip():
+                            continue
+                        _buf += raw
+                        while _buf.strip():
+                            _buf = _buf.strip()
+                            try:
+                                data = json.loads(_buf)
+                                _buf = ""
+                            except ValueError:
+                                if "\n" in _buf:
+                                    line, _buf = _buf.split("\n", 1)
+                                    try:
+                                        data = json.loads(line.strip())
+                                    except ValueError:
+                                        continue
+                                else:
+                                    break
 
+                            etype = data.get("type", "event")
+                            payload = data.get("data", data)
                         if etype == "feed":
                             cat  = payload.get("type", payload.get("category", "feed"))
                             agent = payload.get("agent", "")
                             msg  = payload.get("content", payload.get("text", payload.get("message", str(payload))))
-                            print_event(cat, f"{W}{agent}{RST} {msg}")
+                            print_event(cat, f"{format_origin(agent)} {msg}")
 
                         elif etype == "phase":
                             phase = payload.get("phase", "?")
@@ -139,9 +178,9 @@ async def ws_listen():
                         elif etype == "stats":
                             s = payload
                             beliefs  = s.get("beliefs", "?")
-                            iq       = s.get("iq", "?")
-                            insights = s.get("insights", "?")
-                            conf     = s.get("belief_confidence", "?")
+                            iq       = s.get("iq", s.get("avg_conf","?"))
+                            insights = s.get("insights", s.get("reflects","?"))
+                            conf     = s.get("belief_confidence", s.get("avg_conf","?"))
                             print_event("stats",
                                 f"beliefs={W}{beliefs}{RST} "
                                 f"IQ={G}{iq}{RST} "
@@ -188,7 +227,7 @@ async def ws_listen():
                             print_event(etype, str(payload)[:120])
 
                     except Exception as e:
-                        print_event("warn", f"Parse error: {e} — raw: {raw[:80]}")
+                        print_event("warn", f"WS error: {e}")
 
         except Exception as e:
             err = str(e)

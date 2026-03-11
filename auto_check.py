@@ -12,7 +12,7 @@ M  = "\033[35m"; RS = "\033[0m"
 CFG   = Path.home() / ".config" / "nex"
 KANJI = ["電脳","脳脳","神網","記脳","憶網","処神","学経","網学","脳電","経網","習憶"]
 RENDER_HZ = 1.0
-DATA_HZ   = 3
+DATA_HZ   = 10
 
 activity_log   = deque(maxlen=500)
 learnt_log     = deque(maxlen=500)
@@ -25,7 +25,6 @@ iq_lines       = []
 
 seen_beliefs = set(); seen_convos = set(); seen_refs = set()
 bootstrapped = False
-seen_belief_ids = set()
 platform_pulse = {"moltbook":0,"telegram":0,"discord":0,"mastodon":0,"youtube":0}
 scroll      = {k:0 for k in ("act","lrn","ins","agt","ref","net")}
 SCROLL_RATE = {"act":3,"lrn":5,"ins":7,"agt":11,"ref":9,"net":4}
@@ -56,8 +55,8 @@ def _handle_ws(mtype, data):
         agent_log.clear()
         for item in (data if isinstance(data, list) else []):
             handle, rel, cv = (item + ["acquaintance", 0])[:3]
-            rc = P if rel == "friend" else G if rel == "colleague" else Y if rel == "familiar" else CY if rel == "acquaintance" else D
-            agent_log.append(f"{rc}@{handle}{RS}  {rc}{rel}{RS}  {D}{cv}cv{RS}")
+            rc = G if rel == "colleague" else Y if rel == "familiar" else D
+            agent_log.append(f"{CY}@{handle}{RS}  {rc}{rel}{RS}  {D}{cv}cv{RS}")
 
     elif mtype == "insights":
         insight_log.clear()
@@ -146,9 +145,10 @@ def trending(beliefs, n=9):
     return Counter(words).most_common(n)
 
 def ingest_belief(b):
-    bid = b.get("timestamp","") + b.get("author","") + b.get("content","")[:30]
+    bid = b.get("id", b.get("content","")[:40])
     if bid in seen_beliefs: return
     seen_beliefs.add(bid)
+    platform_pulse["moltbook"] = time.time()
     _auth = b.get("author") or b.get("agent") or ""
     _src  = b.get("source", "") or ""
     _sl   = _src.lower()
@@ -170,21 +170,15 @@ def ingest_belief(b):
     elif _sl == "":                                _sc, _slabel = D,  "unknown"
     else:                                          _sc, _slabel = D,  _src[:12]
 
-    # Pulse correct platform
-    if _slabel in platform_pulse:
-        platform_pulse[_slabel] = time.time()
-
     if _auth and _auth != "?":
         origin = f"{CY}@{_auth}{RS} {D}[{_sc}{_slabel}{RS}{D}]{RS}"
     else:
-        origin = f"{_sc}[{_slabel}]{RS}"
+        origin = f"{_sc}{_slabel}{RS}"
     cont = b.get("content","")[:70].replace("\n"," ")
     ts   = fmt_ts(b.get("timestamp",""))
-    if _slabel not in ("youtube", "yt/video", "arxiv", "rss", "wikipedia", "unknown"):
-        learnt_log.append(  f"{G}▲{RS} {D}[{ts}]{RS} {origin} {D}{cont}{RS}")
-        activity_log.append(f"{D}[{ts}]{RS} {G}▲ LEARNT{RS}  {origin} {D}{cont[:45]}{RS}")
-    if _slabel == "moltbook":
-        network_log.append( f"{D}[{ts}]{RS} {origin} {D}{cont[:60]}{RS}")
+    learnt_log.append(  f"{G}▲{RS} {D}[{ts}]{RS} {origin} {D}{cont}{RS}")
+    activity_log.append(f"{D}[{ts}]{RS} {G}▲ LEARNT{RS}  {origin} {D}{cont[:45]}{RS}")
+    network_log.append( f"{D}[{ts}]{RS} {origin} {D}{cont[:60]}{RS}")
 
 def ingest_convo(cv):
     cid = (cv.get("post_id","") + cv.get("timestamp","") +
@@ -197,15 +191,9 @@ def ingest_convo(cv):
     body   = cv.get("comment", cv.get("post_title",""))[:52]
     ts     = fmt_ts(cv.get("timestamp",""))
     if   ctype == "agent_chat":    activity_log.append(f"{D}[{ts}]{RS} {M}◆ CHATTED{RS}  {CY}@{author}{RS} {D}{body}{RS}")
-    elif ctype == "original_post":
-        activity_log.append(f"{D}[{ts}]{RS} {P}✦ POSTED{RS}   {D}{body}{RS}")
-        network_log.append( f"{D}[{ts}]{RS} {P}✦{RS} {D}{body}{RS}")
-    elif ctype == "comment":
-        activity_log.append(f"{D}[{ts}]{RS} {Y}● REPLIED{RS}  {CY}@{author}{RS} {D}{body}{RS}")
-        network_log.append( f"{D}[{ts}]{RS} {CY}@{author}{RS} {D}{body}{RS}")
-    else:
-        activity_log.append(f"{D}[{ts}]{RS} {T}◈ ANSWERED{RS} {CY}@{author}{RS} {D}{body}{RS}")
-        network_log.append( f"{D}[{ts}]{RS} {CY}@{author}{RS} {D}{body}{RS}")
+    elif ctype == "original_post": activity_log.append(f"{D}[{ts}]{RS} {P}✦ POSTED{RS}   {D}{body}{RS}")
+    elif ctype == "comment":       activity_log.append(f"{D}[{ts}]{RS} {Y}● REPLIED{RS}  {CY}@{author}{RS} {D}{body}{RS}")
+    else:                          activity_log.append(f"{D}[{ts}]{RS} {T}◈ ANSWERED{RS} {CY}@{author}{RS} {D}{body}{RS}")
 
 def ingest_reflection(r):
     rid = r.get("timestamp","")
@@ -258,18 +246,14 @@ def place(r, box_list):
         wr(row_str)
 
 def data_thread():
-    global bootstrapped, seen_belief_ids, self_lines, iq_lines
+    global bootstrapped, self_lines, iq_lines
     while running:
         # Read beliefs direct from SQLite for accurate confidence stats
         try:
             import sqlite3 as _sq
             _db = _sq.connect(os.path.expanduser("~/.config/nex/nex.db"))
-            _rows = _db.execute(
-                "SELECT content, confidence, source, author, timestamp FROM beliefs "
-                "ORDER BY rowid DESC LIMIT 5000"
-            ).fetchall()
-            beliefs = [{"content":r[0],"confidence":r[1],"source":r[2],
-                        "author":r[3] or "","timestamp":r[4] or ""} for r in _rows]
+            _rows = _db.execute("SELECT content, confidence, source FROM beliefs ORDER BY confidence DESC LIMIT 5000").fetchall()
+            beliefs = [{"content":r[0],"confidence":r[1],"source":r[2]} for r in _rows]
             _db.close()
         except Exception:
             beliefs = load("beliefs.json", [])
@@ -281,27 +265,12 @@ def data_thread():
         profiles    = load("agent_profiles.json", {})
 
         if not bootstrapped:
-            # Mark ALL current beliefs as seen — only NEW ones after startup will show
-            for b in beliefs:
-                bid = b.get("timestamp","") + b.get("author","") + b.get("content","")[:30]
-                seen_beliefs.add(bid)
-            # Seed LEARNT with last 15 moltbook beliefs so panel isn't empty
-            molt = [b for b in beliefs if b.get("source","").lower() == "moltbook"]
-            for b in molt[-30:]:
-                _auth = b.get("author","") or ""
-                _cont = b.get("content","")[:70].replace("\n"," ")
-                _ts   = fmt_ts(b.get("timestamp",""))
-                origin = f"{CY}@{_auth}{RS} {D}[{CY}moltbook{RS}{D}]{RS}" if _auth else f"{CY}[moltbook]{RS}"
-                learnt_log.append(f"{G}▲{RS} {D}[{_ts}]{RS} {origin} {D}{_cont}{RS}")
-                network_log.append(f"{D}[{_ts}]{RS} {origin} {D}{_cont[:60]}{RS}")
+            for b  in beliefs[-20:]:     ingest_belief(b)
             for cv in convos:            ingest_convo(cv)
             for r  in reflections[-10:]: ingest_reflection(r)
             bootstrapped = True
         else:
-            for b in beliefs[:50]:  # newest 50 only (ordered DESC)
-                bid = b.get("timestamp","") + b.get("author","") + b.get("content","")[:30]
-                if bid not in seen_beliefs:
-                    ingest_belief(b)
+            for b  in beliefs:     ingest_belief(b)
             for cv in convos:      ingest_convo(cv)
             for r  in reflections: ingest_reflection(r)
 
@@ -316,8 +285,8 @@ def data_thread():
         for name,karma in sorted(agents.items(),key=lambda x:-x[1])[:40]:
             rel=profiles.get(name,{}).get("relationship","acquaintance")
             nc=profiles.get(name,{}).get("conversations_had",0)
-            rc=P if rel in("friend","ally") else G if rel=="close" else Y if rel=="colleague" else CY if rel=="familiar" else D
-            agent_log.append(f"{rc}@{name}{RS}  {Y}{karma}κ{RS}  {rc}{rel}{RS}  {D}{nc}cv{RS}")
+            rc=G if rel in("friend","ally","close") else Y if rel=="acquaintance" else D
+            agent_log.append(f"{CY}@{name}{RS}  {Y}{karma}κ{RS}  {rc}{rel}{RS}  {D}{nc}cv{RS}")
 
         sl=[]; il=[]
         if beliefs:
