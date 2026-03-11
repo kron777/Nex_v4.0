@@ -201,22 +201,26 @@ def ingest_belief(b):
     cont = b.get("content","")[:70].replace("\n"," ")
     ts   = fmt_ts(b.get("timestamp",""))
 
-    # Display balance: cap how many of the last 20 visible entries per log come from same source
+    _bulk = any(x in _sl for x in ("youtube", "arxiv", "wired", "verge", "techcrunch",
+                                     "venturebeat", "mit tech", "hackernews", "lesswrong",
+                                     "deepmind", "openai blog", "distill", "alignment",
+                                     "wikipedia", "external")) or "youtube.com" in _sl
     _MAX_PER_SRC = 4
     def _ok(log):
         return sum(1 for x in list(log)[-20:] if _slabel in strip_ansi(x)) < _MAX_PER_SRC
 
-    if _ok(learnt_log):
-        learnt_log.append(f"{G}▲{RS} {D}[{ts}]{RS} {origin} {D}{cont}{RS}")
-    if _ok(network_log):
-        network_log.append(f"{D}[{ts}]{RS} {origin} {D}{cont[:60]}{RS}")
-    # Only real social sources go to LIVE ACTIVITY
-    _bulk = any(x in _sl for x in ("youtube", "arxiv", "wired", "verge", "techcrunch",
-                                     "venturebeat", "mit tech", "hackernews", "lesswrong",
-                                     "deepmind", "openai blog", "distill", "alignment",
-                                     "wikipedia", "external"))
-    if not _bulk and _ok(activity_log):
-        activity_log.append(f"{D}[{ts}]{RS} {G}▲ LEARNT{RS}  {origin} {D}{cont[:45]}{RS}")
+    if _bulk:
+        # Scrape sources → NETWORK only, capped
+        if _ok(network_log):
+            network_log.append(f"{D}[{ts}]{RS} {origin} {D}{cont[:60]}{RS}")
+    else:
+        # Social sources → all panels, capped
+        if _ok(learnt_log):
+            learnt_log.append(f"{G}▲{RS} {D}[{ts}]{RS} {origin} {D}{cont}{RS}")
+        if _ok(network_log):
+            network_log.append(f"{D}[{ts}]{RS} {origin} {D}{cont[:60]}{RS}")
+        if _ok(activity_log):
+            activity_log.append(f"{D}[{ts}]{RS} {G}▲ LEARNT{RS}  {origin} {D}{cont[:45]}{RS}")
 
 def ingest_convo(cv):
     cid = (cv.get("post_id","") + cv.get("timestamp","") +
@@ -253,6 +257,34 @@ def window(buf, offset, rows):
     lst = list(buf)
     if not lst: return [""]*rows
     padded = [""]*rows + lst
+    total  = len(padded)
+    start  = offset % total
+    return [padded[(start+i) % total] for i in range(rows)]
+
+def window_balanced(buf, offset, rows):
+    """Like window() but interleaves entries so no single source dominates."""
+    lst = list(buf)
+    if not lst: return [""]*rows
+    # Group by source label (first non-ANSI token after timestamp)
+    import re as _re
+    _strip = lambda s: _re.sub(r'\033\[[0-9;]*m', '', s)
+    buckets = {}
+    for line in lst:
+        plain = _strip(line)
+        # Extract source token — 2nd word after the timestamp bracket
+        parts = plain.split()
+        key = parts[1] if len(parts) > 1 else "?"
+        buckets.setdefault(key, []).append(line)
+    # Round-robin across buckets
+    keys = list(buckets.keys())
+    interleaved = []
+    i = 0
+    while any(buckets[k] for k in keys):
+        k = keys[i % len(keys)]
+        if buckets[k]:
+            interleaved.append(buckets[k].pop(0))
+        i += 1
+    padded = [""]*rows + interleaved
     total  = len(padded)
     start  = offset % total
     return [padded[(start+i) % total] for i in range(rows)]
@@ -505,7 +537,7 @@ def main():
 
             half=W//2
             place(R1,[(box("◈ LIVE ACTIVITY",window(activity_log,scroll["act"],BOX_H),half,BOX_H),half),
-                      (box("▲ LEARNT THIS SESSION",window(learnt_log,scroll["lrn"],BOX_H),W-half,BOX_H),W-half)])
+                      (box("▲ LEARNT THIS SESSION",window_balanced(learnt_log,scroll["lrn"],BOX_H),W-half,BOX_H),W-half)])
 
             q=W//4; _now=time.time()
             def pl(name,key):
@@ -528,7 +560,7 @@ def main():
             place(R3,[
                 (box("🧠 SELF ASSESSMENT",_sl[:SLF_H],                           t3,   SLF_H),t3),
                 (box("⚡ NEX INTELLIGENCE",_il[:SLF_H],                           t3,   SLF_H),t3),
-                (box("🌐 NETWORK",         window(network_log,scroll["net"],SLF_H),W-t3*2,SLF_H),W-t3*2)])
+                (box("🌐 NETWORK",         window_balanced(network_log,scroll["net"],SLF_H),W-t3*2,SLF_H),W-t3*2)])
 
             at(FR,1); wr("═"*W)
             try:
