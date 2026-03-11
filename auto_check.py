@@ -346,6 +346,9 @@ def data_thread():
         insights    = load("insights.json",       [])
         reflections = load("reflections.json",    [])
         agents      = load("agents.json",         {})
+        if not agents:  # retry once in case of mid-write corruption
+            time.sleep(0.1)
+            agents  = load("agents.json",         {})
         profiles    = load("agent_profiles.json", {})
 
         if not bootstrapped:
