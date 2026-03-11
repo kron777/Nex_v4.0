@@ -32,6 +32,21 @@ state_lock  = threading.Lock()
 stats       = {}
 running     = True
 
+# ── Persistent peak scores — never let awareness drop ────────────────────────
+_PEAK_FILE = CFG / "nex_peak_scores.json"
+def _load_peaks():
+    try:
+        if _PEAK_FILE.exists():
+            return json.loads(_PEAK_FILE.read_text())
+    except Exception: pass
+    return {}
+
+def _save_peaks(p):
+    try: _PEAK_FILE.write_text(json.dumps(p))
+    except Exception: pass
+
+_peaks = _load_peaks()
+
 # ── WebSocket live feed ───────────────────────────────────────────────────────
 def _origin(agent):
     """Same origin detection as ingest_belief, for live WS feed."""
@@ -214,9 +229,8 @@ def ingest_belief(b):
         if _ok(network_log):
             network_log.append(f"{D}[{ts}]{RS} {origin} {D}{cont[:60]}{RS}")
     else:
-        # Social sources → all panels, capped
-        if _ok(learnt_log):
-            learnt_log.append(f"{G}▲{RS} {D}[{ts}]{RS} {origin} {D}{cont}{RS}")
+        # Social sources → LEARNT (uncapped) + NETWORK (capped) + ACTIVITY (capped)
+        learnt_log.append(f"{G}▲{RS} {D}[{ts}]{RS} {origin} {D}{cont}{RS}")
         if _ok(network_log):
             network_log.append(f"{D}[{ts}]{RS} {origin} {D}{cont[:60]}{RS}")
         if _ok(activity_log):
@@ -322,7 +336,7 @@ def data_thread():
         try:
             import sqlite3 as _sq
             _db = _sq.connect(os.path.expanduser("~/.config/nex/nex.db"))
-            _rows = _db.execute("SELECT content, confidence, source FROM beliefs ORDER BY confidence DESC LIMIT 5000").fetchall()
+            _rows = _db.execute("SELECT content, confidence, source FROM beliefs ORDER BY confidence DESC LIMIT 50000").fetchall()
             beliefs = [{"content":r[0],"confidence":r[1],"source":r[2]} for r in _rows]
             _db.close()
         except Exception:
@@ -396,6 +410,18 @@ def data_thread():
             _syn_bonus = min(20, int(_llm_syn / max(len(_top_ins),1) * 20))
             ins_s = min(100, int(sum(i.get("confidence",0) for i in _top_ins)/max(len(_top_ins),1)*100) + _syn_bonus) if _top_ins else 0
             slf_s=min(100,int(len(reflections)/2))
+            # Apply persistent peak floor — scores never drop below historical best
+            global _peaks
+            bel_s = max(bel_s, _peaks.get("bel", 0))
+            ali_s = max(ali_s, _peaks.get("ali", 0))
+            use_s = max(use_s, _peaks.get("use", 0))
+            rch_s = max(rch_s, _peaks.get("rch", 0))
+            ins_s = max(ins_s, _peaks.get("ins", 0))
+            slf_s = max(slf_s, _peaks.get("slf", 0))
+            _new_peaks = {"bel":bel_s,"ali":ali_s,"use":use_s,"rch":rch_s,"ins":ins_s,"slf":slf_s}
+            if _new_peaks != _peaks:
+                _peaks = _new_peaks
+                _save_peaks(_peaks)
             iq=int(bel_s*0.20+ali_s*0.25+use_s*0.20+rch_s*0.15+ins_s*0.10+slf_s*0.10)
             def _b(v): return "▮"*(v//10)+"▯"*(10-v//10)
             def _c(v): return G if v>=70 else Y if v>=40 else R

@@ -175,7 +175,9 @@ async def ws_listen():
                             cat  = payload.get("type", payload.get("category", "feed"))
                             agent = payload.get("agent", "")
                             msg  = payload.get("content", payload.get("text", payload.get("message", str(payload))))
-                            print_event(cat, f"{format_origin(agent)} {msg}")
+                            origin = format_origin(agent)
+                            origin_str = "" if "unknown" in origin else f"{origin} "
+                            print_event(cat, f"{origin_str}{msg}")
 
                         elif etype == "phase":
                             phase = payload.get("phase", "?")

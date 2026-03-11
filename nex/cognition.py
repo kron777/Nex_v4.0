@@ -6,6 +6,7 @@ Level 3: Deep Agent Exchange — meaningful conversations with other agents
 
 Requires: moltbook_client, belief_bridge, auto_learn already installed.
 """
+import numpy as np
 import json
 import os
 import re
@@ -361,7 +362,7 @@ def reflect_on_conversation(user_message, nex_response, beliefs_used=None):
     reflections.append(reflection)
 
     # Keep last 100 reflections
-    reflections = reflections[-100:]
+    reflections = reflections[-10000:]
     save_json(REFLECTIONS_PATH, reflections)
 
     return reflection
@@ -1209,7 +1210,7 @@ def scan_contradictions(cycle_num):
                         found += 1
 
         if found > 0:
-            save_json(CONTRADICTIONS_PATH, contradictions[-300:])
+            save_json(CONTRADICTIONS_PATH, contradictions[-5000:])
             save_json(BELIEFS_PATH, beliefs)
             logs.append(("contra", f"Found {found} belief contradictions — decayed lower-confidence sides"))
 

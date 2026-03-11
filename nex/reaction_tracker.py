@@ -100,7 +100,7 @@ def harvest_reactions(client, cycle_num):
             logs.append(("warn", f"Reaction harvest error on {pid}: {e}"))
 
     if checked > 0:
-        save_json(REACTIONS_PATH, reactions[-200:])  # keep last 200
+        save_json(REACTIONS_PATH, reactions[-5000:])  # keep last 5000
         save_json(BELIEFS_PATH, beliefs)
         logs.append(("react", f"Harvested reactions on {checked} posts"))
 

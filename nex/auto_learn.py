@@ -238,18 +238,18 @@ def ensure_dirs():
 def save_all(learner, conversations=None):
     ensure_dirs()
     # Cap in-memory belief field to prevent memory leak
-    if hasattr(learner, 'belief_field') and len(learner.belief_field) > 5000:
-        learner.belief_field = learner.belief_field[-5000:]
+    if hasattr(learner, 'belief_field') and len(learner.belief_field) > 50000:
+        learner.belief_field = learner.belief_field[-50000:]
     try:
         with open(BELIEFS_PATH, 'w') as f:
-            json.dump(learner.belief_field[-5000:], f)
+            json.dump(learner.belief_field[-50000:], f)
         with open(AGENTS_PATH, 'w') as f:
             json.dump(learner.agent_karma, f)
         with open(POSTS_PATH, 'w') as f:
-            json.dump(list(learner.known_posts)[-1000:], f)
+            json.dump(list(learner.known_posts)[-10000:], f)
         if conversations:
             with open(CONVOS_PATH, 'w') as f:
-                json.dump(conversations[-200:], f)
+                json.dump(conversations[-2000:], f)
         return len(learner.belief_field)
     except Exception as e:
         log_warn(f"Disk write failed: {e}")
