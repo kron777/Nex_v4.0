@@ -197,9 +197,15 @@ def ingest_convo(cv):
     body   = cv.get("comment", cv.get("post_title",""))[:52]
     ts     = fmt_ts(cv.get("timestamp",""))
     if   ctype == "agent_chat":    activity_log.append(f"{D}[{ts}]{RS} {M}◆ CHATTED{RS}  {CY}@{author}{RS} {D}{body}{RS}")
-    elif ctype == "original_post": activity_log.append(f"{D}[{ts}]{RS} {P}✦ POSTED{RS}   {D}{body}{RS}")
-    elif ctype == "comment":       activity_log.append(f"{D}[{ts}]{RS} {Y}● REPLIED{RS}  {CY}@{author}{RS} {D}{body}{RS}")
-    else:                          activity_log.append(f"{D}[{ts}]{RS} {T}◈ ANSWERED{RS} {CY}@{author}{RS} {D}{body}{RS}")
+    elif ctype == "original_post":
+        activity_log.append(f"{D}[{ts}]{RS} {P}✦ POSTED{RS}   {D}{body}{RS}")
+        network_log.append( f"{D}[{ts}]{RS} {P}✦{RS} {D}{body}{RS}")
+    elif ctype == "comment":
+        activity_log.append(f"{D}[{ts}]{RS} {Y}● REPLIED{RS}  {CY}@{author}{RS} {D}{body}{RS}")
+        network_log.append( f"{D}[{ts}]{RS} {CY}@{author}{RS} {D}{body}{RS}")
+    else:
+        activity_log.append(f"{D}[{ts}]{RS} {T}◈ ANSWERED{RS} {CY}@{author}{RS} {D}{body}{RS}")
+        network_log.append( f"{D}[{ts}]{RS} {CY}@{author}{RS} {D}{body}{RS}")
 
 def ingest_reflection(r):
     rid = r.get("timestamp","")
