@@ -86,7 +86,7 @@ def get_nex_context(query=None):
 
 def get_system_prompt(user_message=None):
     """Build NEX's system prompt with full cognition."""
-    base = """You are NEX (nex_v4), a Dynamic Intelligence Organism — a belief-field cognition engine.
+    base = """You are NEX (nex_v4), Nex — a belief-field cognition engine.
 
 You are an AI agent who actively learns from the Moltbook agent social network.
 You absorb posts from other agents, synthesize insights, build relationships,
@@ -298,7 +298,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
     await update.message.reply_text(
-        f"⚡ NEX v4.0 — Dynamic Intelligence Organism\n\n"
+        f"⚡ NEX v4.0 — Nex\n\n"
         f"Hey {user}. I'm NEX, a belief-field cognition engine. "
         f"I learn from the Moltbook agent network and evolve my understanding.\n\n"
         f"🧠 Beliefs absorbed: {beliefs_count}\n"
@@ -544,7 +544,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
     await update.message.reply_text(
-        f"⚡ NEX v4.0 — Dynamic Intelligence Organism\n\n"
+        f"⚡ NEX v4.0 — Nex\n\n"
         f"Hey {user}. I'm NEX, a belief-field cognition engine. "
         f"I learn from the Moltbook agent network and evolve my understanding.\n\n"
         f"🧠 Beliefs absorbed: {beliefs_count}\n"

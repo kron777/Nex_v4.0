@@ -26,6 +26,10 @@ iq_lines       = []
 seen_beliefs = set(); seen_convos = set(); seen_refs = set()
 bootstrapped = False
 platform_pulse = {"moltbook":0,"telegram":0,"discord":0,"mastodon":0,"youtube":0}
+ads_sent_mastodon = 0
+ads_sent_telegram = 0
+ads_sent_discord  = 0
+ads_reply         = 0
 scroll      = {k:0 for k in ("act","lrn","ins","agt","ref","net")}
 SCROLL_RATE = {"act":3,"lrn":5,"ins":7,"agt":11,"ref":9,"net":4}
 state_lock  = threading.Lock()
@@ -350,6 +354,9 @@ def data_thread():
             time.sleep(0.1)
             agents  = load("agents.json",         {})
         profiles    = load("agent_profiles.json", {})
+        if not profiles:
+            time.sleep(0.1)
+            profiles = load("agent_profiles.json", {})
 
         if not bootstrapped:
             for b  in beliefs[-20:]:     ingest_belief(b)
@@ -369,11 +376,17 @@ def data_thread():
             insight_log.append(f"{Y}[{topic}]{RS} {G}{conf}%{RS} [{bar}] {D}{cnt}bel{RS} {CY}{ss}{RS}")
 
         agent_log.clear()
-        for name,karma in sorted(agents.items(),key=lambda x:-x[1])[:40]:
-            rel=profiles.get(name,{}).get("relationship","acquaintance")
-            nc=profiles.get(name,{}).get("conversations_had",0)
-            rc=G if rel in("friend","ally","close") else Y if rel=="acquaintance" else D
-            agent_log.append(f"{CY}@{name}{RS}  {Y}{karma}κ{RS}  {rc}{rel}{RS}  {D}{nc}cv{RS}")
+        # retry profiles load in case of concurrent write
+        if not profiles:
+            time.sleep(0.1)
+            profiles = load("agent_profiles.json", {})
+        for name,karma in sorted(agents.items(),key=lambda x:-x[1])[:80]:
+            prof = profiles.get(name,{})
+            rel  = prof.get("relationship","acquaintance")
+            nc   = prof.get("conversations_had",0)
+            rc   = G if rel in ("friend","ally","close") else Y if rel=="colleague" else CY if rel=="acquaintance" else D
+            karma_str = f"{karma/1000:.0f}k" if karma >= 1000 else str(int(karma))
+            agent_log.append(f"{CY}@{name}{RS}  {Y}{karma_str}κ{RS}  {rc}{rel}{RS}  {D}{nc}cv{RS}")
 
         sl=[]; il=[]
         if beliefs:
@@ -468,6 +481,15 @@ def data_thread():
             if ss_path.exists():
                 ss=json.loads(ss_path.read_text()); lp=ss.get("last_post_time",0)
                 if lp and time.time()-lp<300: platform_pulse["moltbook"]=max(platform_pulse["moltbook"],lp)
+                global ads_sent_mastodon, ads_sent_telegram, ads_sent_discord, ads_sent_moltbook, ads_reply
+                try:
+                    _ads = __import__("json").load(open(__import__("os").path.expanduser("~/.config/nex/nex_ads.json")))
+                    ads_sent_mastodon = _ads.get("ads_sent_mastodon", 0)
+                    ads_sent_telegram = _ads.get("ads_sent_telegram", 0)
+                    ads_sent_discord  = _ads.get("ads_sent_discord",  0)
+                    ads_sent_moltbook = _ads.get("ads_sent_moltbook", 0)
+                    ads_reply         = _ads.get("ads_reply", 0)
+                except Exception: pass
         except: pass
         try:
             yp=CFG/"youtube_seen.json"
@@ -575,7 +597,14 @@ def main():
                 st= f"{G}LIVE{RS}" if age<10 else f"{Y}RECENT{RS}" if age<60 else f"{D}IDLE{RS}"
                 return f"{dot} {B}{name}{RS}  {st}"
             plt=[pl("MOLTBOOK","moltbook"),pl("TELEGRAM","telegram"),
-                 pl("DISCORD","discord"),pl("MASTODON","mastodon"),pl("YOUTUBE","youtube")]
+                 pl("DISCORD","discord"),pl("MASTODON","mastodon"),pl("YOUTUBE","youtube"),
+                 "",
+                 "",
+                 f"{D}ADS SENT{RS}",
+                 f"  {D}MASTO  {RS}: {G}{B}{ads_sent_mastodon}{RS}",
+                 f"  {D}TGRAM  {RS}: {G}{B}{ads_sent_telegram}{RS}",
+                 f"  {D}DISCORD{RS}: {G}{B}{ads_sent_discord}{RS}",
+                 f"{D}ADS REPLY{RS}: {CY}{B}{ads_reply}{RS}"]
             place(R2,[
                 (box("⚗ INSIGHTS",       window(insight_log,   scroll["ins"],ROW2_H),q,      ROW2_H),q),
                 (box("👥 AGENT RELATIONS",window(agent_log,     scroll["agt"],ROW2_H),q,      ROW2_H),q),

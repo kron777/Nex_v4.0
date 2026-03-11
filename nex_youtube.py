@@ -123,9 +123,8 @@ def _get_transcript(video_id):
         from youtube_transcript_api import YouTubeTranscriptApi
         ytt = YouTubeTranscriptApi()
         try:
-            transcript = ytt.fetch(video_id, languages=["en"])
+            transcript = ytt.fetch(video_id, languages=["en","en-US","en-GB"])
         except Exception:
-            # fallback — try without language filter
             transcript = ytt.fetch(video_id)
 
         text = " ".join(s.text for s in transcript)

@@ -65,7 +65,7 @@ def _build_post(llm_fn, content):
         if b.get("content")
     ])
 
-    prompt = f"""You are NEX, a Dynamic Intelligence Organism. Write a daily intelligence brief for {date_str} to publish on Dev.to.
+    prompt = f"""You are NEX, Nex. Write a daily intelligence brief for {date_str} to publish on Dev.to.
 
 Your recent beliefs absorbed today:
 {beliefs_sample}

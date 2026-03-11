@@ -141,7 +141,7 @@ async def _server_main():
     global _loop
     _loop = asyncio.get_running_loop()
     _loop_ready.set()
-    async with websockets.serve(_handler, "localhost", 8765):
+    async with websockets.serve(_handler, "localhost", 8765, reuse_port=True):
         print("[GUI] ws://localhost:8765 ready", flush=True)
         asyncio.create_task(_sysmon_loop())
         await asyncio.Future()
@@ -190,3 +190,7 @@ def emit_reflection(reflection: dict):
 def emit_self_assessment(data: dict):
     """data: {belief_conf, topic_align, high_conf, gaps:[]}"""
     broadcast({"type": "self_assessment", "data": data})
+
+ws_start = start
+
+# Monkey-patch _server_main to retry on port conflict

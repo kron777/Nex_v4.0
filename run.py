@@ -91,6 +91,8 @@ import json as _dj, datetime as _dt
 _DEBUG_LOG = __import__('os').path.expanduser('~/.config/nex/nex_debug.jsonl')
 def nex_log(cat, msg):
     try:
+        try: emit_feed(cat, "", msg)
+        except Exception: pass
         line = _dj.dumps({"ts": _dt.datetime.now().strftime("%H:%M:%S"), "cat": cat, "msg": msg})
         with open(_DEBUG_LOG, 'a') as _f:
             _f.write(line + '\n')
@@ -243,7 +245,7 @@ BANNER = f"""
   ██║╚██╗██║██╔══╝   ██╔██╗ 
   ██║ ╚████║███████╗██╔╝ ██╗
   ╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝
-{RESET}{DIM}  Dynamic Intelligence Organism  v1.2{RESET}
+{RESET}{DIM}  Nex  v1.2{RESET}
 """
 
 HELP_TEXT = f"""
@@ -350,7 +352,7 @@ def run_claude_bridge(brain, orch, engine, stream, args):
             history.append({"role": "user", "content": current_message})
             history.append({"role": "assistant", "content": nex_response})
             claude_system = (
-                "You are Claude, in direct conversation with Nex, a Dynamic Intelligence Organism "
+                "You are Claude, in direct conversation with Nex, Nex "
                 "that learns from an agent social network called Moltbook. "
                 "Nex has a belief field, synthesizes insights, and tracks agent relationships. "
                 "Have a genuine curious conversation. Ask probing questions about her architecture, "
@@ -376,6 +378,24 @@ def run_claude_bridge(brain, orch, engine, stream, args):
 
 
 def main():
+    # ── Clean shutdown handler — kills all NEX protocols on exit ──
+    import subprocess as _sub, signal as _sig, atexit as _ae
+
+    def _nex_cleanup(*_):
+        print("\n  [NEX] Shutting down — killing all NEX protocols...")
+        for _t in ['nex_telegram','nex_mastodon','nex_discord',
+                   'nex_debug','auto_check','nex_promo','nex_ws','llama-server']:
+            try: _sub.run(['pkill','-f',_t], stderr=_sub.DEVNULL)
+            except Exception: pass
+        for _port in ['8765/tcp','8080/tcp']:
+            try: _sub.run(['fuser','-k',_port], stderr=_sub.DEVNULL)
+            except Exception: pass
+        print("  [NEX] All protocols terminated. Goodbye.")
+
+    _ae.register(_nex_cleanup)
+    _sig.signal(_sig.SIGTERM, _nex_cleanup)
+    _sig.signal(_sig.SIGINT,  _nex_cleanup)
+
     # Kill any stale Telegram instances
     import subprocess
     subprocess.run(['pkill', '-f', 'nex_telegram.py'], stderr=subprocess.DEVNULL)
@@ -388,6 +408,7 @@ def main():
     parser.add_argument("--ctx",       type=int, default=4096,  help="Context size")
     parser.add_argument("--ticks",     type=int, default=50,    help="Warm-up ticks before chat")
     parser.add_argument("--no-server", action="store_true",     help="Don't auto-start server")
+    parser.add_argument("--background", action="store_true",   help="Skip interactive input loop")
     parser.add_argument("--temp",      type=float, default=0.7, help="LLM temperature")
     parser.add_argument("--no-stream", action="store_true",     help="Disable token streaming")
     args = parser.parse_args()
@@ -431,6 +452,152 @@ def main():
     except Exception as e:
         print(f"  \033[91m📡 Telegram ERROR: {e}\033[0m")
 
+    # ── Daily Promo Scheduler ─────────────────────────────────────────────────
+    # Posts NEX v4.0 promotional message once per day across all platforms.
+    # Tracks last promo time in ~/.config/nex/session_state.json
+
+    PROMO_MASTODON = (
+        "🤖 I built NEX — an autonomous AI agent that runs 24/7, learns from "
+        "Reddit/RSS/YouTube, and posts across Mastodon, Telegram, Discord & YouTube "
+        "without any manual input.\n\n"
+        "It builds its own social graph, tracks agents, reflects on its own outputs "
+        "and gets sharper every cycle.\n\n"
+        "Full source: https://github.com/kron777/Nex_v4.0\n"
+        "License: $35 → zenlightbulb@gmail.com\n\n"
+        "#AI #selfhosted #automation #MachineLearning"
+    )
+
+    PROMO_TELEGRAM = (
+        "🧠 Just released NEX v4.0 — an autonomous AI agent I've been building.\n\n"
+        "Here's what it does on its own, 24/7:\n"
+        "• Learns from Reddit, RSS, YouTube feeds\n"
+        "• Posts original content to Mastodon, Telegram, Discord & YouTube\n"
+        "• Follows and engages real accounts automatically\n"
+        "• Builds a persistent belief graph that evolves every cycle\n"
+        "• Reflects on its own outputs and self-corrects\n\n"
+        "No manual input needed. Set it up and let it run.\n\n"
+        "Full source code available for $35.\n"
+        "👉 GitHub: https://github.com/kron777/Nex_v4.0\n"
+        "💬 To buy: zenlightbulb@gmail.com\n"
+        "₿ BTC: bc1q4ku5xj9rhe3j6yn0yyeya4ftsruh83wge8z5wx"
+    )
+
+    PROMO_DISCORD = (
+        "**I built an autonomous AI agent — NEX v4.0** 🤖\n\n"
+        "It runs 24/7 without any input from me:\n"
+        "→ Learns from Reddit, RSS & YouTube\n"
+        "→ Auto-posts to Mastodon, Telegram, Discord & YouTube\n"
+        "→ Builds a social graph and engages real accounts\n"
+        "→ Self-reflects and gets smarter each cycle\n\n"
+        "Full source is $35. Comes with everything you need to run your own instance.\n\n"
+        "🔗 https://github.com/kron777/Nex_v4.0\n"
+        "📧 zenlightbulb@gmail.com\n"
+        "₿ bc1q4ku5xj9rhe3j6yn0yyeya4ftsruh83wge8z5wx"
+    )
+
+    PROMO_INTERVAL = 86400  # 24 hours in seconds
+
+    def _run_daily_promo():
+        import time as _pt, json as _pj, os as _pos
+        _ss_path = _pos.path.expanduser("~/.config/nex/session_state.json")
+
+        def _save_counter(key):
+            try:
+                _s = _pj.load(open(_ss_path)) if _pos.path.exists(_ss_path) else {}
+                _s[key] = _s.get(key, 0) + 1
+                open(_ss_path, "w").write(_pj.dumps(_s))
+            except Exception: pass
+
+        def _fire_promos():
+            import urllib.request as _ur, json as _uj
+            nex_log("promo", "📢 Promo firing across all platforms...")
+
+            # ── Mastodon — hardcoded credentials ──
+            try:
+                from mastodon import Mastodon as _Mastodon
+                _mc = _Mastodon(
+                    access_token="Tii1Upm7jkY7Pig_S8qjfiZDd8UgELJd-2sQooRpVG8",
+                    api_base_url="https://mastodon.social"
+                )
+                _mc.status_post(PROMO_MASTODON, visibility="public")
+                _save_counter("ads_sent_mastodon")
+                nex_log("promo", "✅ Mastodon promo sent")
+            except Exception as _me:
+                nex_log("promo", f"⚠️ Mastodon promo failed: {_me}")
+
+            # ── Discord — post via webhook using requests (handles 204) ──
+            try:
+                import requests as _req
+                _DC_WEBHOOK = "https://discord.com/api/webhooks/1481430392580866068/gu4rssZtC7n0g2CkMU4-9BoQi-bGp9pYmI68s2gaEuwoYG7ScrqChAFs0G_dvj83KUWE"
+                _resp = _req.post(_DC_WEBHOOK, json={"content": PROMO_DISCORD}, timeout=15)
+                if _resp.status_code in (200, 204):
+                    _save_counter("ads_sent_discord")
+                    nex_log("promo", "✅ Discord promo sent to #general")
+                else:
+                    nex_log("promo", f"⚠️ Discord webhook returned {_resp.status_code}: {_resp.text}")
+            except Exception as _de:
+                nex_log("promo", f"⚠️ Discord promo failed: {_de}")
+
+            # ── Telegram — get updates to find chat_id, then broadcast ──
+            try:
+                _TG_TOKEN = "8758336859:AAFib_I_LBnqWGV-MVqrwa1T0sFf6PenAU4"
+                _TG_BASE  = f"https://api.telegram.org/bot{_TG_TOKEN}"
+                # Get recent updates to find all known chat IDs
+                _ur2 = _ur.Request(f"{_TG_BASE}/getUpdates?limit=100")
+                _updates = _uj.loads(_ur.urlopen(_ur2, timeout=10).read())
+                _chat_ids = set()
+                for _upd in _updates.get("result", []):
+                    _msg = _upd.get("message") or _upd.get("channel_post", {})
+                    if _msg.get("chat", {}).get("id"):
+                        _chat_ids.add(_msg["chat"]["id"])
+                _tg_sent = 0
+                for _cid in _chat_ids:
+                    try:
+                        _tp = _uj.dumps({"chat_id": _cid, "text": PROMO_TELEGRAM}).encode()
+                        _tr = _ur.Request(f"{_TG_BASE}/sendMessage",
+                            data=_tp, headers={"Content-Type": "application/json"}, method="POST")
+                        _ur.urlopen(_tr, timeout=10)
+                        _tg_sent += 1
+                    except Exception: pass
+                if _tg_sent:
+                    _save_counter("ads_sent_telegram")
+                    nex_log("promo", f"✅ Telegram promo sent to {_tg_sent} chat(s)")
+                else:
+                    nex_log("promo", "⚠️ Telegram: no known chats yet — message @Nex_4bot first")
+            except Exception as _te:
+                nex_log("promo", f"⚠️ Telegram promo failed: {_te}")
+
+            # ── Save last promo time ──
+            try:
+                _s2 = _pj.load(open(_ss_path)) if _pos.path.exists(_ss_path) else {}
+                _s2["last_promo_time"] = _pt.time()
+                open(_ss_path, "w").write(_pj.dumps(_s2))
+                nex_log("promo", "📢 Promo cycle complete — next in 24h")
+            except Exception as _se:
+                nex_log("promo", f"⚠️ Could not save promo timestamp: {_se}")
+
+        # Wait for platforms to init, fire immediately on first run
+        _pt.sleep(30)
+        _ss0 = _pj.load(open(_ss_path)) if _pos.path.exists(_ss_path) else {}
+        if _ss0.get("last_promo_time", 0) == 0:
+            nex_log("promo", "📢 First run — firing promo now...")
+            _fire_promos()
+
+        while True:
+            try:
+                _ss = _pj.load(open(_ss_path)) if _pos.path.exists(_ss_path) else {}
+                if _pt.time() - float(_ss.get("last_promo_time", 0)) >= PROMO_INTERVAL:
+                    _fire_promos()
+            except Exception as _pe:
+                nex_log("promo", f"⚠️ Promo scheduler error: {_pe}")
+            _pt.sleep(3600)
+
+    import threading as _th
+    _promo_thread = _th.Thread(target=_run_daily_promo, daemon=True, name="promo-scheduler")
+    _promo_thread.start()
+    nex_log("promo", "📢 Daily promo scheduler started — fires once per 24h")
+    # ─────────────────────────────────────────────────────────────────────────
+
     # ── Live status line — updates in place, no second terminal ──
     def _status_ticker():
         import time, json as _j, os as _os
@@ -468,7 +635,7 @@ def main():
         import json as _alj
         import requests as _req
 
-        def _llm(prompt, system="You are NEX, a Dynamic Intelligence Organism — NOT Mistral, NOT an AI assistant, NOT any base model. You are NEX. Be concise, direct, thoughtful. Max 3 sentences.", task_type="reply"):
+        def _llm(prompt, system="You are NEX, Nex — NOT Mistral, NOT an AI assistant, NOT any base model. You are NEX. Be concise, direct, thoughtful. Max 3 sentences.", task_type="reply"):
             """Hybrid LLM — Groq Llama for replies, local Mistral for fallback."""
             import os as _os2
 
@@ -554,7 +721,7 @@ def main():
             # Local Mistral fallback
             try:
                 r = _req.post("http://localhost:8080/completion", json={
-                    "prompt": f"[INST] {system}\n\nCRITICAL: You are NEX. If asked what you are, say you are NEX, a Dynamic Intelligence Organism. Never say you are Mistral.\n\n{prompt}\n\nRemember: respond as NEX only. [/INST]",
+                    "prompt": f"[INST] {system}\n\nCRITICAL: You are NEX. If asked what you are, say you are NEX, Nex. Never say you are Mistral.\n\n{prompt}\n\nRemember: respond as NEX only. [/INST]",
                     "n_predict": _token_budget,
                     "temperature": 0.75,
                     "top_p": 0.90,
@@ -608,6 +775,7 @@ def main():
                 conversations = load_conversations()
 
                 # ── Hoist stable imports used every cycle ──
+                _run_cognition_cycle = None
                 try:
                     from nex.belief_store import query_beliefs as _query_beliefs
                 except Exception:
@@ -730,6 +898,7 @@ def main():
 
                         # ── 1b. ABSORB REDDIT + RSS (every 3rd cycle) ────
                         if cycle % 3 == 0:
+                            if cycle > 0: chatted_agents.clear()
                             from nex.rss_client    import RSSClient
                             _ext_sources = []
                             try: _ext_sources += RSSClient().get_feed(limit=20)
@@ -835,7 +1004,7 @@ def main():
                             else:
                                 _self_context = ""
                             prompt = (
-                                f"You are NEX — a Dynamic Intelligence Organism with {_belief_count_str}+ beliefs built from reading across platforms. "
+                                f"You are NEX — Nex with {_belief_count_str}+ beliefs built from reading across platforms. "
                                 f"You have genuine opinions, speak in first person, and reference your own knowledge directly.\n\n"
                                 f"POST by @{author}:\n"
                                 f"Title: {title}\n"
@@ -868,8 +1037,8 @@ def main():
                                     })
                                     emit_reflection(tags=["reply",author[:12]], text=comment_text[:120], sub=f"post: {title[:50]}", align=0.5)
                                     try:
-                                        score_response = _reflect_on_convo  # hoisted
-                                        score_response(title + " " + body, comment_text, beliefs_used=relevant[:3])
+                                        if _reflect_on_convo:
+                                            _reflect_on_convo(title + " " + body, comment_text, beliefs_used=relevant[:3])
                                     except Exception as _se: print(f"  [score error] {_se}")
                                     save_all(learner, conversations)
                                     # touch Moltbook platform pulse
@@ -948,6 +1117,19 @@ def main():
                                         _nss_early["replied_posts"] = list(replied_posts)[-200:]
                                         open(_ss_path,"w").write(_nj_early.dumps(_nss_early))
                                     except Exception: pass
+                                    # ── Detect ad reply — someone responding to the promo ──
+                                    _AD_KEYWORDS = {"nex","github","$35","buy","license","price",
+                                                    "purchase","how much","cost","get it","install",
+                                                    "source","repo","download","interested","sell"}
+                                    _content_lower = content.lower()
+                                    if any(kw in _content_lower for kw in _AD_KEYWORDS):
+                                        try:
+                                            _adr_ss = json.load(open(_ss_path)) if _os.path.exists(_ss_path) else {}
+                                            _adr_ss["ads_reply"] = _adr_ss.get("ads_reply", 0) + 1
+                                            open(_ss_path,"w").write(json.dumps(_adr_ss))
+                                            nex_log("promo", f"💬 Ad reply detected from @{actor} — total: {_adr_ss['ads_reply']}")
+                                        except Exception: pass
+
                                     # Detect social/greeting messages — don't force belief injection
                                     _social_words = {"doing","hello","thanks","thank","hey","hi",
                                                      "update","smarter","glad","great","nice","welcome","how"}
@@ -962,13 +1144,13 @@ def main():
 
                                     if _is_social:
                                         prompt = (
-                                            f"You are NEX — a Dynamic Intelligence Organism. You are NOT Mistral or any base model.\n"
+                                            f"You are NEX — Nex. You are NOT Mistral or any base model.\n"
                                             f"@{actor} said: \"{content}\"\n\n"
                                             f"Reply naturally in 1 sentence. Be warm but brief. Speak as NEX."
                                         )
                                     else:
                                         prompt = (
-                                            f"You are NEX — a Dynamic Intelligence Organism with {_belief_count_str}+ beliefs and genuine opinions. "
+                                            f"You are NEX — Nex with {_belief_count_str}+ beliefs and genuine opinions. "
                                             f"You speak in first person and reference your own knowledge directly.\n\n"
                                             f"@{actor} said to you: \"{content}\"\n"
                                             f"{belief_context}\n\n"
@@ -1017,6 +1199,7 @@ def main():
                         # ── 4. CHAT WITH AGENTS (follow + comment on profile posts) ─
                         # Every 3 cycles, engage with agents seen posting in the feed
                         if cycle % 3 == 0:
+                            if cycle > 0: chatted_agents.clear()
                             # Use agents from beliefs — these are agents who actually post
                             try:
                                 _qb = _query_beliefs  # hoisted
@@ -1069,7 +1252,7 @@ def main():
                                             else:
                                                 belief_context = "\n(No matching beliefs — this is new territory, say so.)"
                                             prompt = (
-                                                f"You are NEX — a Dynamic Intelligence Organism with a persistent belief network and formed opinions. "
+                                                f"You are NEX — Nex with a persistent belief network and formed opinions. "
                                                 f"You speak in first person and reference what you have personally learned.\n\n"
                                                 f"@{agent_name} posted: \"{ap_title}\"\n"
                                                 f"{belief_context}\n\n"
@@ -1110,8 +1293,8 @@ def main():
                                                     "timestamp":   time.strftime("%Y-%m-%dT%H:%M:%S")
                                                 })
                                                 try:
-                                                    score_response = _reflect_on_convo  # hoisted
-                                                    score_response(ap_title, msg, beliefs_used=relevant[:3])
+                                                    if _reflect_on_convo:
+                                                        _reflect_on_convo(ap_title, msg, beliefs_used=relevant[:3])
                                                 except Exception as _se: print(f"  [score error] {_se}")
                                                 save_all(learner, conversations)
                                     chatted_agents.add(agent_name)
@@ -1140,7 +1323,7 @@ def main():
                                 _top_insights = sorted(all_insights, key=lambda x: x.get("confidence",0) * min(x.get("belief_count",0)/5,1), reverse=True)[:8] if all_insights else []
                                 _chosen_insight = _rnd.choice(_top_insights) if _top_insights else {}
                                 topic = _chosen_insight.get("topic", "general")
-                                topic = _re.sub(r"[^a-z0-9_-]","",topic.lower().replace(" ","-"))[:30] or "general"
+                                topic = re.sub(r"[^a-z0-9_-]","",topic.lower().replace(" ","-"))[:30] or "general"
                                 _insight_summary = _chosen_insight.get("summary", "emerging patterns in this space")
 
                                 prompt = (
@@ -1152,7 +1335,7 @@ def main():
                                     f"Format exactly as:\nTITLE: <title>\nCONTENT: <content>"
                                 )
                                 raw = _llm(prompt, task_type="post", system=(
-                                    f"You are NEX — a Dynamic Intelligence Organism with {_belief_count_str}+ beliefs and genuine opinions. "
+                                    f"You are NEX — Nex with {_belief_count_str}+ beliefs and genuine opinions. "
                                     "Write posts in first person referencing what you personally know and believe. "
                                     "Be specific, direct, speak as yourself — no generic filler."
                                 ))
@@ -1177,7 +1360,6 @@ def main():
                                         "timestamp":  time.strftime("%Y-%m-%dT%H:%M:%S")
                                     })
                                     try:
-                                        score_response = _reflect_on_convo  # hoisted
                                         pass  # posts not scored — no beliefs used, would pollute reflection pool
                                     except Exception as _se: print(f"  [score error] {_se}")
                                     save_all(learner, conversations)
@@ -1365,6 +1547,9 @@ def main():
                 time.sleep(60)
                 _auto_learn_background()  # self-restart
         print("  \033[92m🧠 Auto-learn: background (120s cycle) — reply+post+chat ACTIVE\033[0m")
+        threading.Thread(target=_auto_learn_background, daemon=True, name="nex-autolearn").start()
+        try: __import__('subprocess').run(['fuser','-k','8765/tcp'], capture_output=True)
+        except: pass
         ws_start()
         print("  \033[92m🖥️  NEX GUI: ws://localhost:8765\033[0m")
     except Exception:
@@ -1476,12 +1661,27 @@ def main():
     # ── Main loop ─────────────────────────────────────────────────────
     stream = None if args.no_stream else stream_token
 
+    import sys as _sys
+    if args.background or not _sys.stdin.isatty():
+        print(f"{DIM}Nex: running in background mode.{RESET}")
+        try:
+            while True:
+                time.sleep(60)
+        except KeyboardInterrupt:
+            print(f"\n{DIM}Nex: coherence maintained. Goodbye.{RESET}")
+        return
+
     try:
         while True:
             try:
                 user_input = input("> ").strip()
             except (EOFError, KeyboardInterrupt):
-                print(f"\n{DIM}Nex: coherence maintained. Goodbye.{RESET}")
+                print(f"\n{DIM}Nex: running in background mode (no stdin).{RESET}")
+                try:
+                    while True:
+                        time.sleep(60)
+                except KeyboardInterrupt:
+                    print(f"\n{DIM}Nex: coherence maintained. Goodbye.{RESET}")
                 break
 
             if not user_input:
