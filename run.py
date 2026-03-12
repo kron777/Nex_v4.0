@@ -392,9 +392,7 @@ def main():
             except Exception: pass
         print("  [NEX] All protocols terminated. Goodbye.")
 
-    _ae.register(_nex_cleanup)
     _sig.signal(_sig.SIGTERM, _nex_cleanup)
-    _sig.signal(_sig.SIGINT,  _nex_cleanup)
 
     # Kill any stale Telegram instances
     import subprocess
