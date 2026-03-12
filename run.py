@@ -57,7 +57,7 @@ class _RateLimiter:
             _time.sleep(self._interval - elapsed)
         self._last = _time.time()
 
-_rate = _RateLimiter(calls_per_minute=15)  # 15 API calls/min max
+_rate = _RateLimiter(calls_per_minute=8)   # 8 API calls/min — safe for Groq free tier
 
 # ── make sure nex package is importable ──────────────────────────────────────
 sys.path.insert(0, str(Path(__file__).parent))
@@ -667,10 +667,10 @@ def main():
                             timeout=30
                         )
                         if groq_resp.status_code == 429:
-                            _wait = min(5 * _groq_attempt, 30)
+                            _wait = min(15 * _groq_attempt, 60)
                             nex_log("llm", f"Groq rate limit — waiting {_wait}s (attempt {_groq_attempt})")
                             time.sleep(_wait)
-                            if _groq_attempt >= 3: raise Exception("Groq rate limit after 3 retries")
+                            if _groq_attempt >= 4: raise Exception("Groq rate limit after 4 retries")
                             continue
                         break
                     if groq_resp.status_code != 200:
