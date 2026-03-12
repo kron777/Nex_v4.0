@@ -314,23 +314,8 @@ def box(title, lines, w, h):
     rows.append("┌" + t + "─"*max(0,iw-tv) + "┐")
     for line in lines[:h]:
         p = strip_ansi(line)
-        if len(p) > cw:
-            # wrap: find colour prefix (timestamp+label) then wrap remainder
-            prefix_end = p.find(" ", p.find(" ")+1) if " " in p else 0
-            prefix = " " * min(prefix_end+1, 20)
-            words = p.split(" ")
-            cur = ""; wrapped = []
-            for w in words:
-                if len(cur)+len(w)+1 <= cw: cur = (cur+" "+w).lstrip()
-                else:
-                    if cur: wrapped.append(cur)
-                    cur = w
-            if cur: wrapped.append(cur)
-            for wi, wline in enumerate(wrapped[:2]):
-                pad = prefix if wi > 0 else ""
-                rows.append("│ " + pad + wline + " "*max(0,cw-len(pad)-len(wline)) + " │")
-        else:
-            rows.append("│ " + line + " "*max(0,cw-len(strip_ansi(line))) + " │")
+        if len(p) > cw: line = p[:cw-1]+"…"
+        rows.append("│ " + line + " "*max(0,cw-len(strip_ansi(line))) + " │")
     while len(rows) < h+1: rows.append("│"+" "*iw+"│")
     rows.append("└"+"─"*iw+"┘")
     return rows
