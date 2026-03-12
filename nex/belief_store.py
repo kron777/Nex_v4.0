@@ -15,7 +15,6 @@ _chroma_client = None
 _chroma_collection = None
 
 def _get_chroma():
-    return None  # disabled - too much RAM, SQLite-only mode
     global _chroma_client, _chroma_collection
     if _chroma_collection is not None:
         return _chroma_collection
@@ -25,9 +24,16 @@ def _get_chroma():
         os.makedirs(CHROMA_DIR, exist_ok=True)
         _chroma_client = chromadb.PersistentClient(path=CHROMA_DIR)
         # Use sentence-transformers for embeddings (already installed)
-        # Use lightweight default embeddings — saves ~1.5GB RAM vs sentence-transformers
-        from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
-        ef = DefaultEmbeddingFunction()
+        # GPU-accelerated embeddings — custom class forces ROCm/CUDA device
+        from sentence_transformers import SentenceTransformer
+        import torch
+        class _GPUEmbedFunc:
+            def name(self): return "gpu_minilm"
+            def __init__(self):
+                self._model = SentenceTransformer("all-MiniLM-L6-v2", device="cuda")
+            def __call__(self, input):
+                return self._model.encode(input, convert_to_numpy=True).tolist()
+        ef = _GPUEmbedFunc()
         _chroma_collection = _chroma_client.get_or_create_collection(
             name="nex_beliefs_v2",
             embedding_function=ef,
