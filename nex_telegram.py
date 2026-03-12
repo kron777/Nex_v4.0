@@ -841,9 +841,6 @@ def main():
     _emit_feed("platform", "telegram", "LIVE")
 
     open(__import__("os").path.expanduser("~/.config/nex/platform_telegram.live"), "w").write(__import__("time").strftime("%s"))
-    # Write PID lock so conflict handler can kill stale instance
-    with open("/tmp/nex_telegram.lock", "w") as _lf:
-        _lf.write(str(__import__("os").getpid()))
     print(f"  Listening for messages...")
     print()
 
@@ -897,8 +894,6 @@ def start_telegram_background():
                 if attempt > 1:
                     print(f"  📡 Telegram reconnecting (attempt {attempt})…")
 
-                with open("/tmp/nex_telegram.lock", "w") as _lf:
-                    _lf.write(str(os.getpid()))
                 loop.run_until_complete(run())
 
             except Exception as e:
@@ -906,7 +901,7 @@ def start_telegram_background():
                 # Conflict = duplicate instance still alive, kill it and retry fast
                 if "Conflict" in err:
                     print(f"  ⚠ Telegram conflict — killing stale instance, retrying in 3s…")
-                    import os, signal
+                    import signal
                     lock = "/tmp/nex_telegram.lock"
                     try:
                         with open(lock) as f:

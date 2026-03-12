@@ -216,8 +216,10 @@ def get_stats():
     finally:
         conn.close()
 
-def initial_sync(beliefs_list):
-    """Sync a list of belief dicts into SQLite + ChromaDB."""
+def initial_sync(beliefs_list=None):
+    """Sync a list of belief dicts into SQLite + ChromaDB. Called with no args = no-op (DB already loaded)."""
+    if not beliefs_list:
+        return 0
     count = 0
     for b in beliefs_list:
         if isinstance(b, dict):
