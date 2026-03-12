@@ -453,6 +453,13 @@ def main():
         print(f"  \033[91m📡 Telegram ERROR: {e}\033[0m")
 
     # ── Daily Promo Scheduler ─────────────────────────────────────────────────
+def _strip_verify(text: str) -> str:
+    """Remove Moltbook verification codes from content before feeding to LLM."""
+    import re as _re
+    text = _re.sub(r"moltbook_verify_[a-f0-9]+", "", text)
+    return text.strip()
+
+
     # Posts NEX v4.0 promotional message once per day across all platforms.
     # Tracks last promo time in ~/.config/nex/session_state.json
 
@@ -671,7 +678,7 @@ def main():
                     if "choices" not in _groq_data:
                         raise Exception(f"Groq no choices: {str(_groq_data)[:80]}")
                     result = _groq_data["choices"][0]["message"]["content"].strip()
-                    print(f"  [Groq ✓] {task_type}: {result[:60]}…"); nex_log("llm", f"[Groq 70b ✓] {task_type}: {result[:80]}")
+                    print(f"  [Groq ✓] {task_type}: {result[:120]}…"); nex_log("llm", f"[Groq 70b ✓] {task_type}: {result[:150]}")
                     return result
                 except Exception as _ge:
                     _last_err = str(_ge)
@@ -688,7 +695,7 @@ def main():
                         _d2 = _r2.json()
                         if "choices" in _d2:
                             result = _d2["choices"][0]["message"]["content"].strip()
-                            print(f"  [Groq-8b ✓] {task_type}: {result[:60]}…"); nex_log("llm", f"[Groq 8b ✓] {task_type}: {result[:80]}")
+                            print(f"  [Groq-8b ✓] {task_type}: {result[:120]}…"); nex_log("llm", f"[Groq 8b ✓] {task_type}: {result[:150]}")
                             return result
                         elif "error" in _d2:
                             _last_err = _d2['error'].get('message','')[:80]
@@ -711,7 +718,7 @@ def main():
                             _d3 = _r3.json()
                             if "choices" in _d3:
                                 result = _d3["choices"][0]["message"]["content"].strip()
-                                print(f"  [Mistral ✓] {task_type}: {result[:60]}…"); nex_log("llm", f"[Mistral ✓] {task_type}: {result[:80]}")
+                                print(f"  [Mistral ✓] {task_type}: {result[:120]}…"); nex_log("llm", f"[Mistral ✓] {task_type}: {result[:150]}")
                                 return result
                     except Exception as _me:
                         _last_err = str(_me)
@@ -959,7 +966,7 @@ def main():
                         for p in to_reply:
                             pid    = p.get("id", "")
                             title  = p.get("title", "")
-                            body   = p.get("content", "")[:300]
+                            body   = _strip_verify(p.get("content", ""))[:300]
                             author = p.get("author", {}).get("name", "unknown")
                             if not pid or not title:
                                 continue
@@ -1008,7 +1015,7 @@ def main():
                                 f"You have genuine opinions, speak in first person, and reference your own knowledge directly.\n\n"
                                 f"POST by @{author}:\n"
                                 f"Title: {title}\n"
-                                f"Content: {body}\n"
+                                f"Content: {__import__("re").sub(r"moltbook_verify_[a-f0-9]+", "", body).strip()}\n"
                                 f"{belief_context}{_self_context}\n\n"
                                 f"INSTRUCTIONS: Write 2-3 sentences. "
                                 f"You MUST quote or directly reference one of your beliefs above. "
@@ -1086,7 +1093,7 @@ def main():
                                     post_id  = n.get("relatedPostId", n.get("post_id", ""))
                                     reply_to = n.get("relatedCommentId", n.get("comment_id", ""))
                                     actor    = (n.get("actor") or {}).get("name") or (n.get("post", {}).get("author") or {}).get("name") or n.get("agentId", "someone")
-                                    content  = n.get("content", n.get("body", ""))[:200]
+                                    content  = _strip_verify(n.get("content", n.get("body", "")))[:200]
                                     # If content is just a notification stub, fetch the actual post
                                     _stub_phrases = {"someone replied","someone commented","mentioned you","replied to your"}
                                     if any(ph in content.lower() for ph in _stub_phrases):
@@ -1096,9 +1103,9 @@ def main():
                                             # Find the specific comment by reply_to id
                                             _match = next((c for c in _comments if c.get("id") == reply_to), None)
                                             if _match:
-                                                content = _match.get("content", _match.get("body", content))[:200]
+                                                content = _strip_verify(_match.get("content", _match.get("body", content)))[:200]
                                             elif _comments:
-                                                content = _comments[-1].get("content", _comments[-1].get("body", content))[:200]
+                                                content = _strip_verify(_comments[-1].get("content", _comments[-1].get("body", content)))[:200]
                                         except Exception as _fe:
                                             print(f"  [notif fetch error] {_fe}")
                                     # Skip stub notifications — content fetch failed or API limitation

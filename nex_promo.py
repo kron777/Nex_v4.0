@@ -8,7 +8,8 @@ ADS_PATH = os.path.expanduser("~/.config/nex/nex_ads.json")
 INTERVAL = 86400
 
 ss = json.load(open(SS_PATH)) if os.path.exists(SS_PATH) else {}
-if time.time() - float(ss.get("last_promo_time", 0)) < INTERVAL:
+ads = json.load(open(ADS_PATH)) if os.path.exists(ADS_PATH) else {}
+if time.time() - float(ads.get("last_promo_time", 0)) < INTERVAL:
     print("Promo already sent today — skipping")
     sys.exit(0)
 
@@ -43,6 +44,7 @@ except Exception as e:
     print(f"❌ Discord failed: {e}")
 
 # Save last promo time to session_state
+ads["last_promo_time"] = time.time()
 ss["last_promo_time"] = time.time()
 json.dump(ss, open(SS_PATH, "w"))
 print(f"✅ Done — sent to: {sent}")
