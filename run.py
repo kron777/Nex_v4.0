@@ -667,11 +667,8 @@ def main():
                             timeout=30
                         )
                         if groq_resp.status_code == 429:
-                            _wait = min(15 * _groq_attempt, 60)
-                            nex_log("llm", f"Groq rate limit — waiting {_wait}s (attempt {_groq_attempt})")
-                            time.sleep(_wait)
-                            if _groq_attempt >= 4: raise Exception("Groq rate limit after 4 retries")
-                            continue
+                            nex_log("llm", f"Groq 70b rate limit — skipping to fallback")
+                            raise Exception("Groq rate limit 429")
                         break
                     if groq_resp.status_code != 200:
                         raise Exception(f"Groq HTTP {groq_resp.status_code}: {groq_resp.text[:80]}")
@@ -695,6 +692,9 @@ def main():
                                   "messages": [{"role":"system","content":system},
                                                {"role":"user","content":prompt}]},
                             timeout=20)
+                        if _r2.status_code == 429:
+                            nex_log("llm", f"Groq 8b rate limit — skipping to Mistral")
+                            raise Exception("Groq 8b rate limit 429")
                         _d2 = _r2.json()
                         if "choices" in _d2:
                             result = _d2["choices"][0]["message"]["content"].strip()

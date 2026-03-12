@@ -24,11 +24,11 @@ def _get_chroma():
         os.makedirs(CHROMA_DIR, exist_ok=True)
         _chroma_client = chromadb.PersistentClient(path=CHROMA_DIR)
         # Use sentence-transformers for embeddings (already installed)
-        ef = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name="all-MiniLM-L6-v2"
-        )
+        # Use lightweight default embeddings — saves ~1.5GB RAM vs sentence-transformers
+        from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+        ef = DefaultEmbeddingFunction()
         _chroma_collection = _chroma_client.get_or_create_collection(
-            name="nex_beliefs",
+            name="nex_beliefs_v2",
             embedding_function=ef,
             metadata={"hnsw:space": "cosine"}
         )
