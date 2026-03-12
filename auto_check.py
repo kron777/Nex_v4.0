@@ -217,7 +217,7 @@ def ingest_belief(b):
         origin = f"{CY}@{_auth}{RS} {D}[{_sc}{_slabel}{RS}{D}]{RS}"
     else:
         origin = f"{_sc}{_slabel}{RS}"
-    cont = b.get("content","")[:70].replace("\n"," ")
+    cont = b.get("content","")[:200].replace("\n"," ")
     ts   = fmt_ts(b.get("timestamp",""))
 
     _bulk = any(x in _sl for x in ("youtube", "arxiv", "wired", "verge", "techcrunch",
@@ -231,14 +231,14 @@ def ingest_belief(b):
     if _bulk:
         # Scrape sources → NETWORK only, capped
         if _ok(network_log):
-            network_log.append(f"{D}[{ts}]{RS} {origin} {D}{cont[:60]}{RS}")
+            network_log.append(f"{D}[{ts}]{RS} {origin} {D}{cont[:200]}{RS}")
     else:
         # Social sources → LEARNT (uncapped) + NETWORK (capped) + ACTIVITY (capped)
         learnt_log.append(f"{G}▲{RS} {D}[{ts}]{RS} {origin} {D}{cont}{RS}")
         if _ok(network_log):
-            network_log.append(f"{D}[{ts}]{RS} {origin} {D}{cont[:60]}{RS}")
+            network_log.append(f"{D}[{ts}]{RS} {origin} {D}{cont[:200]}{RS}")
         if _ok(activity_log):
-            activity_log.append(f"{D}[{ts}]{RS} {G}▲ LEARNT{RS}  {origin} {D}{cont[:45]}{RS}")
+            activity_log.append(f"{D}[{ts}]{RS} {G}▲ LEARNT{RS}  {origin} {D}{cont[:200]}{RS}")
 
 def ingest_convo(cv):
     cid = (cv.get("post_id","") + cv.get("timestamp","") +
