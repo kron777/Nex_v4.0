@@ -161,11 +161,20 @@ def load(fname, default=None):
     except: return [] if default is None else default
 
 def llama_ok():
+    # Check local llama.cpp first
     try:
         import urllib.request
         urllib.request.urlopen("http://localhost:8080/health", timeout=1)
         return True
-    except: return False
+    except: pass
+    # Check Groq cloud
+    import os
+    if os.environ.get("GROQ_API_KEY"):
+        return True
+    # Check Mistral cloud
+    if os.environ.get("MISTRAL_API_KEY"):
+        return True
+    return False
 
 def fmt_ts(val):
     try:    return str(val)[11:19] if "T" in str(val) else str(val)[:8]
