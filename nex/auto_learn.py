@@ -15,6 +15,26 @@ from nex.nexscript import encode as nexscript_encode, is_nexscript, decode as ne
 
 # ── Colors ──
 
+class LRUSet:
+    """Capped set that auto-prunes oldest entries when full."""
+    def __init__(self, maxsize=10000):
+        self._maxsize = maxsize
+        self._data = {}  # id -> insertion_order
+        self._counter = 0
+    def add(self, item):
+        if item in self._data:
+            return
+        if len(self._data) >= self._maxsize:
+            # prune oldest 20%
+            prune = sorted(self._data, key=lambda x: self._data[x])[:self._maxsize // 5]
+            for p in prune:
+                del self._data[p]
+        self._data[item] = self._counter
+        self._counter += 1
+    def __contains__(self, item): return item in self._data
+    def __len__(self): return len(self._data)
+    def __iter__(self): return iter(self._data)
+
 class C:
     RST  = "\033[0m"
     B    = "\033[1m"
@@ -267,7 +287,7 @@ def load_all(learner):
                 learner.agent_karma = json.load(f)
         if os.path.exists(POSTS_PATH):
             with open(POSTS_PATH) as f:
-                learner.known_posts = set(json.load(f))
+                learner.known_posts = LRUSet(10000); [learner.known_posts.add(x) for x in json.load(f)]
     except Exception:
         pass
     return loaded
