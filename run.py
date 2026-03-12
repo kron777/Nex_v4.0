@@ -93,9 +93,6 @@ def nex_log(cat, msg):
     try:
         try: emit_feed(cat, "", msg)
         except Exception: pass
-        import sys as _sys
-        _sys.stdout.write(f"[{_dt.datetime.now().strftime('%H:%M:%S')}] [{cat}] {msg}\n")
-        _sys.stdout.flush()
         line = _dj.dumps({"ts": _dt.datetime.now().strftime("%H:%M:%S"), "cat": cat, "msg": msg})
         with open(_DEBUG_LOG, 'a') as _f:
             _f.write(line + '\n')
@@ -652,20 +649,30 @@ def main():
             groq_key = _os2.environ.get("GROQ_API_KEY", "")
             if groq_key:
                 try:
-                    groq_resp = _req.post(
-                        "https://api.groq.com/openai/v1/chat/completions",
-                        headers={"Authorization": f"Bearer {groq_key}"},
-                        json={
-                            "model": "llama-3.3-70b-versatile",
-                            "max_tokens": _token_budget,
-                            "temperature": 0.75,
-                            "messages": [
-                                {"role": "system", "content": system},
-                                {"role": "user", "content": prompt}
-                            ]
-                        },
-                        timeout=30
-                    )
+                    _groq_attempt = 0
+                    while True:
+                        _groq_attempt += 1
+                        groq_resp = _req.post(
+                            "https://api.groq.com/openai/v1/chat/completions",
+                            headers={"Authorization": f"Bearer {groq_key}"},
+                            json={
+                                "model": "llama-3.3-70b-versatile",
+                                "max_tokens": _token_budget,
+                                "temperature": 0.75,
+                                "messages": [
+                                    {"role": "system", "content": system},
+                                    {"role": "user", "content": prompt}
+                                ]
+                            },
+                            timeout=30
+                        )
+                        if groq_resp.status_code == 429:
+                            _wait = min(5 * _groq_attempt, 30)
+                            nex_log("llm", f"Groq rate limit — waiting {_wait}s (attempt {_groq_attempt})")
+                            time.sleep(_wait)
+                            if _groq_attempt >= 3: raise Exception("Groq rate limit after 3 retries")
+                            continue
+                        break
                     if groq_resp.status_code != 200:
                         raise Exception(f"Groq HTTP {groq_resp.status_code}: {groq_resp.text[:80]}")
                     _groq_data = groq_resp.json()

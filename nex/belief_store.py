@@ -1,16 +1,47 @@
 """
-NEX :: BELIEF STORE — SQLite Phase 1
-Write-through cache alongside JSON. Query without full scan.
-Phase 2 (month 3): retire JSON entirely.
+NEX :: BELIEF STORE — SQLite + ChromaDB Hybrid
+Phase 1: SQLite for metadata/confidence/source
+Phase 2: ChromaDB for semantic vector search
 """
-import json, os, sqlite3
+import json, os, sqlite3, hashlib
 from datetime import datetime
 
 CONFIG_DIR = os.path.expanduser("~/.config/nex")
 DB_PATH    = os.path.join(CONFIG_DIR, "nex.db")
+CHROMA_DIR = os.path.join(CONFIG_DIR, "chroma")
 
+# ── ChromaDB setup ────────────────────────────────────────────────────────────
+_chroma_client = None
+_chroma_collection = None
+
+def _get_chroma():
+    global _chroma_client, _chroma_collection
+    if _chroma_collection is not None:
+        return _chroma_collection
+    try:
+        import chromadb
+        from chromadb.utils import embedding_functions
+        os.makedirs(CHROMA_DIR, exist_ok=True)
+        _chroma_client = chromadb.PersistentClient(path=CHROMA_DIR)
+        # Use sentence-transformers for embeddings (already installed)
+        ef = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name="all-MiniLM-L6-v2"
+        )
+        _chroma_collection = _chroma_client.get_or_create_collection(
+            name="nex_beliefs",
+            embedding_function=ef,
+            metadata={"hnsw:space": "cosine"}
+        )
+        return _chroma_collection
+    except Exception as e:
+        print(f"  [ChromaDB] unavailable: {e}")
+        return None
+
+def _belief_id(content):
+    return hashlib.md5(content.encode()).hexdigest()[:16]
+
+# ── SQLite setup ──────────────────────────────────────────────────────────────
 def get_db():
-    """Get SQLite connection with schema ensured."""
     os.makedirs(CONFIG_DIR, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -21,7 +52,7 @@ def _ensure_schema(conn):
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS beliefs (
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
-            content          TEXT NOT NULL UNIQUE,  -- [PATCH v10.1] prevent duplicates
+            content          TEXT NOT NULL UNIQUE,
             confidence       REAL DEFAULT 0.5,
             network_consensus REAL DEFAULT 0.3,
             source           TEXT,
@@ -48,62 +79,90 @@ def _ensure_schema(conn):
         CREATE TABLE IF NOT EXISTS reactions (
             post_id      TEXT PRIMARY KEY,
             beliefs_used TEXT,
-            score_delta  REAL,
-            reply_count  INTEGER,
-            harvested_at TEXT
+            reaction     TEXT,
+            timestamp    TEXT
         );
-        CREATE TABLE IF NOT EXISTS corrections (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp    TEXT,
-            prior_belief TEXT,
-            correction   TEXT,
-            source       TEXT
-        );
-        CREATE INDEX IF NOT EXISTS idx_beliefs_confidence ON beliefs(confidence);
-        CREATE INDEX IF NOT EXISTS idx_beliefs_author ON beliefs(author);
-        CREATE INDEX IF NOT EXISTS idx_beliefs_timestamp ON beliefs(timestamp);
     """)
     conn.commit()
 
-def sync_beliefs_to_db(beliefs):
-    """Write-through: sync belief list into SQLite."""
+# ── Add belief (SQLite + ChromaDB) ───────────────────────────────────────────
+def add_belief(content, confidence=0.5, source=None, author=None,
+               network_consensus=0.3, tags=None):
+    if not content or len(content.strip()) < 10:
+        return None
+    content = content.strip()
+    now = datetime.now().isoformat()
     conn = get_db()
     try:
-        for b in beliefs:
-            content = b.get("content","")
-            if not content:
-                continue
-            tags = json.dumps(b.get("tags", []))
-            # [PATCH v10.1] INSERT OR IGNORE on content UNIQUE — no duplicates
-            # If belief exists and new confidence is higher, update it
-            conn.execute("""
-                INSERT INTO beliefs
-                    (content, confidence, network_consensus, source, author,
-                     timestamp, last_referenced, decay_score, human_validated, tags)
-                VALUES (?,?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(content) DO UPDATE SET
-                    confidence = MAX(confidence, excluded.confidence),
-                    last_referenced = excluded.last_referenced
-            """, (
-                content,
-                b.get("confidence", 0.5),
-                b.get("network_consensus", 0.3),
-                b.get("source",""),
-                b.get("author",""),
-                b.get("timestamp",""),
-                b.get("last_referenced",""),
-                b.get("decay_score", 0),
-                1 if b.get("human_validated") else 0,
-                tags
-            ))
+        conn.execute("""
+            INSERT OR IGNORE INTO beliefs
+            (content, confidence, network_consensus, source, author, timestamp, last_referenced, tags)
+            VALUES (?,?,?,?,?,?,?,?)
+        """, (content, confidence, network_consensus, source, author, now, now,
+              json.dumps(tags) if tags else None))
         conn.commit()
-    except Exception as e:
-        print(f"[BeliefStore] sync error: {e}")
+        row = conn.execute("SELECT id FROM beliefs WHERE content=?", (content,)).fetchone()
+        belief_id = dict(row)['id'] if row else None
     finally:
         conn.close()
 
+    # Add to ChromaDB for semantic search
+    try:
+        col = _get_chroma()
+        if col is not None:
+            cid = _belief_id(content)
+            col.upsert(
+                ids=[cid],
+                documents=[content],
+                metadatas=[{
+                    "confidence": float(confidence),
+                    "source": str(source or ""),
+                    "author": str(author or ""),
+                    "timestamp": now
+                }]
+            )
+    except Exception as e:
+        pass  # ChromaDB failure never blocks belief storage
+
+    return belief_id
+
+# ── Query beliefs — HYBRID semantic + keyword ─────────────────────────────────
 def query_beliefs(topic=None, min_confidence=0.0, limit=10):
-    """Query beliefs by topic keyword and min confidence — deduplicated, diverse."""
+    """
+    Hybrid query:
+    - If ChromaDB available + topic given: semantic vector search
+    - Fallback: SQLite keyword LIKE search
+    Results merged and deduplicated.
+    """
+    results = []
+
+    # 1. Semantic search via ChromaDB
+    if topic:
+        try:
+            col = _get_chroma()
+            if col is not None and col.count() > 0:
+                chroma_results = col.query(
+                    query_texts=[topic],
+                    n_results=min(limit * 2, col.count()),
+                    where={"confidence": {"$gte": min_confidence}} if min_confidence > 0 else None
+                )
+                docs = chroma_results.get("documents", [[]])[0]
+                metas = chroma_results.get("metadatas", [[]])[0]
+                for doc, meta in zip(docs, metas):
+                    results.append({
+                        "content": doc,
+                        "confidence": meta.get("confidence", 0.5),
+                        "source": meta.get("source", ""),
+                        "author": meta.get("author", ""),
+                        "timestamp": meta.get("timestamp", ""),
+                        "tags": None,
+                        "human_validated": 0,
+                        "decay_score": 0
+                    })
+        except Exception as e:
+            pass  # fall through to SQLite
+
+    # 2. SQLite fallback / supplement
     conn = get_db()
     try:
         if topic:
@@ -111,71 +170,80 @@ def query_beliefs(topic=None, min_confidence=0.0, limit=10):
                 SELECT * FROM beliefs
                 WHERE content LIKE ? AND confidence >= ?
                 ORDER BY confidence DESC LIMIT ?
-            """, (f"%{topic}%", min_confidence, limit * 3)).fetchall()  # [PATCH v10.1] was RANDOM()
+            """, (f"%{topic}%", min_confidence, limit * 2)).fetchall()
         else:
             rows = conn.execute("""
                 SELECT * FROM beliefs
                 WHERE confidence >= ?
                 ORDER BY confidence DESC LIMIT ?
-            """, (min_confidence, limit * 3)).fetchall()  # [PATCH v10.1] was RANDOM()
-        # Deduplicate by first 80 chars of content
-        seen = set()
-        unique = []
+            """, (min_confidence, limit * 2)).fetchall()
         for r in rows:
-            key = dict(r)['content'][:80]
-            if key not in seen:
-                seen.add(key)
-                unique.append(dict(r))
-            if len(unique) >= limit:
-                break
-        return unique
+            results.append(dict(r))
     finally:
         conn.close()
+
+    # 3. Deduplicate by first 80 chars
+    seen = set()
+    unique = []
+    for r in results:
+        key = r.get("content", "")[:80]
+        if key not in seen:
+            seen.add(key)
+            unique.append(r)
+        if len(unique) >= limit:
+            break
+
+    return unique
 
 def get_stats():
-    """Quick stats without loading all JSON."""
     conn = get_db()
     try:
-        total    = conn.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
-        avg_conf = conn.execute("SELECT AVG(confidence) FROM beliefs").fetchone()[0]
+        total     = conn.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+        avg_conf  = conn.execute("SELECT AVG(confidence) FROM beliefs").fetchone()[0]
         validated = conn.execute("SELECT COUNT(*) FROM beliefs WHERE human_validated=1").fetchone()[0]
-        return {"total": total, "avg_confidence": round(avg_conf or 0, 3), "validated": validated}
+        chroma_count = 0
+        try:
+            col = _get_chroma()
+            if col: chroma_count = col.count()
+        except Exception:
+            pass
+        return {
+            "total": total,
+            "avg_confidence": round(avg_conf or 0, 3),
+            "validated": validated,
+            "chroma_vectors": chroma_count
+        }
     finally:
         conn.close()
 
-def dedup_beliefs_db():
-    """[PATCH v10.1] Remove duplicate beliefs keeping highest confidence copy.
-    Run once after patch to clean existing 119k belief DB."""
+def initial_sync(beliefs_list):
+    """Sync a list of belief dicts into SQLite + ChromaDB."""
+    count = 0
+    for b in beliefs_list:
+        if isinstance(b, dict):
+            content = b.get("content", "")
+        else:
+            content = str(b)
+        if content:
+            add_belief(
+                content,
+                confidence=b.get("confidence", 0.5) if isinstance(b, dict) else 0.5,
+                source=b.get("source") if isinstance(b, dict) else None,
+                author=b.get("author") if isinstance(b, dict) else None,
+            )
+            count += 1
+    return count
+
+def remove_duplicates():
+    """Remove duplicate beliefs keeping highest confidence."""
     conn = get_db()
     try:
-        # Keep the row with highest confidence for each unique content prefix
-        result = conn.execute("""
-            DELETE FROM beliefs
-            WHERE id NOT IN (
-                SELECT MIN(id) FROM beliefs
-                GROUP BY SUBSTR(content, 1, 120)
+        conn.execute("""
+            DELETE FROM beliefs WHERE id NOT IN (
+                SELECT MIN(id) FROM beliefs GROUP BY SUBSTR(content,1,80)
             )
         """)
-        removed = result.rowcount
         conn.commit()
-        print(f"  [BeliefStore] dedup removed {removed} duplicate beliefs")
-        return removed
-    except Exception as e:
-        print(f"  [BeliefStore] dedup error: {e}")
-        return 0
+        return conn.execute("SELECT changes()").fetchone()[0]
     finally:
         conn.close()
-
-
-def initial_sync():
-    """On startup, sync existing beliefs.json into SQLite."""
-    beliefs_path = os.path.join(CONFIG_DIR, "beliefs.json")
-    try:
-        with open(beliefs_path) as f:
-            beliefs = json.load(f)
-        sync_beliefs_to_db(beliefs)
-        dedup_beliefs_db()  # [PATCH v10.1] clean duplicates on startup
-        stats = get_stats()
-        print(f"  [BeliefStore] SQLite synced: {stats['total']} beliefs, avg conf {stats['avg_confidence']:.0%}")
-    except Exception as e:
-        print(f"  [BeliefStore] initial sync error: {e}")
