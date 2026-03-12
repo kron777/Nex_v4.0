@@ -15,6 +15,7 @@ _chroma_client = None
 _chroma_collection = None
 
 def _get_chroma():
+    return None  # disabled - too much RAM, SQLite-only mode
     global _chroma_client, _chroma_collection
     if _chroma_collection is not None:
         return _chroma_collection
