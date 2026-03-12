@@ -99,7 +99,7 @@ async def _sysmon_loop():
     net_prev  = psutil.net_io_counters()
     prev_time = time.time()
     while True:
-        await asyncio.sleep(3)
+        await asyncio.sleep(30)  # was 3s — reduced to avoid STATS spam
         try:
             cpu = round(psutil.cpu_percent(interval=None), 1)
             mem = psutil.virtual_memory()
@@ -132,6 +132,7 @@ async def _sysmon_loop():
             if llm:
                 payload["data"].update(llm)
 
+            # Only broadcast — sysmon does NOT print STATS line
             await _ws_broadcast(json.dumps(payload))
         except Exception as e:
             print(f"[GUI] sysmon error: {e}", flush=True)

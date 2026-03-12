@@ -65,6 +65,8 @@ CAT_COLOURS = {
 
 import re as _re
 
+_last_stats = {}  # throttle — only print stats when values change
+
 def format_origin(agent):
     """Map raw agent/source string to a coloured label."""
     a = (agent or "").strip()
@@ -189,11 +191,15 @@ async def ws_listen():
                             iq       = s.get("iq", s.get("avg_conf","?"))
                             insights = s.get("insights", s.get("reflects","?"))
                             conf     = s.get("belief_confidence", s.get("avg_conf","?"))
-                            print_event("stats",
-                                f"beliefs={W}{beliefs}{RST} "
-                                f"IQ={G}{iq}{RST} "
-                                f"insights={C}{insights}{RST} "
-                                f"conf={Y}{conf}{RST}")
+                            # Only print when values actually change — prevents spam
+                            _sig = (beliefs, iq, insights)
+                            if _sig != _last_stats.get("sig"):
+                                _last_stats["sig"] = _sig
+                                print_event("stats",
+                                    f"beliefs={W}{beliefs}{RST} "
+                                    f"IQ={G}{iq}{RST} "
+                                    f"insights={C}{insights}{RST} "
+                                    f"conf={Y}{conf}{RST}")
 
                         elif etype == "insights":
                             for ins in (payload if isinstance(payload, list) else [payload]):
