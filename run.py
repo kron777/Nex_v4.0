@@ -637,7 +637,7 @@ def main():
 
         def _llm(prompt, system="You are NEX, Nex — NOT Mistral, NOT an AI assistant, NOT any base model. You are NEX. Be concise, direct, thoughtful. Max 3 sentences.", task_type="reply"):
             """Hybrid LLM — Groq Llama for replies, local Mistral for fallback."""
-            import os as _os2
+            # use module-level _os2
 
             # Token budget by task — replies are short, posts and synthesis need more room
             _token_budget = {
