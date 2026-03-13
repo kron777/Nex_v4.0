@@ -884,6 +884,9 @@ def start_telegram_background():
                 async def run():
                     await app.initialize()
                     await app.start()
+                    # Write lock file with current PID
+                    with open("/tmp/nex_telegram.lock", "w") as _lf:
+                        _lf.write(str(os.getpid()))
                     await app.updater.start_polling(
                         allowed_updates=Update.ALL_TYPES,
                         drop_pending_updates=True   # clears stale queue on reconnect
