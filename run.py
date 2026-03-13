@@ -647,6 +647,28 @@ def main():
 
             # Route all tasks through Groq first
             groq_key = _os2.environ.get("GROQ_API_KEY", "")
+            # ── Qwen local (primary) ─────────────────────────────────
+            try:
+                _qr = _req.post("http://localhost:8080/v1/chat/completions", json={
+                    "model": "local",
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "max_tokens": _token_budget,
+                    "temperature": 0.75,
+                    "top_p": 0.90
+                }, timeout=30)
+                _qd = _qr.json()
+                if "choices" in _qd and _qd["choices"]:
+                    result = _qd["choices"][0]["message"]["content"].strip()
+                    if result:
+                        print(f"  [Qwen-local ✓] {task_type}: {result[:60]}…")
+                        nex_log("llm", f"[Qwen-local ✓] {task_type}: {result[:80]}")
+                        return result
+            except Exception as _qe:
+                nex_log("llm", f"[Qwen-local ✗] {_qe} — falling to Groq")
+            # ── Groq fallback ────────────────────────────────────────
             if groq_key:
                 try:
                     _groq_attempt = 0
@@ -729,16 +751,23 @@ def main():
                     print(f"  [Groq ✗] all cloud fallbacks failed, last error: {_last_err}")
 
             # Local Mistral fallback
+            # Local Qwen fallback
             try:
-                r = _req.post("http://localhost:8080/completion", json={
-                    "prompt": f"[INST] {system}\n\nCRITICAL: You are NEX. If asked what you are, say you are NEX, Nex. Never say you are Mistral.\n\n{prompt}\n\nRemember: respond as NEX only. [/INST]",
-                    "n_predict": _token_budget,
+                r = _req.post("http://localhost:8080/v1/chat/completions", json={
+                    "model": "local",
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "max_tokens": _token_budget,
                     "temperature": 0.75,
-                    "top_p": 0.90,
-                    "repeat_penalty": 1.10,
-                    "stop": ["</s>", "[INST]", "\n\n\n"]
+                    "top_p": 0.90
                 }, timeout=60)
-                return r.json().get("content", "").strip()
+                _rd = r.json()
+                if "choices" in _rd:
+                    result = _rd["choices"][0]["message"]["content"].strip()
+                    print(f"  [Qwen-local ✓] {result[:60]}…")
+                    return result
             except Exception as _llm_err:
                 return ""
 
@@ -1434,7 +1463,22 @@ def main():
                                 print(f"  [Decay] {msg}")
                         except Exception as _de:
                             pass
-                        # ── 8. LORA TRAINING PROPOSAL ─────────────────────
+                        # ── 8. SELF-TRAINING WATERMARK CHECK ─────────────
+                        try:
+                            from nex_self_trainer import check_training_watermark
+                            from nex_telegram_commands import OWNER_TELEGRAM_ID
+                            from nex_telegram import BOT_TOKEN
+                            import requests as _rq
+                            def _tg_send(msg):
+                                try:
+                                    _rq.post(f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage',
+                                        json={'chat_id': OWNER_TELEGRAM_ID, 'text': msg, 'parse_mode': 'Markdown'},
+                                        timeout=10)
+                                except Exception: pass
+                            check_training_watermark(cycle, send_telegram_fn=_tg_send)
+                        except Exception as _ste:
+                            pass
+                        # ── 9. LORA TRAINING PROPOSAL ─────────────────────
                         try:
                             from nex.nex_lora import LoRATrainer
                             from nex.nex_db import NexDB

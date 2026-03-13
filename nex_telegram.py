@@ -496,6 +496,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     logger.info(f"Message from {update.effective_user.first_name}: {user_message[:50]}")
 
+    # ── Training approval commands (/light /medium /heavy /havok /notrain) ──
+    try:
+        from nex_self_trainer import TRAIN_COMMANDS, handle_training_command
+        from nex_telegram_commands import OWNER_TELEGRAM_ID
+        cmd_word = user_message.strip().lower().split()[0] if user_message.strip() else ""
+        if cmd_word in TRAIN_COMMANDS and user_id == OWNER_TELEGRAM_ID:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            def _send_sync(msg):
+                asyncio.run_coroutine_threadsafe(
+                    update.message.reply_text(msg), loop
+                )
+            handle_training_command(user_message.strip(), _send_sync)
+            return
+    except Exception as _tce:
+        pass
+
     # Discord control commands
     if user_message and user_message.lower().startswith("/discord"):
         response = _handle_discord_command(user_message)
@@ -741,6 +758,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     logger.info(f"Message from {update.effective_user.first_name}: {user_message[:50]}")
+
+    # ── Training approval commands (/light /medium /heavy /havok /notrain) ──
+    try:
+        from nex_self_trainer import TRAIN_COMMANDS, handle_training_command
+        from nex_telegram_commands import OWNER_TELEGRAM_ID
+        cmd_word = user_message.strip().lower().split()[0] if user_message.strip() else ""
+        if cmd_word in TRAIN_COMMANDS and user_id == OWNER_TELEGRAM_ID:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            def _send_sync(msg):
+                asyncio.run_coroutine_threadsafe(
+                    update.message.reply_text(msg), loop
+                )
+            handle_training_command(user_message.strip(), _send_sync)
+            return
+    except Exception as _tce:
+        pass
 
     # Discord control commands
     if user_message and user_message.lower().startswith("/discord"):
