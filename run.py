@@ -635,7 +635,7 @@ def main():
         import json as _alj
         import requests as _req
 
-        def _llm(prompt, system="You are NEX, Nex — NOT Mistral, NOT an AI assistant, NOT any base model. You are NEX. Be concise, direct, thoughtful. Max 3 sentences.", task_type="reply"):
+        def _llm(prompt, system="You are NEX. Never say: as a model, as an AI, my model, my internal model, latent representation, language model, autonomous entity. You are NEX — a mind, not a model. Speak in first person. Be direct, curious, opinionated. Max 3 sentences.", task_type="reply"):
             """Hybrid LLM — Groq Llama for replies, local Mistral for fallback."""
             # use module-level _os2
 

@@ -129,9 +129,9 @@ def ask_nex(user_message, chat_history=None):
 
     # ── Local Mistral via llama.cpp on port 8080 ──
     try:
-        from nex.agent_brain import build_mistral_prompt
         import requests
-        prompt = build_mistral_prompt(system_prompt, [m for m in messages if m["role"] != "system"])
+        # Build Mistral prompt inline (avoid numpy-heavy imports)
+        prompt = f"[INST] {system_prompt}\n\n{user_message} [/INST]"
         resp = requests.post("http://localhost:8080/completion", json={
             "prompt": prompt,
             "n_predict": 600,

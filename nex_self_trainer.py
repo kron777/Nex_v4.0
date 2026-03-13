@@ -334,6 +334,7 @@ def handle_training_command(text: str, send_fn) -> bool:
         name=f"nex-train-{intensity}",
     )
     t.start()
+    t.join()
     return True
 
 
@@ -426,17 +427,10 @@ def _do_training(intensity: str, send_fn):
     model_path = str(checkpoints[-1]) if checkpoints else BASE_MODEL
     _log(f"Loading model from: {model_path}")
 
-    # ── 4-bit quantisation to fit in 8GB VRAM ────────────────────────────────
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16,
-        bnb_4bit_use_double_quant=True,
-    )
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
-        quantization_config=bnb_config,
-        device_map="auto",
+        dtype=torch.float16,
+        device_map={"":torch.device("cpu")},
         trust_remote_code=True,
     )
 
@@ -449,6 +443,9 @@ def _do_training(intensity: str, send_fn):
         target_modules=["q_proj", "v_proj"],
         bias="none",
     )
+    for name, param in model.named_parameters():
+        if param.device.type == 'cpu':
+            param.requires_grad_(False)
     model = get_peft_model(model, lora_config)
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     _log(f"Trainable params: {trainable:,}")
@@ -476,6 +473,7 @@ def _do_training(intensity: str, send_fn):
         packing=False,
     )
 
+    model.gradient_checkpointing_enable()
     trainer = SFTTrainer(
         model=model,
         args=training_cfg,
@@ -501,7 +499,7 @@ def _merge_and_export(adapter_path: str, send_fn):
         from peft import PeftModel
 
         _log("Merging LoRA adapter into base model...")
-        base  = AutoModelForCausalLM.from_pretrained(BASE_MODEL, torch_dtype=torch.float16, device_map="cpu")
+        base  = AutoModelForCausalLM.from_pretrained(BASE_MODEL, dtype=torch.float16, device_map="cpu")
         model = PeftModel.from_pretrained(base, adapter_path)
         merged = model.merge_and_unload()
 

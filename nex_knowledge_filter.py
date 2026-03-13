@@ -12,7 +12,7 @@ def run_filter_cycle(cycle: int = 0) -> int:
         conn = sqlite3.connect(DB_PATH)
         cur = conn.cursor()
         # Prune low confidence
-        cur.execute("DELETE FROM beliefs WHERE confidence < 0.15")
+        cur.execute("DELETE FROM beliefs WHERE confidence < 0.40")
         pruned = cur.rowcount
         # Cap 300 per topic
         cur.execute("SELECT DISTINCT topic FROM beliefs")
@@ -27,7 +27,7 @@ def run_filter_cycle(cycle: int = 0) -> int:
                     capped += 1
         # Decay stale beliefs
         cutoff = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 30*86400))
-        cur.execute("UPDATE beliefs SET confidence=MIN(confidence,0.45) WHERE timestamp < ? AND confidence > 0.45", (cutoff,))
+        cur.execute("UPDATE beliefs SET confidence=MIN(confidence,0.85) WHERE timestamp < ? AND confidence > 0.45", (cutoff,))
         decayed = cur.rowcount
         conn.commit()
         conn.close()
