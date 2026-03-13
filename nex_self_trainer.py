@@ -458,7 +458,7 @@ def _do_training(intensity: str, send_fn):
     output = Path(TRAINED) / f"run_{intensity}_{int(time.time())}"
     training_cfg = SFTConfig(
         output_dir=str(output),
-        max_seq_length=512,
+        
         num_train_epochs=cfg["epochs"],
         per_device_train_batch_size=cfg["batch_size"],
         gradient_accumulation_steps=cfg["grad_accum"],
@@ -467,18 +467,20 @@ def _do_training(intensity: str, send_fn):
         logging_steps=20,
         save_strategy="epoch",
         save_total_limit=2,
-        warmup_ratio=0.05,
+        warmup_steps=10,
         lr_scheduler_type="cosine",
         report_to="none",
         dataloader_num_workers=0,
         dataset_text_field="text",
+        max_length=512,
+        packing=False,
     )
 
     trainer = SFTTrainer(
         model=model,
         args=training_cfg,
         train_dataset=dataset,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
     )
 
     _log("Training started...")
