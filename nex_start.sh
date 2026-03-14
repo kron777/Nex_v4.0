@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-cd ~/Desktop/nex
+cd ~
 
-# ── Mount fixes (noexec drives) ──────────────────────────────
+# ── Mount fixes ──────────────────────────────────────────────
 sudo mount -o remount,exec /media/rr/NEX 2>/dev/null
-sudo mount -o remount,exec /media/rr/4TBDATA 2>/dev/null
 
 # ── Activate venv ────────────────────────────────────────────
-source venv/bin/activate
+source ~/Desktop/nex/venv/bin/activate
 
 # ── Kill all stale processes ─────────────────────────────────
 pkill -9 -f "llama-server" 2>/dev/null
@@ -16,12 +15,11 @@ pkill -9 -f "nex_debug" 2>/dev/null
 sleep 2
 
 # ── Start Mistral 7B ─────────────────────────────────────────
-LLAMA_BIN="/media/rr/4TBDATA/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/llama.cpp/build-rocm/bin/llama-server"
 MODEL="/media/rr/4TBDATA/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf"
 
 echo "  [NEX] Starting Mistral 7B..."
 HSA_OVERRIDE_GFX_VERSION=10.3.0 HIP_VISIBLE_DEVICES=0 \
-  "$LLAMA_BIN" --model "$MODEL" \
+  ~/llama-bin/llama-server --model "$MODEL" \
   --port 8080 --n-gpu-layers 28 --ctx-size 2048 \
   >> /tmp/llama_server.log 2>&1 &
 
@@ -39,4 +37,5 @@ done
 > /tmp/nex_brain.log
 
 # ── Launch NEX brain ─────────────────────────────────────────
+cd ~/Desktop/nex
 python3 run.py --no-server 2>&1 | tee /tmp/nex_brain.log
