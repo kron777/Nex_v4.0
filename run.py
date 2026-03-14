@@ -437,7 +437,6 @@ def main():
         _t.sleep(3)
         if _dc_thread.is_alive():
             print("  \033[92m🎮 Discord: Nex_v4#9613 ONLINE\033[0m")
-        else:
             print("  \033[91m🎮 Discord: thread died\033[0m")
     except Exception as _de:
         print(f"  \033[91m🎮 Discord ERROR: {_de}\033[0m")
@@ -455,9 +454,6 @@ def main():
             print("  \033[91m▶️\033[0m  \033[92mYouTube: auto-learn ACTIVE (every 2 cycles — gap-targeted)\033[0m")
             try: _db_sync()
             except Exception as _dbe: print(f"  [BeliefStore] {_dbe}")
-        else:
-            print("  \033[91m📡 Telegram: thread died — restarting\033[0m")
-            _tg_thread = start_telegram_background()
     except Exception as e:
         print(f"  \033[91m📡 Telegram ERROR: {e}\033[0m")
 
