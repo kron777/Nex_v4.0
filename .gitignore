@@ -40,3 +40,5 @@ Thumbs.db
 # Empty files
 what
 discord_config.json
+venv_new/
+*.so
