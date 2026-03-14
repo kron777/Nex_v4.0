@@ -25,5 +25,4 @@ for i in $(seq 1 30); do
   sleep 2
 done
 
-python3 nex_telegram.py >> /tmp/nex_telegram.log 2>&1 &
 python3 run.py --no-server 2>&1 | tee /tmp/nex_brain.log
