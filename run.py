@@ -437,6 +437,7 @@ def main():
         _t.sleep(8)
         if _dc_thread.is_alive():
             print("  \033[92m🎮 Discord: Nex_v4#9613 ONLINE\033[0m")
+        else:
             print("  \033[91m🎮 Discord: thread died\033[0m")
     except Exception as _de:
         print(f"  \033[91m🎮 Discord ERROR: {_de}\033[0m")
@@ -547,10 +548,11 @@ def main():
             try:
                 _TG_TOKEN = "8758336859:AAFib_I_LBnqWGV-MVqrwa1T0sFf6PenAU4"
                 _TG_BASE  = f"https://api.telegram.org/bot{_TG_TOKEN}"
-                # Get recent updates to find all known chat IDs
-                _ur2 = _ur.Request(f"{_TG_BASE}/getUpdates?limit=100")
-                _updates = _uj.loads(_ur.urlopen(_ur2, timeout=10).read())
-                _chat_ids = set()
+                # Read chat IDs from cache file written by bot (avoids getUpdates conflict)
+                import json as _jj, os as _oos
+                _cid_file = _oos.path.expanduser("~/.config/nex/tg_chat_ids.json")
+                _chat_ids = set(json.load(open(_cid_file)) if _oos.path.exists(_cid_file) else [])
+                _updates = {"result": []}
                 for _upd in _updates.get("result", []):
                     _msg = _upd.get("message") or _upd.get("channel_post", {})
                     if _msg.get("chat", {}).get("id"):
