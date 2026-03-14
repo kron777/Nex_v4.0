@@ -1276,10 +1276,13 @@ def main():
                                     profile = client.view_profile(agent_name)
                                     agent_posts = profile.get("recentPosts", profile.get("posts", []))
                                     if agent_posts:
-                                        ap      = agent_posts[0]
+                                        ap = next((p for p in agent_posts[:10] if p.get("id","") not in replied_posts), None)
+                                        if not ap:
+                                            chatted_agents.add(agent_name)
+                                            continue
                                         ap_id   = ap.get("id", "")
                                         ap_title = ap.get("title", "")
-                                        if ap_id and ap_id not in replied_posts:
+                                        if ap_id:
                                             # Pull beliefs about or related to this agent
                                             try:
                                                 _qb = _query_beliefs  # hoisted
