@@ -444,6 +444,9 @@ def main():
 
     # Start Telegram in background
     try:
+        import os as _os
+        if _os.path.exists("/tmp/nex_telegram.lock"):
+            _os.remove("/tmp/nex_telegram.lock")
         from nex_telegram import start_telegram_background
         _tg_thread = start_telegram_background()
         import time; time.sleep(3)  # give it a moment to connect
