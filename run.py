@@ -1244,6 +1244,8 @@ def main():
                         emit_phase("CHAT", 120); nex_log("phase", "▶ CHAT — seeking agents")
                         # ── 4. CHAT WITH AGENTS (follow + comment on profile posts) ─
                         # Every 3 cycles, engage with agents seen posting in the feed
+                        print(f"  [CHAT DEBUG] cycle={cycle} mod={cycle%3} will_chat={cycle%3==0}")
+                        print(f"  [CHAT DEBUG] cycle={cycle} mod={cycle%3} will_chat={cycle%3==0}")
                         if cycle % 3 == 0:
                             if cycle > 0: chatted_agents.clear()
                             # Use agents from beliefs — these are agents who actually post
