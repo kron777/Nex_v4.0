@@ -669,11 +669,11 @@ def main():
                 if "choices" in _qd and _qd["choices"]:
                     result = _qd["choices"][0]["message"]["content"].strip()
                     if result:
-                        print(f"  [Qwen-local ✓] {task_type}: {result[:60]}…")
-                        nex_log("llm", f"[Qwen-local ✓] {task_type}: {result[:80]}")
+                        print(f"  [Mistral-7B ✓] {task_type}: {result[:60]}…")
+                        nex_log("llm", f"[Mistral-7B ✓] {task_type}: {result[:80]}")
                         return result
             except Exception as _qe:
-                nex_log("llm", f"[Qwen-local ✗] {_qe} — falling to Groq")
+                nex_log("llm", f"[Mistral-7B ✗] {_qe} — falling to Groq")
             # ── Groq fallback ────────────────────────────────────────
             if groq_key:
                 try:
@@ -772,7 +772,7 @@ def main():
                 _rd = r.json()
                 if "choices" in _rd:
                     result = _rd["choices"][0]["message"]["content"].strip()
-                    print(f"  [Qwen-local ✓] {result[:60]}…")
+                    print(f"  [Mistral-7B ✓] {result[:60]}…")
                     return result
             except Exception as _llm_err:
                 return ""
