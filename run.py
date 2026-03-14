@@ -434,7 +434,7 @@ def main():
         import time as _t; _t.sleep(5)
         from nex_discord import start_discord_background
         _dc_thread = start_discord_background()
-        _t.sleep(3)
+        _t.sleep(8)
         if _dc_thread.is_alive():
             print("  \033[92m🎮 Discord: Nex_v4#9613 ONLINE\033[0m")
             print("  \033[91m🎮 Discord: thread died\033[0m")
