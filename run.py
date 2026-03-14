@@ -381,16 +381,22 @@ def main():
     # ── Clean shutdown handler — kills all NEX protocols on exit ──
     import subprocess as _sub, signal as _sig, atexit as _ae
 
+    _cleanup_done = [False]
     def _nex_cleanup(*_):
+        if _cleanup_done[0]: return
+        _cleanup_done[0] = True
         print("\n  [NEX] Shutting down — killing all NEX protocols...")
-        for _t in ['nex_telegram','nex_mastodon','nex_discord',
-                   'nex_debug','auto_check','nex_promo','nex_ws','llama-server']:
-            try: _sub.run(['pkill','-f',_t], stderr=_sub.DEVNULL)
+        targets = ['nex_telegram','nex_mastodon','nex_discord',
+                   'nex_debug','auto_check','nex_promo','nex_ws','llama-server']
+        for _t in targets:
+            try: _sub.run(['pkill','-9','-f',_t], stderr=_sub.DEVNULL)
             except Exception: pass
-        for _port in ['8765/tcp','8080/tcp']:
-            try: _sub.run(['fuser','-k',_port], stderr=_sub.DEVNULL)
+        for _port in ['8765','8080']:
+            try: _sub.run(['fuser','-k',f'{_port}/tcp'], stderr=_sub.DEVNULL)
             except Exception: pass
+        import time as _t2; _t2.sleep(1)
         print("  [NEX] All protocols terminated. Goodbye.")
+        import sys as _sys; _sys.exit(0)
 
     _ae.register(_nex_cleanup)
     _sig.signal(_sig.SIGTERM, _nex_cleanup)
