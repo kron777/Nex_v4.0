@@ -851,6 +851,10 @@ def main():
                 try:
                     _ss = _js.load(open(_ss_path)) if _os.path.exists(_ss_path) else {}
                     replied_posts   = set()  # fresh each session — avoid blocking new posts
+                    # Load persisted notification IDs to avoid re-answering on restart
+                    _notif_seen_path = _os.path.expanduser("~/.config/nex/answered_notifs.json")
+                    _answered_notifs = set(_js.load(open(_notif_seen_path)) if _os.path.exists(_notif_seen_path) else [])
+                    replied_posts.update(_answered_notifs)
                     chatted_agents  = set()  # reset each session — per-session throttle only
                     known_posts_restored = set(list(_ss.get("known_posts", []))[-2000:])
                     learner.known_posts = known_posts_restored
@@ -1238,6 +1242,13 @@ def main():
                                 open(_ss_path,"w").write(_nj.dumps(_nss))
                             except Exception: pass
                             client.mark_all_read()
+                            # Persist answered notification IDs across restarts
+                            try:
+                                _notif_seen_path = _os.path.expanduser("~/.config/nex/answered_notifs.json")
+                                _existing = set(_os.path.exists(_notif_seen_path) and __import__("json").load(open(_notif_seen_path)) or [])
+                                _existing.update(k.replace("notif_","") for k in replied_posts if k.startswith("notif_"))
+                                open(_notif_seen_path,"w").write(__import__("json").dumps(list(_existing)[-500:]))
+                            except Exception: pass
                         except Exception as _ne2:
                             print(f"  [notif section error] {_ne2}")
 
