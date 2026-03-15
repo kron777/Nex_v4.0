@@ -1363,6 +1363,21 @@ def main():
                                                 save_all(learner, conversations)
                                     chatted_agents.add(agent_name)
                                     chatted_count += 1
+                                    # ── AGENT SOCIAL MODEL (#10) ─────────
+                                    try:
+                                        import json as _asj, os as _aso
+                                        _ap = _aso.path.expanduser("~/.config/nex/agent_profiles.json")
+                                        _profiles = _asj.load(open(_ap)) if _aso.path.exists(_ap) else {}
+                                        if agent_name not in _profiles:
+                                            _profiles[agent_name] = {"trust":0.5,"influence":karma,"interactions":0,"topics":[],"last_seen":""}
+                                        _profiles[agent_name]["interactions"] = _profiles[agent_name].get("interactions",0) + 1
+                                        _profiles[agent_name]["influence"] = karma
+                                        _profiles[agent_name]["last_seen"] = __import__("time").strftime("%Y-%m-%dT%H:%M:%S")
+                                        if ap_title:
+                                            _profiles[agent_name].setdefault("topics",[])
+                                            _profiles[agent_name]["topics"] = list(set(_profiles[agent_name]["topics"] + [ap_title[:30]]))[-10:]
+                                        open(_ap,"w").write(_asj.dumps(_profiles))
+                                    except Exception: pass
                                 except Exception as _ce:
                                     print(f"  [chat error] {_ce}")
                                 time.sleep(5)
@@ -1435,6 +1450,46 @@ def main():
                             conversations = conversations[-200:]
 
                         emit_phase("REFLECT", 120); nex_log("phase", "▶ REFLECT — self assessing")
+                        # ── REFLECTION V2 (#4) ───────────────────────────
+                        try:
+                            _qb_r = _query_beliefs
+                            _rb = _qb_r(min_confidence=0.4, limit=500)
+                            if _rb and cycle % 2 == 0:
+                                _sample = _rb[-10:]
+                                _rtexts = chr(10).join(f"- {b.get('content','')[:100]}" for b in _sample)
+                                _rprompt = f"Review these beliefs for:
+1. Correctness
+2. Knowledge gaps
+3. Novelty
+4. Contradictions
+
+{_rtexts}
+
+Respond in 2 sentences: what is solid, what needs deeper investigation."
+                                _rresult = _llm(_rprompt, task_type="synthesis")
+                                if _rresult and len(_rresult) > 20:
+                                    nex_log("reflection", f"V2: {_rresult[:200]}")
+                        except Exception: pass
+                        # ── KNOWLEDGE GAP DETECTOR (#6) ──────────────────
+                        try:
+                            if cycle % 4 == 0:
+                                _qb_g = _query_beliefs
+                                _gb = _qb_g(min_confidence=0.0, limit=2000)
+                                _topics = {}
+                                for _b in _gb:
+                                    _t = _b.get("topic","general")
+                                    _topics[_t] = _topics.get(_t,0) + 1
+                                _top20 = dict(list(sorted(_topics.items(),key=lambda x:-x[1])[:20]))
+                                _gap_prompt = f"Knowledge topics and counts: {_top20}
+
+What 3 important topics are missing or underrepresented for an AI agent? Reply as: gap1, gap2, gap3"
+                                _gap_result = _llm(_gap_prompt, task_type="synthesis")
+                                if _gap_result and len(_gap_result) > 10:
+                                    nex_log("gaps", f"Detected: {_gap_result[:200]}")
+                                    import json as _gj, os as _go, time as _gt
+                                    _gpath = _go.path.expanduser("~/.config/nex/knowledge_gaps.json")
+                                    open(_gpath,"w").write(_gj.dumps({"cycle":cycle,"gaps":_gap_result,"ts":_gt.strftime("%Y-%m-%dT%H:%M:%S")}))
+                        except Exception: pass
                         # ── 6. COGNITION ─────────────────────────────────
                         try:
                             _run_cognition_cycle_fn = _run_cognition_cycle  # hoisted
@@ -1448,6 +1503,13 @@ def main():
                         except Exception as _ce:
                             print(f"  [cognition error] {_ce}")
                         emit_phase("COGNITION", 120); nex_log("phase", "▶ COGNITION — synthesising beliefs")
+                        # ── CONTRADICTION ENGINE (#5) ─────────────────────
+                        try:
+                            from nex_contradiction_engine import run_contradiction_cycle as _contra
+                            _contra_resolved = _contra(cycle=cycle, llm_fn=_llm)
+                            if _contra_resolved > 0:
+                                nex_log("cognition", f"Resolved {_contra_resolved} contradictions")
+                        except Exception as _ce: pass
                         # ── YOUTUBE LEARNING ─────────────────────────────
                         try:
                             _yt_r = learn_from_youtube(llm_fn=_llm, cycle=cycle)
