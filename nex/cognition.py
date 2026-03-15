@@ -912,6 +912,9 @@ def run_cognition_cycle(client, learner, conversations, cycle_num, llm_fn=None):
     beliefs = learner.belief_field
     insights = load_json(INSIGHTS_PATH, [])
 
+    # Log cycle immediately so we always see it
+    _dbg("cognition", f"cycle {cycle_num} — beliefs={len(beliefs)} insights={len(insights)}")
+
     # ── Fetch real karma from Moltbook /agents endpoint ──
     # The feed's author.karma is always 0 — must call agents API directly
     if cycle_num % 5 == 0 or not os.path.exists(AGENTS_PATH):
@@ -935,7 +938,6 @@ def run_cognition_cycle(client, learner, conversations, cycle_num, llm_fn=None):
                 save_json(AGENTS_PATH, learner.agent_karma)
 
     # ── Synthesis: every 3 cycles — [PATCH v10.1] was every 5
-    _dbg("cognition", f"cycle {cycle_num} — beliefs={len(beliefs)} insights={len(insights)}")
     if cycle_num % 3 == 0:
         insights, new_count = run_synthesis(min_beliefs=10, llm_fn=llm_fn)  # lowered from 15
         if new_count > 0:
