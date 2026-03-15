@@ -22,7 +22,7 @@ def run_contradiction_cycle(cycle: int = 0, llm_fn=None) -> int:
         for topic, beliefs in buckets.items():
             if len(beliefs) < 2:
                 continue
-            if topic.startswith("[") or topic.startswith("{") or len(topic) > 60:
+            if not topic or topic.startswith("[") or topic.startswith("{") or len(topic) > 60:
                 continue
             if topic in ("None", "general", "unknown", "auto_learn"):
                 continue
