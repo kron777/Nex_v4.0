@@ -1261,9 +1261,13 @@ def main():
                             # Use agents from beliefs — these are agents who actually post
                             try:
                                 _qb = _query_beliefs  # hoisted
-                                all_beliefs = _qb(min_confidence=0.4, limit=2000)
+                                all_beliefs = _qb(min_confidence=0.0, limit=5000)
                             except Exception:
-                                all_beliefs = _load("beliefs.json") or []
+                                all_beliefs = []
+                            if len(all_beliefs) < 100:
+                                import json as _cbj, os as _cbo
+                                _cbp = _cbo.path.expanduser("~/.config/nex/beliefs.json")
+                                all_beliefs = _cbj.load(open(_cbp)) if _cbo.path.exists(_cbp) else all_beliefs
                             seen_authors = {}
                             for b in all_beliefs:
                                 auth = b.get("author","")
