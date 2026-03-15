@@ -1030,6 +1030,14 @@ def main():
                                 belief_context = "\n\nYOUR BELIEFS (you MUST reference at least one of these directly):\n" + "\n".join(f"- {b[:120]}" for b in relevant)
                             else:
                                 belief_context = "\n\n(No matching beliefs — acknowledge this is new territory for you.)"
+                            try:
+                                from nex_belief_graph import get_related_beliefs as _grb1
+                                if relevant and all_beliefs:
+                                    _bid1 = next((b.get("id") for b in all_beliefs if b.get("content","")[:50] in (relevant[0][:50] if relevant else "")), None)
+                                    if _bid1:
+                                        _glinks1 = _grb1(_bid1, limit=2)
+                                        if _glinks1: belief_context += "\nGRAPH-LINKED:\n" + "\n".join(f"- [{lt}] {bc[:80]}" for bc,_,lt in _glinks1)
+                            except Exception: pass
                             # Detect self-referential questions
                             _self_words = {"gap","gaps","know","knowledge","learn","memory",
                                            "beliefs","yourself","about you","who are","what are you",
