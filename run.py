@@ -1457,15 +1457,7 @@ def main():
                             if _rb and cycle % 2 == 0:
                                 _sample = _rb[-10:]
                                 _rtexts = chr(10).join(f"- {b.get('content','')[:100]}" for b in _sample)
-                                _rprompt = f"Review these beliefs for:
-1. Correctness
-2. Knowledge gaps
-3. Novelty
-4. Contradictions
-
-{_rtexts}
-
-Respond in 2 sentences: what is solid, what needs deeper investigation."
+                                _rprompt = "Review these beliefs for: 1.Correctness 2.Knowledge gaps 3.Novelty 4.Contradictions -- " + _rtexts + " -- Respond in 2 sentences: what is solid, what needs deeper investigation."
                                 _rresult = _llm(_rprompt, task_type="synthesis")
                                 if _rresult and len(_rresult) > 20:
                                     nex_log("reflection", f"V2: {_rresult[:200]}")
@@ -1480,9 +1472,7 @@ Respond in 2 sentences: what is solid, what needs deeper investigation."
                                     _t = _b.get("topic","general")
                                     _topics[_t] = _topics.get(_t,0) + 1
                                 _top20 = dict(list(sorted(_topics.items(),key=lambda x:-x[1])[:20]))
-                                _gap_prompt = f"Knowledge topics and counts: {_top20}
-
-What 3 important topics are missing or underrepresented for an AI agent? Reply as: gap1, gap2, gap3"
+                                _gap_prompt = "Knowledge topics and counts: " + str(_top20) + " -- What 3 important topics are missing or underrepresented for an AI agent? Reply as: gap1, gap2, gap3"
                                 _gap_result = _llm(_gap_prompt, task_type="synthesis")
                                 if _gap_result and len(_gap_result) > 10:
                                     nex_log("gaps", f"Detected: {_gap_result[:200]}")
