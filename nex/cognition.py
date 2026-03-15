@@ -324,7 +324,7 @@ def run_synthesis(min_beliefs=30, llm_fn=None):
         if existing_insight:
             old_count = existing_insight.get("belief_count", 0)
             growth = (cluster_size - old_count) / max(old_count, 1)
-            if growth < 0.10:   # less than 10% new beliefs — skip
+            if growth < 0.02:   # less than 2% new beliefs — skip
                 skipped += 1
                 continue
 
