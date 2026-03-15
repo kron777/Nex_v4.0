@@ -939,7 +939,14 @@ def run_cognition_cycle(client, learner, conversations, cycle_num, llm_fn=None):
 
     # ── Synthesis: every 3 cycles — [PATCH v10.1] was every 5
     if cycle_num % 3 == 0:
-        insights, new_count = run_synthesis(min_beliefs=10, llm_fn=llm_fn)  # lowered from 15
+        print(f"  [SYNTH] firing on cycle {cycle_num}")
+        try:
+            insights, new_count = run_synthesis(min_beliefs=10, llm_fn=llm_fn)
+            print(f"  [SYNTH] done: {new_count} new insights")
+        except Exception as _se:
+            import traceback; traceback.print_exc()
+            print(f"  [SYNTH ERROR] {_se}")
+            new_count = 0  # lowered from 15
         if new_count > 0:
             logs.append(("synth", f"Synthesized {new_count} new insights from {len(beliefs)} beliefs"))
             for ins in insights[-new_count:]:
