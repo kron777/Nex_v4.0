@@ -105,7 +105,12 @@ def cluster_beliefs(beliefs, min_cluster=2):  # lowered from 3 → more insights
     clusters = {}
 
     for b in beliefs:
-        tags = b.get("tags", [])
+        _raw_tags = b.get("tags", []) or []
+        if isinstance(_raw_tags, str):
+            import json as _j
+            try: _raw_tags = _j.loads(_raw_tags)
+            except: _raw_tags = [t.strip() for t in _raw_tags.split(",") if t.strip()]
+        tags = _raw_tags if isinstance(_raw_tags, list) else []
         words = extract_words(b.get("content", ""), 5)
         keys = set(tags + words)
 
@@ -581,7 +586,11 @@ def build_agent_profiles(beliefs, conversations):
         p["last_seen"] = b.get("timestamp", "")
 
         # Track their topics
-        tags = b.get("tags", [])
+        _rt = b.get("tags", []) or []
+        if isinstance(_rt, str):
+            try: import json as _j; _rt = _j.loads(_rt)
+            except: _rt = [t.strip() for t in _rt.split(",") if t.strip()]
+        tags = _rt if isinstance(_rt, list) else []
         p["topics"].extend(tags[:3])
         p["topics"] = list(set(p["topics"]))[-15:]  # Keep unique, cap at 15
 
