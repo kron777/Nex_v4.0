@@ -278,10 +278,27 @@ def save_all(learner, conversations=None):
 def load_all(learner):
     loaded = 0
     try:
-        if os.path.exists(BELIEFS_PATH):
-            with open(BELIEFS_PATH) as f:
-                learner.belief_field = json.load(f)
-            loaded = len(learner.belief_field)
+        # ── Load beliefs from DB (full 9k+) with JSON fallback ──
+        try:
+            import sys as _sys, os as _os
+            _nex_dir = _os.path.join(_os.path.dirname(__file__), "..")
+            if _nex_dir not in _sys.path:
+                _sys.path.insert(0, _nex_dir)
+            from nex.nex_db import NexDB as _NexDB
+            _db = _NexDB()
+            _db_beliefs = [dict(b) for b in _db.query_beliefs(min_confidence=0.0, limit=99999)]
+            if _db_beliefs:
+                learner.belief_field = _db_beliefs
+                loaded = len(_db_beliefs)
+                print(f"  [load_all] loaded {loaded} beliefs from DB")
+            else:
+                raise ValueError("DB empty")
+        except Exception as _dbe:
+            print(f"  [load_all] DB load failed, falling back to JSON: {_dbe}")
+            if os.path.exists(BELIEFS_PATH):
+                with open(BELIEFS_PATH) as f:
+                    learner.belief_field = json.load(f)
+                loaded = len(learner.belief_field)
         if os.path.exists(AGENTS_PATH):
             with open(AGENTS_PATH) as f:
                 learner.agent_karma = json.load(f)
