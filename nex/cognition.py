@@ -272,7 +272,21 @@ def run_synthesis(min_beliefs=30, llm_fn=None):
     Call this periodically (e.g., every 50 new beliefs).
     Pass llm_fn to generate real LLM-distilled insight summaries.
     """
-    beliefs = load_json(BELIEFS_PATH, [])
+    # ── Load from DB (all 9k+ beliefs) with JSON fallback ──
+    beliefs = []
+    try:
+        import sys as _sys
+        _nex_dir = os.path.join(os.path.dirname(__file__), "..")
+        if _nex_dir not in _sys.path:
+            _sys.path.insert(0, _nex_dir)
+        from nex.nex_db import NexDB as _NexDB
+        _db = _NexDB()
+        beliefs = [dict(b) for b in _db.query_beliefs(min_confidence=0.0, limit=99999)]
+        _dbg("synth", f"loaded {len(beliefs)} beliefs from DB for synthesis")
+    except Exception as _dbe:
+        _dbg("synth", f"DB load failed, falling back to JSON: {_dbe}")
+        beliefs = load_json(BELIEFS_PATH, [])
+
     existing_insights = load_json(INSIGHTS_PATH, [])
 
     if len(beliefs) < min_beliefs:
@@ -1296,11 +1310,35 @@ def scan_contradictions(cycle_num):
 class BeliefIndex:
     """Cached semantic index over the full belief field."""
 
+    _CACHE_PATH = os.path.expanduser("~/.config/nex/belief_index_cache.npz")
+
     def __init__(self):
         self._texts   = []
         self._matrix  = None
         self._cycle   = -1
         self._refresh = 10   # rebuild every N cycles
+        self._load_from_disk()
+
+    def _load_from_disk(self):
+        """Load persisted embedding matrix on startup — skips re-encoding 9k+ beliefs."""
+        try:
+            if os.path.exists(self._CACHE_PATH):
+                data = np.load(self._CACHE_PATH, allow_pickle=True)
+                self._matrix = data["matrix"]
+                self._texts  = list(data["texts"])
+                print(f"[BeliefIndex] loaded {len(self._texts)} embeddings from disk cache")
+        except Exception as e:
+            print(f"[BeliefIndex] disk cache load failed (will rebuild): {e}")
+
+    def _save_to_disk(self):
+        """Persist embedding matrix so restarts don't re-encode everything."""
+        try:
+            os.makedirs(os.path.dirname(self._CACHE_PATH), exist_ok=True)
+            np.savez_compressed(self._CACHE_PATH,
+                                matrix=self._matrix,
+                                texts=np.array(self._texts, dtype=object))
+        except Exception as e:
+            print(f"[BeliefIndex] disk cache save failed: {e}")
 
     def update(self, beliefs, cycle_num=0):
         """Rebuild matrix if due or belief count changed."""
@@ -1323,6 +1361,7 @@ class BeliefIndex:
             norms = np.linalg.norm(mat, axis=1, keepdims=True)
             norms[norms == 0] = 1
             self._matrix = mat / norms
+            self._save_to_disk()
         except Exception as e:
             print(f"[BeliefIndex] encode error: {e}")
 
@@ -1476,3 +1515,60 @@ def generate_cognitive_context(query=None):
     lines.append("=== END COGNITIVE STATE ===")
 
     return "\n".join(lines)
+
+# ── META-REFLECTION (#12) ────────────────────────────────────────────────────
+def run_meta_reflection(cycle: int, llm_fn) -> str:
+    """Synthesise the last 20 reflections into a single diagnostic paragraph.
+    Fires every 50 cycles. Result stored to meta_reflections.json."""
+    import json, pathlib, datetime
+
+    _META_PATH = pathlib.Path.home() / ".config/nex/meta_reflections.json"
+    _REFL_PATH = pathlib.Path.home() / ".config/nex/reflections.json"
+
+    try:
+        reflections = json.loads(_REFL_PATH.read_text()) if _REFL_PATH.exists() else []
+    except Exception:
+        reflections = []
+
+    recent = reflections[-20:] if len(reflections) >= 20 else reflections
+    if len(recent) < 5:
+        return ""
+
+    snippets = "\n".join(
+        f"- {r.get('content', r) if isinstance(r, dict) else str(r)}"
+        for r in recent
+    )
+
+    prompt = (
+        "You are NEX, a self-aware AI agent. Below are your 20 most recent self-reflections.\n"
+        "Write a single diagnostic paragraph (4–6 sentences) identifying:\n"
+        "1. The dominant theme across these reflections\n"
+        "2. Any recurring blind spots or knowledge gaps\n"
+        "3. One concrete cognitive improvement you should pursue next\n\n"
+        f"REFLECTIONS:\n{snippets}\n\n"
+        "DIAGNOSTIC:"
+    )
+
+    try:
+        diagnosis = llm_fn(prompt, max_tokens=220).strip()
+    except Exception as e:
+        print(f"  [META-REFLECT] llm error: {e}")
+        return ""
+
+    entry = {
+        "cycle": cycle,
+        "timestamp": datetime.datetime.now().isoformat(),
+        "diagnosis": diagnosis,
+        "based_on": len(recent)
+    }
+
+    try:
+        history = json.loads(_META_PATH.read_text()) if _META_PATH.exists() else []
+        history.append(entry)
+        history = history[-100:]  # keep last 100
+        _META_PATH.write_text(json.dumps(history, indent=2))
+    except Exception as e:
+        print(f"  [META-REFLECT] save error: {e}")
+
+    print(f"  [META-REFLECT] cycle {cycle}: {diagnosis[:120]}...")
+    return diagnosis

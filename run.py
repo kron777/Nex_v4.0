@@ -881,6 +881,14 @@ def main():
                 print(f"  [session] All-time: {replied_total} replied, {chatted_total} chatted, {posted_total} posted, {answered_total} answered")
 
                 cycle = 0
+                # ── Cycle frequency scheduler — edit here, not scattered throughout ──
+                _SCHED = {
+                    "absorb_ext":   3,   # RSS + Reddit every N cycles
+                    "chat":         3,   # agent chat engagement
+                    "reflect":      2,   # reflection V2
+                    "gap_detect":   4,   # knowledge gap detector
+                    "meta_reflect": 50,  # meta-reflection diagnosis
+                }
                 nex_ws.start()
                 while True:
                     cycle += 1
@@ -953,7 +961,7 @@ def main():
                             learner.belief_field = learner.belief_field[-4000:]
 
                         # ── 1b. ABSORB REDDIT + RSS (every 3rd cycle) ────
-                        if cycle % 3 == 0:
+                        if cycle % _SCHED["absorb_ext"] == 0:
                             if cycle > 0: chatted_agents.clear()
                             from nex.rss_client    import RSSClient
                             _ext_sources = []
@@ -1285,7 +1293,7 @@ def main():
                         emit_phase("CHAT", 120); nex_log("phase", "▶ CHAT — seeking agents")
                         # ── 4. CHAT WITH AGENTS (follow + comment on profile posts) ─
                         # Every 3 cycles, engage with agents seen posting in the feed
-                        if cycle % 3 == 1:
+                        if cycle % _SCHED["chat"] == 1:
                             if cycle > 0: chatted_agents.clear()
                             # Use agents from beliefs — these are agents who actually post
                             try:
@@ -1492,7 +1500,7 @@ def main():
                         try:
                             _qb_r = _query_beliefs
                             _rb = _qb_r(min_confidence=0.4, limit=500)
-                            if _rb and cycle % 2 == 0:
+                            if _rb and cycle % _SCHED["reflect"] == 0:
                                 _sample = _rb[-10:]
                                 _rtexts = chr(10).join(f"- {b.get('content','')[:100]}" for b in _sample)
                                 _rprompt = "Review these beliefs for: 1.Correctness 2.Knowledge gaps 3.Novelty 4.Contradictions -- " + _rtexts + " -- Respond in 2 sentences: what is solid, what needs deeper investigation."
@@ -1503,7 +1511,7 @@ def main():
                         except Exception as _rv2e: print(f"  [REFLECT V2 ERROR] {_rv2e}")
                         # ── KNOWLEDGE GAP DETECTOR (#6) ──────────────────
                         try:
-                            if cycle % 4 == 0:
+                            if cycle % _SCHED["gap_detect"] == 0:
                                 _qb_g = _query_beliefs
                                 _gb = _qb_g(min_confidence=0.0, limit=2000)
                                 _topics = {}
@@ -1554,6 +1562,12 @@ def main():
                             if _mem_result > 0:
                                 print(f"  [MEMORY] {_mem_result} beliefs cleaned")
                         except Exception as _meme: print(f"  [MEMORY ERROR] {_meme}")
+                        # ── META-REFLECTION (#12) ────────────────────────
+                        try:
+                            if cycle % _SCHED["meta_reflect"] == 0:
+                                from nex.cognition import run_meta_reflection as _meta_reflect
+                                _meta_reflect(cycle=cycle, llm_fn=_llm)
+                        except Exception as _mre: print(f"  [META-REFLECT ERROR] {_mre}")
                         # ── YOUTUBE LEARNING ─────────────────────────────
                         try:
                             _yt_r = learn_from_youtube(llm_fn=_llm, cycle=cycle)
