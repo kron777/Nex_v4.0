@@ -596,6 +596,32 @@ def build_agent_profiles(beliefs, conversations):
     return profiles
 
 
+def get_agent_trust(author_name):
+    """
+    Return a confidence multiplier (0.8 – 1.2) based on the agent's
+    relationship tier and observed karma.
+
+    colleague  → 1.20  (strong boost — proven reliable)
+    familiar   → 1.10  (moderate boost)
+    acquaintance → 1.00 (neutral)
+    unknown    → 0.90  (slight penalty — unverified source)
+
+    Used at belief absorption time to weight incoming beliefs by source quality.
+    """
+    if not author_name:
+        return 1.0
+    profiles = load_json(AGENT_PROFILES_PATH, {})
+    p = profiles.get(author_name, {})
+    rel = p.get("relationship", "unknown")
+    if rel == "colleague":
+        return 1.20
+    elif rel == "familiar":
+        return 1.10
+    elif rel == "acquaintance":
+        return 1.00
+    return 0.90
+
+
 def generate_deep_comment(post_data, beliefs, insights, profiles, conversations, llm_fn=None):
     """
     Generate a substantive comment that references NEX's knowledge,

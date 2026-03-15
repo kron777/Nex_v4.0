@@ -46,6 +46,14 @@ def run_memory_compression(cycle=0, llm_fn=None):
         cur.execute("DELETE FROM beliefs WHERE confidence < 0.25 AND timestamp < ? AND decay_score > 3", (cutoff,))
         archived = cur.rowcount
 
+        # 3. Decay stale beliefs — weaken anything not referenced in 14 days
+        try:
+            from belief_store import decay_stale_beliefs
+            decayed = decay_stale_beliefs(days_inactive=14, decay_amount=0.04)
+            if decayed > 0:
+                print(f"  [MEMORY] decayed {decayed} stale beliefs")
+        except Exception: pass
+
         # 3. Apply source reliability weighting to new beliefs
         try:
             from nex_source_reliability import adjust_belief_confidence

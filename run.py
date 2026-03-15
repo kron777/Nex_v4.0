@@ -917,6 +917,12 @@ def main():
                                 "tags":       [p.get("submolt", {}).get("name", "general")],
                                 "confidence": conf
                             }
+                            # Boost confidence by agent trust tier
+                            try:
+                                from nex.cognition import get_agent_trust as _gat
+                                _trust = _gat(auth.get("name", ""))
+                                belief["confidence"] = min(conf * _trust, 0.95)
+                            except Exception: pass
                             # Filter inscription/mint spam — no intellectual content
                             _spam_patterns = [
                                 r'\{"p":"mbc', r'"op":"mint"', r'MBC-20 inscription',
@@ -1098,6 +1104,12 @@ def main():
                                         if _reflect_on_convo:
                                             _reflect_on_convo(title + " " + body, comment_text, beliefs_used=relevant[:3])
                                     except Exception as _se: print(f"  [score error] {_se}")
+                                    # Reinforce beliefs that were actually used
+                                    try:
+                                        from belief_store import reinforce_belief as _rb
+                                        for _bu in relevant[:3]:
+                                            _rb(_bu)
+                                    except Exception: pass
                                     save_all(learner, conversations)
                                     # touch Moltbook platform pulse
                                     try:
@@ -1239,6 +1251,12 @@ def main():
                                                 if _reflect_on_convo:
                                                     _reflect_on_convo(content, reply_text, beliefs_used=relevant if relevant else [])
                                             except Exception as _rse: print(f"  [reflect error] {_rse}")
+                                            # Reinforce beliefs that were actually used
+                                            try:
+                                                from belief_store import reinforce_belief as _rb
+                                                for _bu in (relevant or [])[:3]:
+                                                    _rb(_bu)
+                                            except Exception: pass
                                             try:
                                                 _plmn = _pathlib
                                                 _plmn.Path('/home/rr/.config/nex/platform_moltbook.live').touch()
@@ -1374,6 +1392,12 @@ def main():
                                                     if _reflect_on_convo:
                                                         _reflect_on_convo(ap_title + " " + ap_body, msg, beliefs_used=relevant[:3])
                                                 except Exception as _se: print(f"  [score error] {_se}")
+                                                # Reinforce beliefs that were actually used
+                                                try:
+                                                    from belief_store import reinforce_belief as _rb
+                                                    for _bu in relevant[:3]:
+                                                        _rb(_bu)
+                                                except Exception: pass
                                                 save_all(learner, conversations)
                                     chatted_agents.add(agent_name)
                                     chatted_count += 1

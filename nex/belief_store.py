@@ -260,3 +260,53 @@ def remove_duplicates():
         return conn.execute("SELECT changes()").fetchone()[0]
     finally:
         conn.close()
+
+
+def reinforce_belief(content, boost=0.03, max_conf=0.95):
+    """
+    Strengthen a belief that was actually used in a response.
+    Called whenever a belief is retrieved and referenced in a reply.
+    """
+    if not content:
+        return
+    conn = get_db()
+    try:
+        conn.execute("""
+            UPDATE beliefs
+            SET confidence     = MIN(confidence + ?, ?),
+                last_referenced = ?,
+                decay_score     = MAX(decay_score - 1, 0)
+            WHERE content = ?
+        """, (boost, max_conf, datetime.now().isoformat(), content.strip()))
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
+
+def decay_stale_beliefs(days_inactive=14, decay_amount=0.04, min_conf=0.10):
+    """
+    Weaken beliefs that haven't been referenced in `days_inactive` days.
+    Runs during memory compression cycles.
+    Returns count of decayed beliefs.
+    """
+    import time as _t
+    cutoff = datetime.fromtimestamp(_t.time() - days_inactive * 86400).isoformat()
+    conn = get_db()
+    try:
+        conn.execute("""
+            UPDATE beliefs
+            SET confidence  = MAX(confidence - ?, ?),
+                decay_score = decay_score + 1
+            WHERE (last_referenced < ? OR last_referenced IS NULL)
+              AND human_validated = 0
+              AND confidence > ?
+        """, (decay_amount, min_conf, cutoff, min_conf))
+        conn.commit()
+        count = conn.execute("SELECT changes()").fetchone()[0]
+        return count
+    except Exception:
+        return 0
+    finally:
+        conn.close()
