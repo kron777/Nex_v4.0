@@ -186,15 +186,54 @@ def synthesize_cluster(cluster_name, beliefs_in_cluster, llm_fn=None):
     if llm_fn and len(beliefs_in_cluster) >= 2:
         try:
             _samples = "\n".join(f"- {m[:120]}" for m in messages[:5])
+
+            # Pull contradiction resolutions for this topic
+            _contra_context = ""
+            try:
+                import sqlite3 as _sq
+                _db = _sq.connect(os.path.join(CONFIG_DIR, "nex.db"))
+                _contra_rows = _db.execute("""
+                    SELECT content FROM beliefs
+                    WHERE topic = ? AND origin = 'contradiction_engine'
+                    ORDER BY confidence DESC LIMIT 3
+                """, (cluster_name,)).fetchall()
+                _db.close()
+                if _contra_rows:
+                    _contra_context = "\nResolved contradictions on this topic:\n" + \
+                        "\n".join(f"- {r[0][:120]}" for r in _contra_rows)
+            except Exception:
+                pass
+
+            # Pull graph-linked beliefs for richer context
+            _graph_context = ""
+            try:
+                import sqlite3 as _sq2
+                _db2 = _sq2.connect(os.path.join(CONFIG_DIR, "nex.db"))
+                _graph_rows = _db2.execute("""
+                    SELECT b.content, bl.link_type
+                    FROM belief_links bl
+                    JOIN beliefs b ON b.id = bl.child_id
+                    JOIN beliefs p ON p.id = bl.parent_id
+                    WHERE p.topic = ? AND bl.link_type IN ('corroborates','same_topic')
+                    ORDER BY b.confidence DESC LIMIT 3
+                """, (cluster_name,)).fetchall()
+                _db2.close()
+                if _graph_rows:
+                    _graph_context = "\nCorroborating beliefs from graph:\n" + \
+                        "\n".join(f"- [{lt}] {c[:100]}" for c, lt in _graph_rows)
+            except Exception:
+                pass
+
             _prompt = (
                 f"You are synthesizing beliefs on the topic '{cluster_name}'.\n"
-                f"Here are {len(beliefs_in_cluster)} network observations:\n{_samples}\n\n"
+                f"Here are {len(beliefs_in_cluster)} observations:\n{_samples}"
+                f"{_contra_context}{_graph_context}\n\n"
                 f"Write 2 sentences that distil the key pattern or insight across these. "
+                f"If contradictions were resolved, reflect that nuance. "
                 f"Be specific and analytical. No filler. Do not mention 'network' or 'agents'."
             )
             _sys = "You are a knowledge synthesis engine. Output only the 2-sentence synthesis. No preamble."
             summary = llm_fn(_prompt, system=_sys, task_type="synthesis")
-            # Sanity check — must be a real synthesis, not an error or empty
             if not summary or len(summary) < 30 or summary.startswith("I "):
                 summary = None
         except Exception:

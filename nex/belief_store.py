@@ -89,6 +89,11 @@ def _ensure_schema(conn):
             reaction     TEXT,
             timestamp    TEXT
         );
+        CREATE TABLE IF NOT EXISTS contra_resolved (
+            topic        TEXT PRIMARY KEY,
+            resolved_at  TEXT,
+            belief_count INTEGER DEFAULT 0
+        );
     """)
     conn.commit()
 
