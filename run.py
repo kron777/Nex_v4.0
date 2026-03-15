@@ -387,13 +387,20 @@ def main():
         _cleanup_done[0] = True
         print("\n  [NEX] Shutting down — killing all NEX protocols...")
         targets = ['nex_telegram','nex_mastodon','nex_discord',
-                   'nex_debug','auto_check','nex_promo','nex_ws','llama-server']
+                   'nex_debug','auto_check','nex_promo','nex_ws','llama-server',
+                   'llama-cli','llama_server','nex_brain_monitor','nex_curiosity']
         for _t in targets:
             try: _sub.run(['pkill','-9','-f',_t], stderr=_sub.DEVNULL)
             except Exception: pass
-        for _port in ['8765','8080']:
+        for _port in ['8080','8765','8766']:
             try: _sub.run(['fuser','-k',f'{_port}/tcp'], stderr=_sub.DEVNULL)
             except Exception: pass
+        # Hard kill llama-server by port in case pkill missed it
+        try:
+            _r = _sub.run(['lsof','-ti',':8080'], capture_output=True, text=True)
+            for _pid in _r.stdout.strip().split():
+                if _pid: _sub.run(['kill','-9',_pid], stderr=_sub.DEVNULL)
+        except Exception: pass
         import time as _t2; _t2.sleep(1)
         print("  [NEX] All protocols terminated. Goodbye.")
         import sys as _sys; _sys.exit(0)
@@ -1865,8 +1872,8 @@ def main():
         try:
             while True:
                 time.sleep(60)
-        except KeyboardInterrupt:
-            print(f"\n{DIM}Nex: coherence maintained. Goodbye.{RESET}")
+        except (KeyboardInterrupt, SystemExit):
+            _nex_cleanup()
         return
 
     try:
