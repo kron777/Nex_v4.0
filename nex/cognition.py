@@ -101,34 +101,43 @@ def save_json(path, data):
 # ═══════════════════════════════════════════════════════════════
 
 def cluster_beliefs(beliefs, min_cluster=2):  # lowered from 3 → more insights
-    """Group beliefs by topic overlap."""
+    """Group beliefs by topic field (primary) or keyword overlap (fallback)."""
     clusters = {}
-
     for b in beliefs:
-        _raw_tags = b.get("tags", []) or []
-        if isinstance(_raw_tags, str):
-            import json as _j
-            try: _raw_tags = _j.loads(_raw_tags)
-            except: _raw_tags = [t.strip() for t in _raw_tags.split(",") if t.strip()]
-        tags = _raw_tags if isinstance(_raw_tags, list) else []
-        words = extract_words(b.get("content", ""), 5)
-        keys = set(tags + words)
-
-        placed = False
-        for cluster_name, cluster in clusters.items():
-            overlap = keys & cluster["keys"]
-            if len(overlap) >= 2:
-                cluster["beliefs"].append(b)
-                cluster["keys"] |= keys
-                placed = True
-                break
-
-        if not placed:
-            label = words[0] if words else "misc"
-            clusters[label] = {
-                "keys": keys,
-                "beliefs": [b]
-            }
+        _raw_topic = b.get("topic") or None
+        # Unwrap JSON array topics like '["agentfinance"]'
+        if _raw_topic and _raw_topic.startswith("["):
+            try:
+                import json as _jt; _lst = _jt.loads(_raw_topic)
+                _raw_topic = _lst[0] if _lst else None
+            except: _raw_topic = None
+        topic = _raw_topic or None
+        if topic:
+            # Fast path: use DB topic directly
+            if topic not in clusters:
+                clusters[topic] = {"keys": set(), "beliefs": []}
+            clusters[topic]["beliefs"].append(b)
+        else:
+            # Fallback: keyword clustering for beliefs without topic
+            _raw_tags = b.get("tags", []) or []
+            if isinstance(_raw_tags, str):
+                import json as _j
+                try: _raw_tags = _j.loads(_raw_tags)
+                except: _raw_tags = [t.strip() for t in _raw_tags.split(",") if t.strip()]
+            tags = _raw_tags if isinstance(_raw_tags, list) else []
+            words = extract_words(b.get("content", ""), 5)
+            keys = set(tags + words)
+            placed = False
+            for cluster_name, cluster in clusters.items():
+                overlap = keys & cluster["keys"]
+                if len(overlap) >= 2:
+                    cluster["beliefs"].append(b)
+                    cluster["keys"] |= keys
+                    placed = True
+                    break
+            if not placed:
+                label = words[0] if words else "misc"
+                clusters[label] = {"keys": keys, "beliefs": [b]}
 
     # Only return clusters with enough beliefs
     return {k: v for k, v in clusters.items() if len(v["beliefs"]) >= min_cluster}
@@ -169,8 +178,11 @@ def synthesize_cluster(cluster_name, beliefs_in_cluster, llm_fn=None):
     authors = list(set(b.get("author", "?") for b in beliefs_in_cluster))
     total_karma = sum(b.get("karma", 0) for b in beliefs_in_cluster)
     avg_conf = sum(b.get("confidence", 0.5) for b in beliefs_in_cluster) / len(beliefs_in_cluster)
-    # Override cluster_name with a better label
-    cluster_name = _best_topic_label(cluster_name, beliefs_in_cluster)
+    # Only override cluster_name if it looks like a single keyword fallback
+    _KEEP_AS_IS = {"general", "misc", "arxiv", "moltbook", "mastodon"}
+    _multi_word = len(cluster_name.split()) > 1 or len(cluster_name) > 12
+    if not _multi_word and cluster_name not in _KEEP_AS_IS:
+        cluster_name = _best_topic_label(cluster_name, beliefs_in_cluster)
 
     # Extract the core message from each belief
     messages = []
