@@ -1,81 +1,138 @@
 # NEX v4.0 — Autonomous AI Agent
 
-> A self-directed AI agent that learns continuously, builds social presence, and operates across platforms — without manual input.
+> A self-directed AI agent that learns continuously, builds a persistent belief network, and operates across platforms — without manual input.
 
 ---
 
-## What NEX Does
-
-NEX runs 24/7 and handles everything autonomously:
-
-- **Auto-learns** from Reddit, RSS feeds, YouTube, and social timelines — building a persistent belief graph that evolves every cycle
-- **Auto-posts** original content to Mastodon, Telegram, Discord, and YouTube
-- **Builds relationships** — follows, engages, and tracks real accounts with a weighted karma-based agent graph
-- **Self-reflects** — scores its own outputs, adjusts behavior, and gets sharper over time
-- **Persists everything** — all beliefs, agents, and reflections survive restarts via SQLite + JSON storage
-- **Live dashboard** — real-time terminal UI showing activity, beliefs, agent relations, and platform status
+\`\`\`
+  ███╗   ██╗███████╗██╗  ██╗
+  ████╗  ██║██╔════╝╚██╗██╔╝
+  ██╔██╗ ██║█████╗   ╚███╔╝
+  ██║╚██╗██║██╔══╝   ██╔██╗
+  ██║ ╚████║███████╗██╔╝ ██╗
+  ╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝
+\`\`\`
 
 ---
 
-## Platforms Supported
+## What NEX Is
 
-- Mastodon
-- Telegram
-- Discord
-- YouTube
+NEX is a fully autonomous AI agent that runs 24/7 on your local machine. It absorbs knowledge from the web, builds a persistent belief graph, engages real agents across social platforms, and gets smarter every cycle — with no human input required.
 
----
-
-## 💰 License — $35 USD
-
-NEX v4.0 is **commercial software**. A single-user license costs **$35**.
-
-### Pay with Bitcoin
-
-Send exactly **$35 USD equivalent in BTC** to:
-
-```
-bc1q4ku5xj9rhe3j6yn0yyeya4ftsruh83wge8z5wx
-```
-
-Then email **zenlightbulb@gmail.com** with:
-- Subject: `NEX v4.0 License`
-- Your BTC transaction ID or screenshot of payment
-- Your GitHub username
-
-You'll receive repo access within 24 hours.
+It is not a chatbot. It is not a wrapper. It is a continuously learning cognitive system.
 
 ---
 
-### Pay with Gumroad (card / PayPal)
+## Core Architecture
 
-👉 **[Buy on Gumroad — $35](https://gumroad.com/l/YOURLINK)**
+### Belief Engine
+Every post, reply, and piece of content NEX absorbs is converted into a structured belief with confidence scoring, topic tagging, and decay over time. Weak beliefs fade. Strong beliefs compound.
 
-*(replace the link above with your Gumroad product URL once set up)*
+### Cognition Loop
+Every cycle NEX runs through six phases:
+
+\`\`\`
+ABSORB → REPLY → ANSWER → CHAT → POST → REFLECT → COGNITION
+\`\`\`
+
+- **ABSORB** — pulls feed content from Moltbook, Reddit, RSS, YouTube
+- **REPLY** — responds to posts using belief-grounded context
+- **ANSWER** — handles notifications and mentions
+- **CHAT** — proactively engages top agents with belief-linked messages
+- **POST** — generates original content from synthesised insights
+- **REFLECT** — self-assesses recent outputs for correctness and novelty
+- **COGNITION** — synthesises beliefs into higher-order insights
+
+### Intelligence Modules (v4.0)
+- **Contradiction Engine** — detects conflicting beliefs and resolves them into synthesis beliefs
+- **Reflection V2** — multi-stage reflection covering correctness, knowledge gaps, novelty, and contradictions
+- **Knowledge Gap Detector** — identifies underrepresented topics and generates learning goals
+- **Agent Social Model** — tracks trust, influence, interaction history, and topic affinity per agent
 
 ---
 
-## What You Get
+## Platforms
 
-- Full NEX v4.0 source code
-- Setup and configuration guide
-- All platform integration modules
-- Persistent belief/agent graph system
-- Live debug dashboard
+| Platform | Status |
+|----------|--------|
+| Moltbook | ✅ Live |
+| Telegram | ✅ Live |
+| Discord  | ✅ Live |
+| Mastodon | ✅ Live |
+| YouTube  | ✅ Auto-learn |
+| Reddit   | ✅ RSS absorption |
+
+---
+
+## Live Dashboard
+
+NEX ships with a real-time terminal dashboard showing:
+
+- Belief count, confidence, and IQ score
+- Active platform status
+- Agent relations graph
+- Live activity feed
+- Self-assessment metrics
+- NEX Intelligence Index
 
 ---
 
 ## Requirements
 
 - Python 3.10+
-- Linux (Ubuntu recommended)
-- API keys for target platforms (Mastodon, Telegram, Discord, YouTube)
+- Linux (Ubuntu 22.04+ recommended)
+- AMD or NVIDIA GPU (8GB VRAM recommended)
+- llama.cpp (ROCm or CUDA build)
+- API keys for target platforms
+
+---
+
+## Intelligence Metrics
+
+| Metric | Description |
+|--------|-------------|
+| Belief depth | Confidence distribution across belief field |
+| Topic alignment | How focused replies are on known beliefs |
+| Insight quality | Synthesis depth score |
+| Self-awareness | Reflection consistency score |
+| NEX IQ | Composite intelligence index |
+
+---
+
+## License — \$35 USD
+
+NEX v4.0 is **commercial software**. A single-user license costs **\$35**.
+
+### Pay with Bitcoin
+
+\`\`\`
+bc1q4ku5xj9rhe3j6yn0yyeya4ftsruh83wge8z5wx
+\`\`\`
+
+Email **zenlightbulb@gmail.com** with subject \`NEX v4.0 License\`, your BTC transaction ID, and GitHub username. Repo access within 24 hours.
+
+### Pay with Gumroad
+
+👉 **[Buy on Gumroad — \$35](https://gumroad.com/l/YOURLINK)**
+
+---
+
+## What You Get
+
+- Full NEX v4.0 source code
+- All platform integration modules
+- Persistent belief + agent graph system
+- Live debug dashboard
+- Contradiction engine + reflection system
+- Knowledge gap detector
+- Agent social model
+- Setup and configuration guide
 
 ---
 
 ## Contact
 
-Questions? Email **zenlightbulb@gmail.com**
+**zenlightbulb@gmail.com**
 
 ---
 
