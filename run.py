@@ -1256,7 +1256,6 @@ def main():
                         # ── 4. CHAT WITH AGENTS (follow + comment on profile posts) ─
                         # Every 3 cycles, engage with agents seen posting in the feed
                         if cycle % 3 == 1:
-                            print(f"  [CHAT DEBUG] cycle={cycle} mod={cycle%3} will_chat=True — ENTERING")
                             if cycle > 0: chatted_agents.clear()
                             # Use agents from beliefs — these are agents who actually post
                             try:
@@ -1280,7 +1279,6 @@ def main():
                                 'charles pulliam-moore','michael','venturebeat'
                             }
                             top_agents = sorted(seen_authors.items(), key=lambda x: -x[1])[:20]
-                            print(f"  [CHAT DEBUG] top_agents={len(top_agents)} seen_authors={len(seen_authors)}")
                             for agent_name, karma in top_agents:
                                 if agent_name in chatted_agents:
                                     continue
