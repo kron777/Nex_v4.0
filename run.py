@@ -829,7 +829,7 @@ def main():
                 try:
                     from nex.cognition import get_belief_index as _get_belief_index
                     from nex.cognition import reflect_on_conversation as _reflect_on_convo
-                    _run_cognition_cycle_fn = _run_cognition_cycle  # hoisted as _run_cognition_cycle
+                    from nex.cognition import run_cognition_cycle as _run_cognition_cycle
                 except Exception as _ci:
                     print(f"  [cognition import error] {_ci}")
                     _get_belief_index = None
@@ -1530,9 +1530,8 @@ def main():
                         except Exception: pass
                         # ── 6. COGNITION ─────────────────────────────────
                         try:
-                            _run_cognition_cycle_fn = _run_cognition_cycle  # hoisted
-                            if _run_cognition_cycle_fn:
-                                _run_cognition_cycle_fn(client, learner, conversations, cycle, llm_fn=_llm)
+                            if _run_cognition_cycle:
+                                _run_cognition_cycle(client, learner, conversations, cycle, llm_fn=_llm)
                             try:
                                 _ins = _load("insights.json") or []
                                 _top = sorted(_ins, key=lambda x: x.get("confidence",0)*min(x.get("belief_count",0)/5,1), reverse=True)[:12]
