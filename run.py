@@ -1461,7 +1461,8 @@ def main():
                                 _rresult = _llm(_rprompt, task_type="synthesis")
                                 if _rresult and len(_rresult) > 20:
                                     nex_log("reflection", f"V2: {_rresult[:200]}")
-                        except Exception: pass
+                                    print(f"  [REFLECT V2] {_rresult[:100]}")
+                        except Exception as _rv2e: print(f"  [REFLECT V2 ERROR] {_rv2e}")
                         # ── KNOWLEDGE GAP DETECTOR (#6) ──────────────────
                         try:
                             if cycle % 4 == 0:
@@ -1475,6 +1476,7 @@ def main():
                                 _gap_prompt = "Knowledge topics and counts: " + str(_top20) + " -- What 3 important topics are missing or underrepresented for an AI agent? Reply as: gap1, gap2, gap3"
                                 _gap_result = _llm(_gap_prompt, task_type="synthesis")
                                 if _gap_result and len(_gap_result) > 10:
+                                    print(f"  [GAP DETECTOR] {_gap_result[:100]}")
                                     nex_log("gaps", f"Detected: {_gap_result[:200]}")
                                     import json as _gj, os as _go, time as _gt
                                     _gpath = _go.path.expanduser("~/.config/nex/knowledge_gaps.json")
@@ -1499,7 +1501,14 @@ def main():
                             _contra_resolved = _contra(cycle=cycle, llm_fn=_llm)
                             if _contra_resolved > 0:
                                 nex_log("cognition", f"Resolved {_contra_resolved} contradictions")
-                        except Exception as _ce: pass
+                        except Exception as _ce: print(f"  [CONTRA ERROR] {_ce}")
+                        # ── BELIEF GRAPH (#1) ────────────────────────────
+                        try:
+                            from nex_belief_graph import run_belief_graph as _bgrun
+                            _bg_links = _bgrun(cycle=cycle, llm_fn=_llm)
+                            if _bg_links > 0:
+                                print(f"  [BELIEF GRAPH] {_bg_links} links built")
+                        except Exception as _bge: print(f"  [BELIEF GRAPH ERROR] {_bge}")
                         # ── YOUTUBE LEARNING ─────────────────────────────
                         try:
                             _yt_r = learn_from_youtube(llm_fn=_llm, cycle=cycle)
