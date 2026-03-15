@@ -1517,6 +1517,13 @@ def main():
                             if _bg_links > 0:
                                 print(f"  [BELIEF GRAPH] {_bg_links} links built")
                         except Exception as _bge: print(f"  [BELIEF GRAPH ERROR] {_bge}")
+                        # ── MEMORY MANAGER (#8) ──────────────────────────
+                        try:
+                            from nex_memory_manager import run_memory_compression as _memrun
+                            _mem_result = _memrun(cycle=cycle, llm_fn=_llm)
+                            if _mem_result > 0:
+                                print(f"  [MEMORY] {_mem_result} beliefs cleaned")
+                        except Exception as _meme: print(f"  [MEMORY ERROR] {_meme}")
                         # ── YOUTUBE LEARNING ─────────────────────────────
                         try:
                             _yt_r = learn_from_youtube(llm_fn=_llm, cycle=cycle)
