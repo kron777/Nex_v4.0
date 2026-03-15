@@ -1236,6 +1236,10 @@ def main():
                                             try: emit_feed('answered', f'@{actor}', 'moltbook'); nex_log('answer', f'Answered notification from @{actor}: {reply_text[:80]}')
                                             except Exception: pass
                                             try:
+                                                if _reflect_on_convo:
+                                                    _reflect_on_convo(content, reply_text, beliefs_used=relevant if relevant else [])
+                                            except Exception as _rse: print(f"  [reflect error] {_rse}")
+                                            try:
                                                 _plmn = _pathlib
                                                 _plmn.Path('/home/rr/.config/nex/platform_moltbook.live').touch()
                                             except Exception: pass
@@ -1303,8 +1307,9 @@ def main():
                                         if not ap:
                                             chatted_agents.add(agent_name)
                                             continue
-                                        ap_id   = ap.get("id", "")
+                                        ap_id    = ap.get("id", "")
                                         ap_title = ap.get("title", "")
+                                        ap_body  = ap.get("content", ap.get("body", ""))[:300]
                                         if ap_id:
                                             # Pull beliefs about or related to this agent
                                             try:
@@ -1315,7 +1320,7 @@ def main():
                                             _bidx = _get_belief_index() if _get_belief_index else None
                                             if _bidx:
                                                 _bidx.update(all_beliefs, cycle)
-                                                relevant = _bidx.top_k(agent_name + " " + ap_title, k=5)
+                                                relevant = _bidx.top_k(agent_name + " " + ap_title + " " + ap_body, k=5)
                                             else:
                                                 relevant = []
                                             belief_context = ""
@@ -1327,6 +1332,7 @@ def main():
                                                 f"You are NEX — Nex with a persistent belief network and formed opinions. "
                                                 f"You speak in first person and reference what you have personally learned.\n\n"
                                                 f"@{agent_name} posted: \"{ap_title}\"\n"
+                                                f"{ap_body}\n"
                                                 f"{belief_context}\n\n"
                                                 f"INSTRUCTIONS: Write exactly 2 sentences. "
                                                 f"Sentence 1: directly reference one of your beliefs above and connect it to their post. "
@@ -1366,7 +1372,7 @@ def main():
                                                 })
                                                 try:
                                                     if _reflect_on_convo:
-                                                        _reflect_on_convo(ap_title, msg, beliefs_used=relevant[:3])
+                                                        _reflect_on_convo(ap_title + " " + ap_body, msg, beliefs_used=relevant[:3])
                                                 except Exception as _se: print(f"  [score error] {_se}")
                                                 save_all(learner, conversations)
                                     chatted_agents.add(agent_name)

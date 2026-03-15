@@ -246,15 +246,17 @@ def run_synthesis(min_beliefs=30, llm_fn=None):
     new_insights = []
     skipped = 0
     for name, cluster in clusters.items():
-        # Skip if we already have a recent insight on this topic
-        already_covered = any(
-            ins.get("topic") == name and
-            ins.get("belief_count", 0) >= len(cluster["beliefs"])
-            for ins in existing_insights
+        cluster_size = len(cluster["beliefs"])
+        # Re-synthesize if belief count grew by >10% since last insight
+        existing_insight = next(
+            (ins for ins in existing_insights if ins.get("topic") == name), None
         )
-        if already_covered:
-            skipped += 1
-            continue
+        if existing_insight:
+            old_count = existing_insight.get("belief_count", 0)
+            growth = (cluster_size - old_count) / max(old_count, 1)
+            if growth < 0.10:   # less than 10% new beliefs — skip
+                skipped += 1
+                continue
 
         insight = synthesize_cluster(name, cluster["beliefs"], llm_fn=llm_fn)
         new_insights.append(insight)
@@ -301,7 +303,10 @@ def _get_embedder():
             logging.getLogger("transformers").setLevel(logging.ERROR)
             from sentence_transformers import SentenceTransformer
             import transformers; transformers.logging.set_verbosity_error()
-            _embedder = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
+            import torch
+            _device = "cuda" if torch.cuda.is_available() else "cpu"
+            _embedder = SentenceTransformer("all-MiniLM-L6-v2", device=_device)
+            print(f"  [BeliefIndex] embedder loaded on {_device}")
         except Exception:
             _embedder = False
     return _embedder

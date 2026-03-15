@@ -17,6 +17,8 @@ def run_contradiction_cycle(cycle: int = 0, llm_fn=None) -> int:
         rows = cur.fetchall()
         buckets = {}
         for topic, content, conf in rows:
+            topic = topic or "general"          # guard: NULL topic → "general"
+            content = content or ""             # guard: NULL content → empty string
             buckets.setdefault(topic, []).append((content, conf))
         resolved = 0
         for topic, beliefs in buckets.items():
@@ -27,6 +29,10 @@ def run_contradiction_cycle(cycle: int = 0, llm_fn=None) -> int:
             if topic in ("None", "general", "unknown", "auto_learn"):
                 continue
             sample = beliefs[:6]
+            # guard: skip beliefs with empty content so we never slice None
+            sample = [(c, cf) for c, cf in sample if c and len(c.strip()) > 5]
+            if len(sample) < 2:
+                continue
             texts = "\n".join(f"- {b[0][:120]}" for b in sample)
             prompt = f"Do any of these beliefs about '{topic}' directly contradict each other? If yes, write one synthesized resolution belief in one sentence. If no contradictions, reply NONE.\n\n{texts}"
             try:

@@ -19,6 +19,8 @@ def run_memory_compression(cycle=0, llm_fn=None):
         topic_groups = {}
         for bid, content, topic, conf in rows:
             t = str(topic or "general")
+            if not content:             # guard: skip NULL content rows
+                continue
             if t.startswith("[") or t.startswith("{"): continue
             topic_groups.setdefault(t, []).append((bid, content, conf))
 

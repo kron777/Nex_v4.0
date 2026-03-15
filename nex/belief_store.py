@@ -156,6 +156,8 @@ def query_beliefs(topic=None, min_confidence=0.0, limit=10):
                 docs = chroma_results.get("documents", [[]])[0]
                 metas = chroma_results.get("metadatas", [[]])[0]
                 for doc, meta in zip(docs, metas):
+                    if not doc:          # guard: skip empty/None chroma docs
+                        continue
                     results.append({
                         "content": doc,
                         "confidence": meta.get("confidence", 0.5),
@@ -193,7 +195,9 @@ def query_beliefs(topic=None, min_confidence=0.0, limit=10):
     seen = set()
     unique = []
     for r in results:
-        key = r.get("content", "")[:80]
+        key = (r.get("content") or "")[:80]
+        if not key:          # skip beliefs with no content
+            continue
         if key not in seen:
             seen.add(key)
             unique.append(r)

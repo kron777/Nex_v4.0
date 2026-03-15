@@ -25,6 +25,7 @@ def run_belief_graph(cycle=0, llm_fn=None):
         topic_groups = {}
         for bid, content, topic, author, conf in beliefs:
             t = str(topic or "general")
+            content = content or ""     # guard: NULL content
             topic_groups.setdefault(t, []).append((bid, content, author, conf))
         linked = 0
         for topic, group in topic_groups.items():
@@ -33,6 +34,8 @@ def run_belief_graph(cycle=0, llm_fn=None):
                 for j in range(i+1, min(i+4, len(group))):
                     aid, acontent, aauthor, aconf = group[i]
                     bid2, bcontent, bauthor, bconf = group[j]
+                    if not acontent or not bcontent:    # guard: skip empty content
+                        continue
                     kw_a = _extract_keywords(acontent)
                     kw_b = _extract_keywords(bcontent)
                     overlap = len(kw_a & kw_b)
