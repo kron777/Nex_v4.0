@@ -60,7 +60,7 @@ def run_contradiction_cycle(cycle: int = 0, llm_fn=None) -> int:
             if _cache:
                 try:
                     _age  = _now - datetime.fromisoformat(_cache["ts"]).timestamp()
-                    _grew = len(beliefs) > _cache["count"] + 2
+                    _grew = len(beliefs) > _cache["count"] * 1.10
                     if _age < _48h and not _grew:
                         continue
                 except Exception:
