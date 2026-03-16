@@ -309,6 +309,21 @@ def load_all(learner):
         pass
     return loaded
 
+def run_startup_synthesis():
+    """Run synthesis immediately on startup so insights are ready from cycle 1."""
+    try:
+        import sys as _sys, os as _os
+        _nex_dir = _os.path.join(_os.path.dirname(__file__), "..")
+        if _nex_dir not in _sys.path:
+            _sys.path.insert(0, _nex_dir)
+        from nex.cognition import run_synthesis
+        insights, new_count = run_synthesis(min_beliefs=10, llm_fn=None)
+        print(f"  [startup] synthesis complete: {len(insights)} insights ({new_count} new)")
+        return len(insights)
+    except Exception as e:
+        print(f"  [startup] synthesis failed: {e}")
+        return 0
+
 def load_conversations():
     try:
         if os.path.exists(CONVOS_PATH):

@@ -825,6 +825,12 @@ def main():
                     emit_agents([[n,_rel(s),0] for n,s in sorted(_rows,key=lambda x:-x[1])[:10]])
                 except Exception as _ae: pass
                 load_all(learner)
+                # ── Run synthesis immediately so insights exist from cycle 1 ──
+                try:
+                    from nex.auto_learn import run_startup_synthesis
+                    run_startup_synthesis()
+                except Exception as _ss_e:
+                    print(f"  [startup synthesis error] {_ss_e}")
                 conversations = load_conversations()
 
                 # ── Hoist stable imports used every cycle ──
@@ -1250,6 +1256,7 @@ def main():
                                             client.comment(post_id, reply_text, parent_id=reply_to if reply_to else None)
                                             _notif_replied += 1
                                             answered_count += 1
+                                            replied_posts.add(key)  # dedup: never answer this notif again
                                             conversations.append({
                                                 "type":      "notification_reply",
                                                 "post_id":   post_id,
