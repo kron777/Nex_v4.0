@@ -411,7 +411,9 @@ def data_thread():
                 m=re.search(r"Need more beliefs about: (.+?)\.",r.get("growth_note",""))
                 if m: gaps.extend([g.strip() for g in m.group(1).split(",")])
             top_gaps=list(dict.fromkeys(gaps))[:4]
-            cov=min(100,int((len(insights)/max(len(beliefs),1))*300))
+            # Network coverage: unique agents interacted with vs total agents tracked
+            _interacted = sum(1 for _,p in profiles.items() if p.get("conversations_had",0) > 0)
+            cov = min(100, int((_interacted / max(len(agents), 1)) * 100))
             sl.append(f"{T}Belief confidence{RS}  [{bc}] {G}{avg_c:.0%}{RS}")
             sl.append(f"{T}Topic alignment  {RS}  [{bal}] {G}{avg_al:.0%}{RS}")
             sl.append(f"{T}High confidence  {RS}  {G}{hi}{RS} beliefs  {D}>70%{RS}")
