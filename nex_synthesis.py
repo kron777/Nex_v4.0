@@ -1,5 +1,3 @@
-from nex_groq import _groq
-from nex_groq import _groq
 #!/usr/bin/env python3
 """
 nex_synthesis.py — Layer 4: Cross-Domain Synthesis Graph
@@ -15,7 +13,7 @@ import time
 import random
 import requests
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime
 
 CFG_PATH      = Path("~/.config/nex").expanduser()
 GRAPH_PATH    = CFG_PATH / "synthesis_graph.json"
@@ -24,19 +22,9 @@ BRIDGES_PATH  = CFG_PATH / "bridge_beliefs.json"
 GROQ_URL      = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL    = "llama-3.3-70b-versatile"
 
+from nex_groq import _groq
+
 RELATION_TYPES = ["implies", "contradicts", "reinforces", "analogous_to", "causes", "prerequisite_of"]
-
-
-# _groq imported from nex_groq
-
-            headers={"Authorization": f"Bearer {key}"},
-            json={"model": GROQ_MODEL, "max_tokens": max_tokens,
-                  "temperature": 0.4, "messages": messages},
-            timeout=20)
-        return r.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        print(f"  [synthesis] Groq error: {e}")
-        return None
 
 
 class SynthesisGraph:
@@ -88,7 +76,7 @@ class SynthesisGraph:
                 "content":  belief.get("content", "")[:150],
                 "tags":     belief.get("tags", ["general"]),
                 "confidence": belief.get("confidence", 0.5),
-                "added":    datetime.now(timezone.utc).isoformat(),
+                "added":    datetime.utcnow().isoformat(),
             }
         return bid
 
@@ -104,10 +92,10 @@ class SynthesisGraph:
             "relation":      relation,
             "confidence":    confidence,
             "discovered_by": source,
-            "timestamp":     datetime.now(timezone.utc).isoformat(),
+            "timestamp":     datetime.utcnow().isoformat(),
         })
         self.graph["stats"]["edges_built"] = len(self.graph["edges"])
-        self.graph["stats"]["last_updated"] = datetime.now(timezone.utc).isoformat()
+        self.graph["stats"]["last_updated"] = datetime.utcnow().isoformat()
 
     def discover_relation(self, belief_a: dict, belief_b: dict) -> dict | None:
         """
