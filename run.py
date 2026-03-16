@@ -1618,8 +1618,8 @@ def main():
                         try:
                             from nex_inner_life import run_inner_life_cycle
                             _il_metrics = {
-                                "topic_alignment":    _last_alignment if '_last_alignment' in dir() else 0.5,
-                                "belief_confidence":  sum(b.get("confidence",0) for b in _query_beliefs(min_confidence=0.0, limit=100)) / 100 if '_query_beliefs' in dir() else 0.6,
+                                "topic_alignment":    0.5,
+                                "belief_confidence":  0.6,
                                 "contradiction_count": 0,
                                 "recent_replies":     replied_count,
                                 "cycle":              cycle,
