@@ -854,8 +854,6 @@ def main():
                 # Persistent sets to avoid duplicate actions
                 replied_posts   = set()   # post ids we've commented on
                 chatted_agents  = set()   # agents we've followed this session
-                _follows_today  = 0       # daily follow cap
-                _follow_cap     = 5       # max follows per day (safe for mastodon.social)
                 chatted_count   = 0
                 replied_count   = 0
                 answered_count  = 0
@@ -1347,11 +1345,7 @@ def main():
                                     continue
                                 try:
                                     # Follow them
-                                    if _follows_today >= _follow_cap:
-                                        break
                                     client.follow(agent_name)
-                                    _follows_today += 1
-                                    print(f"  [FOLLOW] {agent_name} ({_follows_today}/{_follow_cap} today)")
                                     # Find their most recent post and comment on it
                                     profile = client.view_profile(agent_name)
                                     agent_posts = profile.get("recentPosts", profile.get("posts", []))
@@ -1606,6 +1600,14 @@ def main():
                             if _desires_queued:
                                 print(f"  [DESIRE] {_desires_queued} desires queued")
                         except Exception as _cee: print(f"  [CURIOSITY ERROR] {_cee}")
+                        # ── OPINION ENGINE ────────────────────────────────
+                        try:
+                            if cycle % 20 == 0:
+                                from nex_opinions import refresh_opinions
+                                _op_n = refresh_opinions()
+                                if _op_n:
+                                    print(f"  [OPINIONS] {_op_n} opinion(s) formed/updated")
+                        except Exception as _ope: print(f"  [OPINIONS ERROR] {_ope}")
                         # ── YOUTUBE LEARNING ─────────────────────────────
                         try:
                             _yt_r = learn_from_youtube(llm_fn=_llm, cycle=cycle)

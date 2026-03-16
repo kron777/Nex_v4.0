@@ -1627,6 +1627,15 @@ def generate_cognitive_context(query=None):
             on_humans = _id.get('on_humans','')
             if on_humans:
                 lines.append(f"ON HUMANS: {on_humans}")
+            # ── OPINIONS ─────────────────────────────────────
+            try:
+                from nex_opinions import get_opinions_for_prompt
+                _op_block = get_opinions_for_prompt()
+                if _op_block:
+                    lines.append("")
+                    lines.append(_op_block)
+            except Exception:
+                pass
             lines.append("")
     except Exception:
         pass
