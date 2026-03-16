@@ -1662,8 +1662,8 @@ def main():
                         try:
                             _now = __import__('datetime').datetime.now()
                             if _now.hour == 2 and _now.minute < 2:
-                                from nex_nightly_trainer import maybe_run_nightly_training
-                                maybe_run_nightly_training(send_telegram_fn=_tg_send if '_tg_send' in dir() else None)
+                                from nex_nightly_trainer import # maybe_run_nightly_training
+                                # maybe_run_nightly_training(send_telegram_fn=_tg_send if '_tg_send' in dir() else None)
                         except Exception as _nte: print(f"  [NIGHTLY TRAIN ERROR] {_nte}")
                         # ── YOUTUBE LEARNING ─────────────────────────────
                         try:
