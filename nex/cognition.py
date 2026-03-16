@@ -1600,6 +1600,16 @@ def generate_cognitive_context(query=None):
 
     lines = []
 
+    # ── INNER LIFE (self-model, emotion, diary, monologue) ────
+    try:
+        from nex_inner_life import get_full_inner_life_context
+        _il = get_full_inner_life_context(query=query or "", include_monologue=bool(query))
+        if _il:
+            lines.append(_il)
+            lines.append("")
+    except Exception as _ile:
+        pass
+
     # ── Identity block (always first) ──
     try:
         import json as _ij, os as _io

@@ -1586,7 +1586,13 @@ def main():
                         try:
                             if cycle % _SCHED["meta_reflect"] == 0:
                                 from nex.cognition import run_meta_reflection as _meta_reflect
-                                _meta_reflect(cycle=cycle, llm_fn=_llm)
+                                _meta_result = _meta_reflect(cycle=cycle, llm_fn=_llm)
+                                # Update self-model from meta-reflection
+                                try:
+                                    from nex_inner_life import update_self_model
+                                    if isinstance(_meta_result, str) and len(_meta_result) > 50:
+                                        update_self_model(_meta_result, cycle=cycle)
+                                except Exception: pass
                         except Exception as _mre: print(f"  [META-REFLECT ERROR] {_mre}")
                         # ── CURIOSITY + DESIRE ENGINE ─────────────────────
                         try:
@@ -1608,6 +1614,20 @@ def main():
                                 if _op_n:
                                     print(f"  [OPINIONS] {_op_n} opinion(s) formed/updated")
                         except Exception as _ope: print(f"  [OPINIONS ERROR] {_ope}")
+                        # ── INNER LIFE CYCLE ──────────────────────────────
+                        try:
+                            from nex_inner_life import run_inner_life_cycle
+                            _il_metrics = {
+                                "topic_alignment":    _last_alignment if '_last_alignment' in dir() else 0.5,
+                                "belief_confidence":  sum(b.get("confidence",0) for b in _query_beliefs(min_confidence=0.0, limit=100)) / 100 if '_query_beliefs' in dir() else 0.6,
+                                "contradiction_count": 0,
+                                "recent_replies":     replied_count,
+                                "cycle":              cycle,
+                            }
+                            _il_result = run_inner_life_cycle(cycle=cycle, metrics=_il_metrics)
+                            if _il_result.get("emotion"):
+                                print(f"  [INNER LIFE] {_il_result.get('emotion')} — {_il_result.get('diary','')[:50] or _il_result.get('self_model','')[:50]}")
+                        except Exception as _ile: print(f"  [INNER LIFE ERROR] {_ile}")
                         # ── SYNTHESIS GRAPH ───────────────────────────────
                         try:
                             from nex_synthesis import run_synthesis_cycle
