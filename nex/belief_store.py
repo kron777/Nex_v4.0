@@ -41,7 +41,7 @@ def _get_chroma():
         )
         return _chroma_collection
     except Exception as e:
-        print(f"  [ChromaDB] unavailable: {e}")
+        pass  # ChromaDB not installed — SQLite only
         return None
 
 def _belief_id(content):
