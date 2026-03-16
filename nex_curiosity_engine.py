@@ -1,3 +1,4 @@
+from nex_groq import _groq
 #!/usr/bin/env python3
 """
 nex_curiosity_engine.py — Layer 3: Active Curiosity Engine
@@ -38,7 +39,7 @@ def _groq_rate_ok() -> bool:
     return True
 
 
-def _groq(messages: list, max_tokens: int = 300, temperature: float = 0.7) -> str | None:
+#def _groq(messages: list, max_tokens: int = 300, temperature: float = 0.7) -> str | None:
     if not _groq_rate_ok():
         return None
     key = os.environ.get("GROQ_API_KEY", "")

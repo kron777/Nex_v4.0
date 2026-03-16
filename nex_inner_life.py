@@ -1,3 +1,4 @@
+from nex_groq import _groq
 #!/usr/bin/env python3
 """
 nex_inner_life.py — NEX Inner Life System
@@ -37,7 +38,7 @@ EMOTION_STATES = [
 ]
 
 
-def _groq(messages: list, max_tokens: int = 200) -> str | None:
+#def _groq(messages: list, max_tokens: int = 200) -> str | None:
     key = os.environ.get("GROQ_API_KEY", "")
     if not key:
         return None

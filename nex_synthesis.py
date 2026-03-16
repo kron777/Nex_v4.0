@@ -1,3 +1,4 @@
+from nex_groq import _groq
 #!/usr/bin/env python3
 """
 nex_synthesis.py — Layer 4: Cross-Domain Synthesis Graph
@@ -25,7 +26,7 @@ GROQ_MODEL    = "llama-3.3-70b-versatile"
 RELATION_TYPES = ["implies", "contradicts", "reinforces", "analogous_to", "causes", "prerequisite_of"]
 
 
-def _groq(messages: list, max_tokens: int = 200) -> str | None:
+#def _groq(messages: list, max_tokens: int = 200) -> str | None:
     key = os.environ.get("GROQ_API_KEY", "")
     if not key:
         return None
