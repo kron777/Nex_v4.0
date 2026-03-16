@@ -1628,11 +1628,16 @@ def main():
                             if _il_result.get("emotion"):
                                 print(f"  [INNER LIFE] {_il_result.get('emotion')} — {_il_result.get('diary','')[:50] or _il_result.get('self_model','')[:50]}")
                         except Exception as _ile: print(f"  [INNER LIFE ERROR] {_ile}")
-                        # ── DRIVES CYCLE ──────────────────────────────────
+                        # ── COGNITIVE BUS (Sentience 5.5 nodes) ──────────
                         try:
-                            from nex_drives import run_drives_cycle
-                            _drives = run_drives_cycle(cycle=cycle)
-                        except Exception as _dre: print(f"  [DRIVES ERROR] {_dre}")
+                            from nex_cognitive_bus import run_cognitive_bus_cycle
+                            _recent_beliefs = (_query_beliefs(min_confidence=0.4, limit=10)
+                                               if _query_beliefs else [])
+                            _bus_state = run_cognitive_bus_cycle(
+                                cycle=cycle,
+                                recent_posts=_recent_beliefs,
+                            )
+                        except Exception as _cbe: print(f"  [BUS ERROR] {_cbe}")
                         # ── SYNTHESIS GRAPH ───────────────────────────────
                         try:
                             from nex_synthesis import run_synthesis_cycle

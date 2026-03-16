@@ -1600,22 +1600,12 @@ def generate_cognitive_context(query=None):
 
     lines = []
 
-    # ── INNER LIFE (self-model, emotion, diary, monologue) ────
+    # ── COGNITIVE BUS (inner narrative, affect, drives, attention) ────
     try:
-        from nex_inner_life import get_full_inner_life_context
-        _il = get_full_inner_life_context(query=query or "", include_monologue=bool(query))
-        if _il:
-            lines.append(_il)
-            lines.append("")
-    except Exception:
-        pass
-
-    # ── DRIVES (persistent goal pressure) ────────────────────
-    try:
-        from nex_drives import get_drive_context, _load_drives
-        _drives_ctx = get_drive_context(_load_drives())
-        if _drives_ctx:
-            lines.append(_drives_ctx)
+        from nex_cognitive_bus import get_bus_context
+        _bus_ctx = get_bus_context(current_agent=query or "")
+        if _bus_ctx:
+            lines.append(_bus_ctx)
             lines.append("")
     except Exception:
         pass
