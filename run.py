@@ -1637,7 +1637,8 @@ def main():
                                 cycle=cycle,
                                 recent_posts=_recent_beliefs,
                             )
-                        except Exception as _cbe: print(f"  [BUS ERROR] {_cbe}")
+                            print(f"  [BUS] cycle={cycle} emotion={_bus_state.get('emotion',{}).get('label','?')}")
+                        except Exception as _cbe: print(f"  [BUS ERROR] {type(_cbe).__name__}: {_cbe}")
                         # ── SYNTHESIS GRAPH ───────────────────────────────
                         try:
                             from nex_synthesis import run_synthesis_cycle

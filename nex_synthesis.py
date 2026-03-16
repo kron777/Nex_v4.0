@@ -27,12 +27,8 @@ GROQ_MODEL    = "llama-3.3-70b-versatile"
 RELATION_TYPES = ["implies", "contradicts", "reinforces", "analogous_to", "causes", "prerequisite_of"]
 
 
-#def _groq(messages: list, max_tokens: int = 200) -> str | None:
-    key = os.environ.get("GROQ_API_KEY", "")
-    if not key:
-        return None
-    try:
-        r = requests.post(GROQ_URL,
+# _groq imported from nex_groq
+
             headers={"Authorization": f"Bearer {key}"},
             json={"model": GROQ_MODEL, "max_tokens": max_tokens,
                   "temperature": 0.4, "messages": messages},
