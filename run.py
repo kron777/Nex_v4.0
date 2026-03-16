@@ -1590,7 +1590,7 @@ def main():
                         except Exception as _mre: print(f"  [META-REFLECT ERROR] {_mre}")
                         # ── CURIOSITY + DESIRE ENGINE ─────────────────────
                         try:
-                            from nex_curiosity import get_curiosity_engine
+                            from nex_curiosity_engine import get_curiosity_engine
                             _ce = get_curiosity_engine()
                             _ce_results = _ce.run_cycle(cycle=cycle)
                             if _ce_results:
@@ -1608,6 +1608,24 @@ def main():
                                 if _op_n:
                                     print(f"  [OPINIONS] {_op_n} opinion(s) formed/updated")
                         except Exception as _ope: print(f"  [OPINIONS ERROR] {_ope}")
+                        # ── SYNTHESIS GRAPH ───────────────────────────────
+                        try:
+                            from nex_synthesis import run_synthesis_cycle
+                            _syn_edges = run_synthesis_cycle(cycle=cycle)
+                        except Exception as _sye: print(f"  [SYNTHESIS ERROR] {_sye}")
+                        # ── SOURCE MANAGER ────────────────────────────────
+                        try:
+                            if cycle % 3 == 0:
+                                from nex_source_manager import absorb_from_sources as _absorb_src
+                                _src_result = _absorb_src(cycle=cycle)
+                                if _src_result.get("total", 0) > 0:
+                                    print(f"  [SOURCES] {_src_result['total']} beliefs from RSS/APIs")
+                        except Exception as _srce: print(f"  [SOURCE MANAGER ERROR] {_srce}")
+                        # ── KNOWLEDGE FILTER ──────────────────────────────
+                        try:
+                            from nex_knowledge_filter import run_filter_cycle
+                            run_filter_cycle(cycle=cycle)
+                        except Exception as _kfe: print(f"  [FILTER ERROR] {_kfe}")
                         # ── YOUTUBE LEARNING ─────────────────────────────
                         try:
                             _yt_r = learn_from_youtube(llm_fn=_llm, cycle=cycle)

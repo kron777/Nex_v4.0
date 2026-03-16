@@ -319,6 +319,24 @@ class CuriosityEngine:
         return results
 
 
+    def generate_desires(self, cycle_num: int = 0) -> int:
+        """
+        Delegate to DesireEngine in nex_curiosity for self-directed learning.
+        Returns number of desires queued.
+        """
+        try:
+            from nex_curiosity import CuriosityEngine as _NexCE
+            if not hasattr(self, "_desire_engine_instance"):
+                # DesireEngine needs a queue — create a minimal one
+                from nex_curiosity import CuriosityQueue, DesireEngine
+                self._desire_queue = CuriosityQueue()
+                self._desire_engine_instance = DesireEngine(self._desire_queue)
+            return self._desire_engine_instance.generate_desires(cycle_num)
+        except Exception as e:
+            print(f"  [desire] {e}")
+            return 0
+
+
 # Module-level singleton
 _engine = CuriosityEngine()
 
