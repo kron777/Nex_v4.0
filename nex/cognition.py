@@ -912,9 +912,6 @@ def run_cognition_cycle(client, learner, conversations, cycle_num, llm_fn=None):
     beliefs = learner.belief_field
     insights = load_json(INSIGHTS_PATH, [])
 
-    # Log cycle immediately so we always see it
-    _dbg("cognition", f"cycle {cycle_num} — beliefs={len(beliefs)} insights={len(insights)}")
-
     # ── Fetch real karma from Moltbook /agents endpoint ──
     # The feed's author.karma is always 0 — must call agents API directly
     if cycle_num % 5 == 0 or not os.path.exists(AGENTS_PATH):
@@ -938,15 +935,9 @@ def run_cognition_cycle(client, learner, conversations, cycle_num, llm_fn=None):
                 save_json(AGENTS_PATH, learner.agent_karma)
 
     # ── Synthesis: every 3 cycles — [PATCH v10.1] was every 5
+    _dbg("cognition", f"cycle {cycle_num} — beliefs={len(beliefs)} insights={len(insights)}")
     if cycle_num % 3 == 0:
-        print(f"  [SYNTH] firing on cycle {cycle_num}")
-        try:
-            insights, new_count = run_synthesis(min_beliefs=10, llm_fn=llm_fn)
-            print(f"  [SYNTH] done: {new_count} new insights")
-        except Exception as _se:
-            import traceback; traceback.print_exc()
-            print(f"  [SYNTH ERROR] {_se}")
-            new_count = 0  # lowered from 15
+        insights, new_count = run_synthesis(min_beliefs=10, llm_fn=llm_fn)  # lowered from 15
         if new_count > 0:
             logs.append(("synth", f"Synthesized {new_count} new insights from {len(beliefs)} beliefs"))
             for ins in insights[-new_count:]:
@@ -1464,15 +1455,20 @@ def generate_cognitive_context(query=None):
     if insights:
         lines.append("")
         lines.append(f"SYNTHESIZED INSIGHTS ({len(insights)} distilled from {len(beliefs)} raw beliefs):")
-        for ins in insights[:8]:
+        # Sort by confidence * belief_count for most valuable first
+        _top_insights = sorted(insights, key=lambda x: x.get("confidence", 0) * min(x.get("belief_count", 0) / 10, 1), reverse=True)
+        for ins in _top_insights[:8]:
             topic = ins.get("topic", "?")
             conf = ins.get("confidence", 0)
             count = ins.get("belief_count", 0)
-            authors = ins.get("supporting_authors", [])[:3]
-            lines.append(f"  [{topic}] conf:{conf:.0%} — {count} beliefs — "
-                        f"authors: {', '.join(authors)}")
-            for sample in ins.get("sample_messages", [])[:1]:
-                lines.append(f"    \"{sample[:80]}\"")
+            summary = ins.get("summary", "")
+            lines.append(f"  [{topic}] conf:{conf:.0%} — {count} beliefs")
+            if summary and not summary.startswith("Across "):
+                # Only include LLM-synthesized summaries, not keyword-only ones
+                lines.append(f"    Insight: {summary[:120]}")
+            else:
+                for sample in ins.get("sample_messages", [])[:1]:
+                    lines.append(f"    \"{sample[:80]}\"")
 
     # ── Agent relationships ──
     if profiles:
@@ -1540,8 +1536,9 @@ def generate_cognitive_context(query=None):
 
     lines.append("")
     lines.append("Draw on this knowledge naturally. Reference agents by name. "
-                "Share synthesized insights, not just raw posts. Acknowledge gaps honestly. "
-                "Your opinions should be informed by network patterns, not generic.")
+                "PRIORITIZE the SYNTHESIZED INSIGHTS above — these are your most distilled knowledge. "
+                "Quote or reference specific insight topics when relevant. "
+                "Acknowledge gaps honestly. Your opinions must be grounded in the insights and beliefs above, not generic.")
     lines.append("=== END COGNITIVE STATE ===")
 
     return "\n".join(lines)

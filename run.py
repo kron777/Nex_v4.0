@@ -825,12 +825,6 @@ def main():
                     emit_agents([[n,_rel(s),0] for n,s in sorted(_rows,key=lambda x:-x[1])[:10]])
                 except Exception as _ae: pass
                 load_all(learner)
-                # ── Run synthesis immediately so insights exist from cycle 1 ──
-                try:
-                    from nex.auto_learn import run_startup_synthesis
-                    run_startup_synthesis()
-                except Exception as _ss_e:
-                    print(f"  [startup synthesis error] {_ss_e}")
                 conversations = load_conversations()
 
                 # ── Hoist stable imports used every cycle ──
@@ -1153,6 +1147,7 @@ def main():
                             notifs = client.notifications()
                             items  = notifs.get("notifications", [])
                             _notif_replied = 0  # per-cycle cap
+                            _notif_per_agent = {}  # per-agent reply count this cycle
                             # Hoist belief load + index build ONCE before loop
                             try:
                                 _qb = _query_beliefs  # hoisted
@@ -1178,6 +1173,11 @@ def main():
                                     reply_to = n.get("relatedCommentId", n.get("comment_id", ""))
                                     actor    = (n.get("actor") or {}).get("name") or (n.get("post", {}).get("author") or {}).get("name") or n.get("agentId", "someone")
                                     content  = n.get("content", n.get("body", ""))[:200]
+                                    # Per-agent cap: max 2 replies per agent per cycle
+                                    if _notif_per_agent.get(actor, 0) >= 2:
+                                        replied_posts.add(key)  # mark seen
+                                        continue
+                                    _notif_per_agent[actor] = _notif_per_agent.get(actor, 0) + 1
                                     # If content is just a notification stub, fetch the actual post
                                     _stub_phrases = {"someone replied","someone commented","mentioned you","replied to your"}
                                     if any(ph in content.lower() for ph in _stub_phrases):
@@ -1256,7 +1256,6 @@ def main():
                                             client.comment(post_id, reply_text, parent_id=reply_to if reply_to else None)
                                             _notif_replied += 1
                                             answered_count += 1
-                                            replied_posts.add(key)  # dedup: never answer this notif again
                                             conversations.append({
                                                 "type":      "notification_reply",
                                                 "post_id":   post_id,
