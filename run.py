@@ -1628,6 +1628,11 @@ def main():
                             if _il_result.get("emotion"):
                                 print(f"  [INNER LIFE] {_il_result.get('emotion')} — {_il_result.get('diary','')[:50] or _il_result.get('self_model','')[:50]}")
                         except Exception as _ile: print(f"  [INNER LIFE ERROR] {_ile}")
+                        # ── DRIVES CYCLE ──────────────────────────────────
+                        try:
+                            from nex_drives import run_drives_cycle
+                            _drives = run_drives_cycle(cycle=cycle)
+                        except Exception as _dre: print(f"  [DRIVES ERROR] {_dre}")
                         # ── SYNTHESIS GRAPH ───────────────────────────────
                         try:
                             from nex_synthesis import run_synthesis_cycle
