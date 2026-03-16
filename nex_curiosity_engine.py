@@ -23,8 +23,24 @@ JOURNAL_PATH  = CFG_PATH / "dad_journal.json"
 GROQ_URL      = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL    = "llama-3.3-70b-versatile"
 
+# ── Groq rate limiter — max 50 calls/hour ─────────────────────
+_groq_calls: list = []
+GROQ_MAX_PER_HOUR = 50
+
+def _groq_rate_ok() -> bool:
+    now = time.time()
+    global _groq_calls
+    _groq_calls = [t for t in _groq_calls if now - t < 3600]
+    if len(_groq_calls) >= GROQ_MAX_PER_HOUR:
+        print(f"  [curiosity] rate limit reached ({GROQ_MAX_PER_HOUR}/hr), skipping")
+        return False
+    _groq_calls.append(now)
+    return True
+
 
 def _groq(messages: list, max_tokens: int = 300, temperature: float = 0.7) -> str | None:
+    if not _groq_rate_ok():
+        return None
     key = os.environ.get("GROQ_API_KEY", "")
     if not key:
         return None
