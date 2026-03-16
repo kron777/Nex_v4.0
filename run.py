@@ -1960,12 +1960,6 @@ def main():
     import sys as _sys
     if args.background or not _sys.stdin.isatty():
         print(f"{DIM}Nex: running in background mode.{RESET}")
-        try:
-            while True:
-                time.sleep(60)
-        except (KeyboardInterrupt, SystemExit):
-            _nex_cleanup()
-        return
 
     try:
         while True:
