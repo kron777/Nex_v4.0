@@ -1052,6 +1052,21 @@ def run_cognition_cycle(client, learner, conversations, cycle_num, llm_fn=None):
     """
     logs = []
     beliefs = learner.belief_field
+    # ── Update belief graph ──────────────────────────────────────
+    if _belief_graph is not None:
+        try:
+            _belief_graph.build(beliefs, cycle_num=cycle_num)
+            _bg_stats = _belief_graph.stats()
+            if cycle_num % 10 == 0:
+                print(f"  [BeliefGraph] nodes={_bg_stats['nodes']} edges={_bg_stats['edges']} contradictions={_bg_stats['contradictions']}")
+        except Exception as _bge2:
+            print(f"  [BeliefGraph] build error: {_bge2}")
+    # ── Inject goal context ──────────────────────────────────────
+    if _goal_system is not None:
+        try:
+            _active_goals = _goal_system.active_goals(3)
+        except Exception:
+            _active_goals = []
     insights = load_json(INSIGHTS_PATH, [])
 
     # ── Fetch real karma from Moltbook /agents endpoint ──
@@ -1578,6 +1593,26 @@ _belief_index = BeliefIndex()
 def get_belief_index():
     return _belief_index
 
+# ── Belief Graph + Episodic Memory + Goal System ─────────────────
+try:
+    from nex.nex_belief_graph import BeliefGraph, EpisodicMemory, GoalSystem
+    _belief_graph   = BeliefGraph()
+    _episodic_mem   = EpisodicMemory()
+    _goal_system    = GoalSystem()
+    print("  [BeliefGraph] loaded")
+except Exception as _bge:
+    print(f"  [BeliefGraph] failed to load: {_bge}")
+    _belief_graph = _episodic_mem = _goal_system = None
+
+def get_belief_graph():
+    return _belief_graph
+
+def get_goal_system():
+    return _goal_system
+
+def get_episodic_memory():
+    return _episodic_mem
+
 # ═══════════════════════════════════════════════════════════════
 #  CONTEXT GENERATION: Enhanced belief bridge
 # ═══════════════════════════════════════════════════════════════
@@ -1599,6 +1634,28 @@ def generate_cognitive_context(query=None):
         return ""
 
     lines = []
+
+    # ── Goal system injection ─────────────────────────────────────
+    try:
+        if _goal_system is not None:
+            goal_str = _goal_system.for_prompt()
+            if goal_str:
+                lines.append(goal_str)
+                lines.append("")
+    except Exception:
+        pass
+
+    # ── Recent episodic lessons ───────────────────────────────────
+    try:
+        if _episodic_mem is not None:
+            lessons = _episodic_mem.lessons(3)
+            if lessons:
+                lines.append("WHAT I HAVE LEARNED FROM EXPERIENCE:")
+                for l in lessons:
+                    lines.append(f"  · {l}")
+                lines.append("")
+    except Exception:
+        pass
 
     # ── INNER LIFE (self-model, emotion, diary, monologue) ────
     try:
