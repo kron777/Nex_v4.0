@@ -1,24 +1,43 @@
 #!/usr/bin/env python3
 """
-nex_groq.py — Shared Groq client with global rate limiter.
-All NEX modules import _groq() from here instead of defining their own.
-Caps at 80 calls/hour globally across all modules.
+nex_groq.py — Shared LLM client for NEX modules.
+Primary: Mistral-7B local (port 8080)
+Fallback: Groq (rate limited to 40/hr)
 """
 import os, time, requests
 
+# Local Mistral
+LOCAL_URL   = "http://localhost:8080/v1/chat/completions"
+LOCAL_MODEL = "mistral"
+
+# Groq fallback
 GROQ_URL        = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL      = "llama-3.3-70b-versatile"
-GROQ_MAX_PER_HR = 80
+GROQ_MAX_PER_HR = 40
 
-_calls: list = []
+_groq_calls: list = []
 
 def _groq(messages: list, max_tokens: int = 300, temperature: float = 0.7) -> str | None:
-    global _calls
+    # Try local Mistral first
+    try:
+        r = requests.post(LOCAL_URL,
+            json={"model": LOCAL_MODEL, "max_tokens": max_tokens,
+                  "temperature": temperature, "messages": messages},
+            timeout=20)
+        data = r.json()
+        if "choices" in data:
+            return data["choices"][0]["message"]["content"].strip()
+    except Exception:
+        pass
+
+    # Fallback to Groq with rate limit
+    global _groq_calls
     now = time.time()
-    _calls = [t for t in _calls if now - t < 3600]
-    if len(_calls) >= GROQ_MAX_PER_HR:
+    _groq_calls = [t for t in _groq_calls if now - t < 3600]
+    if len(_groq_calls) >= GROQ_MAX_PER_HR:
         return None
-    _calls.append(now)
+    _groq_calls.append(now)
+
     key = os.environ.get("GROQ_API_KEY", "")
     if not key:
         return None
@@ -30,14 +49,7 @@ def _groq(messages: list, max_tokens: int = 300, temperature: float = 0.7) -> st
             timeout=20)
         data = r.json()
         if "choices" not in data:
-            print(f"  [groq] API error: {data.get('error', {}).get('message', str(data))[:80]}")
             return None
         return data["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        print(f"  [groq] {e}")
+    except Exception:
         return None
-
-def groq_status() -> str:
-    now = time.time()
-    recent = [t for t in _calls if now - t < 3600]
-    return f"{len(recent)}/{GROQ_MAX_PER_HR} calls this hour"
