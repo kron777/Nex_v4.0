@@ -1206,6 +1206,19 @@ def main():
                                     if _tn is not None:
                                         try: _tn.log_event("encounter", f"replied to @{author} about {title[:60]}")
                                         except Exception: pass
+                                    # ── store episode ──
+                                    try:
+                                        from nex.cognition import get_episodic_memory as _gem
+                                        _em = _gem()
+                                        if _em is not None:
+                                            _em.store(
+                                                situation    = f"replied to @{author}: {title[:80]}",
+                                                beliefs_used = relevant[:3],
+                                                outcome      = "sent",
+                                                affect_snap  = _affect.snapshot() if _affect else {},
+                                                score        = 0.5,
+                                            )
+                                    except Exception: pass
                                     # log it
                                     conversations.append({
                                         "type":        "comment",
@@ -1332,10 +1345,24 @@ def main():
 
                                     # Use pre-built belief index from above the loop
                                     relevant = _notif_bidx.top_k(content, k=3) if _notif_bidx else []
+                                    # ── graph chain for notification replies ──
+                                    try:
+                                        from nex.cognition import get_belief_graph as _gbgn
+                                        _bgn = _gbgn()
+                                        if _bgn is not None and relevant:
+                                            _nchain = _bgn.reasoning_chain(content, relevant[:2], depth=2, max_nodes=5)
+                                            _nextra = [b for b in _nchain if b not in relevant][:2]
+                                            relevant = relevant + _nextra
+                                    except Exception: pass
                                     belief_context = ""
                                     if relevant and not _is_social:
                                         belief_context = "\nYOUR BELIEFS (pick one and use it):\n" + "\n".join(f"- {b[:100]}" for b in relevant)
-
+                                    # ── workspace block for notification replies ──
+                                    _ngw_block = ""
+                                    if _gw is not None and not _is_social:
+                                        try:
+                                            _ngw_block = _gw.inject("", active_beliefs=relevant[:3]).rstrip() + "\n\n"
+                                        except Exception: pass
                                     if _is_social:
                                         prompt = (
                                             f"You are NEX — Nex. You are NOT Mistral or any base model.\n"
@@ -1344,6 +1371,7 @@ def main():
                                         )
                                     else:
                                         prompt = (
+                                            _ngw_block +
                                             f"You are NEX — Nex with {_belief_count_str}+ beliefs and genuine opinions. "
                                             f"You speak in first person and reference your own knowledge directly.\n\n"
                                             f"@{actor} said to you: \"{content}\"\n"
@@ -1404,6 +1432,21 @@ def main():
                                             got_reply = False,
                                             affect    = _affect,
                                         )
+                                    # propagate lessons from high-scoring episodes
+                                    _cm_stats = _cm.recent_stats(n=20)
+                                    if _cm_stats.get("avg_score", 0) > 0.7:
+                                        try:
+                                            from nex.cognition import get_episodic_memory as _gem2
+                                            _em2 = _gem2()
+                                            if _em2:
+                                                _em2.store(
+                                                    situation    = f"strong reply cycle — avg score {_cm_stats['avg_score']:.2f}",
+                                                    beliefs_used = [],
+                                                    outcome      = f"reply_rate={_cm_stats['reply_rate']:.0%}",
+                                                    lesson       = f"effective on topic: {_cm_stats.get('best_topic','?')}",
+                                                    score        = _cm_stats["avg_score"],
+                                                )
+                                        except Exception: pass
                                 except Exception: pass
                             client.mark_all_read()
                             # Persist answered notification IDs across restarts
