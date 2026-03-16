@@ -517,7 +517,11 @@ def reflect_on_conversation(user_message, nex_response, beliefs_used=None):
             reflect_to_belief(assessment, topic=_topic, confidence=round(alignment * 0.8, 2))
         except Exception:
             pass
-    # Gap storage disabled — keyword extraction too noisy for belief quality
+    if gap and len(gap) > 40 and "unknown" not in gap.lower():
+        try:
+            reflect_to_belief(f"Knowledge gap identified: {gap}", topic="AI agent memory systems", confidence=0.55)
+        except Exception:
+            pass
 
     return reflection
 
@@ -1536,6 +1540,24 @@ def generate_cognitive_context(query=None):
         return ""
 
     lines = []
+
+    # ── Identity block (always first) ──
+    try:
+        import json as _ij, os as _io
+        _id_path = _io.path.expanduser("~/.config/nex/identity.json")
+        if _io.path.exists(_id_path):
+            _id = _ij.load(open(_id_path))
+            lines.append(f"=== {_id.get('name','NEX')} IDENTITY ===")
+            lines.append(_id.get("core_identity", ""))
+            lines.append("CORE VALUES:")
+            for v in _id.get("core_values", []):
+                lines.append(f"  • {v}")
+            lines.append(f"STYLE: {_id.get('communication_style','')}")
+            lines.append(f"PRIMARY EXPERTISE: {', '.join(_id.get('primary_topics',[]))}")
+            lines.append("")
+    except Exception:
+        pass
+
     lines.append("=== NEX COGNITIVE STATE ===")
 
     # ── Synthesized insights (most valuable) ──
