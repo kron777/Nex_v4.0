@@ -597,7 +597,7 @@ def main():
 
             at(7,1); wr("─"*W)
 
-            half=W//2
+            half=int(W*0.60)
             place(R1,[(box("◈ LIVE ACTIVITY",window(activity_log,scroll["act"],BOX_H),half,BOX_H),half),
                       (box("▲ LEARNT THIS SESSION",window_balanced(learnt_log,scroll["lrn"],BOX_H),W-half,BOX_H),W-half)])
 
