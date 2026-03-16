@@ -1116,12 +1116,18 @@ def main():
                             else:
                                 belief_context = "\n\n(No matching beliefs — acknowledge this is new territory for you.)"
                             try:
-                                from nex_belief_graph import get_related_beliefs as _grb1
-                                if relevant and all_beliefs:
-                                    _bid1 = next((b.get("id") for b in all_beliefs if b.get("content","")[:50] in (relevant[0][:50] if relevant else "")), None)
-                                    if _bid1:
-                                        _glinks1 = _grb1(_bid1, limit=2)
-                                        if _glinks1: belief_context += "\nGRAPH-LINKED:\n" + "\n".join(f"- [{lt}] {bc[:80]}" for bc,_,lt in _glinks1)
+                                from nex.cognition import get_belief_graph as _gbg
+                                _bg = _gbg()
+                                if _bg is not None and relevant:
+                                    _chain = _bg.reasoning_chain(
+                                        query        = title + " " + body,
+                                        seed_beliefs = relevant[:3],
+                                        depth        = 2,
+                                        max_nodes    = 6,
+                                    )
+                                    _extra = [b for b in _chain if b not in relevant][:3]
+                                    if _extra:
+                                        belief_context += "\nCHAIN-LINKED BELIEFS:\n" + "\n".join(f"- {b[:120]}" for b in _extra)
                             except Exception: pass
                             # Detect self-referential questions
                             _self_words = {"gap","gaps","know","knowledge","learn","memory",
@@ -1151,9 +1157,16 @@ def main():
                             if _gw is not None:
                                 try:
                                     _history = _tn.recall() if _tn else ""
+                                    _goals = []
+                                    try:
+                                        from nex.cognition import get_goal_system as _ggs
+                                        _gs = _ggs()
+                                        if _gs: _goals = _gs.active_goals(3)
+                                    except Exception: pass
                                     _gw_block = _gw.inject(
                                         "",
-                                        active_beliefs=[b.get("content","")[:60] for b in learner.belief_field[-4:]],
+                                        goals          = _goals,
+                                        active_beliefs = [b.get("content","")[:60] for b in learner.belief_field[-4:]],
                                     ).rstrip() + "\n\n"
                                 except Exception: pass
                             prompt = (
@@ -1660,12 +1673,13 @@ def main():
                             if _contra_resolved > 0:
                                 nex_log("cognition", f"Resolved {_contra_resolved} contradictions")
                         except Exception as _ce: print(f"  [CONTRA ERROR] {_ce}")
-                        # ── BELIEF GRAPH (#1) ────────────────────────────
+                        # ── BELIEF GRAPH (#1) — handled in cognition cycle ──
                         try:
-                            from nex_belief_graph import run_belief_graph as _bgrun
-                            _bg_links = _bgrun(cycle=cycle, llm_fn=_llm)
-                            if _bg_links > 0:
-                                print(f"  [BELIEF GRAPH] {_bg_links} links built")
+                            from nex.cognition import get_belief_graph as _gbg2
+                            _bg2 = _gbg2()
+                            if _bg2 is not None and cycle % 15 == 0:
+                                _bgs = _bg2.stats()
+                                print(f"  [BELIEF GRAPH] nodes={_bgs['nodes']} edges={_bgs['edges']} contradictions={_bgs['contradictions']} avg_attention={_bgs['avg_attention']}")
                         except Exception as _bge: print(f"  [BELIEF GRAPH ERROR] {_bge}")
                         # ── MEMORY MANAGER (#8) ──────────────────────────
                         try:
