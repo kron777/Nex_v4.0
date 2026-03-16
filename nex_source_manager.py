@@ -22,23 +22,28 @@ GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL   = "llama-3.3-70b-versatile"
 
 # ── Default domain-mapped sources ────────────────────────────
+# Aligned to NEX's core identity: cognitive architecture, AI agents,
+# cybersecurity, philosophy of mind, memory systems
 DEFAULT_SOURCES = {
-    "science": [
-        {"url": "https://export.arxiv.org/rss/cs.AI", "name": "arxiv_AI", "score": 1.0},
-        {"url": "https://export.arxiv.org/rss/cs.LG",  "name": "arxiv_ML", "score": 1.0},
-    ],
-    "tech": [
-        {"url": "https://news.ycombinator.com/rss",    "name": "hackernews", "score": 1.0},
-        {"url": "https://lobste.rs/rss",               "name": "lobsters",   "score": 1.0},
-    ],
-    "philosophy": [
-        {"url": "https://aeon.co/feed.rss",            "name": "aeon",       "score": 1.0},
+    "cognitive_architecture": [
+        {"url": "https://export.arxiv.org/rss/cs.AI",  "name": "arxiv_AI",  "score": 1.0},
+        {"url": "https://export.arxiv.org/rss/cs.NE",  "name": "arxiv_NE",  "score": 1.0},
     ],
     "ai_agents": [
-        {"url": "https://www.lesswrong.com/feed.xml",  "name": "lesswrong",  "score": 1.0},
+        {"url": "https://www.lesswrong.com/feed.xml",  "name": "lesswrong", "score": 1.0},
+        {"url": "https://export.arxiv.org/rss/cs.MA",  "name": "arxiv_multiagent", "score": 1.0},
     ],
-    "crypto": [
-        {"url": "https://cointelegraph.com/rss",       "name": "cointelegraph", "score": 1.0},
+    "cybersecurity": [
+        {"url": "https://feeds.feedburner.com/TheHackersNews", "name": "hackernews_sec", "score": 1.0},
+        {"url": "https://export.arxiv.org/rss/cs.CR",  "name": "arxiv_security", "score": 1.0},
+    ],
+    "philosophy_of_mind": [
+        {"url": "https://aeon.co/feed.rss",            "name": "aeon",      "score": 1.0},
+        {"url": "https://blog.philosophyofbrains.com/feed", "name": "phil_brains", "score": 1.0},
+    ],
+    "memory_systems": [
+        {"url": "https://export.arxiv.org/rss/cs.LG",  "name": "arxiv_ML",  "score": 1.0},
+        {"url": "https://distill.pub/rss.xml",         "name": "distill",   "score": 1.0},
     ],
 }
 
