@@ -825,6 +825,14 @@ def main():
                     emit_agents([[n,_rel(s),0] for n,s in sorted(_rows,key=lambda x:-x[1])[:10]])
                 except Exception as _ae: pass
                 load_all(learner)
+                # ── Run synthesis immediately so insights exist from cycle 1 ──
+                try:
+                    import sys as _ssi, os as _osi
+                    _ssi.path.insert(0, _osi.path.expanduser("~/Desktop/nex"))
+                    from nex.auto_learn import run_startup_synthesis as _startup_synth
+                    _startup_synth()
+                except Exception as _ss_e:
+                    print(f"  [startup synthesis error] {_ss_e}")
                 conversations = load_conversations()
 
                 # ── Hoist stable imports used every cycle ──
