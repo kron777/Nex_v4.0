@@ -1,4 +1,5 @@
 from nex_groq import _groq
+from nex_groq import _groq
 #!/usr/bin/env python3
 """
 nex_source_manager.py — Layer 2: Multi-Source Absorption Engine

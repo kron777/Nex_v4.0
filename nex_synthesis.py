@@ -1,4 +1,5 @@
 from nex_groq import _groq
+from nex_groq import _groq
 #!/usr/bin/env python3
 """
 nex_synthesis.py — Layer 4: Cross-Domain Synthesis Graph
