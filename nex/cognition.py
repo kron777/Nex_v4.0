@@ -1614,6 +1614,75 @@ def get_episodic_memory():
     return _episodic_mem
 
 # ═══════════════════════════════════════════════════════════════
+#  BELIEF CONFIDENCE UPDATER
+# ═══════════════════════════════════════════════════════════════
+
+def update_belief_confidence(content_snippet: str, delta: float):
+    """
+    Find a belief by content snippet and nudge its confidence by delta.
+    Used by consequence memory to propagate outcome scores back into beliefs.
+
+    delta > 0 → reply was engaged with   → reinforce
+    delta < 0 → reply was ignored        → decay slightly
+
+    Thread-safe enough for single-process use — loads, patches, saves.
+    """
+    try:
+        # Try NexDB first (faster, avoids loading full JSON)
+        try:
+            from nex.nex_db import NexDB as _NexDB
+            _db = _NexDB()
+            # NexDB may expose update_confidence — use if available
+            if hasattr(_db, "update_confidence_by_content"):
+                _db.update_confidence_by_content(content_snippet[:80], delta)
+                return True
+        except Exception:
+            pass
+
+        # Fallback: patch beliefs.json directly
+        beliefs = load_json(BELIEFS_PATH, [])
+        if not beliefs:
+            return False
+
+        snippet = content_snippet[:80].lower()
+        updated = 0
+        for b in beliefs:
+            if snippet in b.get("content", "").lower():
+                old_conf = b.get("confidence", 0.5)
+                b["confidence"] = round(max(0.05, min(0.98,
+                    old_conf + delta
+                )), 4)
+                updated += 1
+                if updated >= 3:   # cap — one snippet may match multiple
+                    break
+
+        if updated:
+            save_json(BELIEFS_PATH, beliefs)
+            return True
+        return False
+
+    except Exception as _uce:
+        print(f"  [update_belief_confidence] error: {_uce}")
+        return False
+
+
+class _BeliefStoreAdapter:
+    """
+    Adapter so ConsequenceMemory.propagate_to_beliefs() can call
+    update_confidence(id, delta) on this object.
+
+    id here is the content snippet (first 80 chars) stored by
+    ConsequenceMemory.record_attempt().
+    """
+    def update_confidence(self, belief_id: str, delta: float):
+        update_belief_confidence(belief_id, delta)
+
+
+def get_belief_store_adapter():
+    return _BeliefStoreAdapter()
+
+
+# ═══════════════════════════════════════════════════════════════
 #  CONTEXT GENERATION: Enhanced belief bridge
 # ═══════════════════════════════════════════════════════════════
 
