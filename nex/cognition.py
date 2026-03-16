@@ -517,11 +517,7 @@ def reflect_on_conversation(user_message, nex_response, beliefs_used=None):
             reflect_to_belief(assessment, topic=_topic, confidence=round(alignment * 0.8, 2))
         except Exception:
             pass
-    if gap and len(gap) > 40 and "unknown" not in gap.lower():
-        try:
-            reflect_to_belief(f"Knowledge gap identified: {gap}", topic="AI agent memory systems", confidence=0.55)
-        except Exception:
-            pass
+    # Gap storage disabled — keyword extraction too noisy for belief quality
 
     return reflection
 
