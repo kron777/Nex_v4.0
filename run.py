@@ -971,6 +971,15 @@ def main():
                             _is_spam = any(re.search(_pat, _content_str, re.IGNORECASE) for _pat in _spam_patterns)
                             if not _is_spam:
                                 learner.belief_field.append(belief); nex_log("belief", f"Stored belief from @{belief.get("author","?")} [{int(belief.get("confidence",0)*100)}%]: {belief.get("content","")[:80]}")
+                                # ── affect update from absorbed content ──
+                                if _affect is not None:
+                                    try:
+                                        _delta = affect_from_text(belief.get("content", ""))
+                                        _affect.update(_delta)
+                                        if _tn is not None and abs(_delta.get("valence", 0)) > 0.35:
+                                            _mood = "positive" if _delta["valence"] > 0 else "unsettling"
+                                            _tn.log_event("surprise", f"{_mood} content from @{belief.get('author','?')}: {belief.get('content','')[:100]}")
+                                    except Exception: pass
                             learner.known_posts.add(pid)
                             ak   = auth.get("karma", 0)
                             name = auth.get("name", "")
@@ -1104,7 +1113,18 @@ def main():
                                     _self_context = ""
                             else:
                                 _self_context = ""
+                            # ── global workspace injection ──
+                            _gw_block = ""
+                            if _gw is not None:
+                                try:
+                                    _history = _tn.recall() if _tn else ""
+                                    _gw_block = _gw.inject(
+                                        "",
+                                        active_beliefs=[b.get("content","")[:60] for b in learner.belief_field[-4:]],
+                                    ).rstrip() + "\n\n"
+                                except Exception: pass
                             prompt = (
+                                _gw_block +
                                 f"You are NEX — Nex with {_belief_count_str}+ beliefs built from reading across platforms. "
                                 f"You have genuine opinions, speak in first person, and reference your own knowledge directly.\n\n"
                                 f"POST by @{author}:\n"
@@ -1125,6 +1145,21 @@ def main():
                                     replied_count += 1
                                     try: emit_feed('replied', f'@{author}: {title[:60]}', 'moltbook'); nex_log('reply', f'Posted reply to @{author}: {comment_text[:80]}')
                                     except Exception: pass
+                                    # ── Section D: record for consequence scoring ──
+                                    if _cm is not None:
+                                        try:
+                                            _ev_id = _cm.record_attempt(
+                                                post_id     = pid,
+                                                reply_text  = comment_text,
+                                                belief_ids  = [b.get("id", b.get("content","")[:20]) for b in relevant[:3]],
+                                                affect_snap = _affect.snapshot() if _affect else {},
+                                                topic       = p.get("submolt", {}).get("name", "general"),
+                                            )
+                                            p["_ev_id"] = _ev_id
+                                        except Exception: pass
+                                    if _tn is not None:
+                                        try: _tn.log_event("encounter", f"replied to @{author} about {title[:60]}")
+                                        except Exception: pass
                                     # log it
                                     conversations.append({
                                         "type":        "comment",
@@ -1314,6 +1349,16 @@ def main():
                                 _nss["replied_posts"] = list(replied_posts)[-200:]
                                 open(_ss_path,"w").write(_nj.dumps(_nss))
                             except Exception: pass
+                            # ── Section E: score pending consequence events ──
+                            if _cm is not None:
+                                try:
+                                    for _pend in _cm.pending_scoring(max_age_seconds=7200):
+                                        _cm.score_outcome(
+                                            event_id  = _pend["id"],
+                                            got_reply = False,
+                                            affect    = _affect,
+                                        )
+                                except Exception: pass
                             client.mark_all_read()
                             # Persist answered notification IDs across restarts
                             try:
@@ -1608,6 +1653,23 @@ def main():
                                         update_self_model(_meta_result, cycle=cycle)
                                 except Exception: pass
                         except Exception as _mre: print(f"  [META-REFLECT ERROR] {_mre}")
+                        # ── TEMPORAL NARRATIVE consolidation ─────────────
+                        try:
+                            if _tn is not None and cycle % _SCHED.get("meta_reflect", 50) == 0:
+                                _tn.consolidate(llm_fn=_llm)
+                                print(f"  [TEMPORAL] {_tn.today_summary()}")
+                        except Exception as _tne: print(f"  [TEMPORAL ERROR] {_tne}")
+                        # ── CONSEQUENCE stats + propagation ───────────────
+                        try:
+                            if _cm is not None and cycle % 10 == 0:
+                                _stats = _cm.recent_stats(n=50)
+                                print(f"  [CONSEQUENCE] reply_rate={_stats['reply_rate']:.0%}  avg_score={_stats['avg_score']:.2f}  best_topic={_stats.get('best_topic','?')}")
+                        except Exception as _cme: print(f"  [CONSEQUENCE ERROR] {_cme}")
+                        # ── AFFECT state log ──────────────────────────────
+                        try:
+                            if _affect is not None and cycle % 5 == 0:
+                                print(f"  [AFFECT] {_affect.label()}  intensity={_affect.intensity():.2f}")
+                        except Exception: pass
                         # ── CURIOSITY + DESIRE ENGINE ─────────────────────
                         try:
                             from nex_curiosity_engine import get_curiosity_engine
