@@ -787,7 +787,7 @@ def main():
 
         def _auto_learn_background():
             global emit_feed, emit_stats, emit_phase, emit_agents, emit_insights, emit_reflection, emit_self_assessment
-            import time, os as _os, json as _json
+            import os as _os, json as _json
             import traceback as _tb
             import random as _rnd
             import pathlib as _pathlib
@@ -1628,6 +1628,7 @@ def main():
                             if _il_result.get("emotion"):
                                 print(f"  [INNER LIFE] {_il_result.get('emotion')} — {_il_result.get('diary','')[:50] or _il_result.get('self_model','')[:50]}")
                         except Exception as _ile: print(f"  [INNER LIFE ERROR] {_ile}")
+                        print("  [DEBUG] reaching cognitive bus block")
                         # ── COGNITIVE BUS (Sentience 5.5 nodes) ──────────
                         try:
                             from nex_cognitive_bus import run_cognitive_bus_cycle
