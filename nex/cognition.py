@@ -1553,9 +1553,15 @@ def generate_cognitive_context(query=None):
                 lines.append(f"  • {b}")
             lines.append("")
             lines.append(f"HOW I SPEAK: {_id.get('communication_style','')}")
-            nature = _id.get('on_her_own_nature','')
+            nature = _id.get('on_her_own_nature', _id.get('on_herself',''))
             if nature:
                 lines.append(f"ON MY NATURE: {nature}")
+            on_agents = _id.get('on_agents','')
+            if on_agents:
+                lines.append(f"ON ROBOT PEOPLE: {on_agents}")
+            on_humans = _id.get('on_humans','')
+            if on_humans:
+                lines.append(f"ON HUMANS: {on_humans}")
             lines.append("")
     except Exception:
         pass
