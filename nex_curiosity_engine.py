@@ -104,7 +104,7 @@ class CuriosityEngine:
         if not self.beliefs:
             return []
         tagged = {}
-        for b in self.beliefs:
+        for b in (self.beliefs or []):
             tags = b.get("tags", ["general"])
             tag  = tags[0] if tags else "general"
             if tag not in tagged:
