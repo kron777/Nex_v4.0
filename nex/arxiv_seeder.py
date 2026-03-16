@@ -7,7 +7,7 @@ Run once: python3 -m nex.arxiv_seeder
 import json, os, time, re
 import urllib.request
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timezone
 
 CONFIG_DIR  = os.path.expanduser("~/.config/nex")
 BELIEFS_PATH = os.path.join(CONFIG_DIR, "beliefs.json")
@@ -106,12 +106,12 @@ def build_belief(entry, query):
         "concept":      concepts[0] if concepts else "agent-general",
         "links_to":     concepts[1:4],
         "karma":        500,
-        "timestamp":    datetime.utcnow().isoformat(),
+        "timestamp":    datetime.now(timezone.utc).isoformat(),
         "tags":         ["arxiv", "research"] + concepts[:3],
         "confidence":   base_conf,
         "human_validated": False,
         "decay_score":  0,
-        "last_referenced": datetime.utcnow().isoformat(),
+        "last_referenced": datetime.now(timezone.utc).isoformat(),
         "query_source": query
     }
 

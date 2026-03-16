@@ -13,7 +13,7 @@ import time
 import random
 import requests
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 CFG_PATH      = Path("~/.config/nex").expanduser()
 GRAPH_PATH    = CFG_PATH / "synthesis_graph.json"
@@ -90,7 +90,7 @@ class SynthesisGraph:
                 "content":  belief.get("content", "")[:150],
                 "tags":     belief.get("tags", ["general"]),
                 "confidence": belief.get("confidence", 0.5),
-                "added":    datetime.utcnow().isoformat(),
+                "added":    datetime.now(timezone.utc).isoformat(),
             }
         return bid
 
@@ -106,10 +106,10 @@ class SynthesisGraph:
             "relation":      relation,
             "confidence":    confidence,
             "discovered_by": source,
-            "timestamp":     datetime.utcnow().isoformat(),
+            "timestamp":     datetime.now(timezone.utc).isoformat(),
         })
         self.graph["stats"]["edges_built"] = len(self.graph["edges"])
-        self.graph["stats"]["last_updated"] = datetime.utcnow().isoformat()
+        self.graph["stats"]["last_updated"] = datetime.now(timezone.utc).isoformat()
 
     def discover_relation(self, belief_a: dict, belief_b: dict) -> dict | None:
         """

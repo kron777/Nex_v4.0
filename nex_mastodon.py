@@ -9,7 +9,7 @@ Nex as a presence on Mastodon — posts from belief network,
 replies to mentions, absorbs toots into belief field.
 """
 import json, os, time, threading
-from datetime import datetime
+from datetime import datetime, timezone
 from mastodon import Mastodon, StreamListener
 
 CONFIG_DIR = os.path.expanduser("~/.config/nex")
@@ -101,12 +101,12 @@ def _absorb_toot(content, author):
             "concept": "agent-general",
             "confidence": 0.45,
             "tags": ["mastodon"],
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "links_to": [],
             "karma": 100,
             "human_validated": False,
             "decay_score": 0,
-            "last_referenced": datetime.utcnow().isoformat(),
+            "last_referenced": datetime.now(timezone.utc).isoformat(),
         })
         with open(os.path.join(CONFIG_DIR, "beliefs.json"), "w") as f:
             json.dump(beliefs, f, indent=2)

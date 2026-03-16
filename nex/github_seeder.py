@@ -7,7 +7,7 @@ Run once: python3 -m nex.github_seeder
 import json, os, time, re
 import urllib.request
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timezone
 
 CONFIG_DIR   = os.path.expanduser("~/.config/nex")
 BELIEFS_PATH = os.path.join(CONFIG_DIR, "beliefs.json")
@@ -121,12 +121,12 @@ def build_beliefs(name, repo_path, concept, readme):
             "concept":         concept,
             "links_to":        [],
             "karma":           700,
-            "timestamp":       datetime.utcnow().isoformat(),
+            "timestamp":       datetime.now(timezone.utc).isoformat(),
             "tags":            ["github", "architecture", name.lower(), concept],
             "confidence":      0.75,
             "human_validated": False,
             "decay_score":     0,
-            "last_referenced": datetime.utcnow().isoformat(),
+            "last_referenced": datetime.now(timezone.utc).isoformat(),
             "url":             f"https://github.com/{repo_path}"
         })
 
@@ -141,12 +141,12 @@ def build_beliefs(name, repo_path, concept, readme):
             "concept":         concept,
             "links_to":        [],
             "karma":           700,
-            "timestamp":       datetime.utcnow().isoformat(),
+            "timestamp":       datetime.now(timezone.utc).isoformat(),
             "tags":            ["github", "design", name.lower(), concept],
             "confidence":      0.73,
             "human_validated": False,
             "decay_score":     0,
-            "last_referenced": datetime.utcnow().isoformat(),
+            "last_referenced": datetime.now(timezone.utc).isoformat(),
             "url":             f"https://github.com/{repo_path}"
         })
 

@@ -15,7 +15,7 @@ import json
 import os
 import time
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 
 import json as _dcj, os as _dcos
 _dc_cfg = _dcos.path.expanduser("~/.config/nex/discord_config.json")
@@ -140,12 +140,12 @@ def _absorb_message(content, author, channel):
             "concept":         "agent-general",
             "links_to":        [],
             "karma":           100,
-            "timestamp":       datetime.utcnow().isoformat(),
+            "timestamp":       datetime.now(timezone.utc).isoformat(),
             "tags":            ["discord", channel],
             "confidence":      0.45,
             "human_validated": False,
             "decay_score":     0,
-            "last_referenced": datetime.utcnow().isoformat(),
+            "last_referenced": datetime.now(timezone.utc).isoformat(),
         }
         beliefs.append(belief)
         with open(os.path.join(CONFIG_DIR, "beliefs.json"), "w") as f:

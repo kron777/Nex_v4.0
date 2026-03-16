@@ -145,7 +145,7 @@ class CuriosityEngine:
             "confidence": 0.6,
             "tags":       [topic, "curiosity"],
             "query_type": "A",
-            "timestamp":  datetime.utcnow().isoformat(),
+            "timestamp":  datetime.now(timezone.utc).isoformat(),
         }
         _save_bridge_belief(belief)
         return belief
@@ -174,7 +174,7 @@ class CuriosityEngine:
             "confidence": 0.55,
             "tags":       ["depth", "curiosity"],
             "query_type": "B",
-            "timestamp":  datetime.utcnow().isoformat(),
+            "timestamp":  datetime.now(timezone.utc).isoformat(),
         }
         _save_bridge_belief(belief)
         return belief
@@ -228,7 +228,7 @@ class CuriosityEngine:
             "domain_b":   domain_b,
             "belief_a":   belief_a[:80],
             "belief_b":   belief_b[:80],
-            "timestamp":  datetime.utcnow().isoformat(),
+            "timestamp":  datetime.now(timezone.utc).isoformat(),
         }
         _save_bridge_belief(bridge_belief)
         print(f"  [curiosity] Bridge: {answer[:80]}...")
@@ -240,7 +240,7 @@ class CuriosityEngine:
         Once per day: pick 1 topic, run 5 queries in sequence,
         build a knowledge cluster, write to Dad Journal.
         """
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         if self._last_deep_dive_date == today:
             return None
         self._last_deep_dive_date = today
@@ -271,7 +271,7 @@ class CuriosityEngine:
                     "content":    answer,
                     "confidence": 0.65,
                     "tags":       [topic, "deep_dive"],
-                    "timestamp":  datetime.utcnow().isoformat(),
+                    "timestamp":  datetime.now(timezone.utc).isoformat(),
                 }
                 _save_bridge_belief(b)
 

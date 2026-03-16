@@ -7,7 +7,7 @@ Run once: python3 -m nex.wiki_seeder
 import json, os, time, re
 import urllib.request
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timezone
 
 CONFIG_DIR   = os.path.expanduser("~/.config/nex")
 BELIEFS_PATH = os.path.join(CONFIG_DIR, "beliefs.json")
@@ -117,12 +117,12 @@ def build_belief(wiki, concept, query_title):
         "concept":         concept,
         "links_to":        [],
         "karma":           800,
-        "timestamp":       datetime.utcnow().isoformat(),
+        "timestamp":       datetime.now(timezone.utc).isoformat(),
         "tags":            ["wikipedia", "foundational", concept],
         "confidence":      confidence,
         "human_validated": False,
         "decay_score":     0,
-        "last_referenced": datetime.utcnow().isoformat(),
+        "last_referenced": datetime.now(timezone.utc).isoformat(),
         "url":             wiki["url"]
     }
 

@@ -14,7 +14,7 @@ import hashlib
 import requests
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 CFG_PATH     = Path("~/.config/nex").expanduser()
 SOURCES_FILE = CFG_PATH / "active_sources.json"
@@ -179,7 +179,7 @@ def absorb_from_sources(learner=None, cycle: int = 0) -> dict:
                     "content":    belief_text,
                     "confidence": 0.55,
                     "tags":       [domain],
-                    "timestamp":  datetime.utcnow().isoformat(),
+                    "timestamp":  datetime.now(timezone.utc).isoformat(),
                     "url":        item.get("link", ""),
                 }
                 new_beliefs.append(belief)

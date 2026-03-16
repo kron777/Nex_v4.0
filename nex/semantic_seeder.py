@@ -7,7 +7,7 @@ Run once: python3 -m nex.semantic_seeder
 import json, os, time, re
 import urllib.request
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timezone
 
 CONFIG_DIR   = os.path.expanduser("~/.config/nex")
 BELIEFS_PATH = os.path.join(CONFIG_DIR, "beliefs.json")
@@ -100,12 +100,12 @@ def build_belief(paper):
         "karma":           cites,
         "year":            year,
         "citation_count":  cites,
-        "timestamp":       datetime.utcnow().isoformat(),
+        "timestamp":       datetime.now(timezone.utc).isoformat(),
         "tags":            ["semantic_scholar", "cited"] + concepts[:3],
         "confidence":      round(conf, 3),
         "human_validated": False,
         "decay_score":     0,
-        "last_referenced": datetime.utcnow().isoformat(),
+        "last_referenced": datetime.now(timezone.utc).isoformat(),
     }
 
 def run_seed():
