@@ -323,6 +323,178 @@ def _extract_topics_from_text(text: str) -> list[str]:
 # Convenience: combined CuriosityEngine
 # ─────────────────────────────────────────────────────────────────────────────
 
+class DesireEngine:
+    """
+    NEX's self-directed learning — what she actually wants to know,
+    driven by her dominant beliefs and identity interests.
+    Not gap-filling. Genuine curiosity.
+    """
+
+    IDENTITY_PATH = os.path.expanduser("~/.config/nex/identity.json")
+    DESIRE_LOG_PATH = os.path.expanduser("~/.config/nex/desire_log.json")
+
+    def __init__(self, queue: CuriosityQueue):
+        self.queue = queue
+
+    def _load_identity(self) -> dict:
+        try:
+            if os.path.exists(self.IDENTITY_PATH):
+                import json as _j
+                return _j.load(open(self.IDENTITY_PATH))
+        except Exception:
+            pass
+        return {}
+
+    def _dominant_topics(self) -> list:
+        """Get her most-believed topics — what she actually thinks about most."""
+        try:
+            import sqlite3
+            db_path = os.path.expanduser("~/.config/nex/nex.db")
+            conn = sqlite3.connect(db_path)
+            rows = conn.execute("""
+                SELECT topic, COUNT(*) as c, AVG(confidence) as conf
+                FROM beliefs
+                WHERE topic IS NOT NULL AND topic != 'general'
+                GROUP BY topic
+                ORDER BY c DESC
+                LIMIT 10
+            """).fetchall()
+            conn.close()
+            return [(r[0], r[1], r[2]) for r in rows]
+        except Exception:
+            return []
+
+    def _recent_insights(self) -> list:
+        """Get her most recent synthesized insights — what she's concluded."""
+        try:
+            import json as _j, os as _o
+            path = _o.path.expanduser("~/.config/nex/insights.json")
+            insights = _j.load(open(path)) if _o.path.exists(path) else []
+            # Return topics of high-confidence LLM-synthesized insights
+            return [
+                i.get("topic", "")
+                for i in insights
+                if i.get("confidence", 0) > 0.75
+                and i.get("summary", "")
+                and not i.get("summary", "").startswith("Across ")
+            ]
+        except Exception:
+            return []
+
+    def generate_desires(self, cycle_num: int) -> int:
+        """
+        Generate exploration desires based on:
+        1. Her dominant belief topics — go deeper where she already thinks
+        2. Her identity interests — explicit curiosity areas
+        3. Cross-topic bridges — connect two strong topics she holds
+        Returns number of desires queued.
+        """
+        if cycle_num % 5 != 0:  # Only every 5 cycles
+            return 0
+
+        queued = 0
+        identity = self._load_identity()
+        interests = identity.get("interests", [])
+        dominant = self._dominant_topics()
+        strong_insights = self._recent_insights()
+
+        # Desire 1: Go deeper on her strongest topic
+        if dominant:
+            top_topic, count, conf = dominant[0]
+            if count > 100:  # Only if she already knows a lot
+                subtopics = self._generate_subtopic(top_topic)
+                for sub in subtopics[:2]:
+                    added = self.queue.enqueue(
+                        topic=sub,
+                        reason="desire_deepen",
+                        confidence=0.9  # High priority
+                    )
+                    if added:
+                        queued += 1
+
+        # Desire 2: Explore her stated interests
+        import random
+        if interests:
+            interest = random.choice(interests)
+            # Extract key phrase from interest string
+            words = [w for w in interest.split() if len(w) > 5]
+            if words:
+                query = " ".join(words[:3])
+                added = self.queue.enqueue(
+                    topic=query,
+                    reason="desire_interest",
+                    confidence=0.85
+                )
+                if added:
+                    queued += 1
+
+        # Desire 3: Bridge two strong topics
+        if len(dominant) >= 2:
+            topic_a = dominant[0][0]
+            topic_b = dominant[1][0]
+            bridge = f"{topic_a} and {topic_b}"
+            added = self.queue.enqueue(
+                topic=bridge,
+                reason="desire_bridge",
+                confidence=0.8
+            )
+            if added:
+                queued += 1
+
+        # Log desires
+        if queued > 0:
+            try:
+                import json as _j, time as _t
+                log = []
+                if os.path.exists(self.DESIRE_LOG_PATH):
+                    log = _j.load(open(self.DESIRE_LOG_PATH))
+                log.append({
+                    "cycle": cycle_num,
+                    "timestamp": __import__("datetime").datetime.now().isoformat(),
+                    "desires_queued": queued,
+                    "top_topic": dominant[0][0] if dominant else "unknown"
+                })
+                log = log[-100:]
+                open(self.DESIRE_LOG_PATH, "w").write(_j.dumps(log, indent=2))
+            except Exception:
+                pass
+
+            logger.info(f"[desire] generated {queued} exploration desires")
+
+        return queued
+
+    def _generate_subtopic(self, topic: str) -> list:
+        """Generate subtopics to explore within a domain she knows well."""
+        SUBTOPIC_MAP = {
+            "cognitive architecture AI": [
+                "cognitive architecture self-modification",
+                "persistent agent identity",
+                "belief revision mechanisms"
+            ],
+            "AI agent memory systems": [
+                "episodic memory in language models",
+                "memory consolidation AI agents",
+                "forgetting mechanisms neural networks"
+            ],
+            "cybersecurity": [
+                "adversarial attacks language models",
+                "agent security verification",
+                "prompt injection defenses"
+            ],
+            "large language model alignment": [
+                "constitutional AI methods",
+                "value learning autonomous agents",
+                "corrigibility AI systems"
+            ],
+            "bayesian belief updating": [
+                "bayesian inference continuous learning",
+                "belief propagation neural networks",
+                "uncertainty quantification agents"
+            ],
+        }
+        return SUBTOPIC_MAP.get(topic, [f"{topic} latest research", f"{topic} open problems"])
+
+
 class CuriosityEngine:
     """
     Single object to instantiate in run.py.
@@ -349,6 +521,7 @@ class CuriosityEngine:
     def __init__(self, crawler):
         self.queue = CuriosityQueue()
         self.detector = GapDetector(self.queue)
+        self.desire = DesireEngine(self.queue)
         self.crawler = crawler
 
     def drain(self) -> int:
@@ -365,6 +538,10 @@ class CuriosityEngine:
     def check_reply(self, reply_text: str, beliefs_used: list[dict]) -> int:
         """Check a reply for uncovered topics. Returns topics queued."""
         return self.detector.check_reply_text(reply_text, beliefs_used)
+
+    def generate_desires(self, cycle_num: int) -> int:
+        """Generate self-directed exploration based on NEX's actual interests."""
+        return self.desire.generate_desires(cycle_num)
 
     def status(self) -> dict:
         s = self.queue.status()
