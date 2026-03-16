@@ -13,7 +13,7 @@ import time
 import random
 import requests
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 CFG_PATH      = Path("~/.config/nex").expanduser()
 BELIEFS_PATH  = CFG_PATH / "beliefs.json"
