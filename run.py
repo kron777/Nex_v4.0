@@ -1964,6 +1964,8 @@ def main():
     try:
         while True:
             try:
+                if args.background or not _sys.stdin.isatty():
+                    raise EOFError
                 user_input = input("> ").strip()
             except (EOFError, KeyboardInterrupt):
                 print(f"\n{DIM}Nex: running in background mode (no stdin).{RESET}")
