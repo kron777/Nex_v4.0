@@ -50,7 +50,11 @@ MAX_ARTICLES = 5   # per source per run
 def _load_sources() -> dict:
     if SOURCES_FILE.exists():
         try:
-            return json.loads(SOURCES_FILE.read_text())
+            data = json.loads(SOURCES_FILE.read_text())
+            if isinstance(data, dict):
+                return data
+            # File is a list — reset to defaults
+            print("  [sources] active_sources.json was list format, resetting to defaults")
         except Exception:
             pass
     return DEFAULT_SOURCES.copy()

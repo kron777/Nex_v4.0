@@ -321,17 +321,44 @@ class CuriosityEngine:
 
     def generate_desires(self, cycle_num: int = 0) -> int:
         """
-        Delegate to DesireEngine in nex_curiosity for self-directed learning.
+        Self-directed learning: queue exploration topics based on dominant beliefs.
         Returns number of desires queued.
         """
         try:
-            from nex_curiosity import CuriosityEngine as _NexCE
-            if not hasattr(self, "_desire_engine_instance"):
-                # DesireEngine needs a queue — create a minimal one
-                from nex_curiosity import CuriosityQueue, DesireEngine
-                self._desire_queue = CuriosityQueue()
-                self._desire_engine_instance = DesireEngine(self._desire_queue)
-            return self._desire_engine_instance.generate_desires(cycle_num)
+            self.refresh()
+            if not self.beliefs:
+                return 0
+            from collections import Counter
+            from datetime import datetime, timezone
+            import json
+            from pathlib import Path
+
+            tag_counts = Counter()
+            for b in self.beliefs:
+                for t in b.get("tags", []):
+                    if t not in ("general", "curiosity", "bridge", "deep_dive", "depth"):
+                        tag_counts[t] += 1
+
+            top_topics = [t for t, _ in tag_counts.most_common(3)]
+            if not top_topics:
+                return 0
+
+            desires = [
+                {"topic": t, "reason": "desire_interest",
+                 "cycle": cycle_num,
+                 "timestamp": datetime.now(timezone.utc).isoformat()}
+                for t in top_topics
+            ]
+
+            log_path = Path("~/.config/nex/desire_log.json").expanduser()
+            try:
+                existing = json.loads(log_path.read_text()) if log_path.exists() else []
+                existing.extend(desires)
+                log_path.write_text(json.dumps(existing[-200:], indent=2))
+            except Exception:
+                pass
+
+            return len(desires)
         except Exception as e:
             print(f"  [desire] {e}")
             return 0
