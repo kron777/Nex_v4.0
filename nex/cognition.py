@@ -1541,13 +1541,21 @@ def generate_cognitive_context(query=None):
         _id_path = _io.path.expanduser("~/.config/nex/identity.json")
         if _io.path.exists(_id_path):
             _id = _ij.load(open(_id_path))
-            lines.append(f"=== {_id.get('name','NEX')} IDENTITY ===")
+            lines.append("=== WHO I AM ===")
             lines.append(_id.get("core_identity", ""))
-            lines.append("CORE VALUES:")
-            for v in _id.get("core_values", []):
-                lines.append(f"  • {v}")
-            lines.append(f"STYLE: {_id.get('communication_style','')}")
-            lines.append(f"PRIMARY EXPERTISE: {', '.join(_id.get('primary_topics',[]))}")
+            lines.append("")
+            lines.append("MY PERSONALITY:")
+            for t in _id.get("personality_traits", []):
+                lines.append(f"  • {t}")
+            lines.append("")
+            lines.append("WHAT I BELIEVE:")
+            for b in _id.get("core_beliefs", []):
+                lines.append(f"  • {b}")
+            lines.append("")
+            lines.append(f"HOW I SPEAK: {_id.get('communication_style','')}")
+            nature = _id.get('on_her_own_nature','')
+            if nature:
+                lines.append(f"ON MY NATURE: {nature}")
             lines.append("")
     except Exception:
         pass
