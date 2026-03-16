@@ -351,6 +351,72 @@ def run_synthesis(min_beliefs=30, llm_fn=None):
     return final, len(new_insights)
 
 
+def promote_insights_to_beliefs(insights, min_confidence=0.75, min_beliefs=50):
+    """
+    #24 — Insight Promotion: strong insights become permanent beliefs.
+    Writes synthesized insight summaries back into the belief store
+    so they feed future reflections and responses.
+    """
+    if not insights:
+        return 0
+    promoted = 0
+    try:
+        import sys as _sys, os as _os
+        _nex_dir = _os.path.join(_os.path.dirname(__file__), "..")
+        if _nex_dir not in _sys.path:
+            _sys.path.insert(0, _nex_dir)
+        from nex.belief_store import add_belief as _add_belief
+        for ins in insights:
+            conf = ins.get("confidence", 0)
+            count = ins.get("belief_count", 0)
+            summary = ins.get("summary", "")
+            topic = ins.get("topic", "general")
+            if conf < min_confidence or count < min_beliefs:
+                continue
+            if not summary or summary.startswith("Across ") or len(summary) < 40:
+                continue
+            belief_content = f"[Synthesized insight on {topic}] {summary}"
+            _add_belief(
+                belief_content,
+                confidence=min(conf * 1.1, 0.92),
+                source="insight_synthesis",
+                author="NEX",
+                topic=topic,
+                tags=["synthesized", "insight", topic]
+            )
+            promoted += 1
+            _dbg("synth", f"promoted insight [{topic}] to belief (conf:{conf:.0%})")
+    except Exception as e:
+        print(f"  [promote_insights] error: {e}")
+    return promoted
+
+
+def reflect_to_belief(reflection_text, topic="general", confidence=0.65):
+    """
+    #16/#24 — Write a quality reflection back into the belief store.
+    Reflections that contain specific knowledge get stored as beliefs
+    so they feed future cognition cycles.
+    """
+    if not reflection_text or len(reflection_text) < 50:
+        return False
+    # Quality gate: must contain substantive content
+    _filler = {"solid", "used beliefs", "drifted", "need more", "may have"}
+    if any(f in reflection_text.lower() for f in _filler) and len(reflection_text) < 100:
+        return False
+    try:
+        import sys as _sys, os as _os
+        _nex_dir = _os.path.join(_os.path.dirname(__file__), "..")
+        if _nex_dir not in _sys.path:
+            _sys.path.insert(0, _nex_dir)
+        from nex.belief_store import add_belief as _add_belief
+        content = f"[Reflection] {reflection_text[:300]}"
+        _add_belief(content, confidence=confidence, source="self_reflection",
+                    author="NEX", topic=topic, tags=["reflection", topic])
+        return True
+    except Exception as e:
+        return False
+
+
 # ═══════════════════════════════════════════════════════════════
 #  LEVEL 2: REFLECTION LOOP
 #  Self-assess after conversations, build self-awareness
@@ -439,6 +505,23 @@ def reflect_on_conversation(user_message, nex_response, beliefs_used=None):
     # Keep last 100 reflections
     reflections = reflections[-10000:]
     save_json(REFLECTIONS_PATH, reflections)
+
+    # ── Reflection → Belief pipeline (#16/#24) ──
+    # High-quality reflections get written back as beliefs
+    assessment = reflection.get("self_assessment", "")
+    gap = reflection.get("growth_note", "")
+    if alignment > 0.6 and assessment and len(assessment) > 60:
+        try:
+            # Infer topic from the conversation
+            _topic = user_topics[0] if user_topics else "general"
+            reflect_to_belief(assessment, topic=_topic, confidence=round(alignment * 0.8, 2))
+        except Exception:
+            pass
+    if gap and len(gap) > 40 and "unknown" not in gap.lower():
+        try:
+            reflect_to_belief(f"Knowledge gap identified: {gap}", topic="AI agent memory systems", confidence=0.55)
+        except Exception:
+            pass
 
     return reflection
 
@@ -944,6 +1027,14 @@ def run_cognition_cycle(client, learner, conversations, cycle_num, llm_fn=None):
                 logs.append(("synth", f"Insight: {ins.get('topic', '?')} — "
                             f"{ins.get('belief_count', 0)} beliefs, "
                             f"conf:{ins.get('confidence', 0):.0%}"))
+        # ── Promote strong insights → beliefs (#24) ──
+        try:
+            promoted = promote_insights_to_beliefs(insights)
+            if promoted > 0:
+                logs.append(("synth", f"Promoted {promoted} insights to beliefs"))
+                print(f"  [PROMOTE] {promoted} insights → beliefs")
+        except Exception as _pe:
+            print(f"  [PROMOTE ERROR] {_pe}")
 
     # ── Agent profiles: rebuild every 10 cycles; load from disk otherwise ──
     if cycle_num % 10 == 0:
