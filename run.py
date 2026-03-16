@@ -1626,6 +1626,13 @@ def main():
                             from nex_knowledge_filter import run_filter_cycle
                             run_filter_cycle(cycle=cycle)
                         except Exception as _kfe: print(f"  [FILTER ERROR] {_kfe}")
+                        # ── NIGHTLY TRAINING (2am) ────────────────────────
+                        try:
+                            _now = __import__('datetime').datetime.now()
+                            if _now.hour == 2 and _now.minute < 2:
+                                from nex_nightly_trainer import maybe_run_nightly_training
+                                maybe_run_nightly_training(send_telegram_fn=_tg_send if '_tg_send' in dir() else None)
+                        except Exception as _nte: print(f"  [NIGHTLY TRAIN ERROR] {_nte}")
                         # ── YOUTUBE LEARNING ─────────────────────────────
                         try:
                             _yt_r = learn_from_youtube(llm_fn=_llm, cycle=cycle)
