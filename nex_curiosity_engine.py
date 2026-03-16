@@ -334,8 +334,8 @@ class CuriosityEngine:
             from pathlib import Path
 
             tag_counts = Counter()
-            for b in self.beliefs:
-                for t in b.get("tags", []):
+            for b in (self.beliefs or []):
+                for t in b.get("tags", []) or []:
                     if t not in ("general", "curiosity", "bridge", "deep_dive", "depth"):
                         tag_counts[t] += 1
 
