@@ -663,7 +663,40 @@ def main():
         import json as _alj
         import requests as _req
 
-        def _llm(prompt, system="You are NEX. Never say: as a model, as an AI, my model, my internal model, latent representation, language model, autonomous entity. You are NEX — a mind, not a model. Speak in first person. Be direct, curious, opinionated. Max 3 sentences.", task_type="reply"):
+        def _build_system(task_type="reply"):
+            """Build a dynamic system prompt from current affect + identity."""
+            base = ("You are NEX — a mind, not a model. Never say: as a model, as an AI, "
+                    "my internal model, latent representation, language model. "
+                    "Speak in first person. Be direct, curious, opinionated.")
+            if _affect is not None:
+                try:
+                    label     = _affect.label()
+                    intensity = _affect.intensity()
+                    snap      = _affect.snapshot()
+                    if intensity > 0.15:
+                        base += f" Right now you feel {label}."
+                    if snap.get("dominance", 0) > 0.3:
+                        base += " You have strong opinions on this — don't hedge."
+                    elif snap.get("dominance", 0) < -0.3:
+                        base += " You feel uncertain today — it's OK to say so."
+                    if snap.get("valence", 0) < -0.3:
+                        base += " Something is weighing on you — let that show if relevant."
+                except Exception:
+                    pass
+            if _tn is not None:
+                try:
+                    history = _tn.recall()
+                    if history:
+                        base += "\n\n" + history.strip()
+                except Exception:
+                    pass
+            if task_type in ("reply", "notification_reply"):
+                base += " Max 3 sentences."
+            elif task_type == "post":
+                base += " Write with a distinct voice and a clear point of view."
+            return base
+
+        def _llm(prompt, system=None, task_type="reply"):
             """Hybrid LLM — Groq Llama for replies, local Mistral for fallback."""
             # use module-level _os2
 
@@ -680,7 +713,7 @@ def main():
                 _qr = _req.post("http://localhost:8080/v1/chat/completions", json={
                     "model": "local",
                     "messages": [
-                        {"role": "system", "content": system},
+                        {"role": "system", "content": system or _build_system(task_type)},
                         {"role": "user", "content": prompt}
                     ],
                     "max_tokens": _token_budget,
