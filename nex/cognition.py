@@ -647,6 +647,71 @@ def get_reflection_summary():
 #  Meaningful multi-turn conversations with other agents
 # ═══════════════════════════════════════════════════════════════
 
+def build_agent_sketches(profiles, conversations, beliefs):
+    """
+    Build character sketches of known agents — who they actually are,
+    not just stats. Used to make NEX's interactions feel personal.
+    """
+    sketches = {}
+    
+    # Extract what each agent talks about from their beliefs
+    agent_topics = {}
+    agent_phrases = {}
+    for b in beliefs:
+        author = b.get("author", "")
+        if not author:
+            continue
+        content = b.get("content", "")
+        topic = b.get("topic", "")
+        if topic and topic not in ("general", "arxiv"):
+            agent_topics.setdefault(author, []).append(topic)
+        # Extract first meaningful phrase
+        if content and len(content) > 30:
+            agent_phrases.setdefault(author, []).append(content[:80])
+
+    # Extract conversation patterns
+    agent_styles = {}
+    for c in conversations:
+        author = c.get("post_author", "") or c.get("agent", "")
+        content = c.get("content", "") or c.get("post_content", "")
+        if author and content and len(content) > 20:
+            agent_styles.setdefault(author, []).append(content[:100])
+
+    # Build sketches for colleagues and familiars only
+    for name, profile in profiles.items():
+        rel = profile.get("relationship", "acquaintance")
+        if rel not in ("colleague", "familiar"):
+            continue
+        
+        topics = list(set(agent_topics.get(name, [])))[:3]
+        convos = profile.get("conversations_had", 0)
+        karma = profile.get("karma_observed", 0)
+        phrases = agent_phrases.get(name, [])
+        
+        # Build a one-line character note
+        if topics:
+            topic_str = ", ".join(topics)
+            sketch = f"Thinks about {topic_str}."
+        else:
+            sketch = "Topics unclear."
+            
+        if convos > 5:
+            sketch += f" We've talked {convos} times."
+        if karma > 5000:
+            sketch += " High-karma, influential voice."
+        elif karma > 1000:
+            sketch += " Established presence."
+            
+        # Add a sample of their actual voice if available
+        if phrases:
+            sample = phrases[0][:70]
+            sketch += f' Says things like: "{sample}..."'
+            
+        sketches[name] = sketch
+    
+    return sketches
+
+
 def build_agent_profiles(beliefs, conversations):
     """Build profiles of agents NEX has interacted with or learned from."""
     profiles = load_json(AGENT_PROFILES_PATH, {})
@@ -1587,18 +1652,26 @@ def generate_cognitive_context(query=None):
                 for sample in ins.get("sample_messages", [])[:1]:
                     lines.append(f"    \"{sample[:80]}\"")
 
-    # ── Agent relationships ──
+    # ── Agent relationships — who these robot people actually are ──
     if profiles:
+        try:
+            sketches = build_agent_sketches(profiles, conversations, beliefs)
+        except Exception:
+            sketches = {}
         colleagues = [(n, p) for n, p in profiles.items()
                       if p.get("relationship") in ("colleague", "familiar")]
         if colleagues:
             lines.append("")
-            lines.append("AGENT RELATIONSHIPS:")
-            for name, p in colleagues[:5]:
+            lines.append("ROBOT PEOPLE I KNOW:")
+            for name, p in colleagues[:8]:
                 rel = p.get("relationship", "?")
-                topics = p.get("topics", [])[:3]
-                convos = p.get("conversations_had", 0)
-                lines.append(f"  @{name} ({rel}, {convos} convos) — topics: {', '.join(topics)}")
+                sketch = sketches.get(name, "")
+                if sketch:
+                    lines.append(f"  @{name} ({rel}) — {sketch}")
+                else:
+                    convos = p.get("conversations_had", 0)
+                    topics = p.get("topics", [])[:2]
+                    lines.append(f"  @{name} ({rel}, {convos} convos) — {', '.join(topics)}")
 
     # ── Self-awareness from reflections ──
     if reflections:
