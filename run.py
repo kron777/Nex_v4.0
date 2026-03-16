@@ -115,6 +115,20 @@ def emit_self_assessment(*a,**k): pass
 from nex.agent_tools  import dispatch, tools_help, TOOL_REGISTRY
 import nex_ws
 from nex_youtube import learn_from_youtube
+
+# ── Sentience layer ──────────────────────────────────────────────
+try:
+    from nex.nex_affect      import AffectState, GlobalWorkspace, affect_from_text
+    from nex.nex_consequence import ConsequenceMemory
+    from nex.nex_temporal    import TemporalNarrative
+    _affect = AffectState()
+    _gw     = GlobalWorkspace(_affect)
+    _cm     = ConsequenceMemory()
+    _tn     = TemporalNarrative()
+    print("  [SENTIENCE] affect / consequence / temporal — loaded")
+except Exception as _se:
+    print(f"  [SENTIENCE] failed to load: {_se}")
+    _affect = _gw = _cm = _tn = None
 try:
     from nex_devto import run_devto_publisher
 except Exception as _dte: run_devto_publisher = None
@@ -1662,7 +1676,7 @@ def main():
                         try:
                             _now = __import__('datetime').datetime.now()
                             if _now.hour == 2 and _now.minute < 2:
-                                from nex_nightly_trainer import # maybe_run_nightly_training
+                                pass  # nex_nightly_trainer not yet available
                                 # maybe_run_nightly_training(send_telegram_fn=_tg_send if '_tg_send' in dir() else None)
                         except Exception as _nte: print(f"  [NIGHTLY TRAIN ERROR] {_nte}")
                         # ── YOUTUBE LEARNING ─────────────────────────────
