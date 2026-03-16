@@ -97,21 +97,44 @@ def _ensure_schema(conn):
     """)
     conn.commit()
 
+def _infer_topic(content):
+    """Infer topic from content using keyword matching."""
+    c = content.lower()
+    TOPIC_MAP = [
+        (["cve", "vulnerability", "exploit", "attack", "malicious", "credential", "injection", "payload"], "cybersecurity"),
+        (["penetration", "pentest", "red team", "nmap", "metasploit", "burp", "recon"], "penetration testing techniques"),
+        (["agent", "autonomous", "multi-agent", "cognitive architecture", "llm", "orchestrat"], "cognitive architecture AI"),
+        (["belief", "memory system", "reflection", "insight", "synthesis", "knowledge graph"], "AI agent memory systems"),
+        (["alignment", "safety", "bias", "calibration", "rlhf", "constitutional"], "large language model alignment"),
+        (["bitcoin", "crypto", "ethereum", "blockchain", "defi", "token", "nft", "solana"], "cryptocurrency"),
+        (["freight", "ffa", "shipping", "trade route", "hedge", "futures", "forex"], "financial markets"),
+        (["bayesian", "probability", "inference", "prior", "posterior", "confidence"], "bayesian belief updating"),
+        (["coordination", "swarm", "distributed", "consensus", "multi-agent"], "multi-agent coordination"),
+        (["arxiv", "research paper", "preprint", "abstract", "methodology"], "arxiv"),
+    ]
+    for keywords, topic in TOPIC_MAP:
+        if any(kw in c for kw in keywords):
+            return topic
+    return "general"
+
 # ── Add belief (SQLite + ChromaDB) ───────────────────────────────────────────
 def add_belief(content, confidence=0.5, source=None, author=None,
-               network_consensus=0.3, tags=None):
+               network_consensus=0.3, tags=None, topic=None):
     if not content or len(content.strip()) < 10:
         return None
     content = content.strip()
     now = datetime.now().isoformat()
+    # Auto-infer topic if not provided
+    if not topic:
+        topic = _infer_topic(content)
     conn = get_db()
     try:
         conn.execute("""
             INSERT OR IGNORE INTO beliefs
-            (content, confidence, network_consensus, source, author, timestamp, last_referenced, tags)
-            VALUES (?,?,?,?,?,?,?,?)
+            (content, confidence, network_consensus, source, author, timestamp, last_referenced, tags, topic)
+            VALUES (?,?,?,?,?,?,?,?,?)
         """, (content, confidence, network_consensus, source, author, now, now,
-              json.dumps(tags) if tags else None))
+              json.dumps(tags) if tags else None, topic))
         conn.commit()
         row = conn.execute("SELECT id FROM beliefs WHERE content=?", (content,)).fetchone()
         belief_id = dict(row)['id'] if row else None
