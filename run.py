@@ -1703,6 +1703,14 @@ def main():
                         except Exception as _ce:
                             print(f"  [cognition error] {_ce}")
                         emit_phase("COGNITION", 120); nex_log("phase", "▶ COGNITION — synthesising beliefs")
+                        # ── GPU HEALTH CHECK ─────────────────────────────────
+                        try:
+                            if cycle % 10 == 0:
+                                from nex.gpu_watch import check_and_log as _gpu_check
+                                _gpu_status = _gpu_check()
+                                if _gpu_status in ("warning", "critical"):
+                                    nex_log("phase", f"  [GPU] {_gpu_status.upper()} — check gpu_health.json")
+                        except Exception as _gwe: pass
                         # ── CONTRADICTION ENGINE (#5) ─────────────────────
                         try:
                             from nex_contradiction_engine import run_contradiction_cycle as _contra
