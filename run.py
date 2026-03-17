@@ -95,6 +95,16 @@ except Exception as _idef_import_err:
     def _idef_surface_post(**k): return None
     def _idef_stats(): return {}
     def _idef_init(**k): return 0
+
+# ── DARK LAYER import ─────────────────────────────────────────────────────────
+try:
+    from nex.dark_layer import start as _dark_start, get_stats as _dark_stats
+    _DARK_LOADED = True
+except Exception as _dle:
+    print(f"  [DarkLayer] import failed: {_dle}")
+    _DARK_LOADED = False
+    def _dark_start(): pass
+    def _dark_stats(): return {}
 try:
     from nex_ws import ws_start, emit_feed, emit_stats, emit_phase, emit_agents, emit_insights, emit_reflection, emit_self_assessment
     _WS = True
@@ -899,6 +909,13 @@ def main():
                     _startup_synth()
                 except Exception as _ss_e:
                     print(f"  [startup synthesis error] {_ss_e}")
+
+                # ── DARK LAYER START ──────────────────────────────────────────
+                try:
+                    if _DARK_LOADED:
+                        _dark_start()
+                except Exception as _dle2:
+                    print(f"  [DarkLayer start error] {_dle2}")
                 conversations = load_conversations()
 
                 # ── Hoist stable imports used every cycle ──
