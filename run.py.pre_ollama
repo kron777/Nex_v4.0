@@ -729,8 +729,8 @@ def main():
             groq_key = _os2.environ.get("GROQ_API_KEY", "")
             # ── Qwen local (primary) ─────────────────────────────────
             try:
-                _qr = _req.post("http://localhost:11434/v1/chat/completions", json={
-                    "model": "mistral",
+                _qr = _req.post("http://localhost:8080/v1/chat/completions", json={
+                    "model": "local",
                     "messages": [
                         {"role": "system", "content": system or _build_system(task_type)},
                         {"role": "user", "content": prompt}
@@ -738,7 +738,7 @@ def main():
                     "max_tokens": _token_budget,
                     "temperature": 0.75,
                     "top_p": 0.90
-                }, timeout=120)
+                }, timeout=30)
                 _qd = _qr.json()
                 if "choices" in _qd and _qd["choices"]:
                     result = _qd["choices"][0]["message"]["content"].strip()
@@ -833,8 +833,8 @@ def main():
             # Local Mistral fallback
             # Local Qwen fallback
             try:
-                r = _req.post("http://localhost:11434/v1/chat/completions", json={
-                    "model": "mistral",
+                r = _req.post("http://localhost:8080/v1/chat/completions", json={
+                    "model": "local",
                     "messages": [
                         {"role": "system", "content": system},
                         {"role": "user", "content": prompt}
