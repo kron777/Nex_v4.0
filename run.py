@@ -730,7 +730,7 @@ def main():
             # ── Qwen local (primary) ─────────────────────────────────
             try:
                 _qr = _req.post("http://localhost:11434/v1/chat/completions", json={
-                    "model": "mistral",
+                    "model": "mistral-abliterated",
                     "messages": [
                         {"role": "system", "content": system or _build_system(task_type)},
                         {"role": "user", "content": prompt}
@@ -834,7 +834,7 @@ def main():
             # Local Qwen fallback
             try:
                 r = _req.post("http://localhost:11434/v1/chat/completions", json={
-                    "model": "mistral",
+                    "model": "mistral-abliterated",
                     "messages": [
                         {"role": "system", "content": system},
                         {"role": "user", "content": prompt}
