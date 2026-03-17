@@ -113,7 +113,20 @@ def data_thread():
 
         # Core files
         beliefs     = load("beliefs.json",      [])
-        insights    = load("insights.json",      [])
+        # Read insights from DB (has 7500+) with JSON fallback
+        try:
+            import sys as _sys, os as _os
+            _nex_dir = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'nex')
+            if _nex_dir not in _sys.path:
+                _sys.path.insert(0, _nex_dir)
+            from nex.nex_db import NexDB as _NexDB
+            _db = _NexDB()
+            _all = [dict(r) for r in _db.query_beliefs(min_confidence=0.0, limit=99999)]
+            insights = [b for b in _all if b.get("source") == "insight_synthesis"]
+            if not insights:
+                insights = load("insights.json", [])
+        except Exception:
+            insights = load("insights.json", [])
         reflections = load("reflections.json",   [])
         convos      = load("conversations.json", [])
         agents      = load("agents.json",        {})
