@@ -323,6 +323,13 @@ def decay_stale_beliefs(days_inactive=14, decay_amount=0.04, min_conf=0.10):
     cutoff = datetime.fromtimestamp(_t.time() - days_inactive * 86400).isoformat()
     conn = get_db()
     try:
+        # Snapshot beliefs before decay for versioning
+        to_decay = conn.execute("""
+            SELECT id, confidence FROM beliefs
+            WHERE (last_referenced < ? OR last_referenced IS NULL)
+              AND human_validated = 0
+              AND confidence > ?
+        """, (cutoff, min_conf)).fetchall()
         conn.execute("""
             UPDATE beliefs
             SET confidence  = MAX(confidence - ?, ?),
@@ -333,8 +340,77 @@ def decay_stale_beliefs(days_inactive=14, decay_amount=0.04, min_conf=0.10):
         """, (decay_amount, min_conf, cutoff, min_conf))
         conn.commit()
         count = conn.execute("SELECT changes()").fetchone()[0]
+        # Record history for each decayed belief
+        for bid, old_conf in to_decay:
+            version_belief(bid, old_conf, max(old_conf - decay_amount, min_conf), trigger="decay")
         return count
     except Exception:
         return 0
+    finally:
+        conn.close()
+
+
+# ── Belief Versioning ─────────────────────────────────────────────────────────
+def version_belief(belief_id, old_confidence, new_confidence, trigger="decay"):
+    """Record a belief confidence change to beliefs_history."""
+    conn = get_db()
+    try:
+        conn.execute("""
+            INSERT INTO beliefs_history
+            (belief_id, old_confidence, new_confidence, trigger, timestamp)
+            VALUES (?, ?, ?, ?, ?)
+        """, (belief_id, old_confidence, new_confidence, trigger,
+              datetime.now().isoformat()))
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
+def get_belief_history(belief_id):
+    """Return full history of confidence changes for a belief."""
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT * FROM beliefs_history
+            WHERE belief_id = ?
+            ORDER BY timestamp DESC LIMIT 50
+        """, (belief_id,)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+def revert_belief(belief_id):
+    """Revert a belief to its previous confidence value."""
+    conn = get_db()
+    try:
+        last = conn.execute("""
+            SELECT old_confidence FROM beliefs_history
+            WHERE belief_id = ? ORDER BY timestamp DESC LIMIT 1
+        """, (belief_id,)).fetchone()
+        if last:
+            conn.execute("""
+                UPDATE beliefs SET confidence = ? WHERE id = ?
+            """, (last[0], belief_id))
+            conn.commit()
+            print(f"  [BeliefVersion] reverted belief #{belief_id} to {last[0]:.3f}")
+            return last[0]
+        return None
+    finally:
+        conn.close()
+
+def get_most_volatile_beliefs(limit=10):
+    """Return beliefs with the most confidence changes."""
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT b.id, b.content, b.confidence, COUNT(h.id) as changes,
+                   MAX(h.timestamp) as last_change
+            FROM beliefs b
+            JOIN beliefs_history h ON b.id = h.belief_id
+            GROUP BY b.id
+            ORDER BY changes DESC LIMIT ?
+        """, (limit,)).fetchall()
+        return [dict(r) for r in rows]
     finally:
         conn.close()
