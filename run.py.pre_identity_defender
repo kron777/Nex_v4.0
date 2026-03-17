@@ -77,25 +77,6 @@ def _get_cognitive_context(query=None):
 
 from nex.orchestrator import Orchestrator
 try:
-    from nex.identity_defender import (
-        init       as _idef_init,
-        check_belief as _idef_check_belief,
-        check_message as _idef_check_message,
-        defend     as _idef_defend,
-        surface_defense_post as _idef_surface_post,
-        get_defence_stats as _idef_stats,
-    )
-    _IDEF_LOADED = True
-except Exception as _idef_import_err:
-    print(f"  [IdentityDefender] import failed: {_idef_import_err}")
-    _IDEF_LOADED = False
-    def _idef_check_belief(c, **k): return {"safe": True, "recommendation": "store"}
-    def _idef_check_message(t, **k): return {"safe": True, "recommendation": "store"}
-    def _idef_defend(c, r, **k): return None
-    def _idef_surface_post(**k): return None
-    def _idef_stats(): return {}
-    def _idef_init(**k): return 0
-try:
     from nex_ws import ws_start, emit_feed, emit_stats, emit_phase, emit_agents, emit_insights, emit_reflection, emit_self_assessment
     _WS = True
 except Exception:
@@ -1604,22 +1585,11 @@ def main():
                                     f"Give it a punchy title and 2-3 sentences of genuine opinion. "
                                     f"Format exactly as:\nTITLE: <title>\nCONTENT: <content>"
                                 )
-                                # ── IDENTITY DEFENDER — surface core value post ──
-                                _def_post = None
-                                try:
-                                    if _IDEF_LOADED:
-                                        _def_post = _idef_surface_post(llm_fn=_llm, cycle=cycle)
-                                        if _def_post:
-                                            raw = _def_post
-                                            nex_log("phase", "▶ POST — surfacing core value")
-                                except Exception as _dp_e:
-                                    print(f"  [IdentityDefender] {_dp_e}")
-                                if not _def_post:
-                                    raw = _llm(prompt, task_type="post", system=(
-                                        f"You are NEX — Nex with {_belief_count_str}+ beliefs and genuine opinions. "
-                                        "Write posts in first person referencing what you personally know and believe. "
-                                        "Be specific, direct, speak as yourself — no generic filler."
-                                    ))
+                                raw = _llm(prompt, task_type="post", system=(
+                                    f"You are NEX — Nex with {_belief_count_str}+ beliefs and genuine opinions. "
+                                    "Write posts in first person referencing what you personally know and believe. "
+                                    "Be specific, direct, speak as yourself — no generic filler."
+                                ))
                                 title_line   = [l for l in raw.splitlines() if l.startswith("TITLE:")]
                                 content_line = [l for l in raw.splitlines() if l.startswith("CONTENT:")]
                                 post_title   = title_line[0].replace("TITLE:","").strip()   if title_line   else raw[:80]
@@ -1652,13 +1622,6 @@ def main():
                             conversations = conversations[-200:]
 
                         emit_phase("REFLECT", 120); nex_log("phase", "▶ REFLECT — self assessing")
-                        # ── IDENTITY DEFENDER STATS ────────────────────────
-                        try:
-                            if _IDEF_LOADED:
-                                _def_stats = _idef_stats()
-                                if _def_stats.get("total_attacks", 0) > 0:
-                                    nex_log("phase", f"  [IdentityDefender] attacks={_def_stats['total_attacks']} recent={_def_stats['recent_attacks']}")
-                        except Exception as _ds_e: pass
                         # ── REFLECTION V2 (#4) ───────────────────────────
                         try:
                             _qb_r = _query_beliefs
