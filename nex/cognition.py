@@ -373,9 +373,14 @@ def promote_insights_to_beliefs(insights, min_confidence=0.75, min_beliefs=50):
             topic = ins.get("topic", "general")
             if conf < min_confidence or count < min_beliefs:
                 continue
-            if not summary or summary.startswith("Across ") or len(summary) < 40:
+            if not summary or len(summary) < 20:
                 continue
-            belief_content = f"[Synthesized insight on {topic}] {summary}"
+            # Strip boilerplate template prefix if present
+            _clean = summary
+            if _clean.startswith("Across "):
+                _parts = _clean.split(".")
+                _clean = ". ".join(_parts[1:]).strip() if len(_parts) > 1 else _clean
+            belief_content = f"[Synthesized insight on {topic}] {_clean}"
             _add_belief(
                 belief_content,
                 confidence=min(conf * 1.1, 0.92),
