@@ -315,7 +315,11 @@ def run_synthesis(min_beliefs=30, llm_fn=None):
 
     new_insights = []
     skipped = 0
-    for name, cluster in clusters.items():
+    # Sort clusters by size — synthesize largest first, cap LLM calls at 15
+    _sorted_clusters = sorted(clusters.items(), key=lambda x: len(x[1]["beliefs"]), reverse=True)
+    _llm_calls_used = 0
+    _LLM_CAP = 15
+    for name, cluster in _sorted_clusters:
         cluster_size = len(cluster["beliefs"])
         # Re-synthesize if belief count grew by >10% since last insight
         existing_insight = next(
@@ -324,11 +328,17 @@ def run_synthesis(min_beliefs=30, llm_fn=None):
         if existing_insight:
             old_count = existing_insight.get("belief_count", 0)
             growth = (cluster_size - old_count) / max(old_count, 1)
-            if growth < 0.02:   # less than 2% new beliefs — skip
+            # Always re-synthesize if existing summary is template-only
+            _is_template = existing_insight.get("summary", "").startswith("Across ")
+            _not_llm = not existing_insight.get("llm_synthesized", False)
+            if growth < 0.02 and not (_is_template and _not_llm and llm_fn):
                 skipped += 1
                 continue
 
-        insight = synthesize_cluster(name, cluster["beliefs"], llm_fn=llm_fn)
+        _use_llm = llm_fn if _llm_calls_used < _LLM_CAP else None
+        if _use_llm:
+            _llm_calls_used += 1
+        insight = synthesize_cluster(name, cluster["beliefs"], llm_fn=_use_llm)
         new_insights.append(insight)
         _dbg("synth", f"new insight [{name}] from {len(cluster['beliefs'])} beliefs")  # [PATCH v10.1]
 
