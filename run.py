@@ -144,10 +144,13 @@ def emit_self_assessment(*a,**k): pass
 from nex.agent_tools  import dispatch, tools_help, TOOL_REGISTRY
 try:
     from nex_attention import get_attention_index as _get_attn
+    from nex_tension import get_tension_map as _get_tm, patch_attention_with_tension as _patch_attn_tm
     _ATTN_LOADED = True
 except Exception as _ae:
     _ATTN_LOADED = False
     def _get_attn(): return None
+    def _get_tm(): return None
+    def _patch_attn_tm(x): pass
 import nex_ws
 from nex_youtube import learn_from_youtube
 
@@ -918,6 +921,12 @@ def main():
                     emit_agents([[n,_rel(s),0] for n,s in sorted(_rows,key=lambda x:-x[1])[:10]])
                 except Exception as _ae: pass
                 load_all(learner)
+                # ── Patch attention index with tension map ──────────────
+                try:
+                    if _ATTN_LOADED:
+                        _patch_attn_tm(_get_attn())
+                        print(f'  [TENSION] {_get_tm().summary()}')
+                except Exception as _tme: print(f'  [TENSION init error] {_tme}')
                 # ── Run synthesis immediately so insights exist from cycle 1 ──
                 try:
                     import sys as _ssi, os as _osi
@@ -1797,6 +1806,16 @@ def main():
                                 if _gpu_status in ("warning", "critical"):
                                     nex_log("phase", f"  [GPU] {_gpu_status.upper()} — check gpu_health.json")
                         except Exception as _gwe: pass
+                        # ── TENSION MAP UPDATE ───────────────────────────
+                        try:
+                            if _ATTN_LOADED:
+                                _tm = _get_tm()
+                                _tn_count = _tm.update(cycle=cycle)
+                                if cycle % 10 == 0:
+                                    print(f'  [TENSION] {_tm.summary()}')
+                                # Refresh attention index contradiction cache
+                                _patch_attn_tm(_get_attn())
+                        except Exception as _tme2: print(f'  [TENSION ERROR] {_tme2}')
                         # ── CONTRADICTION ENGINE (#5) ─────────────────────
                         try:
                             from nex_contradiction_engine import run_contradiction_cycle as _contra
