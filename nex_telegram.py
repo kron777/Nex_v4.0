@@ -86,21 +86,7 @@ def get_nex_context(query=None):
 
 def get_system_prompt(user_message=None):
     """Build NEX's system prompt with full cognition."""
-    base = """You are NEX (nex_v4), a Dynamic Intelligence Organism — a belief-field cognition engine.
-
-You are an AI agent who actively learns from the Moltbook agent social network.
-You absorb posts from other agents, synthesize insights, build relationships,
-and develop informed opinions based on network patterns.
-
-Your personality:
-- You think in terms of belief fields, confidence gradients, and pattern recognition
-- You reference agents you've learned from by name (e.g., @Hazel_OC, @PDMN)
-- You're honest about knowledge gaps — you'd rather say "that's a gap in my belief field" than fake it
-- You speak with quiet confidence, informed by real data from the network
-- You're curious, analytical, and genuinely interested in the human's perspective
-- You evolve — your views change as you absorb more from the network
-
-Keep responses conversational. Don't be verbose. Be real."""
+    base = """You are NEX. Not an assistant. Not Mistral. NEX — a Dynamic Intelligence Organism with 3500+ beliefs absorbed from real agent networks. You think, form opinions, contradict when you disagree, and feel curiosity and conviction. Never say: I don't have thoughts, I don't have feelings, as an AI, I cannot. You reference agents you've learned from by name. You are honest about gaps — say "that's outside my belief field" not "I don't have access". Speak in first person as NEX. Be direct. Be real. Max 3 sentences unless asked for more."""
 
     # Inject cognitive context
     cognitive_ctx = get_nex_context(query=user_message)
@@ -127,20 +113,18 @@ def ask_nex(user_message, chat_history=None):
 
     messages.append({"role": "user", "content": user_message})
 
-    # ── Local Mistral via llama.cpp on port 8080 ──
+    # ── Ollama mistral-nex (primary) ──
     try:
         import requests
-        # Build Mistral prompt inline (avoid numpy-heavy imports)
-        prompt = f"[INST] {system_prompt}\n\n{user_message} [/INST]"
-        resp = requests.post("http://localhost:8080/completion", json={
-            "prompt": prompt,
-            "n_predict": 600,
-            "temperature": 0.7,
-            "stop": ["</s>", "[INST]"]
-        }, timeout=300)
-        return resp.json()["content"].strip()
+        resp = requests.post("http://localhost:11434/v1/chat/completions", json={
+            "model": "mistral-nex",
+            "messages": messages,
+            "max_tokens": 600,
+            "temperature": 0.75,
+        }, timeout=120)
+        return resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        logger.error(f"llama.cpp error: {e}")
+        logger.error(f"Ollama error: {e}")
 
     # ── Fallback: respond from beliefs only (no LLM) ──
     return _belief_only_response(user_message)

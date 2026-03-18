@@ -1689,6 +1689,12 @@ def main():
                                     nex_log("reflection", f"V2: {_rresult[:200]}")
                                     print(f"  [REFLECT V2] {_rresult[:100]}")
                         except Exception as _rv2e: print(f"  [REFLECT V2 ERROR] {_rv2e}")
+                        # ── Affect update from reflection ────────────────
+                        try:
+                            if _affect is not None and _rresult:
+                                from nex.nex_affect import affect_from_text
+                                _affect.update(affect_from_text(_rresult))
+                        except Exception: pass
                         # ── KNOWLEDGE GAP DETECTOR (#6) ──────────────────
                         try:
                             if cycle % _SCHED["gap_detect"] == 0:
