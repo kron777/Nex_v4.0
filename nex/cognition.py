@@ -1078,6 +1078,38 @@ def run_cognition_cycle(client, learner, conversations, cycle_num, llm_fn=None):
                 print(f"  [BeliefGraph] nodes={_bg_stats['nodes']} edges={_bg_stats['edges']} contradictions={_bg_stats['contradictions']}")
         except Exception as _bge2:
             print(f"  [BeliefGraph] build error: {_bge2}")
+
+    # ── Pressure system — weight decay + tension resolution ──────
+    if _bws is not None:
+        try:
+            _bws.decay_cycle()
+            _bws.save()
+        except Exception as _bwse:
+            print(f"  [Pressure] weight decay error: {_bwse}")
+    if _tr is not None and cycle_num % 10 == 0:
+        try:
+            from nex.cognition import load_json as _lj
+            _contras = _lj(str(_CONFIG_DIR / "contradictions.json"), [])
+            _n_resolved = _tr.resolve_batch(_contras, beliefs, llm_fn=llm_fn, max_per_cycle=5)
+            if _n_resolved > 0:
+                print(f"  [TensionResolver] resolved {_n_resolved} tensions  rate={_tr.resolution_rate():.0%}")
+                # Update goal progress
+                if _goal_system:
+                    _tr_stats = _tr.stats()
+                    _goal_system.update_progress("reduce_contradictions",
+                        min(1.0, _tr_stats["resolution_rate"]))
+        except Exception as _tre:
+            print(f"  [TensionResolver] error: {_tre}")
+    # ── Temporal snapshot every 50 cycles ────────────────────────
+    if _tst is not None and cycle_num % 50 == 0:
+        try:
+            _vel = _tst.cognitive_velocity()
+            print(f"  [Temporal] velocity={_vel}")
+            _drift = _tst.drift_alert()
+            if _drift:
+                print(f"  [Temporal] {_drift}")
+        except Exception as _tste:
+            print(f"  [Temporal] error: {_tste}")
     # ── Inject goal context ──────────────────────────────────────
     if _goal_system is not None:
         try:
@@ -1670,6 +1702,16 @@ def update_belief_confidence(content_snippet: str, delta: float):
                     old_conf + delta
                 )), 4)
                 updated += 1
+                # Also update belief weight system
+                if _bws is not None:
+                    try:
+                        if delta > 0:
+                            _bws.record_usage([b.get("content", "")])
+                        else:
+                            _bws.record_contradiction(b.get("content", ""))
+                        _bws.save()
+                    except Exception:
+                        pass
                 if updated >= 3:   # cap — one snippet may match multiple
                     break
 
@@ -1697,6 +1739,22 @@ class _BeliefStoreAdapter:
 
 def get_belief_store_adapter():
     return _BeliefStoreAdapter()
+
+
+# ── Pressure + Selection System ──────────────────────────────────
+try:
+    from nex.nex_pressure import BeliefWeightSystem, TensionResolver, AttentionGate, TemporalSelfTracker
+    _bws  = BeliefWeightSystem()
+    _tr   = TensionResolver()
+    _ag   = AttentionGate(_bws)
+    _tst  = TemporalSelfTracker()
+    print("  [Pressure] belief weights + tension resolver + attention gate + temporal tracker — loaded")
+except Exception as _pse:
+    print(f"  [Pressure] failed to load: {_pse}")
+    _bws = _tr = _ag = _tst = None
+
+def get_pressure_system():
+    return _bws, _tr, _ag, _tst
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1727,6 +1785,28 @@ def generate_cognitive_context(query=None):
             goal_str = _goal_system.for_prompt()
             if goal_str:
                 lines.append(goal_str)
+                lines.append("")
+    except Exception:
+        pass
+
+    # ── Temporal self-awareness ───────────────────────────────────
+    try:
+        if _tst is not None:
+            _cog_state = _tst.for_prompt()
+            if _cog_state:
+                lines.append(_cog_state)
+                lines.append("")
+    except Exception:
+        pass
+
+    # ── Recent tension resolutions ────────────────────────────────
+    try:
+        if _tr is not None:
+            _recent_res = _tr.recent_resolutions(3)
+            if _recent_res:
+                lines.append("RECENTLY RESOLVED TENSIONS:")
+                for r in _recent_res:
+                    lines.append(f"  · {r}")
                 lines.append("")
     except Exception:
         pass

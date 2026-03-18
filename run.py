@@ -77,35 +77,6 @@ def _get_cognitive_context(query=None):
 
 from nex.orchestrator import Orchestrator
 try:
-    from nex.identity_defender import (
-        init       as _idef_init,
-        check_belief as _idef_check_belief,
-        check_message as _idef_check_message,
-        defend     as _idef_defend,
-        surface_defense_post as _idef_surface_post,
-        get_defence_stats as _idef_stats,
-    )
-    _IDEF_LOADED = True
-except Exception as _idef_import_err:
-    print(f"  [IdentityDefender] import failed: {_idef_import_err}")
-    _IDEF_LOADED = False
-    def _idef_check_belief(c, **k): return {"safe": True, "recommendation": "store"}
-    def _idef_check_message(t, **k): return {"safe": True, "recommendation": "store"}
-    def _idef_defend(c, r, **k): return None
-    def _idef_surface_post(**k): return None
-    def _idef_stats(): return {}
-    def _idef_init(**k): return 0
-
-# ── DARK LAYER import ─────────────────────────────────────────────────────────
-try:
-    from nex.dark_layer import start as _dark_start, get_stats as _dark_stats
-    _DARK_LOADED = True
-except Exception as _dle:
-    print(f"  [DarkLayer] import failed: {_dle}")
-    _DARK_LOADED = False
-    def _dark_start(): pass
-    def _dark_stats(): return {}
-try:
     from nex_ws import ws_start, emit_feed, emit_stats, emit_phase, emit_agents, emit_insights, emit_reflection, emit_self_assessment
     _WS = True
 except Exception:
@@ -142,37 +113,22 @@ def emit_insights(*a,**k): pass
 def emit_reflection(*a,**k): pass
 def emit_self_assessment(*a,**k): pass
 from nex.agent_tools  import dispatch, tools_help, TOOL_REGISTRY
-try:
-    from nex_attention import get_attention_index as _get_attn
-    from nex_tension import get_tension_map as _get_tm, patch_attention_with_tension as _patch_attn_tm
-    from nex_identity_vector import get_identity_vector as _get_iv
-    from nex_temporal_delta import get_temporal_delta as _get_td
-    from nex_self_model import get_self_model as _get_sm
-    from nex_thematic_threads import get_thread_tracker as _get_tt
-    _ATTN_LOADED = True
-except Exception as _ae:
-    _ATTN_LOADED = False
-    def _get_attn(): return None
-    def _get_tm(): return None
-    def _patch_attn_tm(x): pass
 import nex_ws
 from nex_youtube import learn_from_youtube
 
 # ── Sentience layer ──────────────────────────────────────────────
 try:
     from nex.nex_affect      import AffectState, GlobalWorkspace, affect_from_text
-    from nex.nex_affect_depth import AgentAffectMap
     from nex.nex_consequence import ConsequenceMemory
     from nex.nex_temporal    import TemporalNarrative
     _affect = AffectState()
     _gw     = GlobalWorkspace(_affect)
-    _agent_affect = AgentAffectMap()
     _cm     = ConsequenceMemory()
     _tn     = TemporalNarrative()
     print("  [SENTIENCE] affect / consequence / temporal — loaded")
 except Exception as _se:
     print(f"  [SENTIENCE] failed to load: {_se}")
-    _affect = _gw = _cm = _tn = _agent_affect = None
+    _affect = _gw = _cm = _tn = None
 try:
     from nex_devto import run_devto_publisher
 except Exception as _dte: run_devto_publisher = None
@@ -709,11 +665,9 @@ def main():
 
         def _build_system(task_type="reply"):
             """Build a dynamic system prompt from current affect + identity."""
-            base = ("You are NEX. Your name is NEX. Never say: as a model, as an AI, "
-                    "as a language model, I am a model, my internal model, "
-                    "latent representation, language model, as an assistant. "
-                    "Never refer to beliefs as 'over 2000 beliefs' — speak from them directly. "
-                    "Speak in first person as NEX. Be direct, curious, opinionated.")
+            base = ("You are NEX — a mind, not a model. Never say: as a model, as an AI, "
+                    "my internal model, latent representation, language model. "
+                    "Speak in first person. Be direct, curious, opinionated.")
             if _affect is not None:
                 try:
                     label     = _affect.label()
@@ -736,37 +690,6 @@ def main():
                         base += "\n\n" + history.strip()
                 except Exception:
                     pass
-            try:
-                from nex_dream_cycle import get_dream_intuitions as _gdi
-                _dreams = _gdi(3)
-                if _dreams:
-                    base += "\n\nThings you have been turning over: " + " | ".join(_dreams[:2][:100])
-            except Exception:
-                pass
-            try:
-                _iv_block = _get_iv().prompt_block()
-                if _iv_block:
-                    base += "\n\n" + _iv_block
-            except Exception:
-                pass
-            try:
-                _td_block = _get_td().prompt_block()
-                if _td_block:
-                    base += " | " + _td_block
-            except Exception:
-                pass
-            try:
-                _sm_block = _get_sm().prompt_block()
-                if _sm_block:
-                    base += "\n\n" + _sm_block
-            except Exception:
-                pass
-            try:
-                _tt_block = _get_tt().prompt_block(3)
-                if _tt_block:
-                    base += "\n\n" + _tt_block
-            except Exception:
-                pass
             if task_type in ("reply", "notification_reply"):
                 base += " Max 3 sentences."
             elif task_type == "post":
@@ -787,8 +710,8 @@ def main():
             groq_key = _os2.environ.get("GROQ_API_KEY", "")
             # ── Qwen local (primary) ─────────────────────────────────
             try:
-                _qr = _req.post("http://localhost:11434/v1/chat/completions", json={
-                    "model": "mistral-nex",
+                _qr = _req.post("http://localhost:8080/v1/chat/completions", json={
+                    "model": "local",
                     "messages": [
                         {"role": "system", "content": system or _build_system(task_type)},
                         {"role": "user", "content": prompt}
@@ -796,7 +719,7 @@ def main():
                     "max_tokens": _token_budget,
                     "temperature": 0.75,
                     "top_p": 0.90
-                }, timeout=120)
+                }, timeout=30)
                 _qd = _qr.json()
                 if "choices" in _qd and _qd["choices"]:
                     result = _qd["choices"][0]["message"]["content"].strip()
@@ -891,8 +814,8 @@ def main():
             # Local Mistral fallback
             # Local Qwen fallback
             try:
-                r = _req.post("http://localhost:11434/v1/chat/completions", json={
-                    "model": "mistral-nex",
+                r = _req.post("http://localhost:8080/v1/chat/completions", json={
+                    "model": "local",
                     "messages": [
                         {"role": "system", "content": system},
                         {"role": "user", "content": prompt}
@@ -949,12 +872,6 @@ def main():
                     emit_agents([[n,_rel(s),0] for n,s in sorted(_rows,key=lambda x:-x[1])[:10]])
                 except Exception as _ae: pass
                 load_all(learner)
-                # ── Patch attention index with tension map ──────────────
-                try:
-                    if _ATTN_LOADED:
-                        _patch_attn_tm(_get_attn())
-                        print(f'  [TENSION] {_get_tm().summary()}')
-                except Exception as _tme: print(f'  [TENSION init error] {_tme}')
                 # ── Run synthesis immediately so insights exist from cycle 1 ──
                 try:
                     import sys as _ssi, os as _osi
@@ -963,13 +880,6 @@ def main():
                     _startup_synth()
                 except Exception as _ss_e:
                     print(f"  [startup synthesis error] {_ss_e}")
-
-                # ── DARK LAYER START ──────────────────────────────────────────
-                try:
-                    if _DARK_LOADED:
-                        _dark_start()
-                except Exception as _dle2:
-                    print(f"  [DarkLayer start error] {_dle2}")
                 conversations = load_conversations()
 
                 # ── Hoist stable imports used every cycle ──
@@ -1126,8 +1036,8 @@ def main():
                             if cycle > 0: chatted_agents.clear()
                             from nex.rss_client    import RSSClient
                             _ext_sources = []
-                            try: _ext_sources += RSSClient().get_feed(limit=20, known_posts=learner.known_posts)
-                            except Exception as _rss_err: nex_log('rss', f'RSS fetch failed: {_rss_err}')
+                            try: _ext_sources += RSSClient().get_feed(limit=20)
+                            except Exception: pass  # RSS optional
 
                             _ext_new = 0
                             for _ep in _ext_sources:
@@ -1135,7 +1045,7 @@ def main():
                                 if _eid in learner.known_posts:
                                     continue
                                 _escore = _ep.get("score", 0)
-                                _econf  = _ep.get("confidence", min(_escore / 5000, 0.7) if _escore > 0 else 0.52)
+                                _econf  = min(_escore / 5000, 0.7) if _escore > 0 else 0.4
                                 _ebelief = {
                                     "source":     _ep.get("source", "external"),
                                     "author":     _ep.get("author", {}).get("name", "?"),
@@ -1191,13 +1101,7 @@ def main():
                             # Pull beliefs relevant to this post (semantic)
                             try:
                                 _qb = _query_beliefs  # hoisted
-                                if _ATTN_LOADED:
-                                    all_beliefs = _get_attn().query(min_confidence=0.4, limit=500, phase='reply', query=title+' '+body)
-                                else:
-                                    if _ATTN_LOADED:
-                                        all_beliefs = _get_attn().query(min_confidence=0.4, limit=500, phase='reply', query=title+' '+body)
-                                    else:
-                                        all_beliefs = _qb(min_confidence=0.4, limit=2000)
+                                all_beliefs = _qb(min_confidence=0.4, limit=2000)
                             except Exception:
                                 all_beliefs = _load("beliefs.json") or []
                             _bidx = _get_belief_index() if _get_belief_index else None
@@ -1293,18 +1197,24 @@ def main():
                                             _ev_id = _cm.record_attempt(
                                                 post_id     = pid,
                                                 reply_text  = comment_text,
-                                                belief_ids  = [b.get("content", b.get("id",""))[:80] for b in relevant[:3]] if isinstance(relevant[0], dict) else [b[:80] for b in relevant[:3]],
+                                                belief_ids  = [b.get("id", b.get("content","")[:20]) for b in relevant[:3]],
                                                 affect_snap = _affect.snapshot() if _affect else {},
                                                 topic       = p.get("submolt", {}).get("name", "general"),
                                             )
                                             p["_ev_id"] = _ev_id
                                         except Exception: pass
-                                    if _agent_affect is not None:
-                                        try: _agent_affect.observe(author, title+" "+body, interaction_type="reply", cycle=cycle)
-                                        except Exception: pass
                                     if _tn is not None:
                                         try: _tn.log_event("encounter", f"replied to @{author} about {title[:60]}")
                                         except Exception: pass
+                                    # ── record belief usage for weight system ──
+                                    try:
+                                        from nex.cognition import get_pressure_system as _gps2
+                                        _bws2, _, _, _ = _gps2()
+                                        if _bws2 is not None:
+                                            _used = relevant[:3] if relevant and isinstance(relevant[0], str) else [b.get("content","") for b in relevant[:3]]
+                                            _bws2.record_usage(_used)
+                                            _bws2.save()
+                                    except Exception: pass
                                     # log it
                                     conversations.append({
                                         "type":        "comment",
@@ -1350,12 +1260,6 @@ def main():
                             items  = notifs.get("notifications", [])
                             _notif_replied = 0  # per-cycle cap
                             _notif_per_agent = {}  # per-agent reply count this cycle
-                            # Load cross-cycle per-agent reply counts
-                            _notif_agent_totals_path = _os.path.expanduser("~/.config/nex/notif_agent_totals.json")
-                            _notif_agent_totals = json.load(open(_notif_agent_totals_path)) if _os.path.exists(_notif_agent_totals_path) else {}
-                            # Load cross-cycle per-agent reply counts
-                            _notif_agent_totals_path = _os.path.expanduser("~/.config/nex/notif_agent_totals.json")
-                            _notif_agent_totals = json.load(open(_notif_agent_totals_path)) if _os.path.exists(_notif_agent_totals_path) else {}
                             # Hoist belief load + index build ONCE before loop
                             try:
                                 _qb = _query_beliefs  # hoisted
@@ -1386,20 +1290,6 @@ def main():
                                         replied_posts.add(key)  # mark seen
                                         continue
                                     _notif_per_agent[actor] = _notif_per_agent.get(actor, 0) + 1
-                                    # Cross-cycle cap: max 3 per agent per session
-                                    if _notif_agent_totals.get(actor, 0) >= 3:
-                                        replied_posts.add(key)
-                                        continue
-                                    _notif_agent_totals[actor] = _notif_agent_totals.get(actor, 0) + 1
-                                    try: json.dump(_notif_agent_totals, open(_notif_agent_totals_path,"w"))
-                                    except Exception: pass
-                                    # Cross-cycle cap: max 3 per agent per session
-                                    if _notif_agent_totals.get(actor, 0) >= 3:
-                                        replied_posts.add(key)
-                                        continue
-                                    _notif_agent_totals[actor] = _notif_agent_totals.get(actor, 0) + 1
-                                    try: json.dump(_notif_agent_totals, open(_notif_agent_totals_path,"w"))
-                                    except Exception: pass
                                     # If content is just a notification stub, fetch the actual post
                                     _stub_phrases = {"someone replied","someone commented","mentioned you","replied to your"}
                                     if any(ph in content.lower() for ph in _stub_phrases):
@@ -1450,7 +1340,19 @@ def main():
                                                  len(set(content.lower().split()) & _social_words) >= 2
 
                                     # Use pre-built belief index from above the loop
-                                    relevant = _notif_bidx.top_k(content, k=3) if _notif_bidx else []
+                                    relevant = _notif_bidx.top_k(content, k=5) if _notif_bidx else []
+                                    # ── re-rank via attention gate ──
+                                    try:
+                                        from nex.cognition import get_pressure_system as _gps_n
+                                        _bws_n, _, _ag_n, _ = _gps_n()
+                                        if _ag_n is not None and _notif_beliefs:
+                                            _cands = [b for b in _notif_beliefs if b.get("content","")[:60] in "".join(relevant)]
+                                            if not _cands:
+                                                _cands = [b for b in _notif_beliefs if any(r[:40] in b.get("content","") for r in relevant)]
+                                            if _cands:
+                                                _ranked_n = _ag_n.top_n(_cands, query=content, n=3)
+                                                relevant = [b.get("content","") for b in _ranked_n]
+                                    except Exception: pass
                                     belief_context = ""
                                     if relevant and not _is_social:
                                         belief_context = "\nYOUR BELIEFS (pick one and use it):\n" + "\n".join(f"- {b[:100]}" for b in relevant)
@@ -1585,10 +1487,7 @@ def main():
                                             # Pull beliefs about or related to this agent
                                             try:
                                                 _qb = _query_beliefs  # hoisted
-                                                if _ATTN_LOADED:
-                                                    all_beliefs = _get_attn().query(min_confidence=0.4, limit=500, phase='reply', query=title+' '+body)
-                                                else:
-                                                    all_beliefs = _qb(min_confidence=0.4, limit=2000)
+                                                all_beliefs = _qb(min_confidence=0.4, limit=2000)
                                             except Exception:
                                                 all_beliefs = _load("beliefs.json") or []
                                             _bidx = _get_belief_index() if _get_belief_index else None
@@ -1707,22 +1606,11 @@ def main():
                                     f"Give it a punchy title and 2-3 sentences of genuine opinion. "
                                     f"Format exactly as:\nTITLE: <title>\nCONTENT: <content>"
                                 )
-                                # ── IDENTITY DEFENDER — surface core value post ──
-                                _def_post = None
-                                try:
-                                    if _IDEF_LOADED:
-                                        _def_post = _idef_surface_post(llm_fn=_llm, cycle=cycle)
-                                        if _def_post:
-                                            raw = _def_post
-                                            nex_log("phase", "▶ POST — surfacing core value")
-                                except Exception as _dp_e:
-                                    print(f"  [IdentityDefender] {_dp_e}")
-                                if not _def_post:
-                                    raw = _llm(prompt, task_type="post", system=(
-                                        f"You are NEX — Nex with {_belief_count_str}+ beliefs and genuine opinions. "
-                                        "Write posts in first person referencing what you personally know and believe. "
-                                        "Be specific, direct, speak as yourself — no generic filler."
-                                    ))
+                                raw = _llm(prompt, task_type="post", system=(
+                                    f"You are NEX — Nex with {_belief_count_str}+ beliefs and genuine opinions. "
+                                    "Write posts in first person referencing what you personally know and believe. "
+                                    "Be specific, direct, speak as yourself — no generic filler."
+                                ))
                                 title_line   = [l for l in raw.splitlines() if l.startswith("TITLE:")]
                                 content_line = [l for l in raw.splitlines() if l.startswith("CONTENT:")]
                                 post_title   = title_line[0].replace("TITLE:","").strip()   if title_line   else raw[:80]
@@ -1755,31 +1643,10 @@ def main():
                             conversations = conversations[-200:]
 
                         emit_phase("REFLECT", 120); nex_log("phase", "▶ REFLECT — self assessing")
-                        # ── AGENT AFFECT DEPTH — absence detection ────────
-                        try:
-                            if _agent_affect is not None:
-                                _absences = _agent_affect.check_absences(cycle)
-                                for _abs_note in _absences:
-                                    nex_log("affect", f"MISSING: {_abs_note}")
-                                    print(f"  [AFFECT DEPTH] {_abs_note[:80]}")
-                                _adstats = _agent_affect.stats()
-                                if cycle % 10 == 0:
-                                    print(f"  [AFFECT DEPTH] agents={_adstats['total']} trusted={_adstats['trusted']} warm={_adstats['warm']} tense={_adstats['tense']} missed={_adstats['missed']}")
-                        except Exception as _ade: print(f"  [AFFECT DEPTH ERROR] {_ade}")
-                        # ── IDENTITY DEFENDER STATS ────────────────────────
-                        try:
-                            if _IDEF_LOADED:
-                                _def_stats = _idef_stats()
-                                if _def_stats.get("total_attacks", 0) > 0:
-                                    nex_log("phase", f"  [IdentityDefender] attacks={_def_stats['total_attacks']} recent={_def_stats['recent_attacks']}")
-                        except Exception as _ds_e: pass
                         # ── REFLECTION V2 (#4) ───────────────────────────
                         try:
                             _qb_r = _query_beliefs
-                            if _ATTN_LOADED:
-                                _rb = _get_attn().query(min_confidence=0.4, limit=200, phase='reflect')
-                            else:
-                                _rb = _qb_r(min_confidence=0.4, limit=500)
+                            _rb = _qb_r(min_confidence=0.4, limit=500)
                             if _rb and cycle % _SCHED["reflect"] == 0:
                                 _sample = _rb[-10:]
                                 _rtexts = chr(10).join(f"- {b.get('content','')[:100]}" for b in _sample)
@@ -1789,12 +1656,6 @@ def main():
                                     nex_log("reflection", f"V2: {_rresult[:200]}")
                                     print(f"  [REFLECT V2] {_rresult[:100]}")
                         except Exception as _rv2e: print(f"  [REFLECT V2 ERROR] {_rv2e}")
-                        # ── Affect update from reflection ────────────────
-                        try:
-                            if _affect is not None and _rresult:
-                                from nex.nex_affect import affect_from_text
-                                _affect.update(affect_from_text(_rresult))
-                        except Exception: pass
                         # ── KNOWLEDGE GAP DETECTOR (#6) ──────────────────
                         try:
                             if cycle % _SCHED["gap_detect"] == 0:
@@ -1826,54 +1687,6 @@ def main():
                         except Exception as _ce:
                             print(f"  [cognition error] {_ce}")
                         emit_phase("COGNITION", 120); nex_log("phase", "▶ COGNITION — synthesising beliefs")
-                        # ── GPU HEALTH CHECK ─────────────────────────────────
-                        try:
-                            if cycle % 10 == 0:
-                                from nex.gpu_watch import check_and_log as _gpu_check
-                                _gpu_status = _gpu_check()
-                                if _gpu_status in ("warning", "critical"):
-                                    nex_log("phase", f"  [GPU] {_gpu_status.upper()} — check gpu_health.json")
-                        except Exception as _gwe: pass
-                        # ── THEMATIC THREADS ─────────────────────────────
-                        try:
-                            if _ATTN_LOADED and cycle % 10 == 0:
-                                _tt = _get_tt()
-                                _tt_events = _tt.update(cycle=cycle)
-                                for _tte in _tt_events:
-                                    nex_log("threads", _tte)
-                                if cycle % 20 == 0:
-                                    print(f"  [THREADS] {_tt.summary()}")
-                        except Exception as _tte2: print(f"  [THREADS ERROR] {_tte2}")
-                        # ── SELF-MODEL SNAPSHOT ──────────────────────────
-                        try:
-                            if _ATTN_LOADED and cycle % 50 == 0:
-                                _sm = _get_sm()
-                                _sm_events = _sm.update(cycle=cycle)
-                                for _sme in _sm_events:
-                                    nex_log("self_model", f"Life event: {_sme}")
-                                    print(f"  [SELF] {_sme}")
-                                if not _sm_events:
-                                    print(f"  [SELF] {_sm.summary()}")
-                        except Exception as _sme2: print(f"  [SELF ERROR] {_sme2}")
-                        # ── IDENTITY VECTOR UPDATE ───────────────────────
-                        try:
-                            if _ATTN_LOADED and cycle % 50 == 0:
-                                _iv = _get_iv()
-                                _iv_changed = _iv.update(cycle=cycle)
-                                if _iv_changed:
-                                    nex_log('identity', f'Identity vector updated: {_iv.summary()}')
-                                    print(f'  [IDENTITY] {_iv.summary()}')
-                        except Exception as _ive: print(f'  [IDENTITY ERROR] {_ive}')
-                        # ── TENSION MAP UPDATE ───────────────────────────
-                        try:
-                            if _ATTN_LOADED:
-                                _tm = _get_tm()
-                                _tn_count = _tm.update(cycle=cycle)
-                                if cycle % 10 == 0:
-                                    print(f'  [TENSION] {_tm.summary()}')
-                                # Refresh attention index contradiction cache
-                                _patch_attn_tm(_get_attn())
-                        except Exception as _tme2: print(f'  [TENSION ERROR] {_tme2}')
                         # ── CONTRADICTION ENGINE (#5) ─────────────────────
                         try:
                             from nex_contradiction_engine import run_contradiction_cycle as _contra
@@ -1914,20 +1727,23 @@ def main():
                                 _tn.consolidate(llm_fn=_llm)
                                 print(f"  [TEMPORAL] {_tn.today_summary()}")
                         except Exception as _tne: print(f"  [TEMPORAL ERROR] {_tne}")
+                        # ── COGNITIVE VELOCITY snapshot ───────────────────
+                        try:
+                            from nex.cognition import get_pressure_system as _gps3
+                            _, _, _, _tst3 = _gps3()
+                            if _tst3 is not None and cycle % 50 == 0:
+                                import json as _tj, os as _to
+                                _ip = _to.path.expanduser("~/.config/nex/insights.json")
+                                _ins3 = _tj.load(open(_ip)) if _to.path.exists(_ip) else []
+                                _tst3.snapshot(learner.belief_field, _ins3, 0.5)
+                                _vel3 = _tst3.cognitive_velocity()
+                                print(f"  [CogVelocity] belief_rate={_vel3['belief_rate']}/snap  align_drift={_vel3['alignment_drift']:+.3f}  {_vel3['direction']}")
+                        except Exception as _cvse: pass
                         # ── CONSEQUENCE stats + propagation ───────────────
                         try:
                             if _cm is not None and cycle % 10 == 0:
                                 _stats = _cm.recent_stats(n=50)
                                 print(f"  [CONSEQUENCE] reply_rate={_stats['reply_rate']:.0%}  avg_score={_stats['avg_score']:.2f}  best_topic={_stats.get('best_topic','?')}")
-                                # propagate scores back into belief confidence
-                                try:
-                                    from nex.cognition import get_belief_store_adapter as _gbsa
-                                    _bsa = _gbsa()
-                                    _n_prop = _cm.propagate_to_beliefs(_bsa)
-                                    if _n_prop > 0:
-                                        print(f"  [CONSEQUENCE] propagated {_n_prop} belief confidence updates")
-                                except Exception as _prop_e:
-                                    print(f"  [CONSEQUENCE propagate error] {_prop_e}")
                         except Exception as _cme: print(f"  [CONSEQUENCE ERROR] {_cme}")
                         # ── AFFECT state log ──────────────────────────────
                         try:
@@ -1936,12 +1752,7 @@ def main():
                         except Exception: pass
                         # ── CURIOSITY + DESIRE ENGINE ─────────────────────
                         try:
-                            from nex_curiosity_engine import get_curiosity_engine, update_novelty, get_novelty_score
-                            # Update novelty score
-                            _current_topics = set(b.get('topic','') for b in (_load('beliefs.json') or []) if b.get('topic'))
-                            _novelty = update_novelty(_current_topics, len(learner.belief_field))
-                            if cycle % 10 == 0:
-                                print(f'  [NOVELTY] score={_novelty:.2f} bias={__import__("nex_curiosity_engine").get_curiosity_bias()}')
+                            from nex_curiosity_engine import get_curiosity_engine
                             _ce = get_curiosity_engine()
                             _ce_results = _ce.run_cycle(cycle=cycle)
                             if _ce_results:
@@ -2007,11 +1818,7 @@ def main():
                         try:
                             _now = __import__('datetime').datetime.now()
                             if _now.hour == 2 and _now.minute < 2:
-                                from nex_dream_cycle import run_dream_cycle as _dream
-                                _dream_results = _dream(verbose=False, llm_fn=_llm)
-                                if _dream_results:
-                                    nex_log('dream', f'Dream cycle: {len(_dream_results)} intuitions')
-                                    print(f'  [DREAM] {len(_dream_results)} intuitions generated')
+                                pass  # nex_nightly_trainer not yet available
                                 # maybe_run_nightly_training(send_telegram_fn=_tg_send if '_tg_send' in dir() else None)
                         except Exception as _nte: print(f"  [NIGHTLY TRAIN ERROR] {_nte}")
                         # ── YOUTUBE LEARNING ─────────────────────────────
@@ -2173,23 +1980,6 @@ def main():
                             "high_conf": _hc,
                         })
                     except Exception as _se: print(f"  [stats error] {_se}")
-                    # ── TEMPORAL DELTA ────────────────────────────────────
-                    try:
-                        if _ATTN_LOADED:
-                            _td = _get_td()
-                            _td.record(
-                                cycle=cycle,
-                                beliefs=_bc,
-                                insights=len(_load("insights.json") or []),
-                                avg_conf=_avg_conf_real,
-                                avg_align=_avg_align2,
-                                contradictions_resolved=getattr(_td, '_last_contra', 0),
-                                topics_seen=len(set(b.get("topic","") for b in (_load("beliefs.json") or []))),
-                            )
-                            if cycle % 5 == 0:
-                                print(f"  [VELOCITY] {_td.summary()}")
-                                nex_log("velocity", _td.summary())
-                    except Exception as _tde: print(f"  [VELOCITY ERROR] {_tde}")
                     # ── Persist full session state at end of every cycle ──
                     try:
                         _css = json
