@@ -1939,7 +1939,7 @@ def main():
                             from nex_curiosity_engine import get_curiosity_engine, update_novelty, get_novelty_score
                             # Update novelty score
                             _current_topics = set(b.get('topic','') for b in (_load('beliefs.json') or []) if b.get('topic'))
-                            _novelty = update_novelty(_current_topics, _bc)
+                            _novelty = update_novelty(_current_topics, len(learner.belief_field))
                             if cycle % 10 == 0:
                                 print(f'  [NOVELTY] score={_novelty:.2f} bias={__import__("nex_curiosity_engine").get_curiosity_bias()}')
                             _ce = get_curiosity_engine()
