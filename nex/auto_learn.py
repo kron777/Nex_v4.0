@@ -263,8 +263,17 @@ def save_all(learner, conversations=None):
     try:
         with open(BELIEFS_PATH, 'w') as f:
             json.dump(learner.belief_field[-50000:], f)
+        # Merge with existing agents.json — never overwrite with fewer entries
+        _existing_agents = {}
+        try:
+            if os.path.exists(AGENTS_PATH):
+                _existing_agents = json.load(open(AGENTS_PATH))
+        except Exception:
+            pass
+        _merged = {**_existing_agents, **learner.agent_karma}
         with open(AGENTS_PATH, 'w') as f:
-            json.dump(learner.agent_karma, f)
+            json.dump(_merged, f)
+        learner.agent_karma = _merged
         with open(POSTS_PATH, 'w') as f:
             json.dump(list(learner.known_posts)[-10000:], f)
         if conversations:
