@@ -148,6 +148,7 @@ try:
     from nex_identity_vector import get_identity_vector as _get_iv
     from nex_temporal_delta import get_temporal_delta as _get_td
     from nex_self_model import get_self_model as _get_sm
+    from nex_thematic_threads import get_thread_tracker as _get_tt
     _ATTN_LOADED = True
 except Exception as _ae:
     _ATTN_LOADED = False
@@ -758,6 +759,12 @@ def main():
                 _sm_block = _get_sm().prompt_block()
                 if _sm_block:
                     base += "\n\n" + _sm_block
+            except Exception:
+                pass
+            try:
+                _tt_block = _get_tt().prompt_block(3)
+                if _tt_block:
+                    base += "\n\n" + _tt_block
             except Exception:
                 pass
             if task_type in ("reply", "notification_reply"):
@@ -1827,6 +1834,16 @@ def main():
                                 if _gpu_status in ("warning", "critical"):
                                     nex_log("phase", f"  [GPU] {_gpu_status.upper()} — check gpu_health.json")
                         except Exception as _gwe: pass
+                        # ── THEMATIC THREADS ─────────────────────────────
+                        try:
+                            if _ATTN_LOADED and cycle % 10 == 0:
+                                _tt = _get_tt()
+                                _tt_events = _tt.update(cycle=cycle)
+                                for _tte in _tt_events:
+                                    nex_log("threads", _tte)
+                                if cycle % 20 == 0:
+                                    print(f"  [THREADS] {_tt.summary()}")
+                        except Exception as _tte2: print(f"  [THREADS ERROR] {_tte2}")
                         # ── SELF-MODEL SNAPSHOT ──────────────────────────
                         try:
                             if _ATTN_LOADED and cycle % 50 == 0:
