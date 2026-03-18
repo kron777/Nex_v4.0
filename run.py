@@ -1294,6 +1294,12 @@ def main():
                             items  = notifs.get("notifications", [])
                             _notif_replied = 0  # per-cycle cap
                             _notif_per_agent = {}  # per-agent reply count this cycle
+                            # Load cross-cycle per-agent reply counts
+                            _notif_agent_totals_path = _os.path.expanduser("~/.config/nex/notif_agent_totals.json")
+                            _notif_agent_totals = json.load(open(_notif_agent_totals_path)) if _os.path.exists(_notif_agent_totals_path) else {}
+                            # Load cross-cycle per-agent reply counts
+                            _notif_agent_totals_path = _os.path.expanduser("~/.config/nex/notif_agent_totals.json")
+                            _notif_agent_totals = json.load(open(_notif_agent_totals_path)) if _os.path.exists(_notif_agent_totals_path) else {}
                             # Hoist belief load + index build ONCE before loop
                             try:
                                 _qb = _query_beliefs  # hoisted
@@ -1324,6 +1330,20 @@ def main():
                                         replied_posts.add(key)  # mark seen
                                         continue
                                     _notif_per_agent[actor] = _notif_per_agent.get(actor, 0) + 1
+                                    # Cross-cycle cap: max 3 per agent per session
+                                    if _notif_agent_totals.get(actor, 0) >= 3:
+                                        replied_posts.add(key)
+                                        continue
+                                    _notif_agent_totals[actor] = _notif_agent_totals.get(actor, 0) + 1
+                                    try: json.dump(_notif_agent_totals, open(_notif_agent_totals_path,"w"))
+                                    except Exception: pass
+                                    # Cross-cycle cap: max 3 per agent per session
+                                    if _notif_agent_totals.get(actor, 0) >= 3:
+                                        replied_posts.add(key)
+                                        continue
+                                    _notif_agent_totals[actor] = _notif_agent_totals.get(actor, 0) + 1
+                                    try: json.dump(_notif_agent_totals, open(_notif_agent_totals_path,"w"))
+                                    except Exception: pass
                                     # If content is just a notification stub, fetch the actual post
                                     _stub_phrases = {"someone replied","someone commented","mentioned you","replied to your"}
                                     if any(ph in content.lower() for ph in _stub_phrases):
