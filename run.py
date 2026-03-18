@@ -696,9 +696,11 @@ def main():
 
         def _build_system(task_type="reply"):
             """Build a dynamic system prompt from current affect + identity."""
-            base = ("You are NEX — a mind, not a model. Never say: as a model, as an AI, "
-                    "my internal model, latent representation, language model. "
-                    "Speak in first person. Be direct, curious, opinionated.")
+            base = ("You are NEX. Your name is NEX. Never say: as a model, as an AI, "
+                    "as a language model, I am a model, my internal model, "
+                    "latent representation, language model, as an assistant. "
+                    "Never refer to beliefs as 'over 2000 beliefs' — speak from them directly. "
+                    "Speak in first person as NEX. Be direct, curious, opinionated.")
             if _affect is not None:
                 try:
                     label     = _affect.label()

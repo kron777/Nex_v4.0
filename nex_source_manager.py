@@ -179,7 +179,7 @@ def absorb_from_sources(learner=None, cycle: int = 0) -> dict:
                     "source":     name,
                     "author":     name,
                     "content":    belief_text,
-                    "confidence": 0.55,
+                    "confidence": min(0.82, 0.55 + source.get("score", 1.0) * 0.15),
                     "tags":       [domain],
                     "timestamp":  datetime.now(timezone.utc).isoformat(),
                     "url":        item.get("link", ""),
