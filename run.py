@@ -146,6 +146,7 @@ try:
     from nex_attention import get_attention_index as _get_attn
     from nex_tension import get_tension_map as _get_tm, patch_attention_with_tension as _patch_attn_tm
     from nex_identity_vector import get_identity_vector as _get_iv
+    from nex_temporal_delta import get_temporal_delta as _get_td
     _ATTN_LOADED = True
 except Exception as _ae:
     _ATTN_LOADED = False
@@ -744,6 +745,12 @@ def main():
                 _iv_block = _get_iv().prompt_block()
                 if _iv_block:
                     base += "\n\n" + _iv_block
+            except Exception:
+                pass
+            try:
+                _td_block = _get_td().prompt_block()
+                if _td_block:
+                    base += " | " + _td_block
             except Exception:
                 pass
             if task_type in ("reply", "notification_reply"):
@@ -2126,6 +2133,23 @@ def main():
                             "high_conf": _hc,
                         })
                     except Exception as _se: print(f"  [stats error] {_se}")
+                    # ── TEMPORAL DELTA ────────────────────────────────────
+                    try:
+                        if _ATTN_LOADED:
+                            _td = _get_td()
+                            _td.record(
+                                cycle=cycle,
+                                beliefs=_bc,
+                                insights=len(_load("insights.json") or []),
+                                avg_conf=_avg_conf_real,
+                                avg_align=_avg_align2,
+                                contradictions_resolved=getattr(_td, '_last_contra', 0),
+                                topics_seen=len(set(b.get("topic","") for b in (_load("beliefs.json") or []))),
+                            )
+                            if cycle % 5 == 0:
+                                print(f"  [VELOCITY] {_td.summary()}")
+                                nex_log("velocity", _td.summary())
+                    except Exception as _tde: print(f"  [VELOCITY ERROR] {_tde}")
                     # ── Persist full session state at end of every cycle ──
                     try:
                         _css = json
