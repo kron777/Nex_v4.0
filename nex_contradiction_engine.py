@@ -72,21 +72,43 @@ def run_contradiction_cycle(cycle: int = 0, llm_fn=None) -> int:
 
             texts  = "\n".join(f"- {b[0][:120]}" for b in sample)
             prompt = (
-                f"Do any of these beliefs about '{topic}' directly contradict each other? "
-                f"If yes, write one synthesized resolution belief in one sentence. "
-                f"If no contradictions, reply NONE.\n\n{texts}"
+                f"Analyse these beliefs about '{topic}' for contradictions.\n\n{texts}\n\n"
+                f"Classify as one of:\n"
+                f"TRUE_CONFLICT: beliefs directly oppose — write one resolution sentence\n"
+                f"CONTEXTUAL: same topic different contexts — write nuanced synthesis\n"
+                f"NONE: no real contradiction\n\n"
+                f"Reply format: TYPE: your text (or just NONE)"
             )
             try:
                 result = llm_fn(prompt, task_type="synthesis")
-                if result and result.strip().upper() != "NONE" and len(result) > 20:
+                if not result or len(result.strip()) < 10:
+                    continue
+                result = result.strip()
+                _contra_type = None
+                _content = None
+                _ru = result.upper()
+                if _ru.startswith("NONE"):
+                    pass
+                elif _ru.startswith("TRUE_CONFLICT:"):
+                    _content = result[14:].strip()
+                    _contra_type = "true_conflict"
+                elif _ru.startswith("CONTEXTUAL:"):
+                    _content = result[11:].strip()
+                    _contra_type = "contextual"
+                elif len(result) > 30:
+                    _content = result
+                    _contra_type = "unresolved"
+                if _content and len(_content) > 20 and _contra_type:
+                    _conf = 0.85 if _contra_type == "true_conflict" else 0.75
+                    _tags = json.dumps(["contradiction", _contra_type, topic])
                     cur.execute(
                         "INSERT OR IGNORE INTO beliefs "
-                        "(content, confidence, topic, origin, timestamp) VALUES (?,?,?,?,?)",
-                        (result.strip()[:500], 0.82, topic,
-                         "contradiction_engine", time.strftime("%Y-%m-%dT%H:%M:%S"))
+                        "(content, confidence, topic, origin, timestamp, tags) VALUES (?,?,?,?,?,?)",
+                        (_content[:500], _conf, topic,
+                         "contradiction_engine", time.strftime("%Y-%m-%dT%H:%M:%S"), _tags)
                     )
                     resolved += 1
-                    print(f"  [CONTRA] resolved conflict in '{topic}'")
+                    print(f"  [CONTRA] {_contra_type} in '{topic}'")
                 # Cache regardless — NONE means no conflict found, still don't recheck for 48h
                 cur.execute("""
                     INSERT OR REPLACE INTO contra_resolved (topic, resolved_at, belief_count)
