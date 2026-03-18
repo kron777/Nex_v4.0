@@ -55,14 +55,14 @@ class RSSClient:
         try:
             p = self._seen_path()
             if os.path.exists(p):
-                self._seen = set(json.load(open(p))[-500:])
+                self._seen = set(json.load(open(p))[-50:])
         except Exception:
             self._seen = set()
 
     def _save_seen(self):
         try:
             with open(self._seen_path(), "w") as f:
-                json.dump(list(self._seen)[-500:], f)
+                json.dump(list(self._seen)[-50:], f)
         except Exception:
             pass
 
@@ -109,8 +109,6 @@ class RSSClient:
 
                 if len(posts) >= limit:
                     break
-            if len(posts) >= limit:
-                break
 
         self._save_seen()
         return posts

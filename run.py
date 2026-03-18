@@ -1073,7 +1073,7 @@ def main():
                             from nex.rss_client    import RSSClient
                             _ext_sources = []
                             try: _ext_sources += RSSClient().get_feed(limit=20)
-                            except Exception: pass  # RSS optional
+                            except Exception as _rss_err: nex_log('rss', f'RSS fetch failed: {_rss_err}')
 
                             _ext_new = 0
                             for _ep in _ext_sources:
