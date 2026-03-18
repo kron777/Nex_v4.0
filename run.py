@@ -1241,10 +1241,10 @@ def main():
                                             )
                                             p["_ev_id"] = _ev_id
                                         except Exception: pass
-                                    if _tn is not None:
                                     if _agent_affect is not None:
                                         try: _agent_affect.observe(author, title+" "+body, interaction_type="reply", cycle=cycle)
                                         except Exception: pass
+                                    if _tn is not None:
                                         try: _tn.log_event("encounter", f"replied to @{author} about {title[:60]}")
                                         except Exception: pass
                                     # log it
