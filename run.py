@@ -1083,7 +1083,7 @@ def main():
                                 if _eid in learner.known_posts:
                                     continue
                                 _escore = _ep.get("score", 0)
-                                _econf  = min(_escore / 5000, 0.7) if _escore > 0 else 0.4
+                                _econf  = _ep.get("confidence", min(_escore / 5000, 0.7) if _escore > 0 else 0.52)
                                 _ebelief = {
                                     "source":     _ep.get("source", "external"),
                                     "author":     _ep.get("author", {}).get("name", "?"),

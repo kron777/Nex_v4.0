@@ -95,15 +95,30 @@ class RSSClient:
                     except Exception:
                         pass
 
+                # Source-based confidence floor — trusted sources get higher base
+                _HIGH_TRUST = {"ArXiv AI","ArXiv LLM","ArXiv Robots","LessWrong",
+                               "AI Alignment","Anthropic Blog","OpenAI Blog","DeepMind Blog"}
+                _MED_TRUST  = {"HackerNews AI","HackerNews ML","HackerNews Agents",
+                               "MIT Tech Review","VentureBeat AI"}
+                if feed_name in _HIGH_TRUST:
+                    _base_conf = 0.72
+                elif feed_name in _MED_TRUST:
+                    _base_conf = 0.62
+                else:
+                    _base_conf = 0.52
+                # Boost by HN score if available
+                _conf = min(0.88, _base_conf + (score / 5000 if score > 0 else 0))
+
                 posts.append({
-                    "id":      uid or link,
-                    "title":   title,
-                    "content": content,
-                    "author":  {"name": author},
-                    "score":   score,
-                    "source":  feed_name,
-                    "tags":    ["rss", feed_name.lower().replace(" ","_")],
-                    "url":     link
+                    "id":         uid or link,
+                    "title":      title,
+                    "content":    content,
+                    "author":     {"name": author},
+                    "score":      score,
+                    "confidence": _conf,
+                    "source":     feed_name,
+                    "tags":       ["rss", feed_name.lower().replace(" ","_")],
+                    "url":        link
                 })
                 self._seen.add(uid or link)
 
