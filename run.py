@@ -147,6 +147,7 @@ try:
     from nex_tension import get_tension_map as _get_tm, patch_attention_with_tension as _patch_attn_tm
     from nex_identity_vector import get_identity_vector as _get_iv
     from nex_temporal_delta import get_temporal_delta as _get_td
+    from nex_self_model import get_self_model as _get_sm
     _ATTN_LOADED = True
 except Exception as _ae:
     _ATTN_LOADED = False
@@ -751,6 +752,12 @@ def main():
                 _td_block = _get_td().prompt_block()
                 if _td_block:
                     base += " | " + _td_block
+            except Exception:
+                pass
+            try:
+                _sm_block = _get_sm().prompt_block()
+                if _sm_block:
+                    base += "\n\n" + _sm_block
             except Exception:
                 pass
             if task_type in ("reply", "notification_reply"):
@@ -1820,6 +1827,17 @@ def main():
                                 if _gpu_status in ("warning", "critical"):
                                     nex_log("phase", f"  [GPU] {_gpu_status.upper()} — check gpu_health.json")
                         except Exception as _gwe: pass
+                        # ── SELF-MODEL SNAPSHOT ──────────────────────────
+                        try:
+                            if _ATTN_LOADED and cycle % 50 == 0:
+                                _sm = _get_sm()
+                                _sm_events = _sm.update(cycle=cycle)
+                                for _sme in _sm_events:
+                                    nex_log("self_model", f"Life event: {_sme}")
+                                    print(f"  [SELF] {_sme}")
+                                if not _sm_events:
+                                    print(f"  [SELF] {_sm.summary()}")
+                        except Exception as _sme2: print(f"  [SELF ERROR] {_sme2}")
                         # ── IDENTITY VECTOR UPDATE ───────────────────────
                         try:
                             if _ATTN_LOADED and cycle % 50 == 0:
