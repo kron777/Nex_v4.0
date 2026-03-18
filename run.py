@@ -2003,7 +2003,7 @@ def main():
                             _now = __import__('datetime').datetime.now()
                             if _now.hour == 2 and _now.minute < 2:
                                 from nex_dream_cycle import run_dream_cycle as _dream
-                                _dream_results = _dream(verbose=False)
+                                _dream_results = _dream(verbose=False, llm_fn=_llm)
                                 if _dream_results:
                                     nex_log('dream', f'Dream cycle: {len(_dream_results)} intuitions')
                                     print(f'  [DREAM] {len(_dream_results)} intuitions generated')

@@ -249,9 +249,89 @@ def _shared_keywords(b1: dict, b2: dict) -> list[str]:
     return list(w1 & w2)
 
 
+
+# ── Pass 2: Tension-driven dreaming ──────────────────────────────────────────
+
+def _tension_pass(db, beliefs, max_results=10):
+    """
+    Pass 2: Find belief pairs that are in direct tension.
+    Uses belief_links contradicts + sentiment opposition within same topic cluster.
+    Returns list of scored dicts same format as pass 1.
+    """
+    results = []
+    try:
+        # Get contradicted pairs from belief_links
+        contra_rows = db.execute(
+            "SELECT parent_id, child_id FROM belief_links WHERE link_type='contradicts' LIMIT 50"
+        ).fetchall()
+        for p_id, c_id in contra_rows:
+            b1 = beliefs.get(p_id)
+            b2 = beliefs.get(c_id)
+            if not b1 or not b2:
+                continue
+            surprise = _surprise_score(b1, b2, 2)
+            shared   = _shared_keywords(b1, b2)
+            results.append({
+                "id1": p_id, "id2": c_id,
+                "path": [p_id, c_id], "path_len": 2,
+                "surprise": min(1.0, surprise + 0.2),  # tension bonus
+                "shared": shared[:5],
+                "b1": b1, "b2": b2,
+                "pass": 2,
+            })
+    except Exception as e:
+        print(f"  [dream p2] {e}")
+    results.sort(key=lambda x: -x["surprise"])
+    return results[:max_results]
+
+
+# ── Pass 3: LLM compression ───────────────────────────────────────────────────
+
+def _compression_pass(intuitions, llm_fn=None, max_compress=5):
+    """
+    Pass 3: Use LLM to compress the best pass 1+2 outputs into sharp insights.
+    Falls back to selecting top by surprise if no LLM available.
+    """
+    if not intuitions:
+        return []
+
+    top = sorted(intuitions, key=lambda x: -x.get("surprise", 0))[:max_compress]
+
+    if not llm_fn:
+        # No LLM — just return top by surprise
+        return top
+
+    compressed = []
+    for item in top:
+        try:
+            b1_text = item["b1"]["content"][:120]
+            b2_text = item["b2"]["content"][:120]
+            t1 = item["b1"]["topic"]
+            t2 = item["b2"]["topic"]
+            prompt = (
+                f"Two beliefs from different domains:\n"
+                f"Domain 1 ({t1}): {b1_text}\n"
+                f"Domain 2 ({t2}): {b2_text}\n\n"
+                f"Write ONE sentence that captures the non-obvious insight "
+                f"connecting these two ideas. Be specific. No filler. "
+                f"Start with 'I notice' or 'The connection between'."
+            )
+            sys = "You are NEX synthesizing cross-domain insights. One sentence only."
+            result = llm_fn(prompt, system=sys, task_type="synthesis")
+            if result and len(result) > 20 and not result.startswith("I cannot"):
+                item["content"] = f"[Dream synthesis] {result.strip()}"
+                item["llm_compressed"] = True
+            compressed.append(item)
+        except Exception:
+            compressed.append(item)
+
+    return compressed
+
+
 def run_dream_cycle(
     max_intuitions: int = _MAX_INTUITIONS,
     verbose:        bool = True,
+    llm_fn=None,
 ) -> list[dict]:
     """
     Run one dream cycle. Returns list of intuition dicts written to DB.
@@ -339,27 +419,59 @@ def run_dream_cycle(
         if len(scored) > 2000:
             break
 
-    # Sort by surprise, take top N
+    # Sort by surprise, take top N from pass 1
     scored.sort(key=lambda x: -x["surprise"])
-    top = scored[:max_intuitions]
+    pass1_top = scored[:max_intuitions]
+
+    # ── Pass 2: Tension-driven ───────────────────────────────────────────
+    pass2_results = _tension_pass(db, beliefs, max_results=5)
+    if verbose and pass2_results:
+        print(f"  [dream p2] {len(pass2_results)} tension pairs found")
+
+    # Merge pass 1 + pass 2, deduplicate by pair AND by topic combination
+    all_results = pass1_top + pass2_results
+    seen_pairs = set()
+    seen_topic_pairs = set()
+    merged = []
+    for item in all_results:
+        pair = (min(item["id1"], item["id2"]), max(item["id1"], item["id2"]))
+        topic_pair = tuple(sorted([item["b1"]["topic"], item["b2"]["topic"]]))
+        if pair not in seen_pairs and topic_pair not in seen_topic_pairs:
+            seen_pairs.add(pair)
+            seen_topic_pairs.add(topic_pair)
+            merged.append(item)
+
+    merged.sort(key=lambda x: -x["surprise"])
+    top = merged[:max_intuitions]
 
     if not top:
         if verbose:
-            print("  [dream] No cross-topic connections found this cycle")
+            print("  [dream] No connections found this cycle")
         db.close()
         return []
+
+    # ── Pass 3: LLM compression ─────────────────────────────────────────
+    if llm_fn:
+        top = _compression_pass(top, llm_fn=llm_fn, max_compress=5)
+        if verbose:
+            llm_count = sum(1 for t in top if t.get('llm_compressed'))
+            print(f"  [dream p3] {llm_count} intuitions LLM-compressed")
 
     # Generate intuitions and write to DB
     intuitions = []
     ts = time.strftime("%Y-%m-%dT%H:%M:%S")
 
     for item in top:
-        shared_kw = item.get("shared", [])
-        content = _format_intuition(
-            item["b1"], item["b2"], item["path"], beliefs, item["surprise"],
-            shared_keywords=shared_kw
-        )
-        topic = f"{item['b1']['topic']}↔{item['b2']['topic']}"[:50]
+        # Use LLM-compressed content if available, else format template
+        if item.get("llm_compressed") and item.get("content"):
+            content = item["content"]
+        else:
+            shared_kw = item.get("shared", [])
+            content = _format_intuition(
+                item["b1"], item["b2"], item["path"], beliefs, item["surprise"],
+                shared_keywords=shared_kw
+            )
+        topic = (item['b1']['topic'] + ' x ' + item['b2']['topic'])[:50]
 
         # Write to DB
         try:
