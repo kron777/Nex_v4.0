@@ -34,7 +34,7 @@ def run_memory_compression(cycle=0, llm_fn=None):
                     b_words = set(group[j][1].lower().split())
                     if not a_words or not b_words: continue
                     overlap = len(a_words & b_words) / max(len(a_words), len(b_words))
-                    if overlap > 0.85:
+                    if overlap > 0.75:
                         # Keep higher confidence, delete lower
                         keep_id = group[i][0] if group[i][2] >= group[j][2] else group[j][0]
                         del_id  = group[j][0] if keep_id == group[i][0] else group[i][0]
@@ -43,16 +43,21 @@ def run_memory_compression(cycle=0, llm_fn=None):
 
         # 2. Archive very old low-confidence beliefs
         cutoff = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 7*24*3600))
-        cur.execute("DELETE FROM beliefs WHERE confidence < 0.25 AND timestamp < ? AND decay_score > 3", (cutoff,))
+        cur.execute("DELETE FROM beliefs WHERE confidence < 0.35 AND timestamp < ? AND human_validated = 0 AND origin NOT IN ('dream_cycle','insight_synthesis','contradiction_engine')", (cutoff,))
         archived = cur.rowcount
 
-        # 3. Decay stale beliefs — weaken anything not referenced in 14 days
-        try:
-            from belief_store import decay_stale_beliefs
-            decayed = decay_stale_beliefs(days_inactive=14, decay_amount=0.04)
-            if decayed > 0:
-                print(f"  [MEMORY] decayed {decayed} stale beliefs")
-        except Exception: pass
+        # 3. Decay stale beliefs — increment decay_score for unreferenced beliefs
+        stale_cutoff = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 14*24*3600))
+        cur.execute("""
+            UPDATE beliefs SET decay_score = decay_score + 1
+            WHERE (last_referenced IS NULL OR last_referenced < ?)
+            AND timestamp < ?
+            AND confidence < 0.6
+            AND human_validated = 0
+        """, (stale_cutoff, stale_cutoff))
+        decayed = cur.rowcount
+        if decayed > 0:
+            print(f"  [MEMORY] incremented decay_score on {decayed} stale beliefs")
 
         # 3. Apply source reliability weighting to new beliefs
         try:
