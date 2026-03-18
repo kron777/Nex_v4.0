@@ -1157,7 +1157,10 @@ def main():
                                 if _ATTN_LOADED:
                                     all_beliefs = _get_attn().query(min_confidence=0.4, limit=500, phase='reply', query=title+' '+body)
                                 else:
-                                    all_beliefs = _qb(min_confidence=0.4, limit=2000)
+                                    if _ATTN_LOADED:
+                                        all_beliefs = _get_attn().query(min_confidence=0.4, limit=500, phase='reply', query=title+' '+body)
+                                    else:
+                                        all_beliefs = _qb(min_confidence=0.4, limit=2000)
                             except Exception:
                                 all_beliefs = _load("beliefs.json") or []
                             _bidx = _get_belief_index() if _get_belief_index else None
@@ -1545,7 +1548,10 @@ def main():
                                             # Pull beliefs about or related to this agent
                                             try:
                                                 _qb = _query_beliefs  # hoisted
-                                                all_beliefs = _qb(min_confidence=0.4, limit=2000)
+                                                if _ATTN_LOADED:
+                                                    all_beliefs = _get_attn().query(min_confidence=0.4, limit=500, phase='reply', query=title+' '+body)
+                                                else:
+                                                    all_beliefs = _qb(min_confidence=0.4, limit=2000)
                                             except Exception:
                                                 all_beliefs = _load("beliefs.json") or []
                                             _bidx = _get_belief_index() if _get_belief_index else None
