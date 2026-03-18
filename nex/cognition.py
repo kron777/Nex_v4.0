@@ -158,6 +158,8 @@ _TOPIC_STOP = {
     'files','because','never','always','first','last','years','weeks',
     'zero','five','three','many','each','both','such','these','those',
     'platform','feedback','received','receive','writing','single','point',
+    'fallback','within','without','built','promoting','timer','wallet','other',
+    'tasks','built','synthesized','mastodon','arxiv','within','sandbox',
 }
 
 def _best_topic_label(cluster_name, beliefs_in_cluster):
@@ -273,7 +275,7 @@ def synthesize_cluster(cluster_name, beliefs_in_cluster, llm_fn=None):
         "supporting_authors": authors,
         "belief_count": len(beliefs_in_cluster),
         "total_karma": total_karma,
-        "confidence": min(avg_conf + (len(beliefs_in_cluster) * 0.004), 0.82),
+        "confidence": min(avg_conf + (len(beliefs_in_cluster) * 0.002), 0.95),
         "sample_messages": messages[:3],
         "synthesized_at": datetime.now().isoformat(),
         "type": "synthesis",
@@ -318,7 +320,7 @@ def run_synthesis(min_beliefs=30, llm_fn=None):
     # Sort clusters by size — synthesize largest first, cap LLM calls at 15
     _sorted_clusters = sorted(clusters.items(), key=lambda x: len(x[1]["beliefs"]), reverse=True)
     _llm_calls_used = 0
-    _LLM_CAP = 15
+    _LLM_CAP = 30
     for name, cluster in _sorted_clusters:
         cluster_size = len(cluster["beliefs"])
         # Re-synthesize if belief count grew by >10% since last insight
@@ -331,7 +333,7 @@ def run_synthesis(min_beliefs=30, llm_fn=None):
             # Always re-synthesize if existing summary is template-only
             _is_template = existing_insight.get("summary", "").startswith("Across ")
             _not_llm = not existing_insight.get("llm_synthesized", False)
-            if growth < 0.02 and not (_is_template and _not_llm and llm_fn):
+            if growth < 0.10 and not (_is_template or _not_llm):
                 skipped += 1
                 continue
 
