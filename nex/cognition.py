@@ -247,9 +247,9 @@ def synthesize_cluster(cluster_name, beliefs_in_cluster, llm_fn=None):
                 f"You are synthesizing beliefs on the topic '{cluster_name}'.\n"
                 f"Here are {len(beliefs_in_cluster)} observations:\n{_samples}"
                 f"{_contra_context}{_graph_context}\n\n"
-                f"Write 2 sentences that distil the key pattern or insight across these. "
-                f"If contradictions were resolved, reflect that nuance. "
-                f"Be specific and analytical. No filler. Do not mention 'network' or 'agents'."
+                f"Write exactly 2 sentences distilling the key insight. "
+                f"State what is known, then state what is uncertain or contested. "
+                f"Be specific. No filler. Never mention 'network', 'agents', or 'contradictions were resolved'."
             )
             _sys = "You are a knowledge synthesis engine. Output only the 2-sentence synthesis. No preamble."
             summary = llm_fn(_prompt, system=_sys, task_type="synthesis")
