@@ -148,7 +148,8 @@ def absorb_from_sources(learner=None, cycle: int = 0) -> dict:
     seen_ids  = set()
     try:
         if seen_path.exists():
-            seen_ids = set(json.loads(seen_path.read_text()))
+            _seen_list = json.loads(seen_path.read_text())
+            seen_ids = set(_seen_list[-50:])  # cap at 50
     except Exception:
         pass
 
