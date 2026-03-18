@@ -145,6 +145,7 @@ from nex.agent_tools  import dispatch, tools_help, TOOL_REGISTRY
 try:
     from nex_attention import get_attention_index as _get_attn
     from nex_tension import get_tension_map as _get_tm, patch_attention_with_tension as _patch_attn_tm
+    from nex_identity_vector import get_identity_vector as _get_iv
     _ATTN_LOADED = True
 except Exception as _ae:
     _ATTN_LOADED = False
@@ -737,6 +738,12 @@ def main():
                 _dreams = _gdi(3)
                 if _dreams:
                     base += "\n\nThings you have been turning over: " + " | ".join(_dreams[:2][:100])
+            except Exception:
+                pass
+            try:
+                _iv_block = _get_iv().prompt_block()
+                if _iv_block:
+                    base += "\n\n" + _iv_block
             except Exception:
                 pass
             if task_type in ("reply", "notification_reply"):
@@ -1806,6 +1813,15 @@ def main():
                                 if _gpu_status in ("warning", "critical"):
                                     nex_log("phase", f"  [GPU] {_gpu_status.upper()} — check gpu_health.json")
                         except Exception as _gwe: pass
+                        # ── IDENTITY VECTOR UPDATE ───────────────────────
+                        try:
+                            if _ATTN_LOADED and cycle % 50 == 0:
+                                _iv = _get_iv()
+                                _iv_changed = _iv.update(cycle=cycle)
+                                if _iv_changed:
+                                    nex_log('identity', f'Identity vector updated: {_iv.summary()}')
+                                    print(f'  [IDENTITY] {_iv.summary()}')
+                        except Exception as _ive: print(f'  [IDENTITY ERROR] {_ive}')
                         # ── TENSION MAP UPDATE ───────────────────────────
                         try:
                             if _ATTN_LOADED:
