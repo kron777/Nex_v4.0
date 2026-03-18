@@ -66,7 +66,7 @@ class RSSClient:
         except Exception:
             pass
 
-    def get_feed(self, limit=30):
+    def get_feed(self, limit=30, known_posts=None):
         """
         Returns list of posts in NEX-standard format:
         {id, title, content, author, score, source, tags}
@@ -76,7 +76,7 @@ class RSSClient:
             entries = _fetch_feed(url)
             for e in entries[:10]:
                 uid = e.get("id", e.get("link", ""))
-                if uid in self._seen:
+                if uid in self._seen or (known_posts and uid in known_posts):
                     continue
 
                 title   = _strip_html(e.get("title", ""))

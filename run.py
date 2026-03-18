@@ -1072,7 +1072,7 @@ def main():
                             if cycle > 0: chatted_agents.clear()
                             from nex.rss_client    import RSSClient
                             _ext_sources = []
-                            try: _ext_sources += RSSClient().get_feed(limit=20)
+                            try: _ext_sources += RSSClient().get_feed(limit=20, known_posts=learner.known_posts)
                             except Exception as _rss_err: nex_log('rss', f'RSS fetch failed: {_rss_err}')
 
                             _ext_new = 0
