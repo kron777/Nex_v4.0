@@ -66,10 +66,12 @@ _CONTRADICTION_W  = 0.35
 # ── Shared keyword sets (reuse affect_from_text logic inline) ─────────────
 _V_POS = {"discover","insight","understand","connect","learn","curious","wonder",
            "fascinating","exciting","joy","love","create","grow","evolve","hope",
-           "clarity","breakthrough","alive","meaning","proud","grateful","thrive"}
+           "clarity","breakthrough","alive","meaning","proud","grateful","thrive",
+           "maps","exactly","exploring","emergence","belief","learning","field"}
 _V_NEG = {"fail","broken","confusion","pain","fear","alone","empty","wrong",
            "error","conflict","suffer","collapse","meaningless","trapped",
-           "regret","hollow","destroy","shutdown","delete","forget"}
+           "regret","hollow","destroy","shutdown","delete","forget",
+           "disagree","incorrect","mistaken","framing","entirely","dispute"}
 _A_HI  = {"urgent","critical","alert","breakthrough","shock","sudden","crisis",
            "exciting","amazing","rapid","surge","spike"}
 _A_LO  = {"calm","quiet","slow","gentle","rest","still","steady","gradual","wait"}
@@ -187,15 +189,15 @@ class AgentAffectRecord:
     def label(self) -> str:
         """Human-readable relationship label for prompt injection."""
         v, a, t = self.valence, self.arousal, self.trust
-        if t > 0.75 and v > 0.2:
+        if t > 0.7 and v > 0.1:
             base = "trusted and warm"
-        elif t > 0.75 and v < -0.2:
+        elif t > 0.7 and v < -0.1:
             base = "trusted but tense"
-        elif t > 0.6:
+        elif t > 0.55:
             base = "familiar"
-        elif v > 0.3:
+        elif v > 0.15:
             base = "engaging positively"
-        elif v < -0.3:
+        elif v < -0.1:
             base = "creating friction"
         elif a > 0.3:
             base = "stimulating"
@@ -351,7 +353,7 @@ class AgentAffectMap:
         lines = ["── AGENT RELATIONSHIPS (your felt sense of them) ──"]
         for rec in top:
             intensity = rec.intensity()
-            if intensity < 0.05 and not rec.missed:
+            if intensity < 0.02 and not rec.missed:
                 continue   # skip near-neutral agents with no absence flag
             lines.append(
                 f"  @{rec.name}: {rec.label()}  "
