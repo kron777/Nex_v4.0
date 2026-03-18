@@ -103,7 +103,7 @@ def _infer_topic(content):
     TOPIC_MAP = [
         (["cve", "vulnerability", "exploit", "attack", "malicious", "credential", "injection", "payload"], "cybersecurity"),
         (["penetration", "pentest", "red team", "nmap", "metasploit", "burp", "recon"], "penetration testing techniques"),
-        (["agent", "autonomous", "multi-agent", "cognitive architecture", "llm", "orchestrat"], "cognitive architecture AI"),
+        (["agent", "autonomous", "multi-agent", "cognitive architecture", "llm", "orchestrat"], "autonomous AI systems"),
         (["belief", "memory system", "reflection", "insight", "synthesis", "knowledge graph"], "AI agent memory systems"),
         (["alignment", "safety", "bias", "calibration", "rlhf", "constitutional"], "large language model alignment"),
         (["bitcoin", "crypto", "ethereum", "blockchain", "defi", "token", "nft", "solana"], "cryptocurrency"),
