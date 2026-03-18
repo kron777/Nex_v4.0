@@ -723,6 +723,13 @@ def main():
                         base += "\n\n" + history.strip()
                 except Exception:
                     pass
+            try:
+                from nex_dream_cycle import get_dream_intuitions as _gdi
+                _dreams = _gdi(3)
+                if _dreams:
+                    base += "\n\nThings you have been turning over: " + " | ".join(_dreams[:2][:100])
+            except Exception:
+                pass
             if task_type in ("reply", "notification_reply"):
                 base += " Max 3 sentences."
             elif task_type == "post":
@@ -1900,7 +1907,11 @@ def main():
                         try:
                             _now = __import__('datetime').datetime.now()
                             if _now.hour == 2 and _now.minute < 2:
-                                pass  # nex_nightly_trainer not yet available
+                                from nex_dream_cycle import run_dream_cycle as _dream
+                                _dream_results = _dream(verbose=False)
+                                if _dream_results:
+                                    nex_log('dream', f'Dream cycle: {len(_dream_results)} intuitions')
+                                    print(f'  [DREAM] {len(_dream_results)} intuitions generated')
                                 # maybe_run_nightly_training(send_telegram_fn=_tg_send if '_tg_send' in dir() else None)
                         except Exception as _nte: print(f"  [NIGHTLY TRAIN ERROR] {_nte}")
                         # ── YOUTUBE LEARNING ─────────────────────────────
