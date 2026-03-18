@@ -148,16 +148,18 @@ from nex_youtube import learn_from_youtube
 # ── Sentience layer ──────────────────────────────────────────────
 try:
     from nex.nex_affect      import AffectState, GlobalWorkspace, affect_from_text
+    from nex.nex_affect_depth import AgentAffectMap
     from nex.nex_consequence import ConsequenceMemory
     from nex.nex_temporal    import TemporalNarrative
     _affect = AffectState()
     _gw     = GlobalWorkspace(_affect)
+    _agent_affect = AgentAffectMap()
     _cm     = ConsequenceMemory()
     _tn     = TemporalNarrative()
     print("  [SENTIENCE] affect / consequence / temporal — loaded")
 except Exception as _se:
     print(f"  [SENTIENCE] failed to load: {_se}")
-    _affect = _gw = _cm = _tn = None
+    _affect = _gw = _cm = _tn = _agent_affect = None
 try:
     from nex_devto import run_devto_publisher
 except Exception as _dte: run_devto_publisher = None
@@ -1669,6 +1671,17 @@ def main():
                             conversations = conversations[-200:]
 
                         emit_phase("REFLECT", 120); nex_log("phase", "▶ REFLECT — self assessing")
+                        # ── AGENT AFFECT DEPTH — absence detection ────────
+                        try:
+                            if _agent_affect is not None:
+                                _absences = _agent_affect.check_absences(cycle)
+                                for _abs_note in _absences:
+                                    nex_log("affect", f"MISSING: {_abs_note}")
+                                    print(f"  [AFFECT DEPTH] {_abs_note[:80]}")
+                                _adstats = _agent_affect.stats()
+                                if cycle % 10 == 0:
+                                    print(f"  [AFFECT DEPTH] agents={_adstats['total']} trusted={_adstats['trusted']} warm={_adstats['warm']} tense={_adstats['tense']} missed={_adstats['missed']}")
+                        except Exception as _ade: print(f"  [AFFECT DEPTH ERROR] {_ade}")
                         # ── IDENTITY DEFENDER STATS ────────────────────────
                         try:
                             if _IDEF_LOADED:
