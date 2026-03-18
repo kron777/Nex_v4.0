@@ -388,6 +388,110 @@ _engine = CuriosityEngine()
 def get_curiosity_engine() -> CuriosityEngine:
     return _engine
 
+
+# ── Novelty Scorer ────────────────────────────────────────────────────────────
+
+class NoveltyScorer:
+    """
+    Measures how much new territory NEX is covering each cycle.
+    Low novelty → bias curiosity toward bridge queries and new domains.
+    High novelty → allow depth drilling on current topics.
+
+    Score 0-1: 0 = pure repetition, 1 = all new territory.
+    """
+
+    def __init__(self):
+        self._topic_history  : list[set] = []   # per-cycle topic sets
+        self._belief_history : list[int] = []   # per-cycle belief counts
+        self._score          : float = 0.5
+        self._path = CFG_PATH / "novelty_score.json"
+        self._load()
+
+    def _load(self):
+        try:
+            if self._path.exists():
+                d = json.loads(self._path.read_text())
+                self._score = d.get("score", 0.5)
+                self._belief_history = d.get("belief_history", [])
+        except Exception:
+            pass
+
+    def _save(self):
+        try:
+            self._path.write_text(json.dumps({
+                "score": self._score,
+                "belief_history": self._belief_history[-20:],
+                "last_updated": datetime.now().isoformat(),
+            }))
+        except Exception:
+            pass
+
+    def update(self, current_topics: set, belief_count: int) -> float:
+        """
+        Update novelty score from current cycle topics and belief count.
+        Returns updated score.
+        """
+        self._belief_history.append(belief_count)
+
+        if len(self._topic_history) < 2:
+            self._topic_history.append(current_topics)
+            self._score = 0.5
+            self._save()
+            return self._score
+
+        # Topic novelty: what fraction of current topics are new vs last 3 cycles
+        recent_topics = set()
+        for past in self._topic_history[-3:]:
+            recent_topics |= past
+        new_topics = current_topics - recent_topics
+        topic_novelty = len(new_topics) / max(len(current_topics), 1)
+
+        # Belief growth novelty: is belief count growing?
+        if len(self._belief_history) >= 3:
+            recent_growth = self._belief_history[-1] - self._belief_history[-3]
+            growth_novelty = min(1.0, recent_growth / 30.0)
+        else:
+            growth_novelty = 0.5
+
+        # Composite score
+        self._score = round(topic_novelty * 0.6 + growth_novelty * 0.4, 3)
+        self._topic_history.append(current_topics)
+        if len(self._topic_history) > 10:
+            self._topic_history = self._topic_history[-10:]
+
+        self._save()
+        return self._score
+
+    def score(self) -> float:
+        return self._score
+
+    def is_stagnating(self) -> bool:
+        return self._score < 0.2
+
+    def curiosity_bias(self) -> str:
+        """Return recommended curiosity type based on novelty."""
+        if self._score < 0.15:
+            return "bridge"      # very low novelty → force cross-domain
+        elif self._score < 0.35:
+            return "gap_fill"    # low novelty → fill knowledge gaps
+        elif self._score < 0.65:
+            return "balanced"    # normal → mix of all types
+        else:
+            return "depth"       # high novelty → drill deeper
+
+
+_novelty_scorer = NoveltyScorer()
+
+def get_novelty_score() -> float:
+    return _novelty_scorer.score()
+
+def update_novelty(topics: set, belief_count: int) -> float:
+    return _novelty_scorer.update(topics, belief_count)
+
+def get_curiosity_bias() -> str:
+    return _novelty_scorer.curiosity_bias()
+
+
 def run_curiosity_cycle(cycle: int = 0) -> dict:
     return _engine.run_cycle(cycle)
 
