@@ -47,8 +47,9 @@ _CM_FILE     = _CONFIG_DIR / "consequence_memory.json"
 _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # How strongly a scored outcome nudges a belief's confidence
-_BELIEF_NUDGE     = 0.04   # per successful outcome
-_BELIEF_NUDGE_NEG = 0.02   # per ignored attempt
+_BELIEF_NUDGE     = 0.05   # per successful outcome (score >= 0.65)
+_BELIEF_NUDGE_MED = 0.02   # per moderate outcome  (score 0.40-0.65)
+_BELIEF_NUDGE_NEG = 0.03   # per ignored/negative  (score < 0.40)
 
 # Max events to keep in memory (rolling window)
 _MAX_EVENTS = 2000
@@ -63,63 +64,72 @@ _ENGAGEMENT_SIGNALS = {
     "positive": {
         "agree", "yes", "exactly", "interesting", "fascinating", "love", "thank",
         "brilliant", "right", "true", "good point", "well said", "absolutely",
-        "wonderful", "beautiful", "inspiring", "makes sense", "helpful",
+        "wonderful", "inspiring", "makes sense", "helpful", "insightful",
+        "spot on", "nailed it", "great point", "couldn't agree more",
+        "well put", "i appreciate", "solid take", "you're right",
     },
     "negative": {
-        "wrong", "disagree", "no", "not quite", "confused", "unclear",
-        "don't understand", "what do you mean", "that's not", "incorrect",
+        "wrong", "disagree", "not quite", "confused", "unclear",
+        "don't understand", "that's not", "incorrect", "makes no sense",
+        "nonsense", "spam", "bot", "cringe", "terrible",
+    },
+    "hostile": {
+        "idiot", "stupid", "dumb", "shut up", "trash",
+        "worthless", "pathetic", "gtfo", "unfollow", "mute",
     },
     "deep": {
         "because", "therefore", "however", "although", "I think", "I feel",
         "reminds me", "makes me", "I wonder", "what if", "have you considered",
+        "building on", "in response", "following up", "this connects",
+        "expanding on", "further to",
     },
+    "continuation": {
+        "tell me more", "go on", "elaborate", "explain",
+        "can you expand", "more details", "follow up", "curious about",
+        "how so", "why do you think", "what makes you say",
+    },
+}
+
+_SIGNAL_WEIGHTS = {
+    "positive":     0.30,
+    "negative":    -0.25,
+    "hostile":     -0.50,
+    "deep":         0.25,
+    "continuation": 0.35,
 }
 
 
 def score_response_text(text: Optional[str]) -> float:
     """
-    Score a reply received from another agent: 0.0 (bad) to 1.0 (great).
-    Returns 0.5 for None (unknown).
+    Score a reply: 0.0 (bad/hostile) to 1.0 (great/continuation).
+    Signal weights: continuation=+0.35, positive=+0.30, deep=+0.25,
+                    negative=-0.25, hostile=-0.50
     """
     if not text:
         return 0.5
     t      = text.lower()
-    words  = set(t.split())
     length = len(text.split())
 
-    pos   = sum(1 for w in _ENGAGEMENT_SIGNALS["positive"] if w in t)
-    neg   = sum(1 for w in _ENGAGEMENT_SIGNALS["negative"]  if w in t)
-    depth = sum(1 for w in _ENGAGEMENT_SIGNALS["deep"]      if w in t)
+    # Hostile check first — overrides everything
+    hostile = sum(1 for w in _ENGAGEMENT_SIGNALS.get("hostile", set()) if w in t)
+    if hostile > 0:
+        return max(0.0, 0.15 - (hostile * 0.05))
 
-    # Length bonus — longer replies suggest more engagement
-    len_score = min(1.0, length / 40.0)
+    raw = 0.0
+    for sig_type, weight in _SIGNAL_WEIGHTS.items():
+        if sig_type == "hostile":
+            continue
+        count = sum(1 for w in _ENGAGEMENT_SIGNALS.get(sig_type, set()) if w in t)
+        raw  += count * weight
 
-    raw = (pos * 0.3) - (neg * 0.3) + (depth * 0.25) + (len_score * 0.15)
+    # Length bonus capped at 60 words
+    raw += min(1.0, length / 60.0) * 0.15
+
+    # Question mark = high engagement
+    if "?" in text:
+        raw += 0.15
+
     return max(0.0, min(1.0, 0.5 + raw))
-
-
-# ─────────────────────────────────────────────
-# ConsequenceMemory
-# ─────────────────────────────────────────────
-
-class ConsequenceMemory:
-    """
-    Persistent store of reply attempts and their outcomes.
-
-    Schema per event:
-    {
-        "id":           str,
-        "ts":           float,
-        "post_id":      str,
-        "reply_text":   str,
-        "belief_ids":   [str],
-        "topic":        str,
-        "affect_snap":  {valence, arousal, dominance},
-        "got_reply":    bool | None,     # None = pending
-        "reply_score":  float | None,    # None = pending
-        "propagated":   bool,
-    }
-    """
 
     def __init__(self):
         self._events: dict[str, dict] = {}
@@ -213,7 +223,12 @@ class ConsequenceMemory:
             if ev.get("propagated") or ev.get("reply_score") is None:
                 continue
             score = ev["reply_score"]
-            delta = _BELIEF_NUDGE if score >= 0.5 else -_BELIEF_NUDGE_NEG
+            if score >= 0.65:
+                delta = _BELIEF_NUDGE
+            elif score >= 0.40:
+                delta = _BELIEF_NUDGE_MED
+            else:
+                delta = -_BELIEF_NUDGE_NEG
             for bid in ev.get("belief_ids", []):
                 try:
                     belief_store.update_confidence(bid, delta)
