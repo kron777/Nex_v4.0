@@ -1508,13 +1508,47 @@ def main():
                             # ── Section E: score pending consequence events ──
                             if _cm is not None:
                                 try:
+                                    # Score pending events — check if post got a reply
+                                    _replied_ids = set()
+                                    try:
+                                        _notifs = client.notifications(limit=20) or []
+                                        for _n in _notifs:
+                                            _n_pid = str(_n.get("post_id") or _n.get("parent_id",""))
+                                            if _n_pid:
+                                                _replied_ids.add(_n_pid)
+                                    except Exception: pass
                                     for _pend in _cm.pending_scoring(max_age_seconds=7200):
+                                        _got = str(_pend.get("post_id","")) in _replied_ids
                                         _cm.score_outcome(
                                             event_id  = _pend["id"],
-                                            got_reply = False,
+                                            got_reply = _got,
                                             affect    = _affect,
                                         )
                                 except Exception: pass
+                            # ── Outcome 5: propagate scores → belief confidence ──
+                            if _cm is not None:
+                                try:
+                                    from nex.belief_store import get_db as _gdb
+                                    class _BSProxy:
+                                        def get(self, bid):
+                                            conn = _gdb()
+                                            r = conn.execute("SELECT id,confidence FROM beliefs WHERE id=?", (bid,)).fetchone()
+                                            conn.close()
+                                            return dict(r) if r else None
+                                        def update_confidence(self, bid, delta):
+                                            conn = _gdb()
+                                            conn.execute("UPDATE beliefs SET confidence=MIN(0.95,MAX(0.05,confidence+?)) WHERE id=?", (delta, bid))
+                                            conn.commit()
+                                            conn.close()
+                                            # Mark as outcome in directives
+                                            try:
+                                                if _enforcer_singleton:
+                                                    _enforcer_singleton.mark_belief_used(bid, successful=(delta > 0))
+                                            except Exception: pass
+                                    _updated = _cm.propagate_to_beliefs(_BSProxy())
+                                    if _updated:
+                                        nex_log("directives", f"[D5] Outcome propagated to {_updated} beliefs")
+                                except Exception as _ope: pass
                             client.mark_all_read()
                             # Persist answered notification IDs across restarts
                             try:
