@@ -144,11 +144,55 @@ def _infer_topic(content):
     return "general"
 
 # ── Add belief (SQLite + ChromaDB) ───────────────────────────────────────────
+def _belief_quality_score(content):
+    """
+    Returns (passes: bool, reason: str).
+    Rejects low-signal beliefs before insertion.
+    """
+    c = content.strip()
+    # Too short
+    if len(c) < 25:
+        return False, "too_short"
+    # Too long — likely a raw dump not a belief
+    if len(c) > 800:
+        return False, "too_long"
+    # Pure noise patterns
+    import re as _re
+    _noise = [
+        r'^(yes|no|ok|okay|sure|thanks|thank you|hello|hi|bye)[\.!?]?$',
+        r'^\d+[\.\)]?\s*$',           # just a number
+        r'^[^a-zA-Z]*$',                 # no letters at all
+    ]
+    for pattern in _noise:
+        if _re.match(pattern, c.lower()):
+            return False, "noise_pattern"
+    # Requires at least 4 words
+    if len(c.split()) < 4:
+        return False, "too_few_words"
+    # Low information: generic filler phrases
+    _filler = [
+        "as an ai", "i am an ai", "i cannot", "i don't have",
+        "i am unable", "as a language model", "i'm just an ai"
+    ]
+    cl = c.lower()
+    for filler in _filler:
+        if filler in cl:
+            return False, "ai_filler"
+    return True, "ok"
+
 def add_belief(content, confidence=0.5, source=None, author=None,
                network_consensus=0.3, tags=None, topic=None):
     if not content or len(content.strip()) < 10:
         return None
     content = content.strip()
+    # ── Directive 8: belief quality filter ───────────────────────────────────
+    _passes, _reason = _belief_quality_score(content)
+    if not _passes:
+        import logging as _lg
+        _lg.getLogger("nex.belief_store").debug(
+            f"[D8] Belief rejected reason={_reason}: {content[:60]}"
+        )
+        return None
     now = datetime.now().isoformat()
     # Auto-infer topic if not provided
     if not topic:

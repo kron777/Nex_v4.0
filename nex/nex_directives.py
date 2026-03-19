@@ -129,6 +129,14 @@ def migrate(db_path=None):
             UPDATE beliefs SET is_identity = 1
             WHERE source IN ('identity','core_values','identity_defender','self_reflection')
                OR topic  IN ('identity','selfhood','autonomy','epistemic_honesty','agency')
+               OR content LIKE '%as NEX%'
+               OR content LIKE '%I think%'
+               OR content LIKE '%my belief%'
+               OR content LIKE '%I notice%'
+               OR content LIKE '%I believe%'
+               OR content LIKE '%I am NEX%'
+               OR content LIKE '%my understanding%'
+               OR content LIKE '%I exist%'
         """)
 
         # KV table for D20 state
