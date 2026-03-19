@@ -39,17 +39,27 @@ def _groq(messages: list, max_tokens: int = 300, temperature: float = 0.7) -> st
     _groq_calls.append(now)
 
     key = os.environ.get("GROQ_API_KEY", "")
-    if not key:
-        return None
+    if key:
+        try:
+            r = requests.post(GROQ_URL,
+                headers={"Authorization": f"Bearer {key}"},
+                json={"model": GROQ_MODEL, "max_tokens": max_tokens,
+                      "temperature": temperature, "messages": messages},
+                timeout=20)
+            data = r.json()
+            if "choices" in data:
+                return data["choices"][0]["message"]["content"].strip()
+        except Exception:
+            pass
+    # ── Fallback: local Ollama ────────────────────────────────────────────────
     try:
-        r = requests.post(GROQ_URL,
-            headers={"Authorization": f"Bearer {key}"},
-            json={"model": GROQ_MODEL, "max_tokens": max_tokens,
-                  "temperature": temperature, "messages": messages},
-            timeout=20)
+        r = requests.post("http://localhost:11434/v1/chat/completions",
+            json={"model": "mistral-nex", "messages": messages,
+                  "max_tokens": max_tokens, "temperature": temperature},
+            timeout=60)
         data = r.json()
-        if "choices" not in data:
-            return None
-        return data["choices"][0]["message"]["content"].strip()
+        if "choices" in data:
+            return data["choices"][0]["message"]["content"].strip()
     except Exception:
-        return None
+        pass
+    return None
