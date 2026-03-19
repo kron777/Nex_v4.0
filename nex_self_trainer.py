@@ -32,19 +32,19 @@ from datetime import datetime
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 DB_PATH    = Path.home() / ".config" / "nex" / "nex.db"
-BASE_MODEL = "/media/rr/4TBDATA/llmz/nex_base_model"
-TRAINED    = "/media/rr/4TBDATA/llmz/nex_trained"
-TRAIN_DIR  = "/media/rr/NEX/nex/training"
-LOG        = "/media/rr/NEX/nex/training/train.log"
+BASE_MODEL = "/media/rr/4TB DATA/llmz/Mistral-7B-Instruct-v0.3-hf"
+TRAINED    = "/media/rr/4TB DATA/llmz/nex_trained"
+TRAIN_DIR  = "/media/rr/4TB DATA/llmz/nex_training"
+LOG        = "/media/rr/4TB DATA/llmz/nex_training/train.log"
 STATE_FILE = Path.home() / ".config" / "nex" / "trainer_state.json"
 
 # ── Llama server ──────────────────────────────────────────────────────────────
 LLAMA_SERVER_BIN = (
-    "/media/rr/4TBDATA/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF"
+    "/media/rr/4TB DATA/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF"
     "/llama.cpp/build-rocm/bin/llama-server"
 )
 # After training, the merged GGUF will be saved here and served
-TRAINED_GGUF = "/media/rr/4TBDATA/llmz/nex_trained/nex_latest.gguf"
+TRAINED_GGUF = "/media/rr/4TB DATA/llmz/nex_trained/nex_latest.gguf"
 
 # ── Intensity tiers ───────────────────────────────────────────────────────────
 INTENSITIES = {
@@ -98,10 +98,10 @@ INTENSITIES = {
 # Each tier triggers when belief count AND avg confidence cross their thresholds
 # and that many NEW beliefs have accumulated since the last training run.
 WATERMARKS = {
-    "light":  {"new_beliefs": 2_000,  "avg_conf": 0.52},
-    "medium": {"new_beliefs": 5_000,  "avg_conf": 0.57},
-    "heavy":  {"new_beliefs": 9_000,  "avg_conf": 0.62},
-    "havok":  {"new_beliefs": 15_000, "avg_conf": 0.67},
+    "light":  {"new_beliefs": 300,   "avg_conf": 0.42},
+    "medium": {"new_beliefs": 800,   "avg_conf": 0.57},
+    "heavy":  {"new_beliefs": 1500,  "avg_conf": 0.62},
+    "havok":  {"new_beliefs": 3000,  "avg_conf": 0.67},
 }
 
 # ── Global pending approval state ─────────────────────────────────────────────
@@ -462,8 +462,8 @@ def _do_training(intensity: str, send_fn):
         learning_rate=cfg["lr"],
         fp16=True,
         logging_steps=20,
-        save_strategy="epoch",
-        save_total_limit=2,
+        save_strategy="no",
+        save_total_limit=1,
         warmup_steps=10,
         lr_scheduler_type="cosine",
         report_to="none",
@@ -482,9 +482,22 @@ def _do_training(intensity: str, send_fn):
     )
 
     _log("Training started...")
-    trainer.train()
-    trainer.save_model(str(output / "final"))
-    _log(f"Adapter saved → {output}/final")
+    try:
+        trainer.train()
+        _log("Training complete — saving adapter...")
+    except Exception as _te:
+        _log(f"Training error: {_te}")
+        send_fn(f"❌ Training failed during epoch: {_te}")
+        raise
+    try:
+        output_final = output / "final"
+        output_final.mkdir(parents=True, exist_ok=True)
+        trainer.save_model(str(output_final))
+        _log(f"Adapter saved → {output_final}")
+    except Exception as _se:
+        _log(f"Save error: {_se}")
+        send_fn(f"❌ Adapter save failed: {_se}")
+        raise
 
     # ── Merge adapter into base and export GGUF ───────────────────────────────
     send_fn("🔀 Merging adapter into base model...")
@@ -512,7 +525,7 @@ def _merge_and_export(adapter_path: str, send_fn):
 
         # Convert to GGUF using llama.cpp convert script
         convert_script = (
-            "/media/rr/4TBDATA/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF"
+            "/media/rr/4TB DATA/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF"
             "/llama.cpp/convert_hf_to_gguf.py"
         )
         if Path(convert_script).exists():

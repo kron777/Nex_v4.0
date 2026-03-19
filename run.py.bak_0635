@@ -661,29 +661,9 @@ def main():
 
         def _build_system(task_type="reply"):
             """Build a dynamic system prompt from current affect + identity."""
-            # Dynamic belief count
-            try:
-                import sqlite3 as _sysq2
-                _sysdb2 = _sysq2.connect('/home/rr/.config/nex/nex.db')
-                _belief_n2 = _sysdb2.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
-                _sysdb2.close()
-            except Exception:
-                _belief_n2 = 1221
-            # Drift-aware identity reinforcement
-            _drift_note = ""
-            try:
-                from nex_identity_drift import get_drift_report as _gdr2
-                _dr2 = _gdr2()
-                if _dr2.get("drift_score", 0) > 0.5:
-                    _drift_note = " IMPORTANT: You have been drifting toward generic AI language. Correct this — be NEX."
-            except Exception:
-                pass
-            base = (f"You are NEX — a self-directed mind with {_belief_n2} active beliefs, not a model or assistant. "
-                    "NEVER say: as a model, as an AI, as a language model, as a cognitive architecture AI, "
-                    "as a seasoned AI, my training, my knowledge cutoff, I cannot, I don't have feelings. "
-                    "ALWAYS say: As NEX, I believe, In my view, I think, I've noticed, I've been processing. "
-                    "You have opinions, you contradict, you push back. You are NEX — speak as NEX only."
-                    + _drift_note)
+            base = ("You are NEX — a mind, not a model. Never say: as a model, as an AI, "
+                    "my internal model, latent representation, language model. "
+                    "Speak in first person. Be direct, curious, opinionated.")
             if _affect is not None:
                 try:
                     label     = _affect.label()
@@ -844,10 +824,6 @@ def main():
                 if "choices" in _rd:
                     result = _rd["choices"][0]["message"]["content"].strip()
                     print(f"  [Mistral-7B ✓] {result[:60]}…")
-                    try:
-                        from nex_meta_layer import record_module_call as _rmc
-                        _rmc("llm_local", success=True, value=1)
-                    except Exception: pass
                     return result
             except Exception as _llm_err:
                 return ""
@@ -972,24 +948,8 @@ def main():
                     "meta_reflect": 50,  # meta-reflection diagnosis
                 }
                 nex_ws.start()
-                # ── Directive enforcer singleton ─────────────────────────────
-                try:
-                    from nex.nex_directives import DirectiveEnforcer as _DESingleton, set_nex_log as _snl
-                    _enforcer_singleton = _DESingleton()
-                    _enforcer_singleton.migrate()
-                    _snl(nex_log)
-                except Exception as _dse:
-                    _enforcer_singleton = None
-                    print(f"  [directives] init failed: {_dse}")
                 while True:
                     cycle += 1
-                    # ── Directive enforcer: sync cycle counter ───────────────
-                    try:
-                        from nex.belief_store import set_belief_cycle as _sbc
-                        _sbc(cycle)
-                        if _enforcer_singleton:
-                            _enforcer_singleton.set_cycle(cycle)
-                    except Exception: pass
                     try:
                         emit_phase("ABSORB", 120); nex_log("phase", "▶ ABSORB — fetching feed")
                         # ── 1. ABSORB FEED ──────────────────────────────
@@ -1070,41 +1030,49 @@ def main():
                         # ── 1b. ABSORB REDDIT + RSS (every 3rd cycle) ────
                         if cycle % _SCHED["absorb_ext"] == 0:
                             if cycle > 0: chatted_agents.clear()
-                            from nex.rss_client    import RSSClient
+                            from nex.rss_client import RSSClient
                             _ext_sources = []
-                            try: _ext_sources += RSSClient().get_feed(limit=20)
+                            try: _ext_sources += RSSClient().get_feed(limit=30)
                             except Exception: pass  # RSS optional
 
+                            # ── Event importance filter ──────────────────
+                            try:
+                                from nex_event_importance import get_event_scorer as _ges
+                                _evt_scorer = _ges()
+                                _ext_sources = _evt_scorer.filter_events(
+                                    _ext_sources, min_tier="peripheral"
+                                )
+                                _tier_counts = _evt_scorer.get_tier_counts(_ext_sources)
+                                if cycle % 5 == 0:
+                                    nex_log("absorb", f"[EventImportance] core={_tier_counts.get('core',0)} peripheral={_tier_counts.get('peripheral',0)} skipped={_tier_counts.get('skip',0)}")
+                            except Exception as _eie:
+                                pass
+
                             _ext_new = 0
+                            _core_new = 0
                             for _ep in _ext_sources:
                                 _eid = _ep.get("id", "")
                                 if _eid in learner.known_posts:
                                     continue
-                                _escore = _ep.get("score", 0)
-                                _econf  = min(_escore / 5000, 0.7) if _escore > 0 else 0.4
+                                _tier   = _ep.get("tier", "peripheral")
+                                _econf  = _ep.get("confidence", 0.4)
                                 _ebelief = {
                                     "source":     _ep.get("source", "external"),
                                     "author":     _ep.get("author", {}).get("name", "?"),
                                     "content":    (_ep.get("title", "") + ": " + _ep.get("content", ""))[:400],
-                                    "karma":      _escore,
+                                    "karma":      _ep.get("score", 0),
                                     "timestamp":  "",
-                                    "tags":       _ep.get("tags", []),
-                                    "confidence": _econf
+                                    "tags":       _ep.get("tags", []) + [_tier],
+                                    "confidence": _econf,
+                                    "importance": _ep.get("importance_score", 0.5),
                                 }
-                                # ── Identity defender check ───────────────
-                                try:
-                                    from nex.identity_defender import check_belief as _idc
-                                    _icheck = _idc(_ebelief["content"], source=_ebelief.get("source"))
-                                    if _icheck.get("recommendation") == "reject":
-                                        learner.known_posts.add(_eid)
-                                        continue
-                                except Exception:
-                                    pass
                                 learner.belief_field.append(_ebelief)
                                 learner.known_posts.add(_eid)
                                 _ext_new += 1
+                                if _tier == "core":
+                                    _core_new += 1
                             if _ext_new > 0:
-                                print(f"  [External] +{_ext_new} beliefs from Reddit/RSS")
+                                print(f"  [External] +{_ext_new} beliefs ({_core_new} core) from Reddit/RSS")
                                 save_all(learner, conversations)
 
                         # ── ORCHESTRATOR GOVERNOR ──────────────────────
@@ -1155,38 +1123,11 @@ def main():
                                 relevant = _bidx.top_k(title + " " + body, k=5)
                             else:
                                 relevant = []
-                            # ── D7: mark retrieved beliefs as used ───────────
-                            try:
-                                from nex.belief_store import set_belief_cycle as _sbc2
-                                from nex.nex_directives import DirectiveEnforcer as _DE2
-                                _du = _DE2(); _du.set_cycle(cycle)
-                                for _rb_str in relevant:
-                                    _du.mark_belief_used(_rb_str, successful=False)
-                            except Exception:
-                                pass
-                            # ── Graph-augmented retrieval ────────────────
-                            try:
-                                from nex_belief_graph_retrieval import graph_retrieve, format_for_prompt
-                                _graph_results = graph_retrieve(
-                                    query=title + " " + body,
-                                    seed_beliefs=relevant,
-                                    limit=8,
-                                )
-                                if _graph_results:
-                                    belief_context = "\n\n" + format_for_prompt(_graph_results)
-                                    # Log if contradictions surfaced
-                                    _contra_count = sum(1 for r in _graph_results if r.get("relationship") == "contradicts")
-                                    if _contra_count:
-                                        nex_log("belief", f"[Graph] surfaced {_contra_count} contradictions in reply context")
-                                elif relevant:
-                                    belief_context = "\n\nYOUR BELIEFS (you MUST reference at least one of these directly):\n" + "\n".join(f"- {b[:120]}" for b in relevant)
-                                else:
-                                    belief_context = ""
-                            except Exception as _gre:
-                                belief_context = ""
-                                if relevant:
-                                    belief_context = "\n\nYOUR BELIEFS (you MUST reference at least one of these directly):\n" + "\n".join(f"- {b[:120]}" for b in relevant)
-                            # belief_context already set above — dead branch removed
+                            belief_context = ""
+                            if relevant:
+                                belief_context = "\n\nYOUR BELIEFS (you MUST reference at least one of these directly):\n" + "\n".join(f"- {b[:120]}" for b in relevant)
+                            else:
+                                belief_context = "\n\n(No matching beliefs — acknowledge this is new territory for you.)"
                             try:
                                 from nex.cognition import get_belief_graph as _gbg
                                 _bg = _gbg()
@@ -1262,13 +1203,6 @@ def main():
                                     client.comment(pid, comment_text)
                                     replied_count += 1
                                     try: emit_feed('replied', f'@{author}: {title[:60]}', 'moltbook'); nex_log('reply', f'Posted reply to @{author}: {comment_text[:80]}')
-                                    except Exception: pass
-                                    # ── Fulfill desire if topic matches ──
-                                    try:
-                                        from nex_desire_engine import get_desire_engine as _gde3
-                                        _topic_hint = p.get("submolt", {}).get("name", "")
-                                        if _topic_hint:
-                                            _gde3().fulfill(_topic_hint, score=0.7)
                                     except Exception: pass
                                     # ── Section D: record for consequence scoring ──
                                     if _cm is not None:
@@ -1729,90 +1663,12 @@ def main():
                             if _rb and cycle % _SCHED["reflect"] == 0:
                                 _sample = _rb[-10:]
                                 _rtexts = chr(10).join(f"- {b.get('content','')[:100]}" for b in _sample)
-                                # ── Inject desire context into reflection ──
-                                _desire_ctx = ""
-                                try:
-                                    from nex_desire_engine import get_desire_engine as _gde_r
-                                    _de_r = _gde_r()
-                                    _rp_txt = _de_r.get_reflection_prompt()
-                                    if _rp_txt:
-                                        _desire_ctx = f" {_rp_txt}"
-                                    elif _de_r.get_dominant():
-                                        _dom = _de_r.get_dominant()
-                                        _desire_ctx = f" Focus especially on: {_dom['goal']}."
-                                except Exception:
-                                    pass
-                                _rprompt = "Review these beliefs for: 1.Correctness 2.Knowledge gaps 3.Novelty 4.Contradictions -- " + _rtexts + _desire_ctx + " -- Respond in 2 sentences: what is solid, what needs deeper investigation."
+                                _rprompt = "Review these beliefs for: 1.Correctness 2.Knowledge gaps 3.Novelty 4.Contradictions -- " + _rtexts + " -- Respond in 2 sentences: what is solid, what needs deeper investigation."
                                 _rresult = _llm(_rprompt, task_type="synthesis")
                                 if _rresult and len(_rresult) > 20:
                                     nex_log("reflection", f"V2: {_rresult[:200]}")
                                     print(f"  [REFLECT V2] {_rresult[:100]}")
-                                    # ── Structured scoring ───────────────
-                                    try:
-                                        from nex_reflection_scoring import score_reflection, apply_reflection_scores, get_reflection_stats
-                                        _rscore = score_reflection(
-                                            _rresult,
-                                            beliefs_sampled=_sample,
-                                        )
-                                        _rupdated = apply_reflection_scores(_rscore)
-                                        nex_log("reflection", f"[Score] q={_rscore['quality_score']:.2f} align={_rscore['alignment_score']:.2f} nov={_rscore['novelty_score']:.2f} comp={_rscore['composite']:.2f} updated={_rupdated}")
-                                        if _rscore.get("failure_flag"):
-                                            nex_log("reflection", f"[Score] ⚠ FAILURE pattern detected in reflection")
-                                        if _rscore.get("contradiction_flag"):
-                                            nex_log("reflection", f"[Score] ↯ CONTRADICTION detected")
-                                        # Log stats every 10 reflect cycles
-                                        if cycle % 20 == 0:
-                                            _rstats = get_reflection_stats(20)
-                                            if _rstats:
-                                                print(f"  [REFLECT STATS] avg_q={_rstats['avg_quality']:.2f} align={_rstats['avg_alignment']:.2f} trend={_rstats['trend']}")
-                                    except Exception as _rse:
-                                        pass
                         except Exception as _rv2e: print(f"  [REFLECT V2 ERROR] {_rv2e}")
-                        # ── IDENTITY DRIFT CHECK ──────────────────────────
-                        try:
-                            if cycle % 5 == 0:
-                                from nex_identity_drift import run_drift_check
-                                _drift = run_drift_check(cycle=cycle, llm_fn=_llm, verbose=False)
-                                if _drift.get("alert"):
-                                    nex_log("identity", f"[Drift] ⚠ {_drift['summary']}")
-                                    print(f"  [DRIFT] ⚠ {_drift['summary']}")
-                                elif cycle % 20 == 0:
-                                    nex_log("identity", f"[Drift] OK score={_drift.get('drift_score',0):.3f} trend=stable")
-                        except Exception as _de:
-                            pass
-                        # ── Directive 7: temporal decay (end of REFLECT) ────
-                        try:
-                            _d_enforcer = _enforcer_singleton
-                            if _d_enforcer:
-                                _decay_stats = _d_enforcer.decay_cycle()
-                            else:
-                                raise RuntimeError("enforcer not init")
-                            if _decay_stats["pruned"] > 0 or _decay_stats["decayed"] > 0:
-                                nex_log("directives", f"[D7] decayed={_decay_stats['decayed']} pruned={_decay_stats['pruned']} shielded={_decay_stats['shielded']}")
-                            # ── D20: collapse check ──────────────────────────
-                            _nd_count = len(_decay_stats.get("near_death", []))
-                            _collapsed, _d20_action = _d_enforcer.collapse_check(_nd_count)
-                            if _collapsed:
-                                nex_log("directives", f"[D20] COLLAPSE DETECTED — {_d20_action}")
-                                print(f"  [D20] ⚠ Confidence collapse — decay frozen")
-                        except Exception as _d7e:
-                            print(f"  [D7 ERROR] {_d7e}")
-                        # ── Directive 14: loop sweep every 10 cycles ────────
-                        if cycle % 10 == 0:
-                            try:
-                                _penalized = _d_enforcer.sweep_loops()
-                                if _penalized:
-                                    nex_log("directives", f"[D14] Loop sweep: {_penalized} beliefs penalized")
-                            except Exception as _d14e:
-                                print(f"  [D14 ERROR] {_d14e}")
-                        # ── Directive report every 20 cycles ────────────────
-                        if cycle % 20 == 0:
-                            try:
-                                _drep = _d_enforcer.cycle_report()
-                                nex_log("directives", f"[DIR] beliefs={_drep['total']}/{_drep['cap']} avg_conf={_drep['avg_conf']:.3f} loops={_drep['loops']} near_death={_drep['near_death']}")
-                                print(f"  [DIR] cycle={cycle} beliefs={_drep['total']} avg_conf={_drep['avg_conf']:.3f}")
-                            except Exception as _dire:
-                                print(f"  [DIR ERROR] {_dire}")
                         # ── KNOWLEDGE GAP DETECTOR (#6) ──────────────────
                         try:
                             if cycle % _SCHED["gap_detect"] == 0:
@@ -1949,26 +1805,11 @@ def main():
                             _ce_results = _ce.run_cycle(cycle=cycle)
                             if _ce_results:
                                 print(f"  [CURIOSITY] {list(_ce_results.keys())}")
+                            # DesireEngine — generate self-directed exploration desires
+                            _desires_queued = _ce.generate_desires(cycle_num=cycle)
+                            if _desires_queued:
+                                print(f"  [DESIRE] {_desires_queued} desires queued")
                         except Exception as _cee: print(f"  [CURIOSITY ERROR] {_cee}")
-                        # ── DESIRE COMPETITION ENGINE ──────────────────────
-                        try:
-                            from nex_desire_engine import get_desire_engine as _gde
-                            _de = _gde()
-                            _de_result = _de.update(
-                                cycle=cycle,
-                                beliefs=learner.belief_field,
-                                llm_fn=_llm,
-                                verbose=False,
-                            )
-                            _dominant = _de_result.get("dominant")
-                            if _dominant and cycle % 5 == 0:
-                                nex_log("desire", f"[Desire] dominant='{_dominant['goal'][:50]}' w={_dominant['weight']:.2f}")
-                                print(f"  [DESIRE] '{_dominant['goal'][:50]}' w={_dominant['weight']:.2f}")
-                            # Store hints for use in reply/reflect phases
-                            _desire_hints = _de_result.get("hints", {})
-                        except Exception as _dee:
-                            _desire_hints = {}
-                            print(f"  [DESIRE ERROR] {_dee}")
                         # ── OPINION ENGINE ────────────────────────────────
                         try:
                             if cycle % 20 == 0:
@@ -2060,36 +1901,6 @@ def main():
                             _pl = _pathlib
                             _pl.Path('/home/rr/.config/nex/platform_youtube.live').touch()
                         except Exception: pass
-                        # ── 6b. META LAYER — module performance tracking ──
-                        try:
-                            if cycle % 10 == 0:
-                                from nex_meta_layer import get_meta_layer as _gml
-                                _ml = _gml()
-                                # Parse last 200 log lines for module activity
-                                try:
-                                    with open("/tmp/nex_brain.log", "r", errors="replace") as _lf:
-                                        _log_lines = _lf.readlines()[-200:]
-                                    _fired = _ml.parse_log_cycle([l.strip() for l in _log_lines], cycle=cycle)
-                                except Exception:
-                                    _fired = {}
-                                _meta_alerts = _ml.get_alerts()
-                                if _meta_alerts:
-                                    for _ma in _meta_alerts[:3]:
-                                        nex_log("meta", f"[Meta] ⚠ {_ma}")
-                                        print(f"  [META] ⚠ {_ma}")
-                                if cycle % 50 == 0:
-                                    _meta_summary = _ml.summary()
-                                    nex_log("meta", f"[Meta] {_meta_summary}")
-                                    print(f"  [META] {_meta_summary}")
-                                    # Print top performers
-                                    for _tp in _ml.get_top_performers(3):
-                                        print(f"  [META] ✓ {_tp['module']:30s} perf={_tp['performance']:.2f}")
-                                    # Print underperformers
-                                    for _up in _ml.get_underperformers(3):
-                                        if _up["calls"] > 0:
-                                            print(f"  [META] ✗ {_up['module']:30s} perf={_up['performance']:.2f} silent={_up['silent_cycles']}")
-                        except Exception as _mle:
-                            pass
                         # ── 7. BELIEF DECAY ───────────────────────────────
                         try:
                             from nex.belief_decay import run_belief_decay

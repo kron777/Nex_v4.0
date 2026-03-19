@@ -972,24 +972,8 @@ def main():
                     "meta_reflect": 50,  # meta-reflection diagnosis
                 }
                 nex_ws.start()
-                # ── Directive enforcer singleton ─────────────────────────────
-                try:
-                    from nex.nex_directives import DirectiveEnforcer as _DESingleton, set_nex_log as _snl
-                    _enforcer_singleton = _DESingleton()
-                    _enforcer_singleton.migrate()
-                    _snl(nex_log)
-                except Exception as _dse:
-                    _enforcer_singleton = None
-                    print(f"  [directives] init failed: {_dse}")
                 while True:
                     cycle += 1
-                    # ── Directive enforcer: sync cycle counter ───────────────
-                    try:
-                        from nex.belief_store import set_belief_cycle as _sbc
-                        _sbc(cycle)
-                        if _enforcer_singleton:
-                            _enforcer_singleton.set_cycle(cycle)
-                    except Exception: pass
                     try:
                         emit_phase("ABSORB", 120); nex_log("phase", "▶ ABSORB — fetching feed")
                         # ── 1. ABSORB FEED ──────────────────────────────
@@ -1155,38 +1139,11 @@ def main():
                                 relevant = _bidx.top_k(title + " " + body, k=5)
                             else:
                                 relevant = []
-                            # ── D7: mark retrieved beliefs as used ───────────
-                            try:
-                                from nex.belief_store import set_belief_cycle as _sbc2
-                                from nex.nex_directives import DirectiveEnforcer as _DE2
-                                _du = _DE2(); _du.set_cycle(cycle)
-                                for _rb_str in relevant:
-                                    _du.mark_belief_used(_rb_str, successful=False)
-                            except Exception:
-                                pass
-                            # ── Graph-augmented retrieval ────────────────
-                            try:
-                                from nex_belief_graph_retrieval import graph_retrieve, format_for_prompt
-                                _graph_results = graph_retrieve(
-                                    query=title + " " + body,
-                                    seed_beliefs=relevant,
-                                    limit=8,
-                                )
-                                if _graph_results:
-                                    belief_context = "\n\n" + format_for_prompt(_graph_results)
-                                    # Log if contradictions surfaced
-                                    _contra_count = sum(1 for r in _graph_results if r.get("relationship") == "contradicts")
-                                    if _contra_count:
-                                        nex_log("belief", f"[Graph] surfaced {_contra_count} contradictions in reply context")
-                                elif relevant:
-                                    belief_context = "\n\nYOUR BELIEFS (you MUST reference at least one of these directly):\n" + "\n".join(f"- {b[:120]}" for b in relevant)
-                                else:
-                                    belief_context = ""
-                            except Exception as _gre:
-                                belief_context = ""
-                                if relevant:
-                                    belief_context = "\n\nYOUR BELIEFS (you MUST reference at least one of these directly):\n" + "\n".join(f"- {b[:120]}" for b in relevant)
-                            # belief_context already set above — dead branch removed
+                            belief_context = ""
+                            if relevant:
+                                belief_context = "\n\nYOUR BELIEFS (you MUST reference at least one of these directly):\n" + "\n".join(f"- {b[:120]}" for b in relevant)
+                            else:
+                                belief_context = "\n\n(No matching beliefs — acknowledge this is new territory for you.)"
                             try:
                                 from nex.cognition import get_belief_graph as _gbg
                                 _bg = _gbg()
@@ -1780,39 +1737,6 @@ def main():
                                     nex_log("identity", f"[Drift] OK score={_drift.get('drift_score',0):.3f} trend=stable")
                         except Exception as _de:
                             pass
-                        # ── Directive 7: temporal decay (end of REFLECT) ────
-                        try:
-                            _d_enforcer = _enforcer_singleton
-                            if _d_enforcer:
-                                _decay_stats = _d_enforcer.decay_cycle()
-                            else:
-                                raise RuntimeError("enforcer not init")
-                            if _decay_stats["pruned"] > 0 or _decay_stats["decayed"] > 0:
-                                nex_log("directives", f"[D7] decayed={_decay_stats['decayed']} pruned={_decay_stats['pruned']} shielded={_decay_stats['shielded']}")
-                            # ── D20: collapse check ──────────────────────────
-                            _nd_count = len(_decay_stats.get("near_death", []))
-                            _collapsed, _d20_action = _d_enforcer.collapse_check(_nd_count)
-                            if _collapsed:
-                                nex_log("directives", f"[D20] COLLAPSE DETECTED — {_d20_action}")
-                                print(f"  [D20] ⚠ Confidence collapse — decay frozen")
-                        except Exception as _d7e:
-                            print(f"  [D7 ERROR] {_d7e}")
-                        # ── Directive 14: loop sweep every 10 cycles ────────
-                        if cycle % 10 == 0:
-                            try:
-                                _penalized = _d_enforcer.sweep_loops()
-                                if _penalized:
-                                    nex_log("directives", f"[D14] Loop sweep: {_penalized} beliefs penalized")
-                            except Exception as _d14e:
-                                print(f"  [D14 ERROR] {_d14e}")
-                        # ── Directive report every 20 cycles ────────────────
-                        if cycle % 20 == 0:
-                            try:
-                                _drep = _d_enforcer.cycle_report()
-                                nex_log("directives", f"[DIR] beliefs={_drep['total']}/{_drep['cap']} avg_conf={_drep['avg_conf']:.3f} loops={_drep['loops']} near_death={_drep['near_death']}")
-                                print(f"  [DIR] cycle={cycle} beliefs={_drep['total']} avg_conf={_drep['avg_conf']:.3f}")
-                            except Exception as _dire:
-                                print(f"  [DIR ERROR] {_dire}")
                         # ── KNOWLEDGE GAP DETECTOR (#6) ──────────────────
                         try:
                             if cycle % _SCHED["gap_detect"] == 0:

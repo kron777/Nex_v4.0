@@ -14,6 +14,32 @@ CHROMA_DIR = os.path.join(CONFIG_DIR, "chroma")
 _chroma_client = None
 _chroma_collection = None
 
+# ── Directive enforcer (D6/D7/D14) — lazy init to avoid circular imports ────
+_enforcer = None
+_cycle_counter = [0]
+
+def _get_cycle():
+    return _cycle_counter[0]
+
+def _get_enforcer():
+    """Lazy singleton — imported on first use, never at module load."""
+    global _enforcer
+    if _enforcer is None:
+        try:
+            from nex.nex_directives import DirectiveEnforcer as _DE
+            _enforcer = _DE()
+        except Exception:
+            pass
+    return _enforcer
+
+def set_belief_cycle(cycle: int):
+    """Call from run.py each cycle to keep enforcer in sync."""
+    _cycle_counter[0] = cycle
+    e = _get_enforcer()
+    if e:
+        e.set_cycle(cycle)
+
+
 def _get_chroma():
     global _chroma_client, _chroma_collection
     if _chroma_collection is not None:
@@ -127,6 +153,16 @@ def add_belief(content, confidence=0.5, source=None, author=None,
     # Auto-infer topic if not provided
     if not topic:
         topic = _infer_topic(content)
+    # ── Directive 6: belief inflation gate ─────────────────────────────────
+    if _get_enforcer():
+        allowed, reason = _get_enforcer().check_insert(topic, content, confidence)
+        if not allowed:
+            import logging
+            logging.getLogger("nex.belief_store").info(
+                f"[D6] Blocked belief topic='{topic}' conf={confidence:.2f} reason={reason}"
+            )
+            return None
+
     conn = get_db()
     try:
         conn.execute("""
@@ -138,6 +174,14 @@ def add_belief(content, confidence=0.5, source=None, author=None,
         conn.commit()
         row = conn.execute("SELECT id FROM beliefs WHERE content=?", (content,)).fetchone()
         belief_id = dict(row)['id'] if row else None
+        # ── Directive 14: loop detection on existing beliefs ─────────────────
+        if _enforcer and belief_id:
+            was_existing = conn.execute(
+                "SELECT id FROM beliefs WHERE content=? AND timestamp != last_referenced",
+                (content,)
+            ).fetchone()
+            if was_existing:
+                _enforcer.record_reinforcement(belief_id)
     finally:
         conn.close()
 
@@ -297,6 +341,25 @@ def reinforce_belief(content, boost=0.03, max_conf=0.95):
     """
     if not content:
         return
+    # ── D7: resolve id + mark used ──────────────────────────────────────────
+    try:
+        if _get_enforcer():
+            _get_enforcer().mark_belief_used(content, successful=False)
+    except Exception:
+        pass
+    # ── D12: reinforcement cap ───────────────────────────────────────────────
+    try:
+        if _get_enforcer():
+            _bid = _enforcer.db_path and __import__('sqlite3').connect(
+                str(_enforcer.db_path), timeout=5
+            ).execute(
+                "SELECT id FROM beliefs WHERE content=? LIMIT 1", (content.strip(),)
+            ).fetchone()
+            _bid = _bid[0] if _bid else None
+            if _bid and not _get_enforcer().check_reinforce_cap(_bid):
+                return  # capped — skip boost this window
+    except Exception:
+        pass
     conn = get_db()
     try:
         conn.execute("""
@@ -307,10 +370,23 @@ def reinforce_belief(content, boost=0.03, max_conf=0.95):
             WHERE content = ?
         """, (boost, max_conf, datetime.now().isoformat(), content.strip()))
         conn.commit()
+        # ── D14: loop check after boost ──────────────────────────────────────
+        try:
+            if _get_enforcer() and _bid:
+                _get_enforcer().record_reinforcement(_bid)
+        except Exception:
+            pass
     except Exception:
         pass
     finally:
         conn.close()
+    # ── Connect to survival dynamics — boost energy when belief is used ──
+    try:
+        import sys as _s; _s.path.insert(0, '/home/rr/Desktop/nex')
+        from nex_belief_survival import boost_belief_energy
+        boost_belief_energy(content)
+    except Exception:
+        pass
 
 
 def decay_stale_beliefs(days_inactive=14, decay_amount=0.04, min_conf=0.10):

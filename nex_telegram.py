@@ -121,7 +121,7 @@ def ask_nex(user_message, chat_history=None):
             "messages": messages,
             "max_tokens": 600,
             "temperature": 0.75,
-        }, timeout=120)
+        }, timeout=300)
         return resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
         logger.error(f"Ollama error: {e}")

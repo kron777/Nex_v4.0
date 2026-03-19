@@ -7,6 +7,14 @@ import json, os, re
 import urllib.request
 from datetime import datetime
 
+try:
+    from nex_signal_filter import get_scorer, get_gate, ImportanceGate
+    _rss_scorer = get_scorer()
+    _rss_gate   = get_gate()
+except Exception:
+    _rss_scorer = None
+    _rss_gate   = None
+
 # Top feeds for NEX's domain
 FEEDS = [
     ("HackerNews AI",    "https://hnrss.org/newest?q=AI+agent+LLM&count=20"),
@@ -109,13 +117,26 @@ class RSSClient:
                 # Boost by HN score if available
                 _conf = min(0.88, _base_conf + (score / 5000 if score > 0 else 0))
 
+                # ── Importance gate ──────────────────────────────
+                _src_mult = _rss_scorer.get_multiplier(feed_name) if _rss_scorer else 1.0
+                _importance = 1.0
+                if _rss_gate:
+                    _importance = _rss_gate.score(title, content, feed_name, _src_mult)
+                    if _importance < ImportanceGate.MIN_IMPORTANCE:
+                        self._seen.add(uid or link)
+                        continue  # skip noise
+
+                # Adjust confidence by importance
+                _conf_adjusted = min(0.92, _conf * (0.7 + _importance * 0.3))
+
                 posts.append({
                     "id":         uid or link,
                     "title":      title,
                     "content":    content,
                     "author":     {"name": author},
                     "score":      score,
-                    "confidence": _conf,
+                    "confidence": _conf_adjusted,
+                    "importance": _importance,
                     "source":     feed_name,
                     "tags":       ["rss", feed_name.lower().replace(" ","_")],
                     "url":        link
@@ -126,4 +147,6 @@ class RSSClient:
                     break
 
         self._save_seen()
-        return posts
+        # Sort by importance so highest-signal items are processed first
+        posts.sort(key=lambda x: -x.get("importance", 0))
+        return posts[:limit]

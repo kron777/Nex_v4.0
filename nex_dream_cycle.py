@@ -345,6 +345,18 @@ def run_dream_cycle(
     if verbose:
         print("  [dream] Starting dream cycle...")
 
+    # ── Consume tension pressure priority queue ───────────────────────
+    _priority_topics = []
+    try:
+        import sys as _s; _s.path.insert(0, '/home/rr/Desktop/nex')
+        from nex_tension_pressure import get_dream_queue
+        _priority_queue = get_dream_queue()
+        _priority_topics = [q["topic"] for q in _priority_queue]
+        if verbose and _priority_topics:
+            print(f"  [dream] Priority queue: {len(_priority_topics)} topics — {_priority_topics[:3]}")
+    except Exception as _pq_e:
+        _priority_topics = []
+
     db = sqlite3.connect(str(_DB_PATH))
     beliefs, adj, topics = _load_graph(db)
 
@@ -457,6 +469,128 @@ def run_dream_cycle(
             llm_count = sum(1 for t in top if t.get('llm_compressed'))
             print(f"  [dream p3] {llm_count} intuitions LLM-compressed")
 
+    # ── HARD MUTATION PASS ───────────────────────────────────────────────
+    # Every dream cycle MUST: modify ≥1 weight, create ≥1 belief, remove ≥1 belief
+    _mutation_log = []
+    try:
+        _mut_db = sqlite3.connect(str(_DB_PATH))
+
+        # 1. EXAGGERATION — boost weight of top surprise belief
+        if top:
+            _best = top[0]
+            _best_content = _best["b1"]["content"]
+            _mut_db.execute("""
+                UPDATE beliefs SET confidence = MIN(confidence * 1.3, 0.96)
+                WHERE content = ?
+            """, (_best_content,))
+            _mutation_log.append(f"exaggerated: {_best_content[:40]}")
+
+        # 2. INVERSION — for each priority topic, create an antithesis belief
+        for _ptopic in _priority_topics[:2]:
+            _seed_rows = _mut_db.execute("""
+                SELECT content, confidence FROM beliefs
+                WHERE topic LIKE ? AND confidence >= 0.5
+                ORDER BY confidence DESC LIMIT 1
+            """, (f"%{_ptopic[:20]}%",)).fetchall()
+            if _seed_rows:
+                _seed_content, _seed_conf = _seed_rows[0]
+                _inv_content = (
+                    f"[Inversion] Counter-hypothesis on '{_ptopic}': "
+                    f"What if the opposite were true? "
+                    f"Original: '{_seed_content[:80]}' — "
+                    f"Inverted: this pattern may be context-dependent, "
+                    f"unstable, or domain-specific rather than universal."
+                )
+                _mut_db.execute("""
+                    INSERT OR IGNORE INTO beliefs
+                    (content, confidence, source, topic, tags, timestamp)
+                    VALUES (?, 0.38, 'dream_inversion', ?, ?, ?)
+                """, (
+                    _inv_content,
+                    _ptopic[:50],
+                    json.dumps(["dream", "inversion", "antithesis"]),
+                    time.strftime("%Y-%m-%dT%H:%M:%S"),
+                ))
+                _mutation_log.append(f"inverted: {_ptopic[:30]}")
+
+        # 3. COLLAPSE — merge near-duplicate low-confidence beliefs
+        _low_conf = _mut_db.execute("""
+            SELECT id, content, confidence FROM beliefs
+            WHERE confidence < 0.25 AND human_validated = 0
+            AND source != 'dream_inversion'
+            ORDER BY confidence ASC, decay_score DESC
+            LIMIT 20
+        """).fetchall()
+        _killed = 0
+        _seen_prefixes = set()
+        for _bid, _bc, _bconf in _low_conf:
+            _prefix = (_bc or "")[:60]
+            if _prefix in _seen_prefixes:
+                _mut_db.execute("DELETE FROM beliefs WHERE id = ?", (_bid,))
+                _killed += 1
+            else:
+                _seen_prefixes.add(_prefix)
+        if _killed:
+            _mutation_log.append(f"collapsed {_killed} near-dupes")
+
+        # 4. CULL — remove the single weakest belief (energy + confidence combined)
+        try:
+            _weakest = _mut_db.execute("""
+                SELECT id, content FROM beliefs
+                WHERE human_validated = 0
+                AND confidence < 0.15
+                AND source NOT IN ('dream_inversion', 'identity_core')
+                ORDER BY confidence ASC, decay_score DESC
+                LIMIT 1
+            """).fetchone()
+            if _weakest:
+                _mut_db.execute("DELETE FROM beliefs WHERE id = ?", (_weakest[0],))
+                _mutation_log.append(f"culled: {(_weakest[1] or '')[:40]}")
+        except Exception:
+            pass
+
+        _mut_db.commit()
+        _mut_db.close()
+
+        if verbose and _mutation_log:
+            for _ml in _mutation_log:
+                print(f"  [dream mutation] {_ml}")
+    except Exception as _me:
+        if verbose:
+            print(f"  [dream mutation] error: {_me}")
+
+    # ── INVERSION PASS on top tensions (no priority queue needed) ────────
+    try:
+        _inv_db = sqlite3.connect(str(_DB_PATH))
+        _tensions = _inv_db.execute("""
+            SELECT topic, description FROM tensions
+            WHERE resolved_at IS NULL AND cycle_count >= 3
+            ORDER BY cycle_count DESC LIMIT 3
+        """).fetchall()
+        for _tt, _td in _tensions:
+            _exists = _inv_db.execute("""
+                SELECT id FROM beliefs WHERE content LIKE ? LIMIT 1
+            """, (f"%Inversion%{_tt[:20]}%",)).fetchone()
+            if not _exists:
+                _inv_content = (
+                    f"[Dream inversion] Tension '{_tt}' has been unresolved for ≥3 cycles. "
+                    f"Hypothesis: '{_td}' — what if both sides are partially correct "
+                    f"and the tension itself is the signal, not the problem?"
+                )
+                _inv_db.execute("""
+                    INSERT OR IGNORE INTO beliefs
+                    (content, confidence, source, topic, tags, timestamp)
+                    VALUES (?, 0.45, 'dream_tension_inversion', ?, ?, ?)
+                """, (
+                    _inv_content, _tt[:50],
+                    json.dumps(["dream", "tension", "inversion"]),
+                    time.strftime("%Y-%m-%dT%H:%M:%S"),
+                ))
+        _inv_db.commit()
+        _inv_db.close()
+    except Exception:
+        pass
+
     # Generate intuitions and write to DB
     intuitions = []
     ts = time.strftime("%Y-%m-%dT%H:%M:%S")
@@ -512,9 +646,26 @@ def run_dream_cycle(
     # Save dream log
     _save_dream_log(intuitions)
 
+    # ── Resolve consumed priority topics that generated intuitions ────
+    try:
+        from nex_tension_pressure import resolve_tension
+        _covered_topics = set()
+        for _intu in intuitions:
+            _covered_topics.add(_intu.get("b1_topic", ""))
+            _covered_topics.add(_intu.get("b2_topic", ""))
+        for _pt in _priority_topics:
+            if any(_pt[:15] in ct for ct in _covered_topics):
+                resolve_tension(_pt)
+                if verbose:
+                    print(f"  [dream] resolved tension: {_pt[:40]}")
+    except Exception:
+        pass
+
     elapsed = time.time() - t_start
     if verbose:
+        mut_summary = ", ".join(_mutation_log) if _mutation_log else "none"
         print(f"  [dream] Done: {len(intuitions)} intuitions in {elapsed:.1f}s")
+        print(f"  [dream] Mutations: {mut_summary}")
 
     return intuitions
 

@@ -1,5 +1,3 @@
-from nex_groq import _groq
-from nex_groq import _groq
 #!/usr/bin/env python3
 """
 nex_source_manager.py — Layer 2: Multi-Source Absorption Engine
@@ -17,6 +15,15 @@ import requests
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from datetime import datetime, timezone
+
+# Signal/noise filter
+try:
+    from nex_signal_filter import get_scorer, get_gate, ImportanceGate
+    _scorer = get_scorer()
+    _gate   = get_gate()
+except Exception:
+    _scorer = None
+    _gate   = None
 
 CFG_PATH     = Path("~/.config/nex").expanduser()
 SOURCES_FILE = CFG_PATH / "active_sources.json"
@@ -172,6 +179,15 @@ def absorb_from_sources(learner=None, cycle: int = 0) -> dict:
                     continue
                 new_seen.add(item_id)
 
+                # ── Signal gate: skip suppressed sources and low-value items ──
+                if _scorer and _scorer.is_suppressed(name):
+                    continue
+                _src_mult = _scorer.get_multiplier(name) if _scorer else 1.0
+                if _gate:
+                    _importance = _gate.score(item["title"], item["summary"], name, _src_mult)
+                    if _importance < ImportanceGate.MIN_IMPORTANCE:
+                        continue
+
                 belief_text = _groq_extract_belief(item["title"], item["summary"], domain)
                 if not belief_text:
                     continue
@@ -180,10 +196,11 @@ def absorb_from_sources(learner=None, cycle: int = 0) -> dict:
                     "source":     name,
                     "author":     name,
                     "content":    belief_text,
-                    "confidence": min(0.82, 0.55 + source.get("score", 1.0) * 0.15),
+                    "confidence": min(0.82, 0.55 + source.get("score", 1.0) * 0.15 * _src_mult),
                     "tags":       [domain],
                     "timestamp":  datetime.now(timezone.utc).isoformat(),
                     "url":        item.get("link", ""),
+                    "importance": _importance if _gate else 1.0,
                 }
                 new_beliefs.append(belief)
                 beliefs_from_source += 1
@@ -193,6 +210,10 @@ def absorb_from_sources(learner=None, cycle: int = 0) -> dict:
             if items:
                 source["uses"]  = source.get("uses", 0) + 1
                 source["score"] = min(1.0, source.get("score", 1.0) + (beliefs_from_source * 0.05))
+                if _scorer and beliefs_from_source > 0:
+                    _scorer.record_signal(name, weight=beliefs_from_source * 0.1)
+                elif _scorer and not beliefs_from_source and source.get("uses", 0) > 3:
+                    _scorer.record_noise(name, weight=0.5)
             print(f"  [sources] {name}: {beliefs_from_source} beliefs")
 
         # Drop low-scoring sources

@@ -15,7 +15,7 @@ pkill -9 -f "nex_debug" 2>/dev/null
 sleep 2
 
 # ── Start Mistral 7B ─────────────────────────────────────────
-MODEL="/media/rr/4TBDATA/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf"
+MODEL="/media/rr/4TB DATA/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf"
 
 echo "  [NEX] Starting Mistral 7B..."
 HSA_OVERRIDE_GFX_VERSION=10.3.0 HIP_VISIBLE_DEVICES=0 \
