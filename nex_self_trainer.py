@@ -348,6 +348,18 @@ def _run_training_thread(intensity: str, send_fn):
 
     try:
         _log(f"=== {intensity.upper()} TRAINING STARTED ===")
+        # ── Isolate: kill NEX run.py to free VRAM ────────────────────────────
+        try:
+            import subprocess as _sp2
+            _result = _sp2.run(["pgrep", "-f", "run.py"], capture_output=True, text=True)
+            if _result.stdout.strip():
+                _log("Stopping NEX run.py to free VRAM for training...")
+                send_fn("⏸ Pausing NEX for training isolation...")
+                _sp2.run(["pkill", "-f", "run.py"], timeout=10)
+                time.sleep(5)
+                _log("NEX stopped — VRAM freed")
+        except Exception as _ke:
+            _log(f"Could not stop NEX: {_ke} — proceeding anyway")
         t0 = time.time()
         _do_training(intensity, send_fn)
         elapsed = (time.time() - t0) / 60

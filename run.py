@@ -1068,6 +1068,16 @@ def main():
                             learner.belief_field = learner.belief_field[-4000:]
 
                         # ── 1b. ABSORB REDDIT + RSS (every 3rd cycle) ────
+                        # ── D6ext: self-topic balance check ─────────────
+                        try:
+                            if _enforcer_singleton:
+                                _self_boost, _self_ratio = _enforcer_singleton.self_topic_check()
+                                if _self_boost:
+                                    nex_log("directives", f"[D6ext] #self={_self_ratio:.1%} — boosting external absorption")
+                                    _SCHED["absorb_ext"] = max(1, _SCHED["absorb_ext"] - 1)
+                                else:
+                                    _SCHED["absorb_ext"] = 3  # reset to normal
+                        except Exception: pass
                         if cycle % _SCHED["absorb_ext"] == 0:
                             if cycle > 0: chatted_agents.clear()
                             from nex.rss_client    import RSSClient
@@ -1795,6 +1805,12 @@ def main():
                             if _collapsed:
                                 nex_log("directives", f"[D20] COLLAPSE DETECTED — {_d20_action}")
                                 print(f"  [D20] ⚠ Confidence collapse — decay frozen")
+                            # ── D4: confidence floor stabilizer ──────────────
+                            _cf = _d_enforcer.confidence_floor_check()
+                            if _cf["action"] == "frozen":
+                                nex_log("directives", f"[D4] FLOOR STABILIZER — avg_conf={_cf['avg_conf']:.3f} decay frozen until {_cf['frozen_until']}")
+                            elif _cf["action"] == "warning":
+                                nex_log("directives", f"[D4] Low conf warning avg_conf={_cf['avg_conf']:.3f}")
                         except Exception as _d7e:
                             print(f"  [D7 ERROR] {_d7e}")
                         # ── Directive 14: loop sweep every 10 cycles ────────

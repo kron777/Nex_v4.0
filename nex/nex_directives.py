@@ -504,6 +504,62 @@ class DirectiveEnforcer:
         return enforce_d20_collapse_check(
             self.current_cycle, near_death_count, self.db_path)
 
+    # D4: CONFIDENCE FLOOR STABILIZER
+    def confidence_floor_check(self, db_path=None):
+        """
+        If avg_conf < 0.34: freeze decay, lower filter threshold signal.
+        Returns dict with action taken.
+        """
+        global _decay_frozen_until
+        db = db_path or self.db_path
+        with _conn(db) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT AVG(confidence) FROM beliefs")
+            avg_conf = cur.fetchone()[0] or 0.0
+            cur.execute("SELECT COUNT(*) FROM beliefs")
+            total = cur.fetchone()[0]
+
+        if avg_conf < 0.34:
+            # Freeze decay for 10 cycles
+            _decay_frozen_until = self.current_cycle + 10
+            _log("warn",
+                f"[D4] CONFIDENCE FLOOR avg_conf={avg_conf:.3f} < 0.34 — "
+                f"decay frozen until cycle {_decay_frozen_until}"
+            )
+            return {"action": "frozen", "avg_conf": avg_conf,
+                    "frozen_until": _decay_frozen_until}
+        elif avg_conf < 0.40:
+            _log("info", f"[D4] Low confidence warning avg_conf={avg_conf:.3f}")
+            return {"action": "warning", "avg_conf": avg_conf}
+        return {"action": "ok", "avg_conf": avg_conf}
+
+    # D6ext: EXTERNAL SIGNAL BALANCER
+    def self_topic_check(self, db_path=None):
+        """
+        If #self beliefs > 40% of total: flag for external ingestion boost.
+        Returns (needs_boost: bool, self_ratio: float).
+        """
+        db = db_path or self.db_path
+        with _conn(db) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM beliefs")
+            total = cur.fetchone()[0] or 1
+            cur.execute("""
+                SELECT COUNT(*) FROM beliefs
+                WHERE topic IN ('identity','selfhood','self_reflection','autonomy')
+                   OR source IN ('self_reflection','identity_defender')
+            """)
+            self_count = cur.fetchone()[0]
+
+        ratio = self_count / total
+        if ratio > 0.40:
+            _log("warn",
+                f"[D6ext] #self ratio={ratio:.1%} ({self_count}/{total}) > 40% "
+                f"— external ingestion boost needed"
+            )
+            return True, ratio
+        return False, ratio
+
     # REPORT
     def cycle_report(self):
         with _conn(self.db_path) as conn:
