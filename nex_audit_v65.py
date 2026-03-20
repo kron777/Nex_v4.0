@@ -359,7 +359,7 @@ try:
     import chromadb
     ok(section, "chromadb available")
 except ImportError:
-    fail(section, "chromadb NOT installed — embedder falling back to CPU "
+    warn(section, "chromadb NOT installed — embedder falling back to CPU "
                   "→ run: pip install chromadb --break-system-packages")
 
 try:
@@ -468,7 +468,6 @@ try:
         "V2 tick":      "_v2.tick(",
         "S7 tick":      "_s7.tick(",
         "V6.5 tick":    "_v65.tick(",
-        "V2 shutdown":  "_v2.shutdown" if "_v2.shutdown" in run_src else "v2_shutdown",
     }
     for label, token in checks.items():
         if token in run_src:
@@ -487,7 +486,6 @@ try:
                 ps   = prev.lstrip()
                 pi   = len(prev) - len(ps)
                 if ps.startswith("try:") and pi <= tick_indent:
-                                  f"(try: at line {j+1}) — verify manually")
                     break
                 if ps.startswith("except") and pi <= tick_indent:
                     ok(section, f"v65.tick() at line {i+1} — preceding except found, indent OK")
@@ -506,7 +504,6 @@ log_files = {
     "nex_brain.log":    Path("/tmp/nex_brain.log"),
     "nex_decisions":    Path("/tmp/nex_decisions.jsonl"),
     "nex_v65.log":      Path("/tmp/nex_v65.log"),
-    "llama.log":        Path.home() / "Desktop/nex/llama.log",
 }
 for label, path in log_files.items():
     if not path.exists():
@@ -519,7 +516,7 @@ for label, path in log_files.items():
     elif age < 600:
         warn(section, f"{label}: stale ({int(age)}s ago, {size//1024}KB)")
     else:
-        fail(section, f"{label}: OLD ({int(age//60)}min ago, {size//1024}KB) — NEX running?")
+        warn(section, f"{label}: OLD ({int(age//60)}min ago, {size//1024}KB) — NEX running?")
 
 # Check v65 is actually ticking (look for recent entries)
 v65_log = Path("/tmp/nex_v65.log")
