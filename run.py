@@ -605,18 +605,11 @@ def main():
 
         # ── NEX S8 INIT ──────────────────────────────────────────────────────
         try:
-            from nex_s8 import init_s8 as _init_s8
-            _S8_AVAILABLE = True
-        except ImportError:
-            _S8_AVAILABLE = False
-        if _S8_AVAILABLE:
+            # ── S8 init (get_s8 singleton) ───────────────────────
             try:
-                _s8 = init_s8(
-                    v2=_v2, s7=_s7,
-                    notify_fn=_s7_notify if '_s7_notify' in dir() else None,
-                    llm_complete=None,
-                )
-                nex_log("s8", "✅ S8 upgrades online")
+                _s8 = _get_s8()
+                _s8.consistency.load_identity()
+                nex_log("s8", "✅ S8 upgrades online (20 systems)")
             except Exception as _s8ie:
                 nex_log("s8", f"⚠️ S8 init failed: {_s8ie}")
                 _s8 = None
@@ -1138,6 +1131,15 @@ def main():
                             _s7.tick(cycle=cycle, avg_conf=_s7_avg)
                         except Exception as _s7te:
                             pass
+                    # ── S8 TICK ─────────────────────────────────────────────
+                    if _s8 is not None:
+                        try:
+                            _llt = _last_llm_latency if "_last_llm_latency" in dir() else 0.0
+                            _s8.tick(avg_conf=_s7_avg if '_s7_avg' in dir() else 0.44,
+                                     last_latency_s=_llt)
+                        except Exception as _s8te:
+                            pass
+                    # ── end S8 TICK ──────────────────────────────────────────
                     # ─────────────────────────────────────────────────────────
 
                     # ── NEX V2 TICK ──────────────────────────────────────────
