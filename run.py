@@ -89,6 +89,14 @@ try:
 except Exception as _e140_ex:
     print(f'[e140] Load failed: {_e140_ex}')
     _e140 = None
+
+# ── X141–X160 + C141–C143 expression stack ─────────────
+try:
+    from nex_upgrades.nex_x160 import get_x160 as _get_x160
+    _x160 = _get_x160()
+except Exception as _x160_ex:
+    print(f'[x160] Load failed: {_x160_ex}')
+    _x160 = None
 # ── NEX V2 UPGRADES ──────────────────────────────────────────────────────────
 import sys as _v2sys
 _v2_upgrades_dir = __import__("pathlib").Path(__file__).parent / "nex_upgrades"
@@ -1247,6 +1255,16 @@ def main():
                                                                                        belief_count=_bcE, contradiction_count=_ctE, cycle=cycle)
                                                                         except Exception as _ee140:
                                                                             open('/tmp/nex_e140_err.txt','a').write(str(_ee140)+'\n')
+
+                                                                            # ── X141–X160 tick ─────────────────────────────────
+                                                                            if _x160 is not None:
+                                                                                try:
+                                                                                    _ph_x = str(getattr(getattr(_v80,'gss',None),'phase',type('x',(),{'value':'stable'})()).value) if '_v80' in dir() and _v80 else 'stable'
+                                                                                    _wl_x = str(getattr(_v80,'will',type('w',(),{'intent':'seek_truth'})()).intent) if '_v80' in dir() and _v80 else 'seek_truth'
+                                                                                    _ax   = _v2ac if '_v2ac' in dir() else 0.50
+                                                                                    _x160.tick(phase=_ph_x, will=_wl_x, avg_conf=_ax)
+                                                                                except Exception as _ex160:
+                                                                                    open('/tmp/nex_x160_err.txt','a').write(str(_ex160)+'\n')
                     # ─────────────────────────────────────────────────────────
 
                     # ── NEX V2 TICK ──────────────────────────────────────────

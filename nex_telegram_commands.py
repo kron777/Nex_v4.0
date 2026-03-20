@@ -273,3 +273,14 @@ async def e140_status_command(update, context):
         msg = f"e140 status error: {e}"
     await update.message.reply_text(msg, parse_mode="Markdown")
 
+
+
+async def x160_status_command(update, context):
+    """NEX X141–X160 — expression & learning optimization status."""
+    try:
+        from nex_upgrades.nex_x160 import get_x160
+        msg = get_x160().format_status()
+    except Exception as e:
+        msg = f"x160 status error: {e}"
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
