@@ -41,6 +41,19 @@ import argparse
 import threading
 import signal
 
+# ── S8 upgrade import ──────────────────────────────────────────────
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(__import__("pathlib").Path.home() / "Desktop" / "nex" / "nex_upgrades"))
+    from nex_s8 import get_s8 as _get_s8
+    _s8 = _get_s8()
+    print("[S8] import OK")
+except Exception as _s8e:
+    print(f"[S8] import FAILED: {_s8e}")
+    _s8 = None
+# ── end S8 import ──────────────────────────────────────────────────
+
+
 # ── NEX V2 UPGRADES ──────────────────────────────────────────────────────────
 import sys as _v2sys
 _v2_upgrades_dir = __import__("pathlib").Path(__file__).parent / "nex_upgrades"

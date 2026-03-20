@@ -1,1676 +1,1238 @@
 """
-NEX SESSION 8 UPGRADES — nex_s8.py
-20 upgrades focused on emergent dynamics, true scarcity, and proto-agency.
-
-U0  Prime Directive — immutable anchor, all scoring references it
-U1  Energy Model — cognitive energy with real costs, forces tradeoffs
-U2  Attention Field — dynamic topic intensity field with momentum
-U3  Belief Inertia — mutation cost scales with age/usage/reinforcement
-U4  Commitment Mechanism — cluster dominance triggers directed focus
-U5  Contradiction Resolution V2 — merge/split/suppress with structural change
-U6  Temporal Causal Tracking — action→outcome→reinforce loop
-U7  Goal Evolution — goals decay, mutate, die based on tension/failure
-U8  Silence Capability — explicit do-nothing when no action clears threshold
-U9  Self-Model — proto-conscious state tracking used in decision scoring
-U10 Stability Index — calculated stability drives mutation rate adaptation
-U11 Novelty Regulation — balance exploration vs consolidation
-U12 Belief Economy Hard Limit — max 600, prune by composite score
-U13 Internal Debate Micro — pre-commit supporting/opposing argument check
-U14 Failure Memory — suppress repeated failure patterns
-U15 Pressure Redistribution — prevent cluster tunnel vision
-U16 Identity Lock Threshold — auto-promote to identity_core at conf>0.9
-U17 Meta-Learning Loop — evaluate which mechanisms reduced tension, adjust weights
-U18 External Feedback Integration — engagement → belief reinforcement with cap
-U19 Drift Detection — snapshot divergence triggers stabilization mode
-U20 Emergent Behavior Conditions — detect and report proto-agency achievement
+NEX S8 Upgrade Stack — Session 8
+20 systems:
+ 1  FlowGovernor          — information flow rate control
+ 2  MeaningCompressor     — cluster→meta-belief compression
+ 3  HierarchicalBeliefs   — L0/L1/L2/L3 belief layers
+ 4  RelevanceHalfLife     — time+usage+goal decay
+ 5  CoherenceField        — consistency metric + action gate
+ 6  LoadBalancer          — graph cluster split/merge
+ 7  CognitiveRhythm       — INGEST/PROCESS/REFLECT cycle modes
+ 8  SignalDiscriminator    — novelty+trust+relevance filter
+ 9  BeliefLineage         — parent chain + generation depth
+10  ConceptCrystallizer   — stable cluster → concept node
+11  EntropyManager        — randomness/dispersion control
+12  AttentionMomentum     — topic momentum + decay
+13  DecisionLatency       — uncertainty-gated action delay
+14  SelfConsistency       — identity contradiction check
+15  AdaptiveExploration   — stability-driven explore rate
+16  ResourceAwareCognition— CPU/GPU/queue-tied load shedding
+17  MetaStabilityZones    — stable/adaptive/chaotic zones
+18  KnowledgeDistiller    — periodic belief summarisation
+19  IdentityReinforcement — persistence+alignment loop
+20  LongHorizonConsistency— reversal penalty across windows
 """
 
-from __future__ import annotations
-import time
-import json
-import math
-import uuid
-import hashlib
-import logging
-import sqlite3
-from collections import defaultdict, deque
-from dataclasses import dataclass, field
+import time, math, json, sqlite3, threading, collections, os, random
 from pathlib import Path
-from typing import Optional, Callable, Any
+from datetime import datetime, timezone
 
-log = logging.getLogger("nex.s8")
-DB_PATH = Path.home() / ".config" / "nex" / "nex.db"
+# ── paths ────────────────────────────────────────────────────────────
+_NEX_DB   = Path.home() / ".config" / "nex" / "nex.db"
+_S8_LOG   = Path("/tmp/nex_s8.log")
+_S8_STATE = Path.home() / ".config" / "nex" / "s8_state.json"
 
+def _log(msg: str):
+    ts   = datetime.now(timezone.utc).strftime("%H:%M:%S")
+    line = f"[S8 {ts}] {msg}"
+    print(line)
+    try:
+        with _S8_LOG.open("a") as fh:
+            fh.write(line + "\n")
+    except Exception:
+        pass
 
-# ══════════════════════════════════════════════════════════════════════════════
-# U0 — PRIME DIRECTIVE
-# ══════════════════════════════════════════════════════════════════════════════
+def _db():
+    conn = sqlite3.connect(str(_NEX_DB), timeout=10)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-PRIME_DIRECTIVE = "maximize coherent belief evolution under constraint"
+# ════════════════════════════════════════════════════════════════════
+# 1. INFORMATION FLOW GOVERNOR
+# ════════════════════════════════════════════════════════════════════
+class FlowGovernor:
+    def __init__(self, capacity: int = 20):
+        self.capacity        = capacity
+        self.incoming_rate   = 0
+        self.processing_rate = 0
+        self.resolution_rate = 0
+        self._queue          = collections.deque(maxlen=capacity * 2)
+        self._dropped        = 0
+        self._lock           = threading.Lock()
 
-def directive_alignment(content: str, confidence: float, goal_aligned: bool) -> float:
+    def ingest(self, item: dict) -> bool:
+        with self._lock:
+            self.incoming_rate += 1
+            if len(self._queue) >= self.capacity:
+                self._dropped += 1
+                _log(f"FlowGovernor DROP queue={len(self._queue)} dropped={self._dropped}")
+                return False
+            self._queue.append(item)
+            return True
+
+    def process_batch(self) -> list:
+        with self._lock:
+            batch = []
+            while self._queue and len(batch) < self.capacity:
+                batch.append(self._queue.popleft())
+            self.processing_rate = len(batch)
+            return batch
+
+    def resolve(self, count: int):
+        with self._lock:
+            self.resolution_rate = count
+
+    def is_overloaded(self) -> bool:
+        return self.incoming_rate > (self.processing_rate + self.resolution_rate + 1)
+
+    def reset_rates(self):
+        self.incoming_rate   = 0
+        self.processing_rate = 0
+        self.resolution_rate = 0
+
+    def status(self) -> dict:
+        return {
+            "incoming"    : self.incoming_rate,
+            "processing"  : self.processing_rate,
+            "resolution"  : self.resolution_rate,
+            "queue_depth" : len(self._queue),
+            "dropped"     : self._dropped,
+            "overloaded"  : self.is_overloaded(),
+        }
+
+# ════════════════════════════════════════════════════════════════════
+# 2. MEANING COMPRESSION LAYER
+# ════════════════════════════════════════════════════════════════════
+class MeaningCompressor:
+    def __init__(self, cluster_threshold: int = 8):
+        self.cluster_threshold = cluster_threshold
+        self.meta_beliefs: list[dict] = []
+        self._compressed_total = 0
+
+    def compress(self, belief_cluster: list[dict]) -> dict | None:
+        if len(belief_cluster) < self.cluster_threshold:
+            return None
+        topics    = [b.get("topic", "general") for b in belief_cluster]
+        avg_conf  = sum(b.get("confidence", 0.5) for b in belief_cluster) / len(belief_cluster)
+        topic_mode= max(set(topics), key=topics.count)
+        meta = {
+            "type"             : "meta_belief",
+            "topic"            : topic_mode,
+            "abstraction_level": 2,
+            "source_count"     : len(belief_cluster),
+            "avg_confidence"   : round(avg_conf, 3),
+            "summary"          : f"[META:{topic_mode}] {len(belief_cluster)} beliefs compressed",
+            "created_at"       : time.time(),
+            "source_ids"       : [b.get("id", b.get("rowid", "?")) for b in belief_cluster],
+        }
+        self.meta_beliefs.append(meta)
+        self._compressed_total += len(belief_cluster)
+        _log(f"MeaningCompressor: {len(belief_cluster)}→1 meta [{topic_mode}] conf={avg_conf:.2f}")
+        return meta
+
+    def run_on_db(self):
+        try:
+            with _db() as conn:
+                rows = conn.execute(
+                    "SELECT topic, COUNT(*) as ct FROM beliefs GROUP BY topic HAVING ct >= ?",
+                    (self.cluster_threshold,)
+                ).fetchall()
+                for row in rows:
+                    beliefs = [dict(r) for r in conn.execute(
+                        "SELECT rowid as id, topic, confidence FROM beliefs WHERE topic=? LIMIT 50",
+                        (row["topic"],)
+                    ).fetchall()]
+                    self.compress(beliefs)
+        except Exception as e:
+            _log(f"MeaningCompressor.run_on_db error: {e}")
+
+    def status(self) -> dict:
+        return {
+            "meta_beliefs"      : len(self.meta_beliefs),
+            "compressed_total"  : self._compressed_total,
+            "cluster_threshold" : self.cluster_threshold,
+        }
+
+# ════════════════════════════════════════════════════════════════════
+# 3. HIERARCHICAL BELIEF STRUCTURE
+# ════════════════════════════════════════════════════════════════════
+class HierarchicalBeliefs:
     """
-    Score how well a belief/action aligns with the prime directive.
-    Used by all scoring functions as a multiplier.
-    Returns [0,1].
+    L0 raw observations → L1 interpreted → L2 synthesised insights → L3 meta/concepts
+    Only L2+ strongly influence decisions (weight multiplier).
     """
-    # coherence component: higher confidence = more coherent
-    coherence = confidence
+    LAYERS = {0: "raw", 1: "interpreted", 2: "synthesised", 3: "meta"}
+    DECISION_WEIGHT = {0: 0.1, 1: 0.3, 2: 0.8, 3: 1.0}
 
-    # evolution component: belief has content + isn't trivially short
-    evolution = min(1.0, len(content.split()) / 10)
+    def __init__(self):
+        self._store: dict[int, list[dict]] = {k: [] for k in self.LAYERS}
+        self._lock = threading.Lock()
 
-    # constraint component: goal alignment keeps system focused
-    constraint = 0.7 if goal_aligned else 0.4
+    def add(self, belief: dict, layer: int = 1):
+        layer = max(0, min(3, layer))
+        belief["layer"] = layer
+        belief["layer_name"] = self.LAYERS[layer]
+        belief["decision_weight"] = self.DECISION_WEIGHT[layer]
+        with self._lock:
+            self._store[layer].append(belief)
 
-    return (coherence * 0.4 + evolution * 0.3 + constraint * 0.3)
+    def get_decision_pool(self) -> list[dict]:
+        """Return L2+L3 beliefs for decision making."""
+        with self._lock:
+            return self._store[2] + self._store[3]
 
+    def promote(self, belief: dict) -> dict:
+        """Promote a belief one layer up."""
+        current = belief.get("layer", 0)
+        if current < 3:
+            belief["layer"] = current + 1
+            belief["layer_name"] = self.LAYERS[current + 1]
+            belief["decision_weight"] = self.DECISION_WEIGHT[current + 1]
+            with self._lock:
+                if belief in self._store[current]:
+                    self._store[current].remove(belief)
+                self._store[current + 1].append(belief)
+            _log(f"HierarchicalBeliefs: promoted L{current}→L{current+1}")
+        return belief
 
-# ══════════════════════════════════════════════════════════════════════════════
-# U1 — ENERGY MODEL
-# ══════════════════════════════════════════════════════════════════════════════
+    def counts(self) -> dict:
+        with self._lock:
+            return {f"L{k}_{v}": len(self._store[k]) for k, v in self.LAYERS.items()}
 
-ENERGY_COSTS = {
-    "absorb":          2,
-    "reply":           5,
-    "reflect":         4,
-    "belief_mutation": 6,
-    "post":            8,
-    "embed":           3,
-    "debate":          7,
-    "goal_create":     5,
-    "plan":            4,
-}
-
-class EnergyModel:
+# ════════════════════════════════════════════════════════════════════
+# 4. RELEVANCE HALF-LIFE
+# ════════════════════════════════════════════════════════════════════
+class RelevanceHalfLife:
     """
-    Cognitive energy budget. Forces real tradeoffs.
-    energy_max=100, regen=+5/cycle.
-    If energy < cost → action is skipped.
+    relevance = f(time, usage, goal_alignment)
+    Aggressive decay below threshold.
     """
+    def __init__(self, threshold: float = 0.15, half_life_cycles: int = 100):
+        self.threshold        = threshold
+        self.half_life_cycles = half_life_cycles
+        self._pruned          = 0
 
-    def __init__(self, energy_max: int = 100, regen_per_cycle: int = 5):
-        self.energy_max    = energy_max
-        self.regen         = regen_per_cycle
-        self._energy       = float(energy_max)
-        self._spent_log:   deque = deque(maxlen=200)
-        self._denied_log:  deque = deque(maxlen=200)
-        self._cycle        = 0
+    def score(self, belief: dict, current_cycle: int, active_goals: list[str]) -> float:
+        age_cycles    = current_cycle - belief.get("born_cycle", current_cycle)
+        time_factor   = math.exp(-0.693 * age_cycles / max(self.half_life_cycles, 1))
+        usage_factor  = min(1.0, belief.get("usage_count", 0) / 10.0)
+        topic         = belief.get("topic", "")
+        goal_factor   = 1.0 if any(g in topic for g in active_goals) else 0.3
+        relevance     = (time_factor * 0.4) + (usage_factor * 0.35) + (goal_factor * 0.25)
+        return round(relevance, 4)
 
-    def tick(self) -> float:
-        """Call once per cycle to regenerate energy."""
-        self._cycle += 1
-        self._energy = min(self.energy_max, self._energy + self.regen)
-        return self._energy
+    def should_decay(self, belief: dict, current_cycle: int, active_goals: list[str]) -> bool:
+        return self.score(belief, current_cycle, active_goals) < self.threshold
 
-    def can_afford(self, action: str) -> bool:
-        cost = ENERGY_COSTS.get(action, 3)
-        return self._energy >= cost
+    def prune_db(self, current_cycle: int, active_goals: list[str]):
+        try:
+            with _db() as conn:
+                rows = conn.execute(
+                    "SELECT rowid, topic, confidence FROM beliefs WHERE locked=0 OR locked IS NULL"
+                ).fetchall()
+                pruned = 0
+                for row in rows:
+                    b = {"born_cycle": current_cycle - 50,
+                         "topic": row["topic"],
+                         "usage_count": 0,
+                         "confidence": row["confidence"]}
+                    if self.should_decay(b, current_cycle, active_goals):
+                        conn.execute("DELETE FROM beliefs WHERE rowid=?", (row["rowid"],))
+                        pruned += 1
+                conn.commit()
+                self._pruned += pruned
+                if pruned:
+                    _log(f"RelevanceHalfLife: pruned {pruned} low-relevance beliefs")
+        except Exception as e:
+            _log(f"RelevanceHalfLife.prune_db error: {e}")
 
-    def spend(self, action: str) -> bool:
-        """Attempt to spend energy. Returns False if insufficient."""
-        cost = ENERGY_COSTS.get(action, 3)
-        if self._energy < cost:
-            self._denied_log.append({"action": action, "cost": cost,
-                                     "energy": self._energy, "cycle": self._cycle})
-            log.debug(f"[ENERGY] denied {action} cost={cost} energy={self._energy:.1f}")
+    def status(self) -> dict:
+        return {"threshold": self.threshold, "half_life_cycles": self.half_life_cycles,
+                "pruned_total": self._pruned}
+
+# ════════════════════════════════════════════════════════════════════
+# 5. COHERENCE FIELD
+# ════════════════════════════════════════════════════════════════════
+class CoherenceField:
+    """
+    coherence = consistency + identity_alignment - contradictions
+    Actions must maximise coherence gain.
+    """
+    def __init__(self, min_coherence: float = 0.35):
+        self.min_coherence   = min_coherence
+        self.current_score   = 0.5
+        self._history        = collections.deque(maxlen=50)
+        self._blocked_actions= 0
+
+    def compute(self, belief_count: int, contradiction_count: int,
+                identity_count: int, avg_conf: float) -> float:
+        if belief_count == 0:
+            return 0.5
+        consistency       = max(0.0, 1.0 - (contradiction_count / max(belief_count, 1)))
+        identity_alignment= min(1.0, identity_count / max(belief_count * 0.05, 1))
+        contradiction_pen = min(1.0, contradiction_count / max(belief_count, 1))
+        score = (consistency * 0.4) + (identity_alignment * 0.3) + \
+                (avg_conf * 0.2) - (contradiction_pen * 0.1)
+        self.current_score = max(0.0, min(1.0, round(score, 4)))
+        self._history.append({"score": self.current_score, "ts": time.time()})
+        return self.current_score
+
+    def action_allowed(self, proposed_coherence_delta: float = 0.0) -> bool:
+        """Block action if it would drop coherence below minimum."""
+        projected = self.current_score + proposed_coherence_delta
+        if projected < self.min_coherence:
+            self._blocked_actions += 1
+            _log(f"CoherenceField: blocked action (projected={projected:.3f} < min={self.min_coherence})")
             return False
-        self._energy -= cost
-        self._spent_log.append({"action": action, "cost": cost, "cycle": self._cycle})
         return True
 
-    def force_spend(self, action: str) -> None:
-        """Spend energy regardless of balance (for mandatory ops). Can go negative."""
-        cost = ENERGY_COSTS.get(action, 3)
-        self._energy -= cost
-
-    @property
-    def level(self) -> float:
-        return self._energy
-
-    @property
-    def pct(self) -> float:
-        return self._energy / self.energy_max
-
-    def stats(self) -> dict:
-        denied_counts: dict[str, int] = defaultdict(int)
-        for d in self._denied_log:
-            denied_counts[d["action"]] += 1
+    def status(self) -> dict:
+        trend = 0.0
+        if len(self._history) >= 2:
+            trend = self._history[-1]["score"] - self._history[-10]["score"] \
+                    if len(self._history) >= 10 else \
+                    self._history[-1]["score"] - self._history[0]["score"]
         return {
-            "energy":      round(self._energy, 1),
-            "energy_max":  self.energy_max,
-            "pct":         round(self.pct, 2),
-            "cycle":       self._cycle,
-            "denied":      dict(denied_counts),
+            "coherence"      : self.current_score,
+            "min_coherence"  : self.min_coherence,
+            "trend"          : round(trend, 4),
+            "blocked_actions": self._blocked_actions,
         }
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# U2 — ATTENTION FIELD
-# ══════════════════════════════════════════════════════════════════════════════
-
-class AttentionField:
+# ════════════════════════════════════════════════════════════════════
+# 6. STRUCTURAL LOAD BALANCER
+# ════════════════════════════════════════════════════════════════════
+class LoadBalancer:
     """
-    Dynamic topic intensity field. Creates momentum and focus over time.
-    Each cycle: active topics reinforced, inactive decay.
-    Input scoring: score = base_score * field[topic]
+    Monitors cluster_size, edge_density, node_degree.
+    Splits dense clusters, merges sparse ones.
     """
+    def __init__(self, max_cluster_size: int = 30, min_cluster_size: int = 3):
+        self.max_cluster_size = max_cluster_size
+        self.min_cluster_size = min_cluster_size
+        self._splits  = 0
+        self._merges  = 0
 
-    def __init__(
-        self,
-        decay_rate:    float = 0.05,
-        reinforce_amt: float = 0.15,
-        max_topics:    int   = 50,
-    ):
-        self._field:    dict[str, float] = defaultdict(lambda: 0.3)
-        self.decay      = decay_rate
-        self.reinforce  = reinforce_amt
-        self.max_topics = max_topics
-
-    def activate(self, topic: str, strength: float = 1.0) -> float:
-        """Reinforce a topic. Returns new intensity."""
-        current = self._field[topic]
-        new_val = min(1.0, current + self.reinforce * strength)
-        self._field[topic] = new_val
-        return new_val
-
-    def tick(self) -> None:
-        """Decay all topics. Call once per cycle."""
-        for topic in list(self._field.keys()):
-            self._field[topic] = max(0.0, self._field[topic] - self.decay)
-        # prune dead topics
-        dead = [t for t, v in self._field.items() if v < 0.01]
-        for t in dead:
-            del self._field[t]
-        # cap total topics
-        if len(self._field) > self.max_topics:
-            sorted_topics = sorted(self._field.items(), key=lambda x: x[1], reverse=True)
-            self._field = dict(sorted_topics[:self.max_topics])
-
-    def score(self, base_score: float, topic: str) -> float:
-        """Apply field intensity to a base score."""
-        intensity = self._field.get(topic, 0.3)
-        return base_score * (0.5 + intensity * 0.5)
-
-    def top_topics(self, n: int = 5) -> list[dict]:
-        sorted_f = sorted(self._field.items(), key=lambda x: x[1], reverse=True)
-        return [{"topic": t, "intensity": round(v, 3)} for t, v in sorted_f[:n]]
-
-    def dominant_topic(self) -> Optional[str]:
-        if not self._field:
-            return None
-        return max(self._field, key=self._field.get)
-
-    def stats(self) -> dict:
-        return {
-            "active_topics": len(self._field),
-            "dominant":      self.dominant_topic(),
-            "top":           self.top_topics(3),
-        }
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# U3 — BELIEF INERTIA
-# ══════════════════════════════════════════════════════════════════════════════
-
-class BeliefInertia:
-    """
-    Each belief accumulates inertia based on age, usage, reinforcement.
-    Mutation cost scales with inertia — high inertia beliefs resist change.
-    inertia = f(age_cycles, access_count, reinforcement_count)
-    """
-
-    def __init__(self):
-        self._inertia: dict[str, float] = {}
-        self._access:  dict[str, int]   = defaultdict(int)
-        self._reinf:   dict[str, int]   = defaultdict(int)
-        self._born:    dict[str, int]   = {}   # cycle born
-        self._cycle    = 0
-
-    def tick(self, cycle: int) -> None:
-        self._cycle = cycle
-
-    def record_access(self, belief_id: str) -> None:
-        self._access[belief_id] += 1
-        self._update(belief_id)
-
-    def record_reinforcement(self, belief_id: str) -> None:
-        self._reinf[belief_id] += 1
-        self._update(belief_id)
-
-    def born(self, belief_id: str) -> None:
-        if belief_id not in self._born:
-            self._born[belief_id] = self._cycle
-
-    def _update(self, belief_id: str) -> float:
-        age     = self._cycle - self._born.get(belief_id, self._cycle)
-        access  = self._access[belief_id]
-        reinf   = self._reinf[belief_id]
-        # inertia grows with age + usage, logarithmically bounded
-        inertia = (
-            0.3 * math.log1p(age)    / math.log1p(100) +
-            0.4 * math.log1p(access) / math.log1p(50)  +
-            0.3 * math.log1p(reinf)  / math.log1p(20)
-        )
-        self._inertia[belief_id] = min(1.0, inertia)
-        return self._inertia[belief_id]
-
-    def get(self, belief_id: str) -> float:
-        return self._inertia.get(belief_id, 0.1)
-
-    def mutation_cost_multiplier(self, belief_id: str) -> float:
-        """Returns multiplier for mutation energy cost. 1.0–3.0x."""
-        return 1.0 + self.get(belief_id) * 2.0
-
-    def stats(self) -> dict:
-        if not self._inertia:
-            return {"tracked": 0}
-        avg = sum(self._inertia.values()) / len(self._inertia)
-        high = sum(1 for v in self._inertia.values() if v > 0.7)
-        return {"tracked": len(self._inertia), "avg_inertia": round(avg, 3), "high_inertia": high}
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# U4 — COMMITMENT MECHANISM
-# ══════════════════════════════════════════════════════════════════════════════
-
-class CommitmentMechanism:
-    """
-    When a cluster dominates for N consecutive cycles, commit to it.
-    Effects: +2x attention weight, +2x belief reinforcement, suppress competitors.
-    This is where "interest" becomes "direction".
-    """
-
-    def __init__(
-        self,
-        dominance_threshold: int   = 5,    # cycles of dominance to trigger commit
-        attention_field: Optional[AttentionField] = None,
-    ):
-        self.threshold      = dominance_threshold
-        self.attention      = attention_field
-        self._dominance:    dict[str, int]   = defaultdict(int)  # topic → consecutive cycles
-        self._committed:    Optional[str]    = None
-        self._commit_cycle: int              = 0
-        self._history:      list[dict]       = []
-
-    def observe(self, dominant_topic: str, cycle: int) -> Optional[str]:
-        """
-        Call each cycle with the current dominant topic.
-        Returns committed topic if commitment just triggered, else None.
-        """
-        if not dominant_topic:
-            return None
-
-        # increment dominance counter
-        self._dominance[dominant_topic] += 1
-
-        # decay all others
-        for t in list(self._dominance.keys()):
-            if t != dominant_topic:
-                self._dominance[t] = max(0, self._dominance[t] - 1)
-
-        # check threshold
-        if self._dominance[dominant_topic] >= self.threshold:
-            if self._committed != dominant_topic:
-                self._committed    = dominant_topic
-                self._commit_cycle = cycle
-                self._history.append({"topic": dominant_topic, "cycle": cycle})
-
-                # boost attention field
-                if self.attention:
-                    self.attention.activate(dominant_topic, strength=2.0)
-                    # suppress competitors by decaying everything else
-                    for t in list(self.attention._field.keys()):
-                        if t != dominant_topic:
-                            self.attention._field[t] *= 0.7
-
-                log.info(f"[COMMIT] committed to topic: {dominant_topic} at cycle {cycle}")
-                return dominant_topic
-
-        return None
-
-    def is_committed(self) -> bool:
-        return self._committed is not None
-
-    def committed_topic(self) -> Optional[str]:
-        return self._committed
-
-    def release(self) -> None:
-        """Release commitment — call when topic relevance drops."""
-        log.info(f"[COMMIT] released commitment: {self._committed}")
-        self._committed = None
-
-    def stats(self) -> dict:
-        return {
-            "committed":      self._committed,
-            "commit_cycle":   self._commit_cycle,
-            "dominance_map":  dict(sorted(self._dominance.items(), key=lambda x: x[1], reverse=True)[:5]),
-            "history_count":  len(self._history),
-        }
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# U5 — CONTRADICTION RESOLUTION V2
-# ══════════════════════════════════════════════════════════════════════════════
-
-@dataclass
-class ResolutionAction:
-    strategy:    str    # merge / split / suppress
-    belief_a:    str
-    belief_b:    str
-    result:      str    = ""
-    confidence:  float  = 0.0
-    cycle:       int    = 0
-
-
-class ContradictionResolutionV2:
-    """
-    Three strategies for contradiction resolution:
-      A) merge  — synthesize into single belief
-      B) split  — create conditional belief (context-dependent)
-      C) suppress — reduce weaker belief confidence
-
-    Chooses strategy based on confidence + reinforcement + goal alignment.
-    Leads to structural change, not just logging.
-    """
-
-    def __init__(self, belief_graph=None, llm_complete: Optional[Callable] = None):
-        self.beliefs  = belief_graph
-        self._llm     = llm_complete
-        self._log:    list[ResolutionAction] = []
-
-    def resolve(self, id_a: str, id_b: str, cycle: int = 0) -> Optional[ResolutionAction]:
-        if not self.beliefs:
-            return None
-
-        node_a = self.beliefs.get(id_a)
-        node_b = self.beliefs.get(id_b)
-        if not node_a or not node_b:
-            return None
-
-        # choose strategy
-        conf_diff  = abs(node_a.confidence - node_b.confidence)
-        avg_conf   = (node_a.confidence + node_b.confidence) / 2
-        len_a      = len(node_a.content.split())
-        len_b      = len(node_b.content.split())
-
-        if conf_diff > 0.3:
-            # clear winner — suppress loser
-            strategy = "suppress"
-        elif avg_conf > 0.6 and len_a > 5 and len_b > 5:
-            # both substantial — try merge
-            strategy = "merge"
-        else:
-            # ambiguous — split into conditional
-            strategy = "split"
-
-        action = ResolutionAction(strategy=strategy, belief_a=id_a, belief_b=id_b, cycle=cycle)
-
-        if strategy == "suppress":
-            loser  = node_a if node_a.confidence < node_b.confidence else node_b
-            new_cf = loser.confidence * 0.6
-            self.beliefs.upsert(loser.content, new_cf, loser.source,
-                                belief_id=loser.id, reason=f"suppress_cy{cycle}")
-            action.result     = f"suppressed {loser.id[:8]} to conf={new_cf:.2f}"
-            action.confidence = max(node_a.confidence, node_b.confidence)
-
-        elif strategy == "merge":
-            merged_content = f"{node_a.content} [synthesized with: {node_b.content[:40]}]"
-            merged_conf    = min(0.85, (node_a.confidence + node_b.confidence) / 2 + 0.05)
-            self.beliefs.upsert(merged_content, merged_conf, "merge_resolution",
-                                reason=f"merge_cy{cycle}")
-            # reduce both source beliefs
-            self.beliefs.upsert(node_a.content, node_a.confidence * 0.7,
-                                node_a.source, belief_id=id_a, reason="merged")
-            self.beliefs.upsert(node_b.content, node_b.confidence * 0.7,
-                                node_b.source, belief_id=id_b, reason="merged")
-            action.result     = f"merged → new belief conf={merged_conf:.2f}"
-            action.confidence = merged_conf
-
-        elif strategy == "split":
-            # make beliefs context-conditional
-            split_a = f"[context:A] {node_a.content}"
-            split_b = f"[context:B] {node_b.content}"
-            self.beliefs.upsert(split_a, node_a.confidence * 0.9, node_a.source,
-                                belief_id=id_a, reason=f"split_cy{cycle}")
-            self.beliefs.upsert(split_b, node_b.confidence * 0.9, node_b.source,
-                                belief_id=id_b, reason=f"split_cy{cycle}")
-            action.result     = "split into conditional beliefs"
-            action.confidence = avg_conf
-
-        self._log.append(action)
-        log.info(f"[RESOLUTION V2] {strategy}: {id_a[:8]} ↔ {id_b[:8]} → {action.result}")
-        return action
-
-    def resolve_all(self, cycle: int = 0) -> list[ResolutionAction]:
-        if not self.beliefs:
-            return []
-        pairs   = self.beliefs.get_conflicts()
+    def analyse(self, clusters: dict[str, list]) -> list[str]:
         actions = []
-        for a, b in pairs[:10]:   # max 10 per cycle
-            act = self.resolve(a, b, cycle)
-            if act:
-                actions.append(act)
+        for name, members in clusters.items():
+            if len(members) > self.max_cluster_size:
+                actions.append(f"SPLIT:{name}({len(members)})")
+                self._splits += 1
+                _log(f"LoadBalancer: SPLIT cluster '{name}' size={len(members)}")
+            elif len(members) < self.min_cluster_size:
+                actions.append(f"MERGE:{name}({len(members)})")
+                self._merges += 1
+                _log(f"LoadBalancer: MERGE candidate '{name}' size={len(members)}")
         return actions
 
-    def stats(self) -> dict:
-        strategies = defaultdict(int)
-        for r in self._log:
-            strategies[r.strategy] += 1
-        return {"resolutions": len(self._log), "by_strategy": dict(strategies)}
+    def run_on_db(self) -> list[str]:
+        actions = []
+        try:
+            with _db() as conn:
+                rows = conn.execute(
+                    "SELECT topic, COUNT(*) as ct FROM beliefs GROUP BY topic"
+                ).fetchall()
+                clusters = {r["topic"]: list(range(r["ct"])) for r in rows}
+                actions  = self.analyse(clusters)
+        except Exception as e:
+            _log(f"LoadBalancer.run_on_db error: {e}")
+        return actions
 
+    def status(self) -> dict:
+        return {"splits": self._splits, "merges": self._merges,
+                "max_cluster": self.max_cluster_size, "min_cluster": self.min_cluster_size}
 
-# ══════════════════════════════════════════════════════════════════════════════
-# U6 — TEMPORAL CAUSAL TRACKING
-# ══════════════════════════════════════════════════════════════════════════════
-
-@dataclass
-class CausalRecord:
-    id:                 str   = field(default_factory=lambda: uuid.uuid4().hex[:10])
-    action_type:        str   = ""
-    belief_state_before: dict = field(default_factory=dict)   # {avg_conf, count, tension}
-    belief_state_after:  dict = field(default_factory=dict)
-    outcome_score:      float = 0.0   # >0 = good, <0 = bad
-    tension_delta:      float = 0.0   # negative = tension reduced
-    coherence_delta:    float = 0.0
-    timestamp:          float = field(default_factory=time.time)
-    reinforced:         bool  = False
-
-
-class TemporalCausalTracker:
+# ════════════════════════════════════════════════════════════════════
+# 7. COGNITIVE RHYTHM
+# ════════════════════════════════════════════════════════════════════
+class CognitiveRhythm:
     """
-    Records action→outcome→reinforce.
-    Reinforces actions that reduce tension OR increase coherence.
-    Primitive learning from consequences.
+    INGEST (absorb, minimal synthesis)
+    PROCESS (synthesise, cluster)
+    REFLECT (prune, stabilise)
+    Rotates every N cycles.
     """
+    MODES  = ["INGEST", "PROCESS", "REFLECT"]
+    CYCLE_LENGTHS = {"INGEST": 15, "PROCESS": 20, "REFLECT": 10}
 
-    def __init__(self, belief_graph=None, drive_system=None):
-        self.beliefs = belief_graph
-        self.drives  = drive_system
-        self._records: list[CausalRecord] = []
-        self._action_scores: dict[str, list[float]] = defaultdict(list)
-        self._pending: Optional[CausalRecord] = None
-
-    def _snapshot(self) -> dict:
-        if not self.beliefs:
-            return {"avg_conf": 0.44, "count": 0, "conflicts": 0}
-        nodes = list(self.beliefs._nodes.values())
-        avg   = sum(n.confidence for n in nodes) / max(len(nodes), 1)
-        return {
-            "avg_conf":  round(avg, 4),
-            "count":     len(nodes),
-            "conflicts": len(self.beliefs.get_conflicts()),
-        }
-
-    def before_action(self, action_type: str) -> str:
-        """Call before an action. Returns record ID."""
-        rec = CausalRecord(
-            action_type=action_type,
-            belief_state_before=self._snapshot(),
-        )
-        self._pending = rec
-        return rec.id
-
-    def after_action(self, outcome_score: float = 0.0) -> Optional[CausalRecord]:
-        """Call after action completes with outcome score."""
-        if not self._pending:
-            return None
-
-        rec = self._pending
-        self._pending = None
-        rec.belief_state_after = self._snapshot()
-        rec.outcome_score      = outcome_score
-
-        # compute deltas
-        rec.tension_delta   = (rec.belief_state_after["conflicts"] -
-                               rec.belief_state_before["conflicts"]) * -1  # negative conflicts = good
-        rec.coherence_delta = (rec.belief_state_after["avg_conf"] -
-                               rec.belief_state_before["avg_conf"])
-
-        # reinforce if action improved system state
-        net_benefit = outcome_score + rec.tension_delta * 0.3 + rec.coherence_delta * 2.0
-        rec.reinforced = net_benefit > 0
-
-        self._action_scores[rec.action_type].append(net_benefit)
-        self._records.append(rec)
-        if len(self._records) > 500:
-            self._records = self._records[-500:]
-
-        if rec.reinforced and self.drives:
-            self.drives.signal("engagement_signal")
-
-        log.debug(f"[CAUSAL] {rec.action_type} → outcome={outcome_score:.2f} "
-                  f"tension_delta={rec.tension_delta:.2f} reinforced={rec.reinforced}")
-        return rec
-
-    def best_actions(self) -> list[dict]:
-        return sorted(
-            [{"action": a, "avg_score": round(sum(v)/len(v), 3), "count": len(v)}
-             for a, v in self._action_scores.items()],
-            key=lambda x: x["avg_score"], reverse=True
-        )
-
-    def stats(self) -> dict:
-        return {
-            "records":      len(self._records),
-            "best_actions": self.best_actions()[:3],
-            "reinforced":   sum(1 for r in self._records if r.reinforced),
-        }
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# U7 — GOAL EVOLUTION SYSTEM
-# ══════════════════════════════════════════════════════════════════════════════
-
-class GoalEvolutionSystem:
-    """
-    Goals are not static. Goals evolve, decay, and die.
-    - tension persists → goal mutates toward tension topic
-    - cluster dominance shifts → goal priority reweights
-    - failure detected → goal confidence drops
-    - no reinforcement for N cycles → goal decays to dropped
-    """
-
-    def __init__(self, planning_engine=None, decay_rate: float = 0.02, stale_cycles: int = 30):
-        self.planning    = planning_engine
-        self.decay_rate  = decay_rate
-        self.stale_limit = stale_cycles
-        self._last_reinforced: dict[str, int] = {}
-        self._cycle = 0
-
-    def tick(self, cycle: int, tension_topics: list[str] = None, dominant_cluster: str = None) -> dict:
-        self._cycle = cycle
-        if not self.planning:
-            return {}
-
-        evolved   = 0
-        decayed   = 0
-        dropped   = 0
-
-        active = self.planning.get_active_goals()
-        for goal in active:
-            stale = cycle - self._last_reinforced.get(goal.id, cycle - 1)
-
-            # goal decay if not reinforced
-            if stale > self.stale_limit:
-                goal.priority = max(0.05, goal.priority - self.decay_rate * stale)
-                decayed += 1
-                if goal.priority < 0.1:
-                    from nex_bdi_planning import GoalStatus
-                    self.planning.update_goal_status(goal.id, GoalStatus.DROPPED)
-                    dropped += 1
-                    log.info(f"[GOAL EVO] dropped stale goal: {goal.name}")
-                    continue
-
-            # evolve goal toward persistent tension topics
-            if tension_topics and goal.tension_id:
-                if any(t in goal.name for t in tension_topics[:3]):
-                    goal.priority = min(0.95, goal.priority + 0.03)
-                    self._last_reinforced[goal.id] = cycle
-                    evolved += 1
-
-            # boost goals aligned with dominant cluster
-            if dominant_cluster and dominant_cluster.lower() in goal.name.lower():
-                goal.priority = min(0.95, goal.priority + 0.02)
-                self._last_reinforced[goal.id] = cycle
-                evolved += 1
-
-        return {"evolved": evolved, "decayed": decayed, "dropped": dropped}
-
-    def reinforce_goal(self, goal_id: str) -> None:
-        self._last_reinforced[goal_id] = self._cycle
-
-    def on_failure(self, goal_id: str) -> None:
-        """Reduce goal priority on detected failure."""
-        if self.planning:
-            goal = self.planning._goals.get(goal_id)
-            if goal:
-                goal.priority *= 0.75
-                log.info(f"[GOAL EVO] failure penalty on: {goal.name}")
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# U8 — SILENCE CAPABILITY
-# ══════════════════════════════════════════════════════════════════════════════
-
-class SilenceGate:
-    """
-    Silence = intelligence.
-    If no action scores above threshold, do nothing.
-    Tracks silence rate as a health metric.
-    """
-
-    def __init__(self, action_threshold: float = 0.35):
-        self.threshold  = action_threshold
-        self._silenced  = 0
-        self._acted     = 0
-        self._log:      deque = deque(maxlen=100)
-
-    def should_act(self, action_scores: dict[str, float]) -> tuple[bool, Optional[str]]:
-        """
-        Given {action_type: score}, returns (should_act, best_action).
-        Returns (False, None) if nothing clears threshold — silence.
-        """
-        viable = {a: s for a, s in action_scores.items() if s >= self.threshold}
-        if not viable:
-            self._silenced += 1
-            self._log.append({"result": "silence", "ts": time.time(),
-                              "best_score": max(action_scores.values()) if action_scores else 0})
-            log.debug(f"[SILENCE] all actions below threshold={self.threshold} — staying silent")
-            return False, None
-
-        best = max(viable, key=viable.get)
-        self._acted += 1
-        self._log.append({"result": "act", "action": best, "score": viable[best], "ts": time.time()})
-        return True, best
+    def __init__(self):
+        self._mode_idx    = 0
+        self._mode_cycle  = 0
+        self._mode_history= []
 
     @property
-    def silence_rate(self) -> float:
-        total = self._silenced + self._acted
-        return self._silenced / max(total, 1)
+    def mode(self) -> str:
+        return self.MODES[self._mode_idx]
 
-    def stats(self) -> dict:
+    def tick(self) -> str:
+        self._mode_cycle += 1
+        length = self.CYCLE_LENGTHS[self.mode]
+        if self._mode_cycle >= length:
+            prev = self.mode
+            self._mode_idx   = (self._mode_idx + 1) % len(self.MODES)
+            self._mode_cycle = 0
+            self._mode_history.append({"from": prev, "to": self.mode, "ts": time.time()})
+            _log(f"CognitiveRhythm: {prev} → {self.mode}")
+        return self.mode
+
+    def should_ingest(self)  -> bool: return self.mode == "INGEST"
+    def should_process(self) -> bool: return self.mode == "PROCESS"
+    def should_reflect(self) -> bool: return self.mode == "REFLECT"
+
+    def status(self) -> dict:
         return {
-            "silenced":    self._silenced,
-            "acted":       self._acted,
-            "silence_rate": round(self.silence_rate, 3),
-            "threshold":   self.threshold,
+            "mode"         : self.mode,
+            "mode_cycle"   : self._mode_cycle,
+            "mode_length"  : self.CYCLE_LENGTHS[self.mode],
+            "transitions"  : len(self._mode_history),
         }
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# U9 — SELF-MODEL
-# ══════════════════════════════════════════════════════════════════════════════
-
-@dataclass
-class SelfState:
-    dominant_topics:  list[str] = field(default_factory=list)
-    active_goal:      str       = ""
-    tension_level:    float     = 0.3
-    stability_score:  float     = 0.5
-    energy_pct:       float     = 1.0
-    avg_conf:         float     = 0.44
-    cycle:            int       = 0
-    timestamp:        float     = field(default_factory=time.time)
-
-
-class SelfModel:
+# ════════════════════════════════════════════════════════════════════
+# 8. SIGNAL vs NOISE DISCRIMINATOR
+# ════════════════════════════════════════════════════════════════════
+class SignalDiscriminator:
     """
-    Proto-conscious layer. NEX tracks and reasons about its own state.
-    self_state is used as a multiplier in decision scoring.
+    signal_score = novelty + consistency + source_trust + cluster_relevance
+    Only signals above threshold enter belief system.
     """
+    def __init__(self, threshold: float = 0.40):
+        self.threshold  = threshold
+        self._accepted  = 0
+        self._rejected  = 0
+        self._seen_hashes: set = set()
 
-    def __init__(self):
-        self._state   = SelfState()
-        self._history: deque[SelfState] = deque(maxlen=100)
-
-    def update(
-        self,
-        cycle:           int,
-        dominant_topics: list[str],
-        active_goal:     str,
-        tension_level:   float,
-        stability_score: float,
-        energy_pct:      float,
-        avg_conf:        float,
-    ) -> SelfState:
-        prev = self._state
-        self._history.append(prev)
-        self._state = SelfState(
-            dominant_topics=dominant_topics,
-            active_goal=active_goal,
-            tension_level=tension_level,
-            stability_score=stability_score,
-            energy_pct=energy_pct,
-            avg_conf=avg_conf,
-            cycle=cycle,
-        )
-        return self._state
-
-    def decision_modifier(self, action_type: str) -> float:
-        """
-        Modifies action scores based on self-awareness.
-        Returns [0.5, 1.5] multiplier.
-        """
-        s = self._state
-
-        # low energy → penalize expensive actions
-        if s.energy_pct < 0.3 and action_type in ("post", "debate", "belief_mutation"):
-            return 0.6
-
-        # high tension → boost reflection, suppress posting
-        if s.tension_level > 0.7:
-            if action_type == "reflect":
-                return 1.4
-            if action_type == "post":
-                return 0.7
-
-        # high stability → boost posting
-        if s.stability_score > 0.7 and action_type == "post":
-            return 1.3
-
-        # low avg_conf → boost reflection
-        if s.avg_conf < 0.35 and action_type == "reflect":
-            return 1.5
-
+    def _novelty(self, text: str) -> float:
+        h = hash(text[:80])
+        if h in self._seen_hashes:
+            return 0.0
+        self._seen_hashes.add(h)
+        if len(self._seen_hashes) > 10000:
+            self._seen_hashes = set(list(self._seen_hashes)[-5000:])
         return 1.0
 
-    def self_report(self) -> str:
-        s = self._state
-        return (
-            f"cycle={s.cycle} | "
-            f"topics={s.dominant_topics[:2]} | "
-            f"goal={s.active_goal[:30] if s.active_goal else 'none'} | "
-            f"tension={s.tension_level:.2f} | "
-            f"stability={s.stability_score:.2f} | "
-            f"energy={s.energy_pct:.0%} | "
-            f"avg_conf={s.avg_conf:.3f}"
-        )
+    def score(self, input_item: dict, source_trust: float = 0.5,
+              known_topics: list[str] = None) -> float:
+        text       = input_item.get("text", input_item.get("content", ""))
+        novelty    = self._novelty(text)
+        consistency= input_item.get("confidence", 0.5)
+        topic      = input_item.get("topic", "")
+        cluster_rel= 1.0 if known_topics and topic in known_topics else 0.4
+        signal     = (novelty * 0.30) + (consistency * 0.25) + \
+                     (source_trust * 0.25) + (cluster_rel * 0.20)
+        return round(signal, 4)
 
-    def stats(self) -> dict:
+    def is_signal(self, input_item: dict, source_trust: float = 0.5,
+                  known_topics: list[str] = None) -> bool:
+        s = self.score(input_item, source_trust, known_topics)
+        if s >= self.threshold:
+            self._accepted += 1
+            return True
+        self._rejected += 1
+        _log(f"SignalDiscriminator: NOISE score={s:.3f} < {self.threshold}")
+        return False
+
+    def status(self) -> dict:
+        total = max(self._accepted + self._rejected, 1)
         return {
-            "self_state":  self._state.__dict__,
-            "history_len": len(self._history),
+            "threshold"   : self.threshold,
+            "accepted"    : self._accepted,
+            "rejected"    : self._rejected,
+            "signal_ratio": round(self._accepted / total, 3),
         }
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# U10 — STABILITY INDEX
-# ══════════════════════════════════════════════════════════════════════════════
-
-class StabilityIndex:
+# ════════════════════════════════════════════════════════════════════
+# 9. BELIEF LINEAGE TRACKER
+# ════════════════════════════════════════════════════════════════════
+class BeliefLineage:
     """
-    stability = low_contradiction + stable_clusters + low_belief_churn
-    If stability drops: reduce mutation rate, increase reflection weight.
+    Stores parent_beliefs + generation_depth for each belief.
+    Enables traceability and structured reasoning.
     """
-
     def __init__(self):
-        self._history: deque[float] = deque(maxlen=50)
-        self._belief_counts: deque[int] = deque(maxlen=20)
-        self._conflict_counts: deque[int] = deque(maxlen=20)
-        self.mutation_rate_multiplier: float = 1.0
-        self.reflection_weight:        float = 1.0
+        self._lineage: dict[str, dict] = {}
 
-    def calculate(self, belief_count: int, conflict_count: int, avg_conf: float) -> float:
-        self._belief_counts.append(belief_count)
-        self._conflict_counts.append(conflict_count)
-
-        # contradiction component: fewer conflicts = more stable
-        max_conflicts = 50
-        contradiction_score = 1.0 - min(1.0, conflict_count / max_conflicts)
-
-        # cluster stability: belief count not changing rapidly
-        if len(self._belief_counts) >= 3:
-            recent = list(self._belief_counts)[-3:]
-            churn  = max(recent) - min(recent)
-            cluster_score = 1.0 - min(1.0, churn / 20)
+    def register(self, belief_id: str, parent_ids: list[str] = None):
+        parents = parent_ids or []
+        if parents:
+            max_depth = max(
+                self._lineage.get(p, {}).get("generation_depth", 0)
+                for p in parents
+            )
         else:
-            cluster_score = 0.5
-
-        # belief churn: low variance in recent avg_conf
-        if len(self._history) >= 5:
-            recent_conf = list(self._history)[-5:]
-            variance    = sum((c - avg_conf)**2 for c in recent_conf) / 5
-            churn_score = 1.0 - min(1.0, variance * 20)
-        else:
-            churn_score = 0.5
-
-        stability = (contradiction_score * 0.4 + cluster_score * 0.3 + churn_score * 0.3)
-        self._history.append(avg_conf)
-
-        # adapt system parameters
-        if stability < 0.4:
-            self.mutation_rate_multiplier = 0.5   # slow down mutations
-            self.reflection_weight        = 1.8   # reflect more
-            log.warning(f"[STABILITY] low={stability:.2f} — throttling mutation, boosting reflection")
-        elif stability > 0.75:
-            self.mutation_rate_multiplier = 1.2   # allow faster evolution
-            self.reflection_weight        = 0.9
-        else:
-            self.mutation_rate_multiplier = 1.0
-            self.reflection_weight        = 1.0
-
-        return round(stability, 4)
-
-    def current(self) -> float:
-        return self._history[-1] if self._history else 0.5
-
-    def stats(self) -> dict:
-        return {
-            "mutation_rate_multiplier": self.mutation_rate_multiplier,
-            "reflection_weight":        self.reflection_weight,
+            max_depth = 0
+        self._lineage[belief_id] = {
+            "parent_beliefs"  : parents,
+            "generation_depth": max_depth + 1 if parents else 0,
+            "registered_at"   : time.time(),
         }
 
+    def get(self, belief_id: str) -> dict:
+        return self._lineage.get(belief_id, {"parent_beliefs": [], "generation_depth": 0})
 
-# ══════════════════════════════════════════════════════════════════════════════
-# U11 — NOVELTY REGULATION
-# ══════════════════════════════════════════════════════════════════════════════
-
-class NoveltyRegulator:
-    """
-    Tracks novelty_rate = new_beliefs / cycle.
-    Too high → suppress new belief creation.
-    Too low  → boost exploration.
-    """
-
-    def __init__(self, target_rate: float = 3.0, window: int = 10):
-        self.target       = target_rate
-        self._window      = window
-        self._new_beliefs: deque[int] = deque(maxlen=window)
-        self._mode        = "balanced"   # balanced / suppress / explore
-
-    def record_cycle(self, new_beliefs_this_cycle: int) -> str:
-        self._new_beliefs.append(new_beliefs_this_cycle)
-        if len(self._new_beliefs) < 3:
-            return "balanced"
-
-        avg_rate = sum(self._new_beliefs) / len(self._new_beliefs)
-
-        if avg_rate > self.target * 2:
-            self._mode = "suppress"
-            log.debug(f"[NOVELTY] suppressing — rate={avg_rate:.1f} > {self.target*2:.1f}")
-        elif avg_rate < self.target * 0.4:
-            self._mode = "explore"
-            log.debug(f"[NOVELTY] exploring — rate={avg_rate:.1f} < {self.target*0.4:.1f}")
-        else:
-            self._mode = "balanced"
-
-        return self._mode
-
-    def creation_allowed(self) -> bool:
-        return self._mode != "suppress"
-
-    def exploration_boost(self) -> float:
-        """Returns multiplier for novelty scoring."""
-        return 1.4 if self._mode == "explore" else 1.0
-
-    def stats(self) -> dict:
-        avg = sum(self._new_beliefs) / max(len(self._new_beliefs), 1)
-        return {"mode": self._mode, "avg_rate": round(avg, 2), "target": self.target}
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# U12 — BELIEF ECONOMY HARD LIMIT
-# ══════════════════════════════════════════════════════════════════════════════
-
-class BeliefEconomyHard:
-    """
-    Hard cap: max 600 beliefs.
-    If exceeded: prune by composite score = confidence × usage × recency × goal_alignment.
-    Forces evolution instead of accumulation.
-    """
-
-    def __init__(self, max_beliefs: int = 600):
-        self.max_beliefs = max_beliefs
-
-    def enforce(self, belief_graph, temporal_intel=None, goal_keywords: set = None) -> int:
-        """Prune if over limit. Returns number pruned."""
-        if not belief_graph:
-            return 0
-
-        nodes = [n for n in belief_graph._nodes.values() if not n.locked]
-        if len(belief_graph._nodes) <= self.max_beliefs:
-            return 0
-
-        excess = len(belief_graph._nodes) - self.max_beliefs
-        goal_kws = goal_keywords or set()
-        now = time.time()
-
-        def composite_score(node):
-            conf       = node.confidence
-            usage      = math.log1p(getattr(node, 'access_count', 0) or 0) / math.log1p(50)
-            age_hours  = (now - node.updated_at) / 3600
-            recency    = math.exp(-age_hours / 48)
-            words      = set(node.content.lower().split())
-            goal_align = min(1.0, len(words & goal_kws) / max(len(goal_kws), 1)) if goal_kws else 0.3
-            return conf * 0.35 + usage * 0.25 + recency * 0.25 + goal_align * 0.15
-
-        # sort by score ascending (worst first)
-        nodes.sort(key=composite_score)
-        to_prune = nodes[:excess]
-
-        pruned = 0
-        for node in to_prune:
-            if node.id in belief_graph._nodes:
-                del belief_graph._nodes[node.id]
-                pruned += 1
-
-        if pruned:
-            log.warning(f"[ECONOMY HARD] pruned {pruned} beliefs to enforce limit={self.max_beliefs}")
-
-        return pruned
-
-    def stats(self, belief_graph) -> dict:
-        if not belief_graph:
-            return {}
-        total  = len(belief_graph._nodes)
-        locked = sum(1 for n in belief_graph._nodes.values() if n.locked)
-        return {"total": total, "locked": locked, "limit": self.max_beliefs,
-                "headroom": self.max_beliefs - total}
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# U13 — INTERNAL DEBATE MICRO (PRE-COMMIT)
-# ══════════════════════════════════════════════════════════════════════════════
-
-class MicroDebate:
-    """
-    Before committing any belief, generate supporting + opposing argument.
-    Only commit if net confidence is positive.
-    Lower cost than full 3-agent debate — runs on every belief candidate.
-    """
-
-    def __init__(self, llm_complete: Optional[Callable] = None):
-        self._llm     = llm_complete or (lambda p: "SUPPORT: plausible. OPPOSE: uncertain. CONFIDENCE: 0.5")
-        self._log:    list[dict] = []
-
-    def evaluate(self, belief_content: str, base_confidence: float) -> dict:
-        """Returns {commit: bool, adjusted_confidence: float, support: str, oppose: str}"""
-        prompt = f"""Evaluate this belief for commitment:
-"{belief_content}"
-
-Respond with EXACTLY this format:
-SUPPORT: [one sentence argument for]
-OPPOSE: [one sentence argument against]
-CONFIDENCE: [0.0-1.0 adjusted confidence]"""
-
-        try:
-            raw        = self._llm(prompt)
-            support    = ""
-            oppose     = ""
-            adj_conf   = base_confidence
-
-            for line in raw.strip().split("\n"):
-                low = line.lower()
-                if low.startswith("support:"):
-                    support = line.split(":", 1)[1].strip()
-                elif low.startswith("oppose:"):
-                    oppose  = line.split(":", 1)[1].strip()
-                elif low.startswith("confidence:"):
-                    try:
-                        adj_conf = max(0.0, min(1.0, float(line.split(":",1)[1].strip())))
-                    except: pass
-
-            commit = adj_conf > 0.35
-            result = {"commit": commit, "adjusted_confidence": adj_conf,
-                      "support": support, "oppose": oppose, "original": base_confidence}
-        except Exception as e:
-            result = {"commit": True, "adjusted_confidence": base_confidence,
-                      "support": "", "oppose": "", "error": str(e)}
-
-        self._log.append({"content": belief_content[:60], **result})
-        if len(self._log) > 200:
-            self._log = self._log[-200:]
-
+    def chain(self, belief_id: str, depth: int = 0) -> list[str]:
+        """Return full ancestry chain up to depth limit."""
+        if depth > 10:
+            return []
+        entry   = self._lineage.get(belief_id, {})
+        parents = entry.get("parent_beliefs", [])
+        result  = [belief_id]
+        for p in parents:
+            result += self.chain(p, depth + 1)
         return result
 
-    def stats(self) -> dict:
-        if not self._log:
-            return {"evaluated": 0}
-        commits   = sum(1 for r in self._log if r.get("commit"))
-        rejections = len(self._log) - commits
-        return {"evaluated": len(self._log), "committed": commits, "rejected": rejections}
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# U14 — FAILURE MEMORY
-# ══════════════════════════════════════════════════════════════════════════════
-
-class FailureMemory:
-    """
-    Track failed patterns by content hash + context.
-    Suppress repeated failures automatically.
-    """
-
-    def __init__(self, suppress_threshold: int = 3):
-        self.threshold = suppress_threshold
-        self._failures: dict[str, dict] = {}   # hash → {count, pattern, context, last_seen}
-
-    def _hash(self, pattern: str) -> str:
-        return hashlib.md5(pattern.lower().strip().encode()).hexdigest()[:12]
-
-    def record(self, pattern: str, context: str = "") -> int:
-        h   = self._hash(pattern)
-        rec = self._failures.setdefault(h, {"count": 0, "pattern": pattern[:100],
-                                             "context": context[:100], "suppressed": False})
-        rec["count"]     += 1
-        rec["last_seen"]  = time.time()
-
-        if rec["count"] >= self.threshold and not rec["suppressed"]:
-            rec["suppressed"] = True
-            log.warning(f"[FAILURE MEM] suppressing pattern after {rec['count']}x: {pattern[:60]}")
-
-        return rec["count"]
-
-    def is_suppressed(self, pattern: str) -> bool:
-        h   = self._hash(pattern)
-        rec = self._failures.get(h)
-        return rec["suppressed"] if rec else False
-
-    def stats(self) -> dict:
-        suppressed = sum(1 for r in self._failures.values() if r["suppressed"])
-        return {"tracked": len(self._failures), "suppressed": suppressed}
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# U15 — PRESSURE REDISTRIBUTION
-# ══════════════════════════════════════════════════════════════════════════════
-
-class PressureRedistributor:
-    """
-    If one cluster dominates too long: redistribute attention to adjacent clusters.
-    Prevents overfitting / tunnel vision.
-    """
-
-    def __init__(self, attention_field: Optional[AttentionField] = None,
-                 dominance_limit: int = 10):
-        self.attention       = attention_field
-        self.dominance_limit = dominance_limit
-        self._topic_age:     dict[str, int] = defaultdict(int)
-
-    def tick(self, dominant_topic: str) -> bool:
-        """Call each cycle. Returns True if redistribution occurred."""
-        if not dominant_topic:
-            return False
-
-        self._topic_age[dominant_topic] += 1
-
-        if self._topic_age[dominant_topic] >= self.dominance_limit:
-            log.info(f"[PRESSURE] redistributing from over-dominant: {dominant_topic}")
-            self._topic_age[dominant_topic] = self.dominance_limit // 2  # reset partially
-
-            if self.attention:
-                # slightly decay the dominant topic
-                current = self.attention._field.get(dominant_topic, 0.5)
-                self.attention._field[dominant_topic] = current * 0.85
-                # boost adjacent topics (all non-dominant get a small lift)
-                for t in list(self.attention._field.keys()):
-                    if t != dominant_topic:
-                        self.attention._field[t] = min(1.0, self.attention._field[t] + 0.08)
-
-            return True
-        return False
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# U16 — IDENTITY LOCK THRESHOLD
-# ══════════════════════════════════════════════════════════════════════════════
-
-class IdentityLockThreshold:
-    """
-    When belief reaches conf > 0.9 AND high usage → auto-promote to identity_core.
-    Identity beliefs: very slow decay, high mutation resistance.
-    """
-
-    def __init__(self, belief_graph=None, conf_threshold: float = 0.9,
-                 usage_threshold: int = 10):
-        self.beliefs       = belief_graph
-        self.conf_threshold = conf_threshold
-        self.usage_threshold = usage_threshold
-        self._promoted:    set[str] = set()
-
-    def scan(self, inertia_system: Optional[BeliefInertia] = None) -> list[str]:
-        """Scan all beliefs and auto-promote qualifying ones. Returns newly promoted IDs."""
-        if not self.beliefs:
-            return []
-
-        newly_promoted = []
-        for node in self.beliefs._nodes.values():
-            if node.id in self._promoted or node.locked:
-                continue
-
-            usage = 0
-            if inertia_system:
-                usage = inertia_system._access.get(node.id, 0)
-
-            if node.confidence >= self.conf_threshold and usage >= self.usage_threshold:
-                node.locked = True
-                self.beliefs._persist_update(node, node.snapshot(reason="identity_lock_threshold"))
-                self._promoted.add(node.id)
-                newly_promoted.append(node.id)
-                log.info(f"[IDENTITY LOCK] auto-promoted conf={node.confidence:.2f} "
-                         f"usage={usage}: {node.content[:60]}")
-
-        return newly_promoted
-
-    def stats(self) -> dict:
-        return {"auto_promoted": len(self._promoted)}
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# U17 — META-LEARNING LOOP
-# ══════════════════════════════════════════════════════════════════════════════
-
-class MetaLearningLoop:
-    """
-    Every N cycles: evaluate which mechanisms reduced tension most.
-    Adjust weights: attention decay, mutation rate, reflection frequency.
-    System improves its own thinking process.
-    """
-
-    def __init__(self, eval_every: int = 50):
-        self.eval_every = eval_every
-        self._snapshots: list[dict] = []
-        self.weights = {
-            "attention_decay":    0.05,
-            "mutation_rate":      1.0,
-            "reflection_weight":  1.0,
-            "novelty_target":     3.0,
-            "silence_threshold":  0.35,
-        }
-        self._adjustments: list[dict] = []
-
-    def snapshot(self, cycle: int, tension: float, avg_conf: float,
-                 conflicts: int, silence_rate: float) -> None:
-        self._snapshots.append({
-            "cycle": cycle, "tension": tension, "avg_conf": avg_conf,
-            "conflicts": conflicts, "silence_rate": silence_rate,
-            "weights": dict(self.weights),
-        })
-        if len(self._snapshots) > 200:
-            self._snapshots = self._snapshots[-200:]
-
-    def evaluate(self, cycle: int) -> Optional[dict]:
-        if cycle % self.eval_every != 0 or len(self._snapshots) < 10:
-            return None
-
-        recent   = self._snapshots[-10:]
-        prev     = self._snapshots[-20:-10] if len(self._snapshots) >= 20 else recent
-
-        avg_tension_recent = sum(s["tension"]   for s in recent) / len(recent)
-        avg_tension_prev   = sum(s["tension"]   for s in prev)   / len(prev)
-        avg_conf_recent    = sum(s["avg_conf"]  for s in recent) / len(recent)
-        avg_conf_prev      = sum(s["avg_conf"]  for s in prev)   / len(prev)
-
-        tension_improving = avg_tension_recent < avg_tension_prev
-        conf_improving    = avg_conf_recent    > avg_conf_prev
-
-        adjustments = {}
-
-        if not tension_improving:
-            # tension not dropping → increase reflection weight
-            self.weights["reflection_weight"] = min(2.5, self.weights["reflection_weight"] * 1.1)
-            adjustments["reflection_weight"] = self.weights["reflection_weight"]
-
-        if not conf_improving:
-            # confidence not rising → slow mutation rate
-            self.weights["mutation_rate"] = max(0.3, self.weights["mutation_rate"] * 0.9)
-            adjustments["mutation_rate"] = self.weights["mutation_rate"]
-
-        if tension_improving and conf_improving:
-            # system improving → relax constraints slightly
-            self.weights["mutation_rate"]     = min(1.5, self.weights["mutation_rate"] * 1.05)
-            self.weights["attention_decay"]   = max(0.02, self.weights["attention_decay"] * 0.98)
-            adjustments["relaxed"] = True
-
-        record = {
-            "cycle": cycle, "adjustments": adjustments,
-            "tension_trend": "improving" if tension_improving else "worsening",
-            "conf_trend":    "improving" if conf_improving    else "worsening",
-        }
-        self._adjustments.append(record)
-        log.info(f"[META-LEARN] cy={cycle} tension={'↓' if tension_improving else '↑'} "
-                 f"conf={'↑' if conf_improving else '↓'} adjustments={adjustments}")
-        return record
-
-    def stats(self) -> dict:
-        return {"weights": self.weights, "adjustments": len(self._adjustments)}
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# U18 — EXTERNAL FEEDBACK INTEGRATION
-# ══════════════════════════════════════════════════════════════════════════════
-
-class ExternalFeedbackIntegrator:
-    """
-    Tracks external_response_score per belief/action.
-    Reinforces beliefs/actions that produce meaningful engagement.
-    Hard cap on influence to prevent overfitting to noise.
-    """
-
-    def __init__(self, belief_graph=None, max_reinforcement_per_belief: float = 0.25):
-        self.beliefs    = belief_graph
-        self.max_reinf  = max_reinforcement_per_belief
-        self._total_reinforcement: dict[str, float] = defaultdict(float)
-        self._scores:   deque = deque(maxlen=500)
-
-    def record(self, belief_ids: list[str], response_score: float,
-               platform: str = "") -> None:
-        """
-        response_score: [0,1] quality of external response
-        Reinforces contributing beliefs, capped to prevent noise overfitting.
-        """
-        if not belief_ids or not self.beliefs:
-            return
-
-        # cap individual reinforcement
-        per_belief = min(0.03, response_score * 0.05)
-
-        for bid in belief_ids:
-            total = self._total_reinforcement[bid]
-            if total >= self.max_reinf:
-                continue   # cap reached — immune to further noise
-
-            actual = min(per_belief, self.max_reinf - total)
-            self._total_reinforcement[bid] += actual
-
-            node = self.beliefs.get(bid)
-            if node and not node.locked:
-                new_conf = min(0.95, node.confidence + actual)
-                self.beliefs.upsert(node.content, new_conf, node.source,
-                                    belief_id=bid, reason=f"ext_feedback:{platform}")
-
-        self._scores.append({"score": response_score, "beliefs": len(belief_ids),
-                             "platform": platform, "ts": time.time()})
-
-    def avg_response_score(self) -> float:
-        if not self._scores:
-            return 0.0
-        return sum(s["score"] for s in self._scores) / len(self._scores)
-
-    def stats(self) -> dict:
-        capped = sum(1 for v in self._total_reinforcement.values() if v >= self.max_reinf)
-        return {"records": len(self._scores), "beliefs_tracked": len(self._total_reinforcement),
-                "capped": capped, "avg_response": round(self.avg_response_score(), 3)}
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# U19 — DRIFT DETECTION
-# ══════════════════════════════════════════════════════════════════════════════
-
-class DriftDetector:
-    """
-    Compare current state to previous snapshots.
-    IF divergence > threshold → trigger stabilization mode.
-    """
-
-    def __init__(self, divergence_threshold: float = 0.15, snapshot_interval: int = 25):
-        self.threshold         = divergence_threshold
-        self.snapshot_interval = snapshot_interval
-        self._snapshots: list[dict] = []
-        self._stabilizing      = False
-        self._drift_events:    list[dict] = []
-
-    def snapshot(self, cycle: int, avg_conf: float, conflict_count: int,
-                 belief_count: int, dominant_topic: str = "") -> None:
-        if cycle % self.snapshot_interval != 0:
-            return
-        self._snapshots.append({
-            "cycle": cycle, "avg_conf": avg_conf,
-            "conflicts": conflict_count, "beliefs": belief_count,
-            "dominant": dominant_topic, "ts": time.time(),
-        })
-        if len(self._snapshots) > 100:
-            self._snapshots = self._snapshots[-100:]
-
-    def check(self) -> dict:
-        """Returns drift report. Call each cycle."""
-        if len(self._snapshots) < 2:
-            return {"drift": 0.0, "stabilizing": False}
-
-        curr = self._snapshots[-1]
-        prev = self._snapshots[-2]
-
-        conf_drift     = abs(curr["avg_conf"]   - prev["avg_conf"])
-        conflict_drift = abs(curr["conflicts"]  - prev["conflicts"]) / max(prev["conflicts"], 1)
-        belief_drift   = abs(curr["beliefs"]    - prev["beliefs"])   / max(prev["beliefs"], 1)
-
-        drift = conf_drift * 0.5 + conflict_drift * 0.3 + belief_drift * 0.2
-
-        if drift > self.threshold and not self._stabilizing:
-            self._stabilizing = True
-            evt = {"cycle": curr["cycle"], "drift": round(drift, 4),
-                   "conf_drift": round(conf_drift, 4)}
-            self._drift_events.append(evt)
-            log.warning(f"[DRIFT] divergence={drift:.3f} > {self.threshold} — stabilization mode ON")
-
-        elif drift < self.threshold * 0.5 and self._stabilizing:
-            self._stabilizing = False
-            log.info("[DRIFT] stabilization mode OFF — system re-stabilized")
-
+    def status(self) -> dict:
+        if not self._lineage:
+            return {"tracked": 0, "avg_depth": 0}
+        depths = [v["generation_depth"] for v in self._lineage.values()]
         return {
-            "drift":        round(drift, 4),
-            "stabilizing":  self._stabilizing,
-            "events":       len(self._drift_events),
+            "tracked"  : len(self._lineage),
+            "avg_depth": round(sum(depths) / len(depths), 2),
+            "max_depth": max(depths),
         }
 
-    def is_stabilizing(self) -> bool:
-        return self._stabilizing
-
-    def stats(self) -> dict:
-        return {"drift_events": len(self._drift_events), "stabilizing": self._stabilizing}
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# U20 — EMERGENT BEHAVIOR CONDITIONS
-# ══════════════════════════════════════════════════════════════════════════════
-
-class EmergentBehaviorDetector:
+# ════════════════════════════════════════════════════════════════════
+# 10. CONCEPT CRYSTALLIZER
+# ════════════════════════════════════════════════════════════════════
+class ConceptCrystallizer:
     """
-    Detects and reports proto-agency achievement.
-    Conditions:
-      1. stable goal persists for 20+ cycles
-      2. selective attention active (silence_rate > 0.3)
-      3. belief churn decreasing (novelty in 'balanced' or 'suppress')
-      4. actions becoming consistent (same action_type 60%+ of last 20)
-    Emits notification when all 4 conditions met.
+    When a cluster stabilises (low variance, high avg_conf) → concept node.
+    Concept nodes reduce internal complexity, boost influence.
     """
+    def __init__(self, stability_threshold: int = 5, conf_threshold: float = 0.60):
+        self.stability_threshold = stability_threshold
+        self.conf_threshold      = conf_threshold
+        self._concepts: list[dict] = []
+        self._stability_counts: dict[str, int] = collections.defaultdict(int)
 
-    def __init__(self, notify_fn: Optional[Callable] = None):
-        self._notify        = notify_fn or (lambda m: log.info(m))
-        self._achieved      = False
-        self._conditions:   dict[str, bool] = {
-            "stable_goal":        False,
-            "selective_attention": False,
-            "low_churn":          False,
-            "consistent_actions": False,
-        }
-        self._action_history: deque = deque(maxlen=20)
-        self._goal_streak:    int   = 0
-        self._last_goal:      str   = ""
-
-    def tick(
-        self,
-        cycle:         int,
-        active_goal:   str,
-        silence_rate:  float,
-        novelty_mode:  str,
-        last_action:   str,
-    ) -> bool:
-        """
-        Returns True if proto-agency achieved this cycle (first time).
-        """
-        # 1. stable goal
-        if active_goal and active_goal == self._last_goal:
-            self._goal_streak += 1
+    def observe(self, topic: str, avg_conf: float, size: int) -> dict | None:
+        if avg_conf >= self.conf_threshold and size >= 5:
+            self._stability_counts[topic] += 1
         else:
-            self._goal_streak = 0
-            self._last_goal   = active_goal
-        self._conditions["stable_goal"] = self._goal_streak >= 20
+            self._stability_counts[topic] = max(0, self._stability_counts[topic] - 1)
 
-        # 2. selective attention
-        self._conditions["selective_attention"] = silence_rate > 0.30
+        if self._stability_counts[topic] >= self.stability_threshold:
+            existing = next((c for c in self._concepts if c["topic"] == topic), None)
+            if not existing:
+                concept = {
+                    "topic"         : topic,
+                    "type"          : "concept",
+                    "influence"     : 1.0,
+                    "avg_conf"      : avg_conf,
+                    "crystallized_at": time.time(),
+                    "member_count"  : size,
+                }
+                self._concepts.append(concept)
+                _log(f"ConceptCrystallizer: CONCEPT formed [{topic}] conf={avg_conf:.2f}")
+                self._stability_counts[topic] = 0
+                return concept
+        return None
 
-        # 3. low churn
-        self._conditions["low_churn"] = novelty_mode in ("balanced", "suppress")
+    def is_concept(self, topic: str) -> bool:
+        return any(c["topic"] == topic for c in self._concepts)
 
-        # 4. consistent actions
-        if last_action:
-            self._action_history.append(last_action)
-        if len(self._action_history) >= 20:
-            most_common = max(set(self._action_history), key=list(self._action_history).count)
-            consistency = list(self._action_history).count(most_common) / len(self._action_history)
-            self._conditions["consistent_actions"] = consistency >= 0.6
+    def status(self) -> dict:
+        return {
+            "concepts"           : len(self._concepts),
+            "concept_list"       : [c["topic"] for c in self._concepts[-10:]],
+            "stability_threshold": self.stability_threshold,
+        }
 
-        all_met = all(self._conditions.values())
+# ════════════════════════════════════════════════════════════════════
+# 11. ENTROPY MANAGER
+# ════════════════════════════════════════════════════════════════════
+class EntropyManager:
+    """
+    entropy = randomness of belief activation + topic dispersion + contradiction spread
+    High entropy → enforce pruning + focus.
+    """
+    def __init__(self, high_threshold: float = 0.70, low_threshold: float = 0.30):
+        self.high_threshold = high_threshold
+        self.low_threshold  = low_threshold
+        self.current        = 0.5
+        self._prune_events  = 0
+        self._focus_events  = 0
 
-        if all_met and not self._achieved:
-            self._achieved = True
-            msg = (
-                "🧠 *NEX PROTO-AGENCY ACHIEVED*\n"
-                f"Cycle: {cycle}\n"
-                f"All 4 emergence conditions met:\n"
-                f"  ✅ Stable goal: {active_goal[:40]}\n"
-                f"  ✅ Selective attention: silence_rate={silence_rate:.2f}\n"
-                f"  ✅ Low belief churn: mode={novelty_mode}\n"
-                f"  ✅ Consistent actions: dominant={most_common if len(self._action_history)>=20 else '?'}"
-            )
-            self._notify(msg)
-            log.info(f"[EMERGENT] PROTO-AGENCY ACHIEVED at cycle {cycle}")
+    def compute(self, belief_count: int, topic_count: int,
+                contradiction_count: int, activated_last_cycle: int) -> float:
+        if belief_count == 0:
+            self.current = 0.5
+            return self.current
+        activation_rand = 1.0 - min(1.0, activated_last_cycle / max(belief_count, 1))
+        dispersion      = min(1.0, topic_count / max(belief_count * 0.5, 1))
+        cont_spread     = min(1.0, contradiction_count / max(belief_count * 0.1, 1))
+        self.current    = round((activation_rand * 0.4) + (dispersion * 0.35) +
+                                (cont_spread * 0.25), 4)
+        return self.current
+
+    def needs_pruning(self) -> bool:
+        if self.current > self.high_threshold:
+            self._prune_events += 1
             return True
-
         return False
 
-    def conditions(self) -> dict:
-        return {**self._conditions, "achieved": self._achieved,
-                "goal_streak": self._goal_streak}
+    def needs_focus(self) -> bool:
+        if self.current > self.high_threshold:
+            self._focus_events += 1
+            return True
+        return False
 
+    def status(self) -> dict:
+        level = "LOW" if self.current < self.low_threshold else \
+                "HIGH" if self.current > self.high_threshold else "NORMAL"
+        return {
+            "entropy"      : self.current,
+            "level"        : level,
+            "prune_events" : self._prune_events,
+            "focus_events" : self._focus_events,
+        }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════════════
+# 12. ATTENTION MOMENTUM
+# ════════════════════════════════════════════════════════════════════
+class AttentionMomentum:
+    """
+    Topics gain momentum when repeatedly selected.
+    Momentum decays slowly. Biases future attention.
+    """
+    def __init__(self, decay_rate: float = 0.05, momentum_boost: float = 0.20):
+        self.decay_rate     = decay_rate
+        self.momentum_boost = momentum_boost
+        self._momentum: dict[str, float] = collections.defaultdict(float)
+
+    def reinforce(self, topic: str):
+        self._momentum[topic] = min(1.0, self._momentum[topic] + self.momentum_boost)
+
+    def decay_all(self):
+        for t in list(self._momentum.keys()):
+            self._momentum[t] = max(0.0, self._momentum[t] - self.decay_rate)
+
+    def bias_score(self, topic: str, base_score: float) -> float:
+        return min(1.0, base_score + self._momentum[topic] * 0.5)
+
+    def top_topics(self, n: int = 5) -> list[tuple]:
+        return sorted(self._momentum.items(), key=lambda x: -x[1])[:n]
+
+    def status(self) -> dict:
+        top = self.top_topics(5)
+        return {
+            "tracked_topics": len(self._momentum),
+            "top_momentum"  : [{"topic": t, "momentum": round(m, 3)} for t, m in top],
+            "decay_rate"    : self.decay_rate,
+        }
+
+# ════════════════════════════════════════════════════════════════════
+# 13. DECISION LATENCY CONTROL
+# ════════════════════════════════════════════════════════════════════
+class DecisionLatency:
+    """
+    High uncertainty → delay action.
+    High confidence → act immediately.
+    """
+    def __init__(self, high_conf: float = 0.70, low_conf: float = 0.35,
+                 max_delay_cycles: int = 5):
+        self.high_conf        = high_conf
+        self.low_conf         = low_conf
+        self.max_delay_cycles = max_delay_cycles
+        self._pending: dict[str, dict] = {}
+        self._immediate       = 0
+        self._delayed         = 0
+
+    def evaluate(self, action_id: str, confidence: float, current_cycle: int) -> bool:
+        """Returns True if action should proceed now."""
+        if confidence >= self.high_conf:
+            self._immediate += 1
+            return True
+        if confidence < self.low_conf:
+            if action_id not in self._pending:
+                self._pending[action_id] = {
+                    "queued_cycle": current_cycle,
+                    "confidence"  : confidence,
+                }
+                self._delayed += 1
+                _log(f"DecisionLatency: DELAY action={action_id} conf={confidence:.2f}")
+                return False
+            queued = self._pending[action_id]["queued_cycle"]
+            if current_cycle - queued >= self.max_delay_cycles:
+                del self._pending[action_id]
+                _log(f"DecisionLatency: RELEASE (timeout) action={action_id}")
+                return True
+            return False
+        self._immediate += 1
+        return True
+
+    def status(self) -> dict:
+        return {
+            "pending"  : len(self._pending),
+            "immediate": self._immediate,
+            "delayed"  : self._delayed,
+            "high_conf": self.high_conf,
+            "low_conf" : self.low_conf,
+        }
+
+# ════════════════════════════════════════════════════════════════════
+# 14. SELF-CONSISTENCY CHECK
+# ════════════════════════════════════════════════════════════════════
+class SelfConsistencyCheck:
+    """
+    Before action: simulate 'Does this contradict my identity?'
+    Suppress or revise if yes.
+    """
+    def __init__(self):
+        self._identity_beliefs: list[str] = []
+        self._suppressed = 0
+        self._passed     = 0
+
+    def load_identity(self):
+        try:
+            with _db() as conn:
+                rows = conn.execute(
+                    "SELECT content FROM beliefs WHERE tags LIKE '%#self%' OR tags LIKE '%identity%' LIMIT 50"
+                ).fetchall()
+                self._identity_beliefs = [r[0] for r in rows if r[0]]
+        except Exception as e:
+            _log(f"SelfConsistency.load_identity error: {e}")
+
+    def check(self, proposed_action_text: str) -> tuple[bool, str]:
+        """Returns (is_consistent, reason)."""
+        action_lower = proposed_action_text.lower()
+        for ib in self._identity_beliefs:
+            if not ib:
+                continue
+            ib_words = set(ib.lower().split())
+            act_words= set(action_lower.split())
+            conflict_words = {"not", "never", "refuse", "deny", "oppose", "against"}
+            if conflict_words & ib_words & act_words:
+                self._suppressed += 1
+                reason = f"conflicts with identity belief: '{ib[:60]}'"
+                _log(f"SelfConsistency: SUPPRESS — {reason}")
+                return False, reason
+        self._passed += 1
+        return True, "ok"
+
+    def status(self) -> dict:
+        return {
+            "identity_beliefs_loaded": len(self._identity_beliefs),
+            "suppressed" : self._suppressed,
+            "passed"     : self._passed,
+        }
+
+# ════════════════════════════════════════════════════════════════════
+# 15. ADAPTIVE EXPLORATION RATE
+# ════════════════════════════════════════════════════════════════════
+class AdaptiveExploration:
+    """
+    Stability high → increase exploration.
+    Chaos high → reduce exploration.
+    """
+    def __init__(self, base_rate: float = 0.25):
+        self.base_rate   = base_rate
+        self.current_rate= base_rate
+        self._history    = collections.deque(maxlen=20)
+
+    def update(self, coherence: float, entropy: float):
+        stability = coherence * (1.0 - entropy)
+        if stability > 0.6:
+            self.current_rate = min(0.60, self.current_rate + 0.03)
+        elif stability < 0.3:
+            self.current_rate = max(0.05, self.current_rate - 0.05)
+        else:
+            self.current_rate = 0.4 * self.base_rate + 0.6 * self.current_rate
+        self.current_rate = round(self.current_rate, 4)
+        self._history.append({"rate": self.current_rate, "stability": round(stability, 3)})
+
+    def should_explore(self) -> bool:
+        return random.random() < self.current_rate
+
+    def status(self) -> dict:
+        return {
+            "exploration_rate": self.current_rate,
+            "base_rate"       : self.base_rate,
+        }
+
+# ════════════════════════════════════════════════════════════════════
+# 16. RESOURCE-AWARE COGNITION
+# ════════════════════════════════════════════════════════════════════
+class ResourceAwareCognition:
+    """
+    Ties all operations to CPU/GPU usage, latency, queue depth.
+    Sheds cognitive load when system is strained.
+    """
+    def __init__(self, latency_limit_s: float = 90.0, queue_limit: int = 15):
+        self.latency_limit   = latency_limit_s
+        self.queue_limit     = queue_limit
+        self._shedding       = False
+        self._shed_events    = 0
+        self._last_latency   = 0.0
+
+    def report_latency(self, latency_s: float):
+        self._last_latency = latency_s
+
+    def assess(self, queue_depth: int) -> dict:
+        strained = (self._last_latency > self.latency_limit or
+                    queue_depth > self.queue_limit)
+        if strained and not self._shedding:
+            self._shedding    = True
+            self._shed_events += 1
+            _log(f"ResourceAware: SHED latency={self._last_latency:.1f}s queue={queue_depth}")
+        elif not strained and self._shedding:
+            self._shedding = False
+            _log("ResourceAware: RESUME — system recovered")
+        return {
+            "shedding"    : self._shedding,
+            "last_latency": self._last_latency,
+            "queue_depth" : queue_depth,
+        }
+
+    def skip_heavy_ops(self) -> bool:
+        return self._shedding
+
+    def status(self) -> dict:
+        return {
+            "shedding"     : self._shedding,
+            "shed_events"  : self._shed_events,
+            "last_latency_s": self._last_latency,
+            "latency_limit" : self.latency_limit,
+        }
+
+# ════════════════════════════════════════════════════════════════════
+# 17. META-STABILITY ZONES
+# ════════════════════════════════════════════════════════════════════
+class MetaStabilityZones:
+    """
+    STABLE   → coherence>0.65, entropy<0.35
+    ADAPTIVE → coherence 0.40–0.65
+    CHAOTIC  → coherence<0.40 or entropy>0.65
+    Behaviour rules change per zone.
+    """
+    STABLE   = "STABLE"
+    ADAPTIVE = "ADAPTIVE"
+    CHAOTIC  = "CHAOTIC"
+
+    def __init__(self):
+        self.zone     = self.ADAPTIVE
+        self._history = collections.deque(maxlen=30)
+
+    def update(self, coherence: float, entropy: float) -> str:
+        prev = self.zone
+        if coherence > 0.65 and entropy < 0.35:
+            self.zone = self.STABLE
+        elif coherence < 0.40 or entropy > 0.65:
+            self.zone = self.CHAOTIC
+        else:
+            self.zone = self.ADAPTIVE
+        if self.zone != prev:
+            _log(f"MetaStabilityZones: {prev} → {self.zone} (coh={coherence:.2f} ent={entropy:.2f})")
+        self._history.append({"zone": self.zone, "ts": time.time()})
+        return self.zone
+
+    def behaviour(self) -> dict:
+        if self.zone == self.STABLE:
+            return {"explore": True,  "prune_aggressively": False, "reflect": False}
+        elif self.zone == self.CHAOTIC:
+            return {"explore": False, "prune_aggressively": True,  "reflect": True}
+        else:
+            return {"explore": True,  "prune_aggressively": False, "reflect": True}
+
+    def status(self) -> dict:
+        counts = collections.Counter(h["zone"] for h in self._history)
+        return {
+            "zone"    : self.zone,
+            "behaviour": self.behaviour(),
+            "recent_distribution": dict(counts),
+        }
+
+# ════════════════════════════════════════════════════════════════════
+# 18. KNOWLEDGE DISTILLER
+# ════════════════════════════════════════════════════════════════════
+class KnowledgeDistiller:
+    """
+    Periodically summarises large belief sets into compact forms.
+    Archives raw beliefs after distillation.
+    """
+    def __init__(self, distill_interval: int = 50, max_raw_beliefs: int = 400):
+        self.distill_interval  = distill_interval
+        self.max_raw_beliefs   = max_raw_beliefs
+        self._last_distill     = 0
+        self._distillations    = 0
+        self._archive: list[dict] = []
+
+    def should_distill(self, current_cycle: int, belief_count: int) -> bool:
+        cycle_due   = (current_cycle - self._last_distill) >= self.distill_interval
+        count_due   = belief_count > self.max_raw_beliefs
+        return cycle_due or count_due
+
+    def distill(self, current_cycle: int) -> int:
+        """Remove oldest low-confidence beliefs from DB, archive summaries."""
+        archived = 0
+        try:
+            with _db() as conn:
+                old_low = conn.execute(
+                    """SELECT rowid, topic, confidence, content
+                       FROM beliefs
+                       WHERE (locked=0 OR locked IS NULL)
+                         AND confidence < 0.35
+                       ORDER BY rowid ASC
+                       LIMIT 100"""
+                ).fetchall()
+                for row in old_low:
+                    self._archive.append({
+                        "topic"     : row["topic"],
+                        "confidence": row["confidence"],
+                        "archived_at": time.time(),
+                    })
+                    conn.execute("DELETE FROM beliefs WHERE rowid=?", (row["rowid"],))
+                    archived += 1
+                conn.commit()
+            self._last_distill  = current_cycle
+            self._distillations += 1
+            if archived:
+                _log(f"KnowledgeDistiller: archived {archived} low-conf beliefs")
+        except Exception as e:
+            _log(f"KnowledgeDistiller.distill error: {e}")
+        return archived
+
+    def status(self) -> dict:
+        return {
+            "distillations"  : self._distillations,
+            "archived_total" : len(self._archive),
+            "distill_interval": self.distill_interval,
+            "max_raw"        : self.max_raw_beliefs,
+        }
+
+# ════════════════════════════════════════════════════════════════════
+# 19. IDENTITY REINFORCEMENT LOOP
+# ════════════════════════════════════════════════════════════════════
+class IdentityReinforcement:
+    """
+    Reinforces beliefs that:
+    - persist over time
+    - align with dominant clusters
+    - reduce contradictions
+    """
+    def __init__(self, reinforce_amount: float = 0.02, interval: int = 10):
+        self.reinforce_amount = reinforce_amount
+        self.interval         = interval
+        self._reinforced      = 0
+        self._last_run        = 0
+
+    def run(self, current_cycle: int, dominant_topics: list[str]):
+        if current_cycle - self._last_run < self.interval:
+            return
+        self._last_run = current_cycle
+        try:
+            with _db() as conn:
+                for topic in dominant_topics[:5]:
+                    result = conn.execute(
+                        """UPDATE beliefs
+                           SET confidence = MIN(0.98, confidence + ?)
+                           WHERE topic=?
+                             AND (tags LIKE '%#self%' OR tags LIKE '%identity%')
+                             AND confidence < 0.95""",
+                        (self.reinforce_amount, topic)
+                    )
+                    if result.rowcount:
+                        self._reinforced += result.rowcount
+                        _log(f"IdentityReinforcement: +{self.reinforce_amount} × {result.rowcount} [{topic}]")
+                conn.commit()
+        except Exception as e:
+            _log(f"IdentityReinforcement.run error: {e}")
+
+    def status(self) -> dict:
+        return {
+            "reinforced_total" : self._reinforced,
+            "reinforce_amount" : self.reinforce_amount,
+            "interval"         : self.interval,
+        }
+
+# ════════════════════════════════════════════════════════════════════
+# 20. LONG-HORIZON CONSISTENCY
+# ════════════════════════════════════════════════════════════════════
+class LongHorizonConsistency:
+    """
+    Tracks belief consistency across time windows.
+    Penalises frequent reversals.
+    """
+    def __init__(self, window_size: int = 30, reversal_penalty: float = 0.05):
+        self.window_size     = window_size
+        self.reversal_penalty= reversal_penalty
+        self._snapshots: collections.deque = collections.deque(maxlen=window_size)
+        self._reversals      = 0
+        self._penalised      = 0
+
+    def snapshot(self, belief_states: dict[str, float]):
+        """belief_states: {topic: avg_confidence}"""
+        self._snapshots.append({"states": dict(belief_states), "ts": time.time()})
+
+    def detect_reversals(self) -> list[str]:
+        if len(self._snapshots) < 2:
+            return []
+        current = self._snapshots[-1]["states"]
+        prev    = self._snapshots[-2]["states"]
+        reversals = []
+        for topic, conf in current.items():
+            if topic in prev:
+                delta = conf - prev[topic]
+                if abs(delta) > 0.25:
+                    reversals.append(topic)
+                    self._reversals += 1
+        return reversals
+
+    def penalise(self, reversal_topics: list[str]):
+        if not reversal_topics:
+            return
+        try:
+            with _db() as conn:
+                for topic in reversal_topics:
+                    result = conn.execute(
+                        """UPDATE beliefs
+                           SET confidence = MAX(0.05, confidence - ?)
+                           WHERE topic=?
+                             AND (locked=0 OR locked IS NULL)""",
+                        (self.reversal_penalty, topic)
+                    )
+                    self._penalised += result.rowcount
+                conn.commit()
+                _log(f"LongHorizonConsistency: penalised {len(reversal_topics)} reversal topics")
+        except Exception as e:
+            _log(f"LongHorizonConsistency.penalise error: {e}")
+
+    def status(self) -> dict:
+        return {
+            "snapshots"       : len(self._snapshots),
+            "window_size"     : self.window_size,
+            "reversals_total" : self._reversals,
+            "penalised_total" : self._penalised,
+        }
+
+# ════════════════════════════════════════════════════════════════════
 # S8 MASTER ORCHESTRATOR
-# ══════════════════════════════════════════════════════════════════════════════
-
+# ════════════════════════════════════════════════════════════════════
 class NexS8:
-    """
-    Session 8 upgrade bundle — emergent dynamics layer.
-    Call nex_s8.tick() after nex_s7.tick() each cycle.
-    """
+    def __init__(self):
+        _log("S8 init starting...")
+        self.flow        = FlowGovernor(capacity=20)
+        self.compressor  = MeaningCompressor(cluster_threshold=8)
+        self.hierarchy   = HierarchicalBeliefs()
+        self.halflife    = RelevanceHalfLife(threshold=0.15, half_life_cycles=100)
+        self.coherence   = CoherenceField(min_coherence=0.35)
+        self.balancer    = LoadBalancer(max_cluster_size=30, min_cluster_size=3)
+        self.rhythm      = CognitiveRhythm()
+        self.signal      = SignalDiscriminator(threshold=0.40)
+        self.lineage     = BeliefLineage()
+        self.crystallizer= ConceptCrystallizer(stability_threshold=5, conf_threshold=0.60)
+        self.entropy     = EntropyManager(high_threshold=0.70, low_threshold=0.30)
+        self.momentum    = AttentionMomentum(decay_rate=0.05, momentum_boost=0.20)
+        self.latency     = DecisionLatency(high_conf=0.70, low_conf=0.35, max_delay_cycles=5)
+        self.consistency = SelfConsistencyCheck()
+        self.exploration = AdaptiveExploration(base_rate=0.25)
+        self.resources   = ResourceAwareCognition(latency_limit_s=90.0, queue_limit=15)
+        self.zones       = MetaStabilityZones()
+        self.distiller   = KnowledgeDistiller(distill_interval=50, max_raw_beliefs=400)
+        self.identity    = IdentityReinforcement(reinforce_amount=0.02, interval=10)
+        self.horizon     = LongHorizonConsistency(window_size=30, reversal_penalty=0.05)
+        self._cycle      = 0
+        _log("S8 init complete — 20 systems online")
 
-    def __init__(
-        self,
-        v2=None,
-        s7=None,
-        notify_fn: Optional[Callable] = None,
-        llm_complete: Optional[Callable] = None,
-    ):
-        self.v2      = v2
-        self.s7      = s7
-        self._notify = notify_fn   or (lambda m: log.info(m))
-        self._llm    = llm_complete or (lambda p: "SUPPORT: plausible. OPPOSE: uncertain. CONFIDENCE: 0.5")
+    # ── per-cycle tick ──────────────────────────────────────────────
+    def tick(self, avg_conf: float = 0.44, last_latency_s: float = 0.0):
+        self._cycle += 1
+        c = self._cycle
 
-        bg = getattr(v2, "belief_graph", None)
-        dr = getattr(v2, "drives",       None)
-        pl = getattr(v2, "planning",     None)
+        # Flow Governor — reset rates each cycle
+        self.flow.reset_rates()
 
-        # instantiate all S8 systems
-        self.energy         = EnergyModel()
-        self.attention_field = AttentionField()
-        self.inertia        = BeliefInertia()
-        self.commitment     = CommitmentMechanism(attention_field=self.attention_field)
-        self.resolution_v2  = ContradictionResolutionV2(bg, self._llm)
-        self.causal         = TemporalCausalTracker(bg, dr)
-        self.goal_evo       = GoalEvolutionSystem(pl)
-        self.silence        = SilenceGate()
-        self.self_model     = SelfModel()
-        self.stability      = StabilityIndex()
-        self.novelty        = NoveltyRegulator()
-        self.economy_hard   = BeliefEconomyHard(max_beliefs=600)
-        self.micro_debate   = MicroDebate(self._llm)
-        self.failure_mem    = FailureMemory()
-        self.pressure_redis = PressureRedistributor(self.attention_field)
-        self.identity_lock  = IdentityLockThreshold(bg)
-        self.meta_learn     = MetaLearningLoop()
-        self.ext_feedback   = ExternalFeedbackIntegrator(bg)
-        self.drift          = DriftDetector()
-        self.emergent       = EmergentBehaviorDetector(self._notify)
+        # Cognitive Rhythm — advance mode
+        mode = self.rhythm.tick()
 
-        self._cycle         = 0
-        self._last_action   = ""
+        # Resource awareness
+        res = self.resources.assess(self.flow.status()["queue_depth"])
+        self.resources.report_latency(last_latency_s)
+        heavy_ops_ok = not self.resources.skip_heavy_ops()
 
-        log.info("[S8] NexS8 initialized — all session-8 upgrades active")
-        log.info(f"[S8] PRIME DIRECTIVE: {PRIME_DIRECTIVE}")
+        # Pull live stats from DB
+        belief_count = cont_count = topic_count = identity_count = 0
+        topic_conf: dict[str, float] = {}
+        dominant_topics: list[str] = []
+        try:
+            with _db() as conn:
+                belief_count = conn.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+                cont_count   = conn.execute(
+                    "SELECT COUNT(*) FROM beliefs WHERE tags LIKE '%contradiction%'"
+                ).fetchone()[0]
+                topic_rows   = conn.execute(
+                    "SELECT topic, COUNT(*) as ct, AVG(confidence) as ac FROM beliefs GROUP BY topic"
+                ).fetchall()
+                topic_count  = len(topic_rows)
+                identity_count = conn.execute(
+                    "SELECT COUNT(*) FROM beliefs WHERE tags LIKE '%#self%' OR tags LIKE '%identity%'"
+                ).fetchone()[0]
+                for row in topic_rows:
+                    topic_conf[row["topic"]] = round(row["ac"] or 0, 3)
+                dominant_topics = sorted(topic_rows, key=lambda r: -(r["ct"]))[: 5]
+                dominant_topics = [r["topic"] for r in dominant_topics]
+        except Exception as e:
+            _log(f"S8.tick DB error: {e}")
 
-    def tick(self, cycle: int, avg_conf: float, new_beliefs: int = 0,
-             last_action: str = "") -> dict:
-        """Per-cycle hook. Call after s7.tick()."""
-        self._cycle     = cycle
-        self._last_action = last_action or self._last_action
+        # Coherence
+        coh = self.coherence.compute(belief_count, cont_count, identity_count, avg_conf)
 
-        results = {"cycle": cycle}
+        # Entropy
+        ent = self.entropy.compute(belief_count, topic_count, cont_count, min(belief_count, 20))
 
-        # energy regen
-        self.energy.tick()
+        # Meta-stability zone
+        zone = self.zones.update(coh, ent)
+        behaviour = self.zones.behaviour()
 
-        # attention field decay
-        self.attention_field.tick()
+        # Exploration rate
+        self.exploration.update(coh, ent)
 
-        # inertia cycle
-        self.inertia.tick(cycle)
+        # Long-horizon snapshot + reversal detection + penalise
+        self.horizon.snapshot(topic_conf)
+        reversals = self.horizon.detect_reversals()
+        if reversals:
+            self.horizon.penalise(reversals)
 
-        # novelty regulation
-        novelty_mode = self.novelty.record_cycle(new_beliefs)
-        results["novelty_mode"] = novelty_mode
+        # Relevance half-life pruning — only in REFLECT mode or CHAOTIC zone
+        if heavy_ops_ok and (mode == "REFLECT" or zone == MetaStabilityZones.CHAOTIC):
+            self.halflife.prune_db(c, dominant_topics)
 
-        # get current state from v2/s7
-        belief_graph  = getattr(self.v2, "belief_graph", None)
-        conflict_count = len(belief_graph.get_conflicts()) if belief_graph else 0
-        belief_count   = len(belief_graph._nodes) if belief_graph else 0
+        # Meaning compression — only in PROCESS mode
+        if heavy_ops_ok and mode == "PROCESS":
+            self.compressor.run_on_db()
 
-        # stability index
-        stability = self.stability.calculate(belief_count, conflict_count, avg_conf)
-        results["stability"] = stability
+        # Load balancer — every 15 cycles
+        if heavy_ops_ok and c % 15 == 0:
+            self.balancer.run_on_db()
 
-        # drift detection snapshot + check
-        dominant = self.attention_field.dominant_topic() or ""
-        self.drift.snapshot(cycle, avg_conf, conflict_count, belief_count, dominant)
-        drift_report = self.drift.check()
-        results["drift"] = drift_report
+        # Concept crystallizer — observe dominant topics
+        try:
+            with _db() as conn:
+                for topic in dominant_topics:
+                    row = conn.execute(
+                        "SELECT COUNT(*) as ct, AVG(confidence) as ac FROM beliefs WHERE topic=?",
+                        (topic,)
+                    ).fetchone()
+                    if row:
+                        self.crystallizer.observe(topic, row["ac"] or 0, row["ct"] or 0)
+        except Exception:
+            pass
 
-        # commitment mechanism
-        if dominant:
-            committed = self.commitment.observe(dominant, cycle)
-            if committed:
-                results["committed_to"] = committed
-            # pressure redistribution
-            self.pressure_redis.tick(dominant)
+        # Attention momentum decay
+        self.momentum.decay_all()
+        for t in dominant_topics:
+            self.momentum.reinforce(t)
 
-        # self-model update
-        tension_level = 0.3
-        if self.s7 and hasattr(self.s7, 'tension'):
-            tension_level = self.s7.tension._global_tension
-        active_goal = ""
-        if self.v2 and self.v2.planning:
-            goals = self.v2.planning.get_active_goals()
-            active_goal = goals[0].name if goals else ""
+        # Identity reinforcement
+        self.identity.run(c, dominant_topics)
 
-        self.self_model.update(
-            cycle=cycle,
-            dominant_topics=[dominant] if dominant else [],
-            active_goal=active_goal,
-            tension_level=tension_level,
-            stability_score=stability,
-            energy_pct=self.energy.pct,
-            avg_conf=avg_conf,
-        )
+        # Knowledge distillation
+        if heavy_ops_ok and self.distiller.should_distill(c, belief_count):
+            self.distiller.distill(c)
 
-        # goal evolution
-        tension_topics = []
-        if self.s7 and hasattr(self.s7, 'tension'):
-            tension_topics = [t["topic"] for t in self.s7.tension.get_hot_topics(3)]
-        goal_evo_result = self.goal_evo.tick(cycle, tension_topics, dominant)
-        results["goal_evo"] = goal_evo_result
+        # Self-consistency — reload identity beliefs every 25 cycles
+        if c % 25 == 0:
+            self.consistency.load_identity()
 
-        # meta-learning snapshot + evaluate
-        silence_rate = self.silence.silence_rate
-        self.meta_learn.snapshot(cycle, tension_level, avg_conf, conflict_count, silence_rate)
-        meta_result  = self.meta_learn.evaluate(cycle)
-        if meta_result:
-            results["meta_learn"] = meta_result
+        _log(f"S8 tick #{c} mode={mode} zone={zone} coh={coh:.3f} ent={ent:.3f} "
+             f"beliefs={belief_count} explore={self.exploration.current_rate:.2f}")
 
-        # identity lock scan every 25 cycles
-        if cycle % 25 == 0:
-            promoted = self.identity_lock.scan(self.inertia)
-            if promoted:
-                results["identity_locked"] = len(promoted)
+    # ── Telegram /s8status ──────────────────────────────────────────
+    def s8status(self) -> str:
+        lines = [
+            "🧠 *NEX S8 STATUS*",
+            f"Cycle: {self._cycle}",
+            "",
+            f"*1 Flow Governor*",
+        ]
+        fg = self.flow.status()
+        lines += [f"  in={fg['incoming']} proc={fg['processing']} res={fg['resolution']} "
+                  f"queue={fg['queue_depth']} dropped={fg['dropped']} overload={fg['overloaded']}"]
 
-        # belief economy hard limit every 10 cycles
-        if cycle % 10 == 0 and belief_graph:
-            goal_kws = set()
-            if self.v2 and self.v2.planning:
-                for g in self.v2.planning.get_active_goals():
-                    goal_kws.update(g.name.lower().split())
-            pruned = self.economy_hard.enforce(belief_graph, goal_keywords=goal_kws)
-            if pruned:
-                results["economy_pruned"] = pruned
+        lines += ["", "*2 Meaning Compressor*"]
+        mc = self.compressor.status()
+        lines += [f"  meta_beliefs={mc['meta_beliefs']} compressed={mc['compressed_total']}"]
 
-        # contradiction resolution V2 every 50 cycles
-        if cycle % 50 == 0:
-            actions = self.resolution_v2.resolve_all(cycle)
-            results["resolutions"] = len(actions)
-            if self.v2 and self.v2.drives and actions:
-                self.v2.drives.signal("conflict_resolved")
+        lines += ["", "*3 Belief Hierarchy*"]
+        lines += ["  " + " ".join(f"{k}={v}" for k, v in self.hierarchy.counts().items())]
 
-        # emergent behavior check
-        emergent = self.emergent.tick(
-            cycle=cycle,
-            active_goal=active_goal,
-            silence_rate=silence_rate,
-            novelty_mode=novelty_mode,
-            last_action=self._last_action,
-        )
-        if emergent:
-            results["proto_agency"] = True
+        lines += ["", "*4 Relevance Half-Life*"]
+        rl = self.halflife.status()
+        lines += [f"  threshold={rl['threshold']} half_life={rl['half_life_cycles']}cyc pruned={rl['pruned_total']}"]
 
-        return results
+        lines += ["", "*5 Coherence Field*"]
+        cf = self.coherence.status()
+        lines += [f"  coherence={cf['coherence']} trend={cf['trend']:+.4f} blocked={cf['blocked_actions']}"]
 
-    # ── PUBLIC HOOKS ──────────────────────────────────────────────────────────
+        lines += ["", "*6 Load Balancer*"]
+        lb = self.balancer.status()
+        lines += [f"  splits={lb['splits']} merges={lb['merges']}"]
 
-    def can_act(self, action: str) -> bool:
-        """Gate any action through energy model + silence gate."""
-        return self.energy.can_afford(action)
+        lines += ["", "*7 Cognitive Rhythm*"]
+        cr = self.rhythm.status()
+        lines += [f"  mode={cr['mode']} [{cr['mode_cycle']}/{cr['mode_length']}] transitions={cr['transitions']}"]
 
-    def spend(self, action: str) -> bool:
-        return self.energy.spend(action)
+        lines += ["", "*8 Signal Discriminator*"]
+        sd = self.signal.status()
+        lines += [f"  accepted={sd['accepted']} rejected={sd['rejected']} ratio={sd['signal_ratio']}"]
 
-    def evaluate_belief(self, content: str, confidence: float) -> dict:
-        """Run micro-debate before committing a belief."""
-        if self.failure_mem.is_suppressed(content):
-            return {"commit": False, "reason": "failure_memory_suppressed"}
-        return self.micro_debate.evaluate(content, confidence)
+        lines += ["", "*9 Belief Lineage*"]
+        bl = self.lineage.status()
+        lines += [f"  tracked={bl['tracked']} avg_depth={bl.get('avg_depth',0)} max_depth={bl.get('max_depth',0)}"]
 
-    def on_action_result(self, action: str, outcome: float, pattern: str = "") -> None:
-        """Call after any action completes with its outcome score."""
-        self._last_action = action
-        if outcome < 0 and pattern:
-            self.failure_mem.record(pattern)
-        self.causal.after_action(outcome)
+        lines += ["", "*10 Concept Crystallizer*"]
+        cc = self.crystallizer.status()
+        lines += [f"  concepts={cc['concepts']} list={cc['concept_list']}"]
 
-    def on_external_response(self, belief_ids: list, score: float, platform: str = "") -> None:
-        self.ext_feedback.record(belief_ids, score, platform)
+        lines += ["", "*11 Entropy Manager*"]
+        em = self.entropy.status()
+        lines += [f"  entropy={em['entropy']} level={em['level']} prune_events={em['prune_events']}"]
 
-    def status(self) -> str:
-        lines = ["*NEX S8 STATUS*\n",
-                 f"📌 Prime: _{PRIME_DIRECTIVE}_\n"]
+        lines += ["", "*12 Attention Momentum*"]
+        am = self.momentum.status()
+        top = " ".join(f"{x['topic']}:{x['momentum']}" for x in am['top_momentum'][:3])
+        lines += [f"  topics={am['tracked_topics']} top=[{top}]"]
 
-        en = self.energy.stats()
-        lines.append(f"⚡ *Energy*: {en['energy']}/{en['energy_max']} ({en['pct']:.0%})"
-                     + (f" denied={en['denied']}" if en['denied'] else ""))
+        lines += ["", "*13 Decision Latency*"]
+        dl = self.latency.status()
+        lines += [f"  pending={dl['pending']} immediate={dl['immediate']} delayed={dl['delayed']}"]
 
-        af = self.attention_field.stats()
-        lines.append(f"🎯 *Attention Field*: topics={af['active_topics']} dominant={af['dominant']}")
+        lines += ["", "*14 Self-Consistency*"]
+        sc = self.consistency.status()
+        lines += [f"  identity_loaded={sc['identity_beliefs_loaded']} passed={sc['passed']} suppressed={sc['suppressed']}"]
 
-        cm = self.commitment.stats()
-        lines.append(f"🔒 *Commitment*: {cm['committed'] or 'none'} (streak tracked)")
+        lines += ["", "*15 Adaptive Exploration*"]
+        ae = self.exploration.status()
+        lines += [f"  rate={ae['exploration_rate']} base={ae['base_rate']}"]
 
-        sm = self.self_model.stats()
-        ss = sm["self_state"]
-        lines.append(f"🪞 *Self*: tension={ss['tension_level']:.2f} stability={ss['stability_score']:.2f} energy={ss['energy_pct']:.0%}")
+        lines += ["", "*16 Resource Cognition*"]
+        rc = self.resources.status()
+        lines += [f"  shedding={rc['shedding']} latency={rc['last_latency_s']:.1f}s shed_events={rc['shed_events']}"]
 
-        st = self.stability.stats()
-        lines.append(f"📊 *Stability*: mutation_mult={st['mutation_rate_multiplier']:.2f} reflection_w={st['reflection_weight']:.2f}")
+        lines += ["", "*17 Meta-Stability Zone*"]
+        mz = self.zones.status()
+        lines += [f"  zone={mz['zone']} dist={mz['recent_distribution']}"]
 
-        nv = self.novelty.stats()
-        lines.append(f"🔬 *Novelty*: mode={nv['mode']} rate={nv['avg_rate']:.1f}/cy")
+        lines += ["", "*18 Knowledge Distiller*"]
+        kd = self.distiller.status()
+        lines += [f"  distillations={kd['distillations']} archived={kd['archived_total']}"]
 
-        sl = self.silence.stats()
-        lines.append(f"🤫 *Silence*: rate={sl['silence_rate']:.2f} acted={sl['acted']} silenced={sl['silenced']}")
+        lines += ["", "*19 Identity Reinforcement*"]
+        ir = self.identity.status()
+        lines += [f"  reinforced={ir['reinforced_total']} amount={ir['reinforce_amount']}"]
 
-        dr = self.drift.stats()
-        lines.append(f"📡 *Drift*: events={dr['drift_events']} stabilizing={dr['stabilizing']}")
-
-        ml = self.meta_learn.stats()
-        lines.append(f"🧬 *Meta-Learn*: adjustments={ml['adjustments']} weights={ml['weights']}")
-
-        ec = self.emergent.conditions()
-        lines.append(f"🌱 *Emergent*: achieved={ec['achieved']} goal_streak={ec['goal_streak']}"
-                     f" conditions={sum(1 for v in ec.values() if v is True)}/4")
-
-        ef = self.ext_feedback.stats()
-        lines.append(f"📬 *Ext Feedback*: records={ef['records']} capped={ef['capped']} avg={ef['avg_response']:.3f}")
-
-        res = self.resolution_v2.stats()
-        lines.append(f"⚖️ *Resolution V2*: {res['resolutions']} total {res['by_strategy']}")
+        lines += ["", "*20 Long-Horizon Consistency*"]
+        lh = self.horizon.status()
+        lines += [f"  snapshots={lh['snapshots']} reversals={lh['reversals_total']} penalised={lh['penalised_total']}"]
 
         return "\n".join(lines)
 
 
-# ── singleton ──────────────────────────────────────────────────────────────────
-_s8_instance: Optional[NexS8] = None
+# ── singleton ────────────────────────────────────────────────────────
+_s8_instance: NexS8 | None = None
 
-def init_s8(v2=None, s7=None, notify_fn=None, llm_complete=None) -> NexS8:
+def get_s8() -> NexS8:
     global _s8_instance
-    _s8_instance = NexS8(v2=v2, s7=s7, notify_fn=notify_fn, llm_complete=llm_complete)
-    return _s8_instance
-
-def get_s8() -> Optional[NexS8]:
+    if _s8_instance is None:
+        _s8_instance = NexS8()
     return _s8_instance
