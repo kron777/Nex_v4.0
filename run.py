@@ -309,25 +309,6 @@ HELP_TEXT = f"""
   {CYAN}/tools{RESET}        — List all available tools
   {CYAN}/batch{RESET}        — Answer a pasted list of questions one by one
   {CYAN}/reset{RESET}        — Clear conversation history
-            elif cmd == "/s8status":
-                if _s8 is not None:
-                    try:
-                        _send(chat_id, _s8.s8status())
-                    except Exception as _e:
-                        _send(chat_id, f"S8 error: {_e}")
-                else:
-                    _send(chat_id, "⚠️ S8 not loaded.")
-  {CYAN}/ticks N{RESET}      — Run N belief ticks manually
-  {CYAN}/pause{RESET}        — Pause background belief engine
-  {CYAN}/resume{RESET}       — Resume background belief engine
-  {CYAN}/memory{RESET}       — Show memory system summary
-  {CYAN}/domains{RESET}      — List belief domains + confidence
-  {CYAN}/run CMD{RESET}      — Run a shell command directly
-  {CYAN}/search Q{RESET}     — Quick web search
-  {CYAN}/read PATH{RESET}    — Read a file
-  {CYAN}/write PATH{RESET}   — Write file (prompts for content)
-  {CYAN}/help{RESET}         — Show this help
-  {CYAN}/quit{RESET}         — Exit Nex
 
   {DIM}Anything else is sent to Nex as a chat message.{RESET}
 """
@@ -2831,6 +2812,16 @@ def main():
             elif cmd == "/reset":
                 brain.reset()
                 pass  # silenced
+
+            elif cmd == "/s8status":
+                if _s8 is not None:
+                    try:
+                        msg = _s8.s8status()
+                        print(msg)
+                    except Exception as _s8ce:
+                        print(f"S8 error: {_s8ce}")
+                else:
+                    print("⚠️ S8 not loaded.")
 
             elif cmd.startswith("/ticks "):
                 try:
