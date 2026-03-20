@@ -314,6 +314,13 @@ async def on_message(message):
 
             loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(None, _llm, prompt)
+            # Apply opener: strip "As NEX" and inject style
+            try:
+                from nex_dynamic_opener import get_opener as _gop_dc
+                _op = _gop_dc()
+                response = _op.strip_output(response) if response else response
+            except Exception:
+                pass
 
             if response and len(response) > 5:
                 # Discord has 2000 char limit
