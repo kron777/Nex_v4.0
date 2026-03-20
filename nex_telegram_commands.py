@@ -295,3 +295,58 @@ async def r181_status_command(update, context):
         msg = f"r181 status error: {e}"
     await update.message.reply_text(msg, parse_mode="Markdown")
 
+
+
+async def trainstatus_command(update, context):
+    """NEX training scheduler status + readiness."""
+    try:
+        from nex_train_scheduler import get_scheduler
+        msg = get_scheduler().format_status()
+    except Exception as e:
+        msg = f"trainer status error: {e}"
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
+async def traindata_command(update, context):
+    """Force generate training data now. Args: light|hectic"""
+    try:
+        from nex_train_scheduler import get_scheduler
+        args = context.args if context.args else []
+        mode = args[0].lower() if args else "light"
+        if mode not in ("light", "hectic"):
+            mode = "light"
+        await update.message.reply_text(
+            f"Generating {mode} training data... (notifying when done)")
+        import threading
+        def _gen():
+            try:
+                get_scheduler().force_generate(mode)
+            except Exception as e:
+                import asyncio
+                pass
+        threading.Thread(target=_gen, daemon=True).start()
+    except Exception as e:
+        await update.message.reply_text(f"traindata error: {e}")
+
+async def trainnow_command(update, context):
+    """Evaluate training readiness and generate if ready."""
+    try:
+        from nex_train_scheduler import get_scheduler
+        sched = get_scheduler()
+        ev    = sched.get_readiness()
+        mode  = ev.get("mode")
+        if mode:
+            await update.message.reply_text(
+                f"Ready for {mode} training. Generating data + notifying...")
+            import threading
+            threading.Thread(target=sched.force_generate, args=(mode,), daemon=True).start()
+        else:
+            ls = ev.get("light_score","?")
+            hs = ev.get("hectic_score","?")
+            await update.message.reply_text(
+                f"Not ready yet.\nLight: {ls}/4 | Hectic: {hs}/4\n"
+                f"Beliefs: {ev.get('belief_count','?')} | "
+                f"conf: {ev.get('avg_conf','?')}\n"
+                f"New since last: {ev.get('new_beliefs','?')}")
+    except Exception as e:
+        await update.message.reply_text(f"trainnow error: {e}")
+

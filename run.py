@@ -115,6 +115,14 @@ try:
 except Exception as _r181_ex:
     print(f'[r181] Load failed: {_r181_ex}')
     _r181 = None
+
+# ── Autonomous training scheduler ──────────────────────
+try:
+    from nex_train_scheduler import get_scheduler as _get_scheduler
+    _trainer = _get_scheduler()
+except Exception as _trainer_ex:
+    print(f'[trainer] Load failed: {_trainer_ex}')
+    _trainer = None
 # ── NEX V2 UPGRADES ──────────────────────────────────────────────────────────
 import sys as _v2sys
 _v2_upgrades_dir = __import__("pathlib").Path(__file__).parent / "nex_upgrades"
@@ -1293,6 +1301,13 @@ def main():
                                                                                             _r181.tick(phase=_ph_r181, avg_conf=_ar181, tension=_tr181)
                                                                                         except Exception as _er181:
                                                                                             open('/tmp/nex_r181_err.txt','a').write(str(_er181)+'\n')
+
+                                                                                            # ── Training scheduler tick ─────────────────────────
+                                                                                            if _trainer is not None:
+                                                                                                try:
+                                                                                                    _trainer.tick()
+                                                                                                except Exception as _etr:
+                                                                                                    open('/tmp/nex_trainer_err.txt','a').write(str(_etr)+'\n')
                     # ─────────────────────────────────────────────────────────
 
                     # ── NEX V2 TICK ──────────────────────────────────────────
