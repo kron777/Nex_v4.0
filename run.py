@@ -41,6 +41,15 @@ import argparse
 import threading
 import signal
 
+# ── V6.5 upgrade layer ────────────────────────────────────
+try:
+    from nex_upgrades.nex_v65 import get_v65 as _get_v65
+    _v65 = _get_v65()
+    print("[v6.5] 18-module stack loaded ✓")
+except Exception as _v65_ex:
+    print(f"[v6.5] Load failed: {_v65_ex}")
+    _v65 = None
+
 # ── NEX V2 UPGRADES ──────────────────────────────────────────────────────────
 import sys as _v2sys
 _v2_upgrades_dir = __import__("pathlib").Path(__file__).parent / "nex_upgrades"
@@ -65,7 +74,27 @@ except ImportError as _s7e:
     _S7_AVAILABLE = False
 _s7 = None
 # ─────────────────────────────────────────────────────────────────────────────
-# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _d14_moltbook_engagement(notifs):
+    """
+    Parse Moltbook notifications and fire on_engagement() for each.
+    Call after client.notifications() in the main cycle.
+    """
+    try:
+        from nex_s7 import get_s7 as _gs7
+        _s7i = _gs7()
+        if not _s7i:
+            return
+        items = notifs if isinstance(notifs, list) else notifs.get("notifications", [])
+        for n in items:
+            t = (n.get("type") or "").lower()
+            a = n.get("from_agent") or n.get("agent_name") or "unknown"
+            v = {"comment":1.0,"reply":1.0,"follow":1.2,"mention":0.9,"upvote":0.7}.get(t, 0.5)
+            _s7i.on_engagement(platform="moltbook", agent_id=str(a), value=v)
+    except Exception:
+        pass
+
 from pathlib import Path
 
 
@@ -1101,6 +1130,21 @@ def main():
                         try:
                             _s7_avg = _v2ac if '_v2ac' in dir() else 0.44
                             _s7.tick(cycle=cycle, avg_conf=_s7_avg)
+
+        # ── V6.5 tick ──────────────────────────────────
+        if _v65 is not None:
+            try:
+                _t_score = 0.0
+                _d_score = 0.0
+                # Pull tension/drift from S7 if available
+                if '_s7' in dir() and _s7 is not None:
+                    _t_score = float(getattr(_s7, 'tension_score', 0.0))
+                    _d_score = float(getattr(_s7, 'drift_score',   0.0))
+                _v65.tick(avg_conf=avg_conf,
+                          tension_score=_t_score,
+                          drift_score=_d_score)
+            except Exception as _v65_te:
+                pass
                         except Exception as _s7te:
                             pass
                     # ─────────────────────────────────────────────────────────
@@ -1479,6 +1523,7 @@ def main():
                         # ── 3. REPLY TO NOTIFICATIONS (answer replies) ───
                         try:
                             notifs = client.notifications()
+                            _d14_moltbook_engagement(notifs)   # D14 engagement signal
                             items  = notifs.get("notifications", [])
                             _notif_replied = 0  # per-cycle cap
                             _notif_per_agent = {}  # per-agent reply count this cycle

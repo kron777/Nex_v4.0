@@ -218,3 +218,14 @@ if __name__ == "__main__":
     for msg in test_messages:
         cmd = parse_command(msg)
         print(f"  '{msg}'\n    → {cmd}\n")
+
+
+async def v65_status_command(update, context):
+    """NEX v6.5 — 18-module upgrade stack status."""
+    try:
+        from nex_upgrades.nex_v65 import get_v65
+        msg = get_v65().format_status()
+    except Exception as e:
+        msg = f"v6.5 status error: {e}"
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
