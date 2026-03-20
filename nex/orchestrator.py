@@ -129,7 +129,7 @@ class Orchestrator:
             u4_reset_cycle(self.tick)
             if self.tick % 50 == 0:
                 u1_lock_top_beliefs(n=30)
-            if self.tick % 20 == 0:
+            if self.tick % 100 == 0:
                 try:
                     u2_run_contradiction_resolution(
                         lambda p: self._llm_resolve(p), limit=3
@@ -241,6 +241,28 @@ class Orchestrator:
             if d.K < 0.12 and self.tick % 50 == 0:
                 if self.coupling.coupling_norm(n) < 0.05:
                     self.beliefs.remove_domain(d.index)
+
+    def _llm_resolve(self, prompt: str) -> str:
+        """U2 contradiction resolution via Ollama."""
+        try:
+            import urllib.request, json as _j
+            payload = _j.dumps({
+                "model": "mistral-nex",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.2,
+                "max_tokens": 10,
+                "stream": False
+            }).encode()
+            req = urllib.request.Request(
+                "http://localhost:11434/v1/chat/completions",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            resp = _j.loads(urllib.request.urlopen(req, timeout=30).read())
+            return resp["choices"][0]["message"]["content"].strip()
+        except Exception:
+            return "UNCERTAINTY"
 
     def status(self) -> dict:
         report    = self.coh_eng.last_report

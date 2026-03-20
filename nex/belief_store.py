@@ -64,7 +64,7 @@ def _get_chroma():
         class _GPUEmbedFunc:
             def name(self): return "gpu_minilm"
             def __init__(self):
-                self._model = SentenceTransformer("all-MiniLM-L6-v2", device="cuda")
+                self._model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
             def __call__(self, input):
                 return self._model.encode(input, convert_to_numpy=True).tolist()
         ef = _GPUEmbedFunc()
