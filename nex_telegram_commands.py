@@ -229,3 +229,14 @@ async def v65_status_command(update, context):
         msg = f"v6.5 status error: {e}"
     await update.message.reply_text(msg, parse_mode="Markdown")
 
+
+
+async def v80_status_command(update, context):
+    """NEX v8.0 — Unification layer status."""
+    try:
+        from nex_upgrades.nex_v80 import get_v80
+        msg = get_v80().format_status()
+    except Exception as e:
+        msg = f"v8.0 status error: {e}"
+    await update.message.reply_text(msg, parse_mode="Markdown")
+

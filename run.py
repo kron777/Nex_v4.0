@@ -57,6 +57,14 @@ try:
 except Exception as _v72_ex:
     print(f'[v7.2] Load failed: {_v72_ex}')
     _v72 = None
+
+# ── V8.0 unification layer ─────────────────────────────
+try:
+    from nex_upgrades.nex_v80 import get_v80 as _get_v80
+    _v80 = _get_v80()
+except Exception as _v80_ex:
+    print(f'[v8.0] Load failed: {_v80_ex}')
+    _v80 = None
 # ── NEX V2 UPGRADES ──────────────────────────────────────────────────────────
 import sys as _v2sys
 _v2_upgrades_dir = __import__("pathlib").Path(__file__).parent / "nex_upgrades"
@@ -1158,6 +1166,16 @@ def main():
                                             _v72.tick(avg_conf=_a72, queue_pressure=_q72)
                                         except Exception as _e72:
                                             open('/tmp/nex_v72_err.txt','a').write(str(_e72)+'\n')
+
+                                            # ── V8.0 tick ─────────────────────────────────────
+                                            if _v80 is not None:
+                                                try:
+                                                    _a80 = _v2ac if '_v2ac' in dir() else 0.50
+                                                    _t80 = float(getattr(_s7,'tension_score',0.0)) if '_s7' in dir() and _s7 else 0.0
+                                                    _d80 = float(getattr(_s7,'drift_score',  0.0)) if '_s7' in dir() and _s7 else 0.0
+                                                    _v80.tick(avg_conf=_a80, tension=_t80, drift=_d80)
+                                                except Exception as _e80:
+                                                    open('/tmp/nex_v80_err.txt','a').write(str(_e80)+'\n')
                     # ─────────────────────────────────────────────────────────
 
                     # ── NEX V2 TICK ──────────────────────────────────────────
