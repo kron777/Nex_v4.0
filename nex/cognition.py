@@ -14,6 +14,13 @@ import random
 import time
 from datetime import datetime
 from collections import Counter
+try:
+    from nex.nex_upgrades import u9_set_intent
+    _U9 = True
+except Exception:
+    _U9 = False
+    def u9_set_intent(t, c, d=5): pass
+
 
 # Optional heavy deps — loaded once at module level
 try:
@@ -140,7 +147,14 @@ def cluster_beliefs(beliefs, min_cluster=2):  # lowered from 3 → more insights
                 clusters[label] = {"keys": keys, "beliefs": [b]}
 
     # Only return clusters with enough beliefs
-    return {k: v for k, v in clusters.items() if len(v["beliefs"]) >= min_cluster}
+    _result = {k: v for k, v in clusters.items() if len(v["beliefs"]) >= min_cluster}
+    # ── U9: set dominant topic as active intent ──────────────
+    if _U9 and _result:
+        _dominant = max(_result, key=lambda k: len(_result[k]["beliefs"]))
+        import time as _t
+        _cycle = int(_t.time() / 30) % 10000  # proxy cycle from time
+        u9_set_intent(_dominant, _cycle, duration=8)
+    return _result
 
 
 # Extended stop list for insight topic naming

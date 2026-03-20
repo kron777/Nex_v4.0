@@ -129,7 +129,7 @@ class Orchestrator:
             u4_reset_cycle(self.tick)
             if self.tick % 50 == 0:
                 u1_lock_top_beliefs(n=30)
-            if self.tick % 100 == 0:
+            if self.tick % 50 == 0:
                 try:
                     u2_run_contradiction_resolution(
                         lambda p: self._llm_resolve(p), limit=3

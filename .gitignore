@@ -42,3 +42,8 @@ what
 discord_config.json
 venv_new/
 *.so
+*.bak.*
+nex_debug.jsonl
+/tmp/
+nex_trained/
+nex_training/
