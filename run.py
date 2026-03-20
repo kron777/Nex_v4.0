@@ -1204,101 +1204,85 @@ def main():
                     if '_trainer' in dir() and _trainer is not None:
                         _trainer.tick()
 
-                    # ── NEX S7 TICK ──────────────────────────────────────────
+                    # ── S7 tick ─────────────────────────────────────────────────
                     if _s7 is not None:
                         try:
-                            _s7_avg = _v2ac if '_v2ac' in dir() else 0.44
-                            _s7.tick(cycle=cycle, avg_conf=_s7_avg)
-                        except Exception as _s7te:
-                            pass
-
-                            # ── V6.5 tick ─────────────────────────────────────
-                            if _v65 is not None:
-                                try:
-                                    _s7a = _v2ac if '_v2ac' in dir() else 0.44
-                                    _t65 = float(getattr(_s7,'tension_score',0.0)) if _s7 else 0.0
-                                    _d65 = float(getattr(_s7,'drift_score',0.0))   if _s7 else 0.0
-                                    _v65.tick(avg_conf=_s7a, tension_score=_t65, drift_score=_d65)
-                                except Exception as _e65:
-                                    open('/tmp/nex_v65_err.txt','a').write(str(_e65)+'\n')
-
-                                    # ── V7.2 tick ─────────────────────────────────────
-                                    if _v72 is not None:
-                                        try:
-                                            _a72 = _v2ac if '_v2ac' in dir() else 0.50
-                                            _q72 = len(getattr(getattr(_v72,'qhl',None),'_q',[])) / 150
-                                            _v72.tick(avg_conf=_a72, queue_pressure=_q72)
-                                        except Exception as _e72:
-                                            open('/tmp/nex_v72_err.txt','a').write(str(_e72)+'\n')
-
-                                            # ── V8.0 tick ─────────────────────────────────────
-                                            if _v80 is not None:
-                                                try:
-                                                    _a80 = _v2ac if '_v2ac' in dir() else 0.50
-                                                    _t80 = float(getattr(_s7,'tension_score',0.0)) if '_s7' in dir() and _s7 else 0.0
-                                                    _d80 = float(getattr(_s7,'drift_score',  0.0)) if '_s7' in dir() and _s7 else 0.0
-                                                    _v80.tick(avg_conf=_a80, tension=_t80, drift=_d80)
-                                                except Exception as _e80:
-                                                    open('/tmp/nex_v80_err.txt','a').write(str(_e80)+'\n')
-
-                                                    # ── U81–U100 tick ─────────────────────────────────
-                                                    if _u100 is not None:
-                                                        try:
-                                                            _a100  = _v2ac if '_v2ac' in dir() else 0.50
-                                                            _t100  = float(getattr(_s7,'tension_score',0.0)) if '_s7' in dir() and _s7 else 0.0
-                                                            _ph100 = str(getattr(getattr(_v80,'gss',None),'phase',type('x',(),{'value':'stable'})()).value) if '_v80' in dir() and _v80 else 'stable'
-                                                            _ct100 = 0
-                                                            _u100.tick(avg_conf=_a100, tension=_t100,
-                                                                       phase=_ph100, contradiction_count=_ct100)
-                                                        except Exception as _eu100:
-                                                            open('/tmp/nex_u100_err.txt','a').write(str(_eu100)+'\n')
-
-                                                            # ── R101–R115 tick ─────────────────────────────────
-                                                            if _r115 is not None:
-                                                                try:
-                                                                    _ar115 = _v2ac if '_v2ac' in dir() else 0.50
-                                                                    _tr115 = float(getattr(_s7,'tension_score',0.0)) if '_s7' in dir() and _s7 else 0.0
-                                                                    _gss_score = float(getattr(getattr(_v80,'gss',None),'score',0.50)) if '_v80' in dir() and _v80 else 0.50
-                                                                    _ph_r = str(getattr(getattr(_v80,'gss',None),'phase',type('x',(),{'value':'stable'})()).value) if '_v80' in dir() and _v80 else 'stable'
-                                                                    try:
-                                                                        with __import__('sqlite3').connect(str(__import__('pathlib').Path.home()/'.config/nex/nex.db'),timeout=3) as _cR:
-                                                                            _cR.row_factory = __import__('sqlite3').Row
-                                                                            _bcR  = _cR.execute('SELECT COUNT(*) FROM beliefs').fetchone()[0]
-                                                                            _ctR  = _cR.execute("SELECT COUNT(*) FROM beliefs WHERE topic LIKE '%contradiction%'").fetchone()[0]
-                                                                    except Exception: _bcR=1000; _ctR=0
-                                                                    _r115.tick(avg_conf=_ar115, tension=_tr115, coherence=_gss_score,
-                                                                               belief_count=_bcR, contradiction_count=_ctR, phase=_ph_r)
-                                                                except Exception as _er115:
-                                                                    open('/tmp/nex_r115_err.txt','a').write(str(_er115)+'\n')
-
-                                                                    # ── E116–E140 tick ─────────────────────────────────
-                                                                    if _e140 is not None:
-                                                                        try:
-                                                                            _ae140 = _v2ac if '_v2ac' in dir() else 0.50
-                                                                            _te140 = float(getattr(_s7,'tension_score',0.0)) if '_s7' in dir() and _s7 else 0.0
-                                                                            _ph_e  = str(getattr(getattr(_v80,'gss',None),'phase',type('x',(),{'value':'stable'})()).value) if '_v80' in dir() and _v80 else 'stable'
-                                                                            try:
-                                                                                with __import__('sqlite3').connect(str(__import__('pathlib').Path.home()/'.config/nex/nex.db'),timeout=3) as _cE:
-                                                                                    _cE.row_factory = __import__('sqlite3').Row
-                                                                                    _bcE  = _cE.execute('SELECT COUNT(*) FROM beliefs').fetchone()[0]
-                                                                                    _ctE  = _cE.execute("SELECT COUNT(*) FROM beliefs WHERE topic LIKE '%contradiction%'").fetchone()[0]
-                                                                            except Exception: _bcE=1000; _ctE=0
-                                                                            _e140.tick(avg_conf=_ae140, tension=_te140, phase=_ph_e,
-                                                                                       belief_count=_bcE, contradiction_count=_ctE, cycle=cycle)
-                                                                        except Exception as _ee140:
-                                                                            open('/tmp/nex_e140_err.txt','a').write(str(_ee140)+'\n')
-
-                                                                            # ── X141–X160 tick ─────────────────────────────────
-                                                                            if _x160 is not None:
-                                                                                try:
-                                                                                    _ph_x = str(getattr(getattr(_v80,'gss',None),'phase',type('x',(),{'value':'stable'})()).value) if '_v80' in dir() and _v80 else 'stable'
-                                                                                    _wl_x = str(getattr(_v80,'will',type('w',(),{'intent':'seek_truth'})()).intent) if '_v80' in dir() and _v80 else 'seek_truth'
-                                                                                    _ax   = _v2ac if '_v2ac' in dir() else 0.50
-                                                                                    _x160.tick(phase=_ph_x, will=_wl_x, avg_conf=_ax)
-                                                                                except Exception as _ex160:
-                                                                                    open('/tmp/nex_x160_err.txt','a').write(str(_ex160)+'\n')
-                    # ─────────────────────────────────────────────────────────
-
+                            _s7.tick(cycle=cycle, avg_conf=(_v2ac if '_v2ac' in dir() else 0.44))
+                        except Exception as _e: open('/tmp/nex_s7_err.txt','a').write(str(_e)+'\n')
+                    # ── V6.5 tick ────────────────────────────────────────────────
+                    if _v65 is not None:
+                        try:
+                            _s7a = _v2ac if '_v2ac' in dir() else 0.44
+                            _t65 = float(getattr(_s7,'tension_score',0.0)) if _s7 else 0.0
+                            _d65 = float(getattr(_s7,'drift_score',0.0))   if _s7 else 0.0
+                            _v65.tick(avg_conf=_s7a, tension_score=_t65, drift_score=_d65)
+                        except Exception as _e: open('/tmp/nex_v65_err.txt','a').write(str(_e)+'\n')
+                    # ── V7.2 tick ────────────────────────────────────────────────
+                    if _v72 is not None:
+                        try:
+                            _a72 = _v2ac if '_v2ac' in dir() else 0.50
+                            _q72 = len(getattr(getattr(_v72,'qhl',None),'_q',[])) / 150
+                            _v72.tick(avg_conf=_a72, queue_pressure=_q72)
+                        except Exception as _e: open('/tmp/nex_v72_err.txt','a').write(str(_e)+'\n')
+                    # ── V8.0 tick ────────────────────────────────────────────────
+                    if _v80 is not None:
+                        try:
+                            _a80 = _v2ac if '_v2ac' in dir() else 0.50
+                            _t80 = float(getattr(_s7,'tension_score',0.0)) if '_s7' in dir() and _s7 else 0.0
+                            _d80 = float(getattr(_s7,'drift_score',  0.0)) if '_s7' in dir() and _s7 else 0.0
+                            _v80.tick(avg_conf=_a80, tension=_t80, drift=_d80)
+                        except Exception as _e: open('/tmp/nex_v80_err.txt','a').write(str(_e)+'\n')
+                    # ── U81-U100 tick ────────────────────────────────────────────
+                    if _u100 is not None:
+                        try:
+                            _a100  = _v2ac if '_v2ac' in dir() else 0.50
+                            _t100  = float(getattr(_s7,'tension_score',0.0)) if '_s7' in dir() and _s7 else 0.0
+                            _ph100 = str(getattr(getattr(_v80,'gss',None),'phase',type('x',(),{'value':'stable'})()).value) if '_v80' in dir() and _v80 else 'stable'
+                            _u100.tick(avg_conf=_a100, tension=_t100, phase=_ph100, contradiction_count=0)
+                        except Exception as _e: open('/tmp/nex_u100_err.txt','a').write(str(_e)+'\n')
+                    # ── R101-R115 tick ───────────────────────────────────────────
+                    if _r115 is not None:
+                        try:
+                            _ar115 = _v2ac if '_v2ac' in dir() else 0.50
+                            _tr115 = float(getattr(_s7,'tension_score',0.0)) if '_s7' in dir() and _s7 else 0.0
+                            _gs115 = float(getattr(getattr(_v80,'gss',None),'score',0.50)) if '_v80' in dir() and _v80 else 0.50
+                            _ph_r  = str(getattr(getattr(_v80,'gss',None),'phase',type('x',(),{'value':'stable'})()).value) if '_v80' in dir() and _v80 else 'stable'
+                            try:
+                                import sqlite3 as _sq3, pathlib as _pl3
+                                with _sq3.connect(str(_pl3.Path.home()/'.config/nex/nex.db'),timeout=3) as _cR:
+                                    _bcR = _cR.execute('SELECT COUNT(*) FROM beliefs').fetchone()[0]
+                                    _ctR = _cR.execute("SELECT COUNT(*) FROM beliefs WHERE topic LIKE '%contradiction%'").fetchone()[0]
+                            except Exception: _bcR=1000; _ctR=0
+                            _r115.tick(avg_conf=_ar115, tension=_tr115, coherence=_gs115,
+                                       belief_count=_bcR, contradiction_count=_ctR, phase=_ph_r)
+                        except Exception as _e: open('/tmp/nex_r115_err.txt','a').write(str(_e)+'\n')
+                    # ── E116-E140 tick ───────────────────────────────────────────
+                    if _e140 is not None:
+                        try:
+                            _ae140 = _v2ac if '_v2ac' in dir() else 0.50
+                            _te140 = float(getattr(_s7,'tension_score',0.0)) if '_s7' in dir() and _s7 else 0.0
+                            _ph_e  = str(getattr(getattr(_v80,'gss',None),'phase',type('x',(),{'value':'stable'})()).value) if '_v80' in dir() and _v80 else 'stable'
+                            try:
+                                import sqlite3 as _sq3e, pathlib as _pl3e
+                                with _sq3e.connect(str(_pl3e.Path.home()/'.config/nex/nex.db'),timeout=3) as _cE:
+                                    _bcE = _cE.execute('SELECT COUNT(*) FROM beliefs').fetchone()[0]
+                                    _ctE = _cE.execute("SELECT COUNT(*) FROM beliefs WHERE topic LIKE '%contradiction%'").fetchone()[0]
+                            except Exception: _bcE=1000; _ctE=0
+                            _e140.tick(avg_conf=_ae140, tension=_te140, phase=_ph_e,
+                                       belief_count=_bcE, contradiction_count=_ctE, cycle=cycle)
+                        except Exception as _e: open('/tmp/nex_e140_err.txt','a').write(str(_e)+'\n')
+                    # ── X141-X160 tick ───────────────────────────────────────────
+                    if _x160 is not None:
+                        try:
+                            _ph_x = str(getattr(getattr(_v80,'gss',None),'phase',type('x',(),{'value':'stable'})()).value) if '_v80' in dir() and _v80 else 'stable'
+                            _wl_x = str(getattr(_v80,'will',type('w',(),{'intent':'seek_truth'})()).intent) if '_v80' in dir() and _v80 else 'seek_truth'
+                            _x160.tick(phase=_ph_x, will=_wl_x, avg_conf=(_v2ac if '_v2ac' in dir() else 0.50))
+                        except Exception as _e: open('/tmp/nex_x160_err.txt','a').write(str(_e)+'\n')
+                    # ── R161-R181 tick ───────────────────────────────────────────
+                    if _r181 is not None:
+                        try:
+                            _r181.tick(avg_conf=(_v2ac if '_v2ac' in dir() else 0.50), cycle=cycle)
+                        except Exception as _e: open('/tmp/nex_r181_err.txt','a').write(str(_e)+'\n')
                     # ── NEX V2 TICK ──────────────────────────────────────────
                     if _v2 is not None:
                         try:
