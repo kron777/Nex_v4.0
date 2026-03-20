@@ -10,6 +10,13 @@ from collections import defaultdict, deque
 from pathlib import Path
 from datetime import datetime
 
+
+def _ts() -> str:
+    """Return current time as ISO string for last_referenced column."""
+    from datetime import datetime
+    return datetime.utcnow().isoformat()
+
+
 DB_PATH   = Path.home() / ".config/nex/nex.db"
 V65_LOG   = Path("/tmp/nex_v65.log")
 
@@ -56,10 +63,10 @@ class DecisionEngine:
         try:
             with _db() as conn:
                 beliefs = conn.execute("""
-                    SELECT id, topic, content, confidence, reinforcement_count, last_updated
+                    SELECT id, topic, content, confidence, reinforce_count, last_referenced
                     FROM beliefs
                     WHERE confidence < 0.55
-                    ORDER BY confidence ASC, last_updated ASC
+                    ORDER BY confidence ASC, last_referenced ASC
                     LIMIT 30
                 """).fetchall()
 
@@ -84,7 +91,7 @@ class DecisionEngine:
                         # Dominant: boost winner, prune loser
                         conn.execute("""
                             UPDATE beliefs
-                            SET confidence = MIN(confidence + 0.05, 1.0), last_updated = ?
+                            SET confidence = MIN(confidence + 0.05, 1.0), last_referenced = ?
                             WHERE id = ?
                         """, (time.time(), dominant["id"]))
                         conn.execute("DELETE FROM beliefs WHERE id = ?", (weakest["id"],))
@@ -98,7 +105,7 @@ class DecisionEngine:
                                           f"[+{weakest['content'][:60]}]")[:500]
                         conn.execute("""
                             UPDATE beliefs
-                            SET confidence = ?, content = ?, last_updated = ?
+                            SET confidence = ?, content = ?, last_referenced = ?
                             WHERE id = ?
                         """, (merged_conf, merged_content, time.time(), dominant["id"]))
                         conn.execute("DELETE FROM beliefs WHERE id = ?", (weakest["id"],))
@@ -147,8 +154,8 @@ class HardPruningSystem:
                         WHERE topic NOT LIKE '%identity%'
                           AND topic NOT LIKE '%truth%'
                           AND topic NOT LIKE '%contradiction%'
-                        ORDER BY (confidence * 0.5 + reinforcement_count * 0.01) ASC,
-                                 last_updated ASC
+                        ORDER BY (confidence * 0.5 + reinforce_count * 0.01) ASC,
+                                 last_referenced ASC
                         LIMIT ?
                     )
                 """, (excess,))
@@ -314,7 +321,7 @@ class BeliefValidationLayer:
 
                 with _db() as conn:
                     conn.execute(
-                        "UPDATE beliefs SET confidence=?, last_updated=? WHERE id=?",
+                        "UPDATE beliefs SET confidence=?, last_referenced=? WHERE id=?",
                         (nc, time.time(), b["id"])
                     )
                     conn.commit()
@@ -410,7 +417,7 @@ class MemoryConsolidationPass:
         try:
             with _db() as conn:
                 beliefs = conn.execute("""
-                    SELECT id, topic, content, confidence, reinforcement_count
+                    SELECT id, topic, content, confidence, reinforce_count
                     FROM beliefs ORDER BY topic, confidence DESC
                 """).fetchall()
 
@@ -426,11 +433,11 @@ class MemoryConsolidationPass:
                 existing = seen[key]
                 if self._sim(b["content"], existing["content"]) >= self.SIM_THRESH:
                     merged_conf = max(b["confidence"], existing["confidence"])
-                    merged_rc   = b["reinforcement_count"] + existing["reinforcement_count"]
+                    merged_rc   = b["reinforce_count"] + existing["reinforce_count"]
                     with _db() as conn:
                         conn.execute("""
                             UPDATE beliefs
-                            SET confidence=?, reinforcement_count=?, last_updated=?
+                            SET confidence=?, reinforce_count=?, last_referenced=?
                             WHERE id=?
                         """, (merged_conf, merged_rc, time.time(), existing["id"]))
                     to_delete.add(b["id"])
@@ -540,14 +547,14 @@ class DriftCorrectionTrigger:
             with _db() as conn:
                 conn.execute("""
                     UPDATE beliefs
-                    SET confidence = MIN(confidence + 0.08, 0.95), last_updated = ?
+                    SET confidence = MIN(confidence + 0.08, 0.95), last_referenced = ?
                     WHERE topic LIKE '%identity%'
                        OR topic LIKE '%self%'
                        OR topic LIKE '%nex%'
                 """, (time.time(),))
                 conn.execute("""
                     UPDATE beliefs
-                    SET confidence = MAX(confidence - 0.03, 0.05), last_updated = ?
+                    SET confidence = MAX(confidence - 0.03, 0.05), last_referenced = ?
                     WHERE confidence < 0.22
                       AND topic NOT LIKE '%identity%'
                       AND topic NOT LIKE '%truth%'
@@ -592,7 +599,7 @@ class CoreDirectivesLock:
                     if not row:
                         conn.execute("""
                             INSERT INTO beliefs
-                              (topic, content, confidence, reinforcement_count, last_updated)
+                              (topic, content, confidence, reinforce_count, last_referenced)
                             VALUES (?,?,?,999,?)
                         """, (topic, content, conf, time.time()))
                         _log(f"[CoreLock] Seeded: {topic}")
@@ -613,13 +620,13 @@ class CoreDirectivesLock:
                     if not row:
                         conn.execute("""
                             INSERT INTO beliefs
-                              (topic, content, confidence, reinforcement_count, last_updated)
+                              (topic, content, confidence, reinforce_count, last_referenced)
                             VALUES (?,?,?,999,?)
                         """, (topic, content, conf, time.time()))
                         _log(f"[CoreLock] Restored: {topic}")
                     elif row["confidence"] < conf - 0.05:
                         conn.execute(
-                            "UPDATE beliefs SET confidence=?, last_updated=? WHERE id=?",
+                            "UPDATE beliefs SET confidence=?, last_referenced=? WHERE id=?",
                             (conf, time.time(), row["id"])
                         )
                 conn.commit()
@@ -803,7 +810,7 @@ class PredictionOutcomeLoop:
                 conn.execute("""
                     UPDATE beliefs
                     SET confidence = MAX(0.05, MIN(confidence + ?, 1.0)),
-                        last_updated = ?
+                        last_referenced = ?
                     WHERE id = ?
                 """, (adj, time.time(), p["belief_id"]))
                 conn.commit()
@@ -854,7 +861,7 @@ class FailureMemorySystem:
                     with _db() as conn:
                         conn.execute("""
                             UPDATE beliefs
-                            SET confidence = MAX(confidence - 0.10, 0.05), last_updated = ?
+                            SET confidence = MAX(confidence - 0.10, 0.05), last_referenced = ?
                             WHERE id = ?
                         """, (time.time(), belief_id))
                         conn.commit()
@@ -892,7 +899,7 @@ class SimulationSandbox:
         try:
             with _db() as conn:
                 b = conn.execute(
-                    "SELECT id, topic, content, confidence, reinforcement_count "
+                    "SELECT id, topic, content, confidence, reinforce_count "
                     "FROM beliefs WHERE id=?", (belief_id,)
                 ).fetchone()
             if not b:
@@ -906,7 +913,7 @@ class SimulationSandbox:
             if is_anchor and risk > 0.15:
                 return {"safe": False, "reason": "anchor_drift_risk",
                         "delta": round(delta, 3)}
-            if new_confidence < 0.08 and b["reinforcement_count"] > 10:
+            if new_confidence < 0.08 and b["reinforce_count"] > 10:
                 return {"safe": False, "reason": "high_reinforcement_prune_block"}
 
             return {"safe": True, "delta": round(delta, 3),
@@ -926,12 +933,12 @@ class SimulationSandbox:
             with _db() as conn:
                 if new_content:
                     conn.execute("""
-                        UPDATE beliefs SET confidence=?, content=?, last_updated=?
+                        UPDATE beliefs SET confidence=?, content=?, last_referenced=?
                         WHERE id=?
                     """, (new_confidence, new_content, time.time(), belief_id))
                 else:
                     conn.execute(
-                        "UPDATE beliefs SET confidence=?, last_updated=? WHERE id=?",
+                        "UPDATE beliefs SET confidence=?, last_referenced=? WHERE id=?",
                         (new_confidence, time.time(), belief_id)
                     )
                 conn.commit()
@@ -970,7 +977,7 @@ class BeliefMarket:
         try:
             with _db() as conn:
                 rows = conn.execute("""
-                    SELECT id, confidence, reinforcement_count, last_updated
+                    SELECT id, confidence, reinforce_count, last_referenced
                     FROM beliefs LIMIT 400
                 """).fetchall()
             if not rows:
@@ -979,9 +986,9 @@ class BeliefMarket:
             now    = time.time()
             scored = []
             for r in rows:
-                age_pen = math.exp(-(now - r["last_updated"]) / 86400)
+                age_pen = math.exp(-(now - (r["last_referenced"] or now)) / 86400)
                 score   = (r["confidence"]
-                           * math.log(r["reinforcement_count"] + 2)
+                           * math.log(r["reinforce_count"] + 2)
                            * age_pen)
                 scored.append((r["id"], score))
 
@@ -997,14 +1004,14 @@ class BeliefMarket:
                 for bid in top_ids:
                     conn.execute("""
                         UPDATE beliefs
-                        SET confidence = MIN(confidence + ?, 1.0), last_updated=?
+                        SET confidence = MIN(confidence + ?, 1.0), last_referenced=?
                         WHERE id=?
                     """, (self.BOOST, now, bid))
                     self._weights[bid] = 1.2
                 for bid in bottom_ids:
                     conn.execute("""
                         UPDATE beliefs
-                        SET confidence = MAX(confidence - ?, 0.03), last_updated=?
+                        SET confidence = MAX(confidence - ?, 0.03), last_referenced=?
                         WHERE id=?
                     """, (self.DECAY_EXTRA, now, bid))
                     self._weights[bid] = 0.5
