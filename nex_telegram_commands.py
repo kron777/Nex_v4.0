@@ -240,3 +240,14 @@ async def v80_status_command(update, context):
         msg = f"v8.0 status error: {e}"
     await update.message.reply_text(msg, parse_mode="Markdown")
 
+
+
+async def u100_status_command(update, context):
+    """NEX U81–U100 — directives stack status."""
+    try:
+        from nex_upgrades.nex_u100 import get_u100
+        msg = get_u100().format_status()
+    except Exception as e:
+        msg = f"u100 status error: {e}"
+    await update.message.reply_text(msg, parse_mode="Markdown")
+

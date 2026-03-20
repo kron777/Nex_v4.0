@@ -65,6 +65,14 @@ try:
 except Exception as _v80_ex:
     print(f'[v8.0] Load failed: {_v80_ex}')
     _v80 = None
+
+# ── U81–U100 directives stack ──────────────────────────
+try:
+    from nex_upgrades.nex_u100 import get_u100 as _get_u100
+    _u100 = _get_u100()
+except Exception as _u100_ex:
+    print(f'[u100] Load failed: {_u100_ex}')
+    _u100 = None
 # ── NEX V2 UPGRADES ──────────────────────────────────────────────────────────
 import sys as _v2sys
 _v2_upgrades_dir = __import__("pathlib").Path(__file__).parent / "nex_upgrades"
@@ -1176,6 +1184,18 @@ def main():
                                                     _v80.tick(avg_conf=_a80, tension=_t80, drift=_d80)
                                                 except Exception as _e80:
                                                     open('/tmp/nex_v80_err.txt','a').write(str(_e80)+'\n')
+
+                                                    # ── U81–U100 tick ─────────────────────────────────
+                                                    if _u100 is not None:
+                                                        try:
+                                                            _a100  = _v2ac if '_v2ac' in dir() else 0.50
+                                                            _t100  = float(getattr(_s7,'tension_score',0.0)) if '_s7' in dir() and _s7 else 0.0
+                                                            _ph100 = str(getattr(getattr(_v80,'gss',None),'phase',type('x',(),{'value':'stable'})()).value) if '_v80' in dir() and _v80 else 'stable'
+                                                            _ct100 = 0
+                                                            _u100.tick(avg_conf=_a100, tension=_t100,
+                                                                       phase=_ph100, contradiction_count=_ct100)
+                                                        except Exception as _eu100:
+                                                            open('/tmp/nex_u100_err.txt','a').write(str(_eu100)+'\n')
                     # ─────────────────────────────────────────────────────────
 
                     # ── NEX V2 TICK ──────────────────────────────────────────
