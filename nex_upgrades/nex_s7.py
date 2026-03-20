@@ -1050,6 +1050,12 @@ class NexS7:
             self.v2.drives.signal("post_sent")
 
     def on_engagement(self, platform: str, agent_id: str, value: float = 1.0) -> None:
+        try:
+            import sqlite3 as _sq; from pathlib import Path as _P
+            with _sq.connect(str(_P.home()/'.config/nex/nex.db'), timeout=5) as _c:
+                _c.execute('UPDATE beliefs SET outcome_count=outcome_count+1 WHERE last_used_cycle>0 AND last_used_cycle>=(SELECT MAX(last_used_cycle)-3 FROM beliefs)')
+                _c.commit()
+        except Exception: pass
         self.platform.record_engagement(platform, value)
         self.trust.record_interaction(agent_id, accuracy=value, novelty=value*0.8, alignment=value*0.9)
         if self.v2 and self.v2.learning:

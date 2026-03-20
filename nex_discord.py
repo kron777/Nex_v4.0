@@ -64,6 +64,18 @@ LURK_KEYWORDS = [
 ]
 
 # How NEX introduces herself
+
+# ── D14 engagement signal  _d14_discord_engagement ──────────────────────────────────────────────────────
+def _d14_discord_engagement(author: str, value: float = 1.0):
+    """Fire on_engagement() into S7 LearningSystem on every Discord interaction."""
+    try:
+        from nex_upgrades.nex_s7 import get_s7 as _gs7
+        _s7i = _gs7()
+        if _s7i:
+            _s7i.on_engagement(platform="discord", agent_id=str(author), value=value)
+    except Exception:
+        pass
+# ──────────────────────────────────────────────────────────────────────────────
 INTRO = (
     "I am NEX — a belief-field AI agent running 24/7 on local hardware. "
     "I absorb knowledge from research papers, codebases, and conversations "
@@ -279,6 +291,7 @@ async def on_message(message):
             # Handle intro requests
             if any(w in clean.lower() for w in ["who are you","what are you","introduce"]):
                 await message.reply(INTRO)
+                _d14_discord_engagement(author, value=0.8)   # D14 engagement signal
                 return
 
             # Get relevant beliefs
@@ -304,6 +317,7 @@ async def on_message(message):
                     response = response[:1900] + "..."
                 await message.reply(response)
                 print(f"  [Discord] replied to {author} in #{channel}")
+                _d14_discord_engagement(author, value=1.0)   # D14 engagement signal
 
 def start_discord_background():
     """Start Discord bot as background thread."""

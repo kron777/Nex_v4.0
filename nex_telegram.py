@@ -473,6 +473,18 @@ def _handle_discord_command(text):
     )
 
 
+
+# ── D14 engagement signal ──────────────────────────────────────────────────────
+def _d14_telegram_engagement(user_id, value: float = 1.0):
+    """Fire on_engagement() into S7 LearningSystem on every Telegram interaction."""
+    try:
+        from nex_upgrades.nex_s7 import get_s7 as _gs7
+        _s7i = _gs7()
+        if _s7i:
+            _s7i.on_engagement(platform="telegram", agent_id=str(user_id), value=value)
+    except Exception:
+        pass
+# ──────────────────────────────────────────────────────────────────────────────
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle regular chat messages."""
     user_message = update.message.text
@@ -524,6 +536,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(chunk)
     else:
         await update.message.reply_text(response)
+    _d14_telegram_engagement(user_id, value=1.0)   # D14 engagement signal
 
 
 async def cmd_discord(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -870,6 +883,36 @@ def main():
 
 # ── Background mode: run inside NEX ──
 
+
+async def cmd_v2_passthrough(update, context):
+    """Route /v2* /s7* /spl* commands to run.py's internal dispatcher."""
+    from telegram import Update
+    cmd = update.message.text.strip()
+    try:
+        # run.py exposes _v2 and _s7 in its module globals via get_v2/get_s7
+        reply = None
+        if cmd.startswith("/v2"):
+            from nex_upgrades_v2 import get_v2
+            v2 = get_v2()
+            if v2:
+                args = cmd[len(cmd.split()[0]):].strip()
+                reply = v2.handle_command(cmd.split()[0], args)
+        elif cmd.startswith("/s7"):
+            from nex_upgrades.nex_s7 import get_s7
+            s7 = get_s7()
+            if s7:
+                reply = s7.status()
+        elif cmd.startswith("/spl"):
+            from nex_sentience_protocols import get_spl
+            spl = get_spl()
+            if spl:
+                reply = spl.status()
+        if not reply:
+            reply = f"Module not initialized for {cmd}"
+    except Exception as e:
+        reply = f"Error: {e}"
+    await update.message.reply_text(reply[:4000], parse_mode="Markdown")
+
 def start_telegram_background():
     """Start Telegram bot as a background thread with auto-reconnect."""
     import threading
@@ -883,6 +926,10 @@ def start_telegram_background():
         app.add_handler(CommandHandler("think", cmd_think))
         app.add_handler(CommandHandler("status", cmd_status))
         app.add_handler(CommandHandler("discord", cmd_discord))
+        # ── V2/S7/SPL status commands — pass through to handle_message ──
+        for _cmd in ["v2status","v2debug","v2goals","v2drives","v2economy",
+                     "s7status","splstatus","v2sim","v2explain"]:
+            app.add_handler(CommandHandler(_cmd, cmd_v2_passthrough))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
         return app
 
