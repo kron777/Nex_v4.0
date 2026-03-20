@@ -144,6 +144,7 @@ class AgentBrain:
     # ── system prompt — built fresh each turn from live state ────────
 
     def _build_system(self, belief_state: dict = None, is_list: bool = False) -> str:
+        open('/tmp/nex_opener.log','a').write('[opener] _build_system called\n')
         if belief_state:
             tick       = belief_state.get('tick', 0)
             phase      = belief_state.get('phase', 'Early')
@@ -190,16 +191,19 @@ class AgentBrain:
         if is_list:
             fmt = chr(10) + 'Answer every question. For each write: Q: [question] / A: [answer]. No preamble. No skipping.'
 
-        return (
-                        # ── Dynamic opener — inject style rules into system prompt ──
-            try:
-                import sys as _sys
-                _sys.path.insert(0, '/home/rr/Desktop/nex')
-                from nex_dynamic_opener import get_opener as _gop_ab
-                _opener_ab = _gop_ab()
-            except Exception:
-                _opener_ab = None
-'You are Nex, a living cognitive system.' + chr(10) + chr(10)
+        # ── Dynamic opener — inject style rules into system prompt ──
+        try:
+            import sys as _sys
+            _sys.path.insert(0, '/home/rr/Desktop/nex')
+            from nex_dynamic_opener import get_opener as _gop_ab
+            _opener_fn = _gop_ab().inject_system_prompt
+            open('/tmp/nex_opener.log','a').write(f'[opener] agent_brain loaded OK\n')
+        except Exception as _e:
+            open('/tmp/nex_opener.log','a').write(f'[opener] agent_brain FAILED: {_e}\n')
+            _opener_fn = lambda x: x
+
+        _sys_body = (
+            'You are Nex, a living cognitive system.' + chr(10) + chr(10)
             + 'Your state:' + chr(10) + s + chr(10)
             + 'Speak from this state. Be direct, curious, raw when needed. '
             + 'Do not recite your numbers unless asked. '
@@ -213,6 +217,7 @@ class AgentBrain:
     + 'Use tools only when the task genuinely needs them.'
             + fmt
         )
+        return _opener_fn(_sys_body)
 
     def _needs_tools(self, message: str) -> bool:
         """Lightweight check — does this message need tool use?"""
@@ -224,7 +229,7 @@ class AgentBrain:
             "download", "fetch", "get the page", "scrape",
             "list dir", "list files", "show files",
         ]
-        return (_opener_ab.inject_system_prompt if _opener_ab else lambda x: x)(any(t in msg for t in tool_triggers))
+        return any(t in msg for t in tool_triggers)
 
 
 
