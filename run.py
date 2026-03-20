@@ -49,6 +49,14 @@ except Exception as _v65_ex:
     print(f'[v6.5] Load failed: {_v65_ex}')
     _v65 = None
 
+
+# ── V7.2 upgrade layer ─────────────────────────────────
+try:
+    from nex_upgrades.nex_v72 import get_v72 as _get_v72
+    _v72 = _get_v72()
+except Exception as _v72_ex:
+    print(f'[v7.2] Load failed: {_v72_ex}')
+    _v72 = None
 # ── NEX V2 UPGRADES ──────────────────────────────────────────────────────────
 import sys as _v2sys
 _v2_upgrades_dir = __import__("pathlib").Path(__file__).parent / "nex_upgrades"
