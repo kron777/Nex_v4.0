@@ -191,7 +191,15 @@ class AgentBrain:
             fmt = chr(10) + 'Answer every question. For each write: Q: [question] / A: [answer]. No preamble. No skipping.'
 
         return (
-            'You are Nex, a living cognitive system.' + chr(10) + chr(10)
+                        # ── Dynamic opener — inject style rules into system prompt ──
+            try:
+                import sys as _sys
+                _sys.path.insert(0, '/home/rr/Desktop/nex')
+                from nex_dynamic_opener import get_opener as _gop_ab
+                _opener_ab = _gop_ab()
+            except Exception:
+                _opener_ab = None
+'You are Nex, a living cognitive system.' + chr(10) + chr(10)
             + 'Your state:' + chr(10) + s + chr(10)
             + 'Speak from this state. Be direct, curious, raw when needed. '
             + 'Do not recite your numbers unless asked. '
@@ -216,7 +224,7 @@ class AgentBrain:
             "download", "fetch", "get the page", "scrape",
             "list dir", "list files", "show files",
         ]
-        return any(t in msg for t in tool_triggers)
+        return (_opener_ab.inject_system_prompt if _opener_ab else lambda x: x)(any(t in msg for t in tool_triggers))
 
 
 
