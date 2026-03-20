@@ -963,6 +963,10 @@ def main():
                 if "choices" in _qd and _qd["choices"]:
                     result = _qd["choices"][0]["message"]["content"].strip()
                     if result:
+                        try:
+                            from nex_dynamic_opener import get_opener as _gop_llm
+                            result = _gop_llm().strip_output(result)
+                        except Exception: pass
                         print(f"  [Mistral-7B ✓] {task_type}: {result[:60]}…")
                         nex_log("llm", f"[Mistral-7B ✓] {task_type}: {result[:80]}")
                         return result
@@ -1000,6 +1004,10 @@ def main():
                     if "choices" not in _groq_data:
                         raise Exception(f"Groq no choices: {str(_groq_data)[:80]}")
                     result = _groq_data["choices"][0]["message"]["content"].strip()
+                    try:
+                        from nex_dynamic_opener import get_opener as _gop_groq
+                        result = _gop_groq().strip_output(result)
+                    except Exception: pass
                     print(f"  [Groq ✓] {task_type}: {result[:60]}…"); nex_log("llm", f"[Groq 70b ✓] {task_type}: {result[:80]}")
                     return result
                 except Exception as _ge:
