@@ -13,6 +13,21 @@ from .homeostasis_engine  import HomeostasisEngine
 from .curiosity_engine    import CuriosityEngine
 from .simulation_engine   import SimulationEngine
 from .attractor_map       import AttractorMap
+try:
+    from nex.nex_upgrades import (
+        u1_lock_top_beliefs,
+        u2_run_contradiction_resolution,
+        u4_reset_cycle, u4_should_reflect,
+        u9_get_intent,
+        u10_stability_check,
+        u11_ground_output,
+        u8_get_active_directives,
+    )
+    _UPG = True
+except Exception as _ue:
+    _UPG = False
+    print(f"  [UPGRADES] not loaded: {_ue}")
+
 
 
 class Orchestrator:
@@ -109,6 +124,24 @@ class Orchestrator:
         self.world.advance(self.tick, nex_stable=stable)
         self.tick += 1
 
+        # ── NEX UPGRADES: per-cycle hooks ─────────────────────
+        if _UPG:
+            u4_reset_cycle(self.tick)
+            if self.tick % 50 == 0:
+                u1_lock_top_beliefs(n=30)
+            if self.tick % 20 == 0:
+                try:
+                    u2_run_contradiction_resolution(
+                        lambda p: self._llm_resolve(p), limit=3
+                    )
+                except Exception:
+                    pass
+            _stab = u10_stability_check(current_cycle=self.tick)
+            if _stab["mode"] == "fallback":
+                import logging as _lg
+                _lg.getLogger("nex.orchestrator").warning(
+                    f"[U10] Fallback mode: {_stab['signals']}")
+        # ─────────────────────────────────────────────────────
         return {
             "tick": self.tick, "perf": round(perf,4),
             "pred_error": round(pred_error,4), "coherence": round(report.c_total,4),
@@ -242,4 +275,7 @@ class Orchestrator:
             "perf_recent": round(float(np.mean(self._perf_history[-20:])) if self._perf_history else 0,4),
             "domain_list": [{"name":d.name,"K":round(d.K,3),"norm":round(d.norm,3),"probationary":d.probationary}
                             for d in self.beliefs.domains],
+            "active_directives": u8_get_active_directives() if _UPG else [],
+            "active_intent": u9_get_intent(self.tick) if _UPG else None,
+            "stability": u10_stability_check(current_cycle=self.tick)["mode"] if _UPG else "unknown",
         }

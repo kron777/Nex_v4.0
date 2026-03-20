@@ -5,6 +5,14 @@ Phase 2: ChromaDB for semantic vector search
 """
 import json, os, sqlite3, hashlib
 from datetime import datetime
+try:
+    from nex.nex_upgrades import u3_topic_alignment_penalty, u12_weight_agent_input
+    _UPGRADES = True
+except Exception:
+    _UPGRADES = False
+    def u3_topic_alignment_penalty(c, conf, cy): return conf
+    def u12_weight_agent_input(a, conf): return conf
+
 
 CONFIG_DIR = os.path.expanduser("~/.config/nex")
 DB_PATH    = os.path.join(CONFIG_DIR, "nex.db")
@@ -197,6 +205,12 @@ def add_belief(content, confidence=0.5, source=None, author=None,
     # Auto-infer topic if not provided
     if not topic:
         topic = _infer_topic(content)
+    # ── U3: topic alignment penalty ────────────────────────────────────────
+    _cy = _get_cycle()
+    confidence = u3_topic_alignment_penalty(content, confidence, _cy)
+    # ── U12: agent trust weighting ──────────────────────────────────────────
+    if author:
+        confidence = u12_weight_agent_input(author, confidence)
     # ── Directive 6: belief inflation gate ─────────────────────────────────
     if _get_enforcer():
         allowed, reason = _get_enforcer().check_insert(topic, content, confidence)

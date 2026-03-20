@@ -114,6 +114,7 @@ def migrate(db_path=None):
         "last_reinforced_cycle":  "INTEGER DEFAULT 0",
         "loop_episodes":          "INTEGER DEFAULT 0",
         "is_identity":            "INTEGER DEFAULT 0",
+        "locked":                 "INTEGER DEFAULT 0",
     }
     with _conn(db_path) as conn:
         cur = conn.cursor()
@@ -173,7 +174,8 @@ def _d6_weakest_evictable(db_path=None):
         if succ_ct < D17_SUCCESS_RESERVE:
             exclude.append(f"successful_uses>={D17_SUCCESS_THRESHOLD}")
 
-        where = ("WHERE NOT (" + " OR ".join(exclude) + ")" if exclude else "")
+        lock_clause = "AND locked = 0"
+        where = ("WHERE NOT (" + " OR ".join(exclude) + ") " + lock_clause if exclude else "WHERE locked = 0")
         cur.execute(f"""
             SELECT id, confidence, topic FROM beliefs {where}
             ORDER BY confidence ASC, successful_uses ASC LIMIT 1

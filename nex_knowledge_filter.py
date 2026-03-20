@@ -2,6 +2,14 @@
 """nex_knowledge_filter.py — prunes, deduplicates and decays beliefs."""
 import sqlite3, time
 from pathlib import Path
+try:
+    from nex.nex_upgrades import u5_reweight_confidence, u7_compress_memory
+    _UPGRADES = True
+except Exception:
+    _UPGRADES = False
+    def u5_reweight_confidence(db_path=None, cycle=0): return 0
+    def u7_compress_memory(db_path=None, target_floor=500, cycle=0): return 0
+
 
 DB_PATH = Path.home() / ".config" / "nex" / "nex.db"
 
@@ -55,6 +63,12 @@ def run_filter_cycle(cycle: int = 0) -> int:
         conn.close()
         if pruned or capped or decayed:
             print(f"  [FILTER] pruned={pruned} capped={capped} decayed={decayed}")
+        # ── U5: stability reweight ──────────────────────────────────────────
+        if _UPGRADES:
+            u5_reweight_confidence(DB_PATH, cycle)
+        # ── U7: memory compress ─────────────────────────────────────────────
+        if _UPGRADES:
+            u7_compress_memory(DB_PATH, BELIEF_FLOOR, cycle)
         return pruned + capped
     except Exception as e:
         print(f"  [FILTER] error: {e}")
