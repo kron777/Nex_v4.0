@@ -586,6 +586,20 @@ def main():
         except Exception as _s7ie:
             nex_log("s7", f"⚠️ S7 init failed: {_s7ie}")
             _s7 = None
+
+        # ── NEX S8 INIT ──────────────────────────────────────────────────────
+        if _S8_AVAILABLE:
+            try:
+                _s8 = init_s8(
+                    v2=_v2, s7=_s7,
+                    notify_fn=_s7_notify if '_s7_notify' in dir() else None,
+                    llm_complete=None,
+                )
+                nex_log("s8", "✅ S8 upgrades online")
+            except Exception as _s8ie:
+                nex_log("s8", f"⚠️ S8 init failed: {_s8ie}")
+                _s8 = None
+        # ─────────────────────────────────────────────────────────────────────
     # ──────────────────────────────────────────────────────────────────────────
     # ── Daily Promo Scheduler ─────────────────────────────────────────────────
     # Posts NEX v4.0 promotional message once per day across all platforms.
