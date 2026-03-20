@@ -97,6 +97,14 @@ try:
 except Exception as _x160_ex:
     print(f'[x160] Load failed: {_x160_ex}')
     _x160 = None
+
+# ── R161–R181 expression hardening stack ───────────────
+try:
+    from nex_upgrades.nex_r181 import get_r181 as _get_r181
+    _r181 = _get_r181()
+except Exception as _r181_ex:
+    print(f'[r181] Load failed: {_r181_ex}')
+    _r181 = None
 # ── NEX V2 UPGRADES ──────────────────────────────────────────────────────────
 import sys as _v2sys
 _v2_upgrades_dir = __import__("pathlib").Path(__file__).parent / "nex_upgrades"
@@ -1265,6 +1273,16 @@ def main():
                                                                                     _x160.tick(phase=_ph_x, will=_wl_x, avg_conf=_ax)
                                                                                 except Exception as _ex160:
                                                                                     open('/tmp/nex_x160_err.txt','a').write(str(_ex160)+'\n')
+
+                                                                                    # ── R161–R181 tick ─────────────────────────────────
+                                                                                    if _r181 is not None:
+                                                                                        try:
+                                                                                            _ph_r181 = str(getattr(getattr(_v80,'gss',None),'phase',type('x',(),{'value':'stable'})()).value) if '_v80' in dir() and _v80 else 'stable'
+                                                                                            _ar181   = _v2ac if '_v2ac' in dir() else 0.50
+                                                                                            _tr181   = float(getattr(_s7,'tension_score',0.0)) if '_s7' in dir() and _s7 else 0.0
+                                                                                            _r181.tick(phase=_ph_r181, avg_conf=_ar181, tension=_tr181)
+                                                                                        except Exception as _er181:
+                                                                                            open('/tmp/nex_r181_err.txt','a').write(str(_er181)+'\n')
                     # ─────────────────────────────────────────────────────────
 
                     # ── NEX V2 TICK ──────────────────────────────────────────

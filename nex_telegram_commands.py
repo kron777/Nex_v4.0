@@ -284,3 +284,14 @@ async def x160_status_command(update, context):
         msg = f"x160 status error: {e}"
     await update.message.reply_text(msg, parse_mode="Markdown")
 
+
+
+async def r181_status_command(update, context):
+    """NEX R161–R181 — expression hardening status."""
+    try:
+        from nex_upgrades.nex_r181 import get_r181
+        msg = get_r181().format_status()
+    except Exception as e:
+        msg = f"r181 status error: {e}"
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
