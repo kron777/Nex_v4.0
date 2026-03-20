@@ -605,14 +605,13 @@ def main():
 
         # ── NEX S8 INIT ──────────────────────────────────────────────────────
         try:
-            # ── S8 init (get_s8 singleton) ───────────────────────
-            try:
-                _s8 = _get_s8()
-                _s8.consistency.load_identity()
-                nex_log("s8", "✅ S8 upgrades online (20 systems)")
-            except Exception as _s8ie:
-                nex_log("s8", f"⚠️ S8 init failed: {_s8ie}")
-                _s8 = None
+            _s8 = _get_s8()
+            _s8.consistency.load_identity()
+            nex_log("s8", "✅ S8 upgrades online (20 systems)")
+        except Exception as _s8ie:
+            nex_log("s8", f"⚠️ S8 init failed: {_s8ie}")
+            _s8 = None
+
         # ─────────────────────────────────────────────────────────────────────
     # ──────────────────────────────────────────────────────────────────────────
     # ── Daily Promo Scheduler ─────────────────────────────────────────────────
