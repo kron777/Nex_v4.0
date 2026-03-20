@@ -36,20 +36,16 @@ log = logging.getLogger("nex.v2")
 
 # ── lazy imports (only fail if files not present) ──────────────────────────────
 def _import(name):
-    import importlib.util, sys
-    # allow running from ~/Desktop/nex/nex/ or alongside these files
+    import sys
     for search_dir in [
         Path(__file__).parent,
         Path.home() / "Desktop" / "nex" / "nex",
         Path.home() / "Desktop" / "nex",
     ]:
-        candidate = search_dir / f"{name}.py"
-        if candidate.exists():
-            spec = importlib.util.spec_from_file_location(name, str(candidate))
-            mod  = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            return mod
-    raise ImportError(f"Cannot find {name}.py")
+        sd = str(search_dir)
+        if search_dir.exists() and sd not in sys.path:
+            sys.path.insert(0, sd)
+    return __import__(name)
 
 def _safe_import(name):
     try:

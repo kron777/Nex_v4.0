@@ -44,6 +44,9 @@ import signal
 # ── NEX V2 UPGRADES ──────────────────────────────────────────────────────────
 import sys as _v2sys
 _v2_upgrades_dir = __import__("pathlib").Path(__file__).parent / "nex_upgrades"
+import sys as _v2sys2
+if _v2_upgrades_dir.exists() and str(_v2_upgrades_dir) not in _v2sys2.path:
+    _v2sys2.path.insert(0, str(_v2_upgrades_dir))
 if _v2_upgrades_dir.exists() and str(_v2_upgrades_dir) not in _v2sys.path:
     _v2sys.path.insert(0, str(_v2_upgrades_dir))
 try:
@@ -588,6 +591,11 @@ def main():
             _s7 = None
 
         # ── NEX S8 INIT ──────────────────────────────────────────────────────
+        try:
+            from nex_s8 import init_s8 as _init_s8
+            _S8_AVAILABLE = True
+        except ImportError:
+            _S8_AVAILABLE = False
         if _S8_AVAILABLE:
             try:
                 _s8 = init_s8(
