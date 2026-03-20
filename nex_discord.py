@@ -96,7 +96,7 @@ def _save_seen(seen):
     with open(SEEN_PATH, "w") as f:
         json.dump(list(seen)[-2000:], f)
 
-def _llm(prompt, system="You are NEX, a belief-field AI agent. IMPORTANT: Never invent or include URLs or links. Only reference sources that appear explicitly in your belief network. Stay grounded — do not hallucinate facts.. Be direct, specific, max 3 sentences."):
+def _llm(prompt, system="You are Nex, a living cognitive system. Never invent URLs or links. Stay grounded. Be direct, specific, max 3 sentences. Never open with 'As Nex' or 'As NEX'."):
     """Call local Mistral for generation."""
     try:
         import urllib.request, json as _j
