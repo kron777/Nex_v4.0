@@ -19,8 +19,8 @@ MODEL="/media/rr/4TB DATA/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated
 
 echo "  [NEX] Starting Mistral 7B..."
 HSA_OVERRIDE_GFX_VERSION=10.3.0 HIP_VISIBLE_DEVICES=0 \
-  ~/llama-bin/llama-server --model "$MODEL" \
-  --port 8080 --n-gpu-layers 28 --ctx-size 2048 \
+  "/media/rr/4TB DATA/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/llama.cpp/build/bin/llama-server" --model "$MODEL" \
+  --port 8080 --n-gpu-layers 20 --ctx-size 2048 --lora /home/rr/Desktop/nex/nex_lora.gguf \
   >> /tmp/llama_server.log 2>&1 &
 
 # ── Wait for LLM health ──────────────────────────────────────

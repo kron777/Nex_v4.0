@@ -33,8 +33,8 @@ from datetime import datetime
 # ── Paths ─────────────────────────────────────────────────────────────────────
 DB_PATH    = Path.home() / ".config" / "nex" / "nex.db"
 BASE_MODEL = "/media/rr/4TB DATA/llmz/Mistral-7B-Instruct-v0.3-hf"
-TRAINED    = "/media/rr/4TB DATA/llmz/nex_trained"
-TRAIN_DIR  = "/media/rr/4TB DATA/llmz/nex_training"
+TRAINED    = "/home/rr/Desktop/nex/nex_trained"
+TRAIN_DIR  = "/home/rr/Desktop/nex/nex_training"
 LOG        = "/media/rr/4TB DATA/llmz/nex_training/train.log"
 STATE_FILE = Path.home() / ".config" / "nex" / "trainer_state.json"
 
@@ -44,7 +44,7 @@ LLAMA_SERVER_BIN = (
     "/llama.cpp/build-rocm/bin/llama-server"
 )
 # After training, the merged GGUF will be saved here and served
-TRAINED_GGUF = "/media/rr/4TB DATA/llmz/nex_trained/nex_latest.gguf"
+TRAINED_GGUF = "/home/rr/Desktop/nex/nex_lora.gguf"
 
 # ── Intensity tiers ───────────────────────────────────────────────────────────
 INTENSITIES = {

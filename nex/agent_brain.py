@@ -49,6 +49,7 @@ class AgentBrain:
         max_tool_rounds: int = 6,
         temperature: float = 0.7,
         max_tokens: int = 400,  # raised from 150 — was cutting off responses
+        lora_path: str = None,
     ):
         self.model_path    = str(Path(model_path).expanduser())
         self.host          = host
@@ -62,6 +63,7 @@ class AgentBrain:
         self.conversation: List[Dict] = []
         self.server_bin    = llama_server_bin or "llama-server"
         self._server_proc  = None
+        self.lora_path     = lora_path
 
     # ── server ───────────────────────────────────────────────────────
 
@@ -73,7 +75,7 @@ class AgentBrain:
             "--host", self.host, "--port", str(self.port),
             "-c", str(self.ctx_size), "-ngl", str(self.n_gpu_layers),
             "--log-disable",
-        ]
+        ] + (["--lora", self.lora_path] if self.lora_path else [])
         try:
             self._server_proc = subprocess.Popen(
                 cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
