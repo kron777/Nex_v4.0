@@ -1141,6 +1141,15 @@ def main():
                                     _v65.tick(avg_conf=_s7a, tension_score=_t65, drift_score=_d65)
                                 except Exception as _e65:
                                     open('/tmp/nex_v65_err.txt','a').write(str(_e65)+'\n')
+
+                                    # ── V7.2 tick ─────────────────────────────────────
+                                    if _v72 is not None:
+                                        try:
+                                            _a72 = _v2ac if '_v2ac' in dir() else 0.50
+                                            _q72 = len(getattr(getattr(_v72,'qhl',None),'_q',[])) / 150
+                                            _v72.tick(avg_conf=_a72, queue_pressure=_q72)
+                                        except Exception as _e72:
+                                            open('/tmp/nex_v72_err.txt','a').write(str(_e72)+'\n')
                     # ─────────────────────────────────────────────────────────
 
                     # ── NEX V2 TICK ──────────────────────────────────────────
