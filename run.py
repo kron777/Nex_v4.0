@@ -309,6 +309,14 @@ HELP_TEXT = f"""
   {CYAN}/tools{RESET}        — List all available tools
   {CYAN}/batch{RESET}        — Answer a pasted list of questions one by one
   {CYAN}/reset{RESET}        — Clear conversation history
+            elif cmd == "/s8status":
+                if _s8 is not None:
+                    try:
+                        _send(chat_id, _s8.s8status())
+                    except Exception as _e:
+                        _send(chat_id, f"S8 error: {_e}")
+                else:
+                    _send(chat_id, "⚠️ S8 not loaded.")
   {CYAN}/ticks N{RESET}      — Run N belief ticks manually
   {CYAN}/pause{RESET}        — Pause background belief engine
   {CYAN}/resume{RESET}       — Resume background belief engine
