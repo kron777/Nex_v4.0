@@ -134,7 +134,7 @@ def generate_training_data(mode: str = "light") -> dict:
     try:
         with _db() as c:
             refs = c.execute(f"""
-                SELECT content FROM reflections
+                SELECT nex_response AS content FROM reflections
                 WHERE LENGTH(content) > 60
                 ORDER BY timestamp DESC LIMIT {max_ref}
             """).fetchall()
@@ -154,8 +154,8 @@ def generate_training_data(mode: str = "light") -> dict:
     try:
         with _db() as c:
             insights = c.execute(f"""
-                SELECT content, confidence FROM insights
-                WHERE confidence > 0.50 AND LENGTH(content) > 50
+                SELECT content FROM insights
+                WHERE 1=1 AND LENGTH(content) > 50
                 ORDER BY confidence DESC LIMIT {max_ins}
             """).fetchall()
         _log(f"[gen]   insights: {len(insights)}")
@@ -263,7 +263,7 @@ def generate_training_data(mode: str = "light") -> dict:
     # ── Deduplicate + shuffle ─────────────────────────────────
     seen, unique = set(), []
     for p in pairs:
-        h = p["text"][:180]
+        h = p["text"].split("<|im_start|>user")[-1][:150]
         if h not in seen:
             seen.add(h)
             unique.append(p)

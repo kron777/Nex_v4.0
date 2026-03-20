@@ -1198,6 +1198,10 @@ def main():
                 while True:
                     cycle += 1
 
+                    # ── Training scheduler ─────────────────────────────
+                    if '_trainer' in dir() and _trainer is not None:
+                        _trainer.tick()
+
                     # ── NEX S7 TICK ──────────────────────────────────────────
                     if _s7 is not None:
                         try:
@@ -1301,7 +1305,6 @@ def main():
                                                                                             _r181.tick(phase=_ph_r181, avg_conf=_ar181, tension=_tr181)
                                                                                         except Exception as _er181:
                                                                                             open('/tmp/nex_r181_err.txt','a').write(str(_er181)+'\n')
-
                                                                                             # ── Training scheduler tick ─────────────────────────
                                                                                             if _trainer is not None:
                                                                                                 try:
