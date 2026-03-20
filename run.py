@@ -41,13 +41,12 @@ import argparse
 import threading
 import signal
 
-# ── V6.5 upgrade layer ────────────────────────────────────
+# ── V6.5 upgrade layer ─────────────────────────────────
 try:
     from nex_upgrades.nex_v65 import get_v65 as _get_v65
     _v65 = _get_v65()
-    print("[v6.5] 18-module stack loaded ✓")
 except Exception as _v65_ex:
-    print(f"[v6.5] Load failed: {_v65_ex}")
+    print(f'[v6.5] Load failed: {_v65_ex}')
     _v65 = None
 
 # ── NEX V2 UPGRADES ──────────────────────────────────────────────────────────
@@ -1130,23 +1129,18 @@ def main():
                         try:
                             _s7_avg = _v2ac if '_v2ac' in dir() else 0.44
                             _s7.tick(cycle=cycle, avg_conf=_s7_avg)
-
-        # ── V6.5 tick ──────────────────────────────────
-        if _v65 is not None:
-            try:
-                _t_score = 0.0
-                _d_score = 0.0
-                # Pull tension/drift from S7 if available
-                if '_s7' in dir() and _s7 is not None:
-                    _t_score = float(getattr(_s7, 'tension_score', 0.0))
-                    _d_score = float(getattr(_s7, 'drift_score',   0.0))
-                _v65.tick(avg_conf=avg_conf,
-                          tension_score=_t_score,
-                          drift_score=_d_score)
-            except Exception as _v65_te:
-                pass
                         except Exception as _s7te:
                             pass
+
+                            # ── V6.5 tick ─────────────────────────────────────
+                            if _v65 is not None:
+                                try:
+                                    _s7a = _v2ac if '_v2ac' in dir() else 0.44
+                                    _t65 = float(getattr(_s7,'tension_score',0.0)) if _s7 else 0.0
+                                    _d65 = float(getattr(_s7,'drift_score',0.0))   if _s7 else 0.0
+                                    _v65.tick(avg_conf=_s7a, tension_score=_t65, drift_score=_d65)
+                                except Exception as _e65:
+                                    open('/tmp/nex_v65_err.txt','a').write(str(_e65)+'\n')
                     # ─────────────────────────────────────────────────────────
 
                     # ── NEX V2 TICK ──────────────────────────────────────────

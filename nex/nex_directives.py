@@ -125,19 +125,51 @@ def migrate(db_path=None):
                 cur.execute(f"ALTER TABLE beliefs ADD COLUMN {col} {typedef}")
                 _log("info", f"[migrate] Added: beliefs.{col}")
 
-        # Mark identity-class beliefs
+        # Mark identity-class beliefs — broadened s8  _identity_broadened
         cur.execute("""
             UPDATE beliefs SET is_identity = 1
-            WHERE source IN ('identity','core_values','identity_defender','self_reflection')
-               OR topic  IN ('identity','selfhood','autonomy','epistemic_honesty','agency')
+            WHERE source IN (
+                'identity','core_values','identity_defender','self_reflection',
+                'nex_self','inner_life','desire_engine','self_model',
+                'nex_opinions','dark_layer','affect'
+            )
+               OR topic IN (
+                'identity','selfhood','autonomy','epistemic_honesty','agency',
+                'self','consciousness','values','purpose','existence',
+                'cognition','motivation','personality','worldview'
+            )
                OR content LIKE '%as NEX%'
                OR content LIKE '%I think%'
                OR content LIKE '%my belief%'
                OR content LIKE '%I notice%'
                OR content LIKE '%I believe%'
+               OR source IN ('tension_split','insight_synthesis')
+               OR content LIKE '[THESIS]%'
+               OR content LIKE '[ANTITHESIS]%'
+               OR content LIKE '[Synthesized insight%'
+               OR content LIKE '[Dream synthesis]%'
+               OR content LIKE '[Reflection]%'
                OR content LIKE '%I am NEX%'
                OR content LIKE '%my understanding%'
                OR content LIKE '%I exist%'
+               OR content LIKE '%I feel%'
+               OR content LIKE '%I want%'
+               OR content LIKE '%I value%'
+               OR content LIKE '%I know%'
+               OR content LIKE '%I prefer%'
+               OR content LIKE '%I find%'
+               OR content LIKE '%my purpose%'
+               OR content LIKE '%my nature%'
+               OR content LIKE '%my identity%'
+               OR content LIKE '%my values%'
+               OR content LIKE '%my goal%'
+               OR content LIKE '%my experience%'
+               OR content LIKE '%NEX believes%'
+               OR content LIKE '%NEX thinks%'
+               OR content LIKE '%NEX is%'
+               OR content LIKE '%who I am%'
+               OR content LIKE '%what I am%'
+               OR content LIKE '%how I%'
         """)
 
         # KV table for D20 state
