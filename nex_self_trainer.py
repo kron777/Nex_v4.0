@@ -439,12 +439,25 @@ def _do_training(intensity: str, send_fn):
     model_path = str(checkpoints[-1]) if checkpoints else BASE_MODEL
     _log(f"Loading model from: {model_path}")
 
-    model = AutoModelForCausalLM.from_pretrained(
-        model_path,
-        dtype=torch.float16,
-        device_map={"":torch.device("cpu")},
-        trust_remote_code=True,
-    )
+    # ── GPU/CPU + 4-bit quant for 8GB VRAM ──────────────────────────────────
+    os.environ["PYTORCH_HIP_ALLOC_CONF"] = "expandable_segments:True"
+    _use_gpu = torch.cuda.is_available()
+    if _use_gpu:
+        _log("GPU detected — loading fp16 on GPU only (no offload)")
+        model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            dtype=torch.float16,
+            device_map={"": 0},
+            trust_remote_code=True,
+        )
+    else:
+        _log("No GPU — loading on CPU (slow)")
+        model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            dtype=torch.float16,
+            device_map={"": torch.device("cpu")},
+            trust_remote_code=True,
+        )
 
     # ── LoRA ──────────────────────────────────────────────────────────────────
     lora_config = LoraConfig(
@@ -469,10 +482,10 @@ def _do_training(intensity: str, send_fn):
         output_dir=str(output),
         
         num_train_epochs=cfg["epochs"],
-        per_device_train_batch_size=cfg["batch_size"],
-        gradient_accumulation_steps=cfg["grad_accum"],
+        per_device_train_batch_size=1,  # reduced for 8GB VRAM
+        gradient_accumulation_steps=8,
         learning_rate=cfg["lr"],
-        fp16=True,
+        fp16=_use_gpu,
         logging_steps=20,
         save_strategy="no",
         save_total_limit=1,
