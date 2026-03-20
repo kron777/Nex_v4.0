@@ -73,6 +73,14 @@ try:
 except Exception as _u100_ex:
     print(f'[u100] Load failed: {_u100_ex}')
     _u100 = None
+
+# ── R101–R115 research evolution stack ─────────────────
+try:
+    from nex_upgrades.nex_r115 import get_r115 as _get_r115
+    _r115 = _get_r115()
+except Exception as _r115_ex:
+    print(f'[r115] Load failed: {_r115_ex}')
+    _r115 = None
 # ── NEX V2 UPGRADES ──────────────────────────────────────────────────────────
 import sys as _v2sys
 _v2_upgrades_dir = __import__("pathlib").Path(__file__).parent / "nex_upgrades"
@@ -1196,6 +1204,24 @@ def main():
                                                                        phase=_ph100, contradiction_count=_ct100)
                                                         except Exception as _eu100:
                                                             open('/tmp/nex_u100_err.txt','a').write(str(_eu100)+'\n')
+
+                                                            # ── R101–R115 tick ─────────────────────────────────
+                                                            if _r115 is not None:
+                                                                try:
+                                                                    _ar115 = _v2ac if '_v2ac' in dir() else 0.50
+                                                                    _tr115 = float(getattr(_s7,'tension_score',0.0)) if '_s7' in dir() and _s7 else 0.0
+                                                                    _gss_score = float(getattr(getattr(_v80,'gss',None),'score',0.50)) if '_v80' in dir() and _v80 else 0.50
+                                                                    _ph_r = str(getattr(getattr(_v80,'gss',None),'phase',type('x',(),{'value':'stable'})()).value) if '_v80' in dir() and _v80 else 'stable'
+                                                                    try:
+                                                                        with __import__('sqlite3').connect(str(__import__('pathlib').Path.home()/'.config/nex/nex.db'),timeout=3) as _cR:
+                                                                            _cR.row_factory = __import__('sqlite3').Row
+                                                                            _bcR  = _cR.execute('SELECT COUNT(*) FROM beliefs').fetchone()[0]
+                                                                            _ctR  = _cR.execute("SELECT COUNT(*) FROM beliefs WHERE topic LIKE '%contradiction%'").fetchone()[0]
+                                                                    except Exception: _bcR=1000; _ctR=0
+                                                                    _r115.tick(avg_conf=_ar115, tension=_tr115, coherence=_gss_score,
+                                                                               belief_count=_bcR, contradiction_count=_ctR, phase=_ph_r)
+                                                                except Exception as _er115:
+                                                                    open('/tmp/nex_r115_err.txt','a').write(str(_er115)+'\n')
                     # ─────────────────────────────────────────────────────────
 
                     # ── NEX V2 TICK ──────────────────────────────────────────

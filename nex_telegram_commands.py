@@ -251,3 +251,14 @@ async def u100_status_command(update, context):
         msg = f"u100 status error: {e}"
     await update.message.reply_text(msg, parse_mode="Markdown")
 
+
+
+async def r115_status_command(update, context):
+    """NEX R101–R115 — research evolution stack status."""
+    try:
+        from nex_upgrades.nex_r115 import get_r115
+        msg = get_r115().format_status()
+    except Exception as e:
+        msg = f"r115 status error: {e}"
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
