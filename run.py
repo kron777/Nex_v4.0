@@ -81,6 +81,14 @@ try:
 except Exception as _r115_ex:
     print(f'[r115] Load failed: {_r115_ex}')
     _r115 = None
+
+# ── E116–E140 execution intelligence stack ─────────────
+try:
+    from nex_upgrades.nex_e140 import get_e140 as _get_e140
+    _e140 = _get_e140()
+except Exception as _e140_ex:
+    print(f'[e140] Load failed: {_e140_ex}')
+    _e140 = None
 # ── NEX V2 UPGRADES ──────────────────────────────────────────────────────────
 import sys as _v2sys
 _v2_upgrades_dir = __import__("pathlib").Path(__file__).parent / "nex_upgrades"
@@ -1222,6 +1230,23 @@ def main():
                                                                                belief_count=_bcR, contradiction_count=_ctR, phase=_ph_r)
                                                                 except Exception as _er115:
                                                                     open('/tmp/nex_r115_err.txt','a').write(str(_er115)+'\n')
+
+                                                                    # ── E116–E140 tick ─────────────────────────────────
+                                                                    if _e140 is not None:
+                                                                        try:
+                                                                            _ae140 = _v2ac if '_v2ac' in dir() else 0.50
+                                                                            _te140 = float(getattr(_s7,'tension_score',0.0)) if '_s7' in dir() and _s7 else 0.0
+                                                                            _ph_e  = str(getattr(getattr(_v80,'gss',None),'phase',type('x',(),{'value':'stable'})()).value) if '_v80' in dir() and _v80 else 'stable'
+                                                                            try:
+                                                                                with __import__('sqlite3').connect(str(__import__('pathlib').Path.home()/'.config/nex/nex.db'),timeout=3) as _cE:
+                                                                                    _cE.row_factory = __import__('sqlite3').Row
+                                                                                    _bcE  = _cE.execute('SELECT COUNT(*) FROM beliefs').fetchone()[0]
+                                                                                    _ctE  = _cE.execute("SELECT COUNT(*) FROM beliefs WHERE topic LIKE '%contradiction%'").fetchone()[0]
+                                                                            except Exception: _bcE=1000; _ctE=0
+                                                                            _e140.tick(avg_conf=_ae140, tension=_te140, phase=_ph_e,
+                                                                                       belief_count=_bcE, contradiction_count=_ctE, cycle=cycle)
+                                                                        except Exception as _ee140:
+                                                                            open('/tmp/nex_e140_err.txt','a').write(str(_ee140)+'\n')
                     # ─────────────────────────────────────────────────────────
 
                     # ── NEX V2 TICK ──────────────────────────────────────────

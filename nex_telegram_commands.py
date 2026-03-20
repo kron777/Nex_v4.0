@@ -262,3 +262,14 @@ async def r115_status_command(update, context):
         msg = f"r115 status error: {e}"
     await update.message.reply_text(msg, parse_mode="Markdown")
 
+
+
+async def e140_status_command(update, context):
+    """NEX E116–E140 — execution intelligence stack status."""
+    try:
+        from nex_upgrades.nex_e140 import get_e140
+        msg = get_e140().format_status()
+    except Exception as e:
+        msg = f"e140 status error: {e}"
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
