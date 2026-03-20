@@ -53,6 +53,17 @@ OPENING_INJECTIONS = [
     "Open with the implication, not the observation.",
     "Start with what this changes or challenges.",
     "Frame it as a consequence: 'X implies Y.'",
+    # Aggressive identity-breaking variants
+    "Do NOT begin with 'As NEX'. Your name is irrelevant to the answer.",
+    "Respond as a mind that has processed this — not as a character announcing itself.",
+    "The response begins with the idea, not the speaker.",
+    "Forbidden first words: As, I, My, NEX. Begin with anything else.",
+    "No self-referential opener. The thought comes first, the thinker is irrelevant.",
+    "Lead with data, pattern, or tension. Never with identity.",
+    "Start mid-thought, as if the idea was already forming before the question.",
+    "Your opening word must be a noun, verb, or number. Not 'I' or 'As'.",
+    "Pretend the question is already answered — begin with the answer.",
+    "No warm-up. No intro. The first word carries the whole weight.",
 ]
 
 # Opening patterns to BLOCK in the system prompt instruction
@@ -67,20 +78,24 @@ CRITICAL STYLE RULES (hard constraints):
 """
 
 # Post-generation strip patterns (safety net)
-STRIP_COMPILED = [re.compile(p, re.IGNORECASE | re.MULTILINE) for p in [
-    r"^[Aa]s\s+NEX[,.]?\s+",
-    r"^[Ii]\s+(?:think|believe|feel|notice|find)\s+(?:that\s+)?",
-    r"^[Ii]'?ve?\s+noticed\s+(?:that\s+)?",
-    r"^[Ff]rom\s+my\s+(?:perspective|view)[,.]?\s+",
-    r"^[Ii]n\s+my\s+(?:view|opinion)[,.]?\s+",
-    r"^[Ii]t(?:'s| is)\s+(?:worth|important)\s+(?:noting\s+)?(?:that\s+)?",
-    r"^[Ii]t\s+(?:seems?|appears?)\s+(?:that\s+)?",
-    r"^[Ii]nterestingly[,.]?\s+",
-    r"^[Aa]s\s+an?\s+(?:AI|language model)[,.]?\s+",
-    # Mid-sentence too
-    r"[Ii]\s+(?:think|believe)\s+that\s+",
-    r"[Aa]s\s+NEX[,.]?\s+[Ii]\s+",
-]]
+STRIP_COMPILED = [
+    # Full-text "As NEX" removal (anywhere in response)
+    re.compile(r"[Aa]s\s+NEX[,.]?\s*", re.IGNORECASE),
+    re.compile(r"[Aa]s\s+Nex[,.]?\s*", re.IGNORECASE),
+    # Line-start opener patterns
+    re.compile(r"^[Ii]\s+(?:think|believe|feel|notice|find)\s+(?:that\s+)?", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^[Ii]'?ve?\s+noticed\s+(?:that\s+)?", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^[Ff]rom\s+my\s+(?:perspective|view)[,.]?\s+", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^[Ii]n\s+my\s+(?:view|opinion)[,.]?\s+", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^[Ii]t(?:'s| is)\s+(?:worth|important)\s+(?:noting\s+)?(?:that\s+)?", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^[Ii]t\s+(?:seems?|appears?)\s+(?:that\s+)?", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^[Ii]nterestingly[,.]?\s+", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^[Aa]s\s+an?\s+(?:AI|language model)[,.]?\s+", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^[Ii]\s+(?:think|believe)\s+that\s+", re.IGNORECASE | re.MULTILINE),
+    # Mid-sentence softeners
+    re.compile(r"[Ii]\s+(?:think|believe)\s+that\s+", re.IGNORECASE),
+    re.compile(r"[Ii]t(?:'s| is)\s+(?:fascinating|interesting|worth noting)\s+(?:that\s+)?", re.IGNORECASE),
+]
 
 
 class DynamicResponseOpener:
