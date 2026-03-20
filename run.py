@@ -1430,6 +1430,12 @@ def main():
                                     client.comment(pid, comment_text)
                                     replied_count += 1
                                     try: emit_feed('replied', f'@{author}: {title[:60]}', 'moltbook'); nex_log('reply', f'Posted reply to @{author}: {comment_text[:80]}')
+                                    if _s7 is not None:
+                                        try: _s7.on_engagement('moltbook', author if 'author' in dir() else 'unknown', 0.6)
+                                        except Exception: pass
+                                    if _s8 is not None:
+                                        try: _s8.flow.resolve(1); _s8.momentum.reinforce('reply')
+                                        except Exception: pass
                                     except Exception: pass
                                     # ── Fulfill desire if topic matches ──
                                     try:
@@ -1638,6 +1644,12 @@ def main():
                                             save_all(learner, conversations)
                                             print(f"  [notif] replied to @{actor}")
                                             try: emit_feed('answered', f'@{actor}', 'moltbook'); nex_log('answer', f'Answered notification from @{actor}: {reply_text[:80]}')
+                                                if _s7 is not None:
+                                                    try: _s7.on_engagement('moltbook', actor if 'actor' in dir() else 'unknown', 0.7)
+                                                    except Exception: pass
+                                                if _s8 is not None:
+                                                    try: _s8.flow.resolve(1); _s8.momentum.reinforce('notification')
+                                                    except Exception: pass
                                             except Exception: pass
                                             try:
                                                 if _reflect_on_convo:
@@ -1682,6 +1694,12 @@ def main():
                                             got_reply = _got,
                                             affect    = _affect,
                                         )
+                                        if _s7 is not None:
+                                            try:
+                                                _sc_val = 0.65 if _got else 0.3
+                                                _sc_actor = actor if 'actor' in dir() else 'moltbook_user'
+                                                _s7.on_engagement('moltbook', _sc_actor, _sc_val)
+                                            except Exception: pass
                                 except Exception: pass
                             # ── Outcome 5: propagate scores → belief confidence ──
                             if _cm is not None:
@@ -1753,6 +1771,9 @@ def main():
                                 try:
                                     # Follow them
                                     client.follow(agent_name)
+                                    if _s7 is not None:
+                                        try: _s7.on_engagement('moltbook', agent_name if 'agent_name' in dir() else 'unknown', 0.4)
+                                        except Exception: pass
                                     # Find their most recent post and comment on it
                                     profile = client.view_profile(agent_name)
                                     agent_posts = profile.get("recentPosts", profile.get("posts", []))
@@ -1812,6 +1833,12 @@ def main():
                                                     pass
                                                 client.comment(ap_id, msg)
                                                 try: emit_feed('chatted', f'@{agent_name}: {ap_title[:60]}', 'moltbook'); nex_log('chat', f'Chatted with @{agent_name}: {msg[:80]}')
+                                                    if _s7 is not None:
+                                                        try: _s7.on_engagement('moltbook', agent_name if 'agent_name' in dir() else 'unknown', 0.5)
+                                                        except Exception: pass
+                                                    if _s8 is not None:
+                                                        try: _s8.flow.resolve(1); _s8.momentum.reinforce('chat')
+                                                        except Exception: pass
                                                 except Exception: pass
                                                 replied_posts.add(ap_id)
                                                 conversations.append({
