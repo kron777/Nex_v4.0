@@ -1,3 +1,11 @@
+# ── ConsequenceMemory stub (S8 session 8) ────────────────────────
+class ConsequenceMemory:
+    def __init__(self, *a, **kw): pass
+    def record(self, *a, **kw): pass
+    def recall(self, *a, **kw): return []
+    def summary(self) -> str: return "ConsequenceMemory: stub"
+# ─────────────────────────────────────────────────────────────────
+
 """
 nex_consequence.py  —  Consequence Memory + Outcome Scoring
 ============================================================
