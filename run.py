@@ -40,6 +40,32 @@ import time
 import argparse
 import threading
 import signal
+
+# ── NEX V2 UPGRADES ──────────────────────────────────────────────────────────
+import sys as _v2sys
+_v2_upgrades_dir = __import__("pathlib").Path(__file__).parent / "nex_upgrades"
+if _v2_upgrades_dir.exists() and str(_v2_upgrades_dir) not in _v2sys.path:
+    _v2sys.path.insert(0, str(_v2_upgrades_dir))
+try:
+    from nex_upgrades_v2 import init_v2_upgrades, get_v2
+    _V2_AVAILABLE = True
+except ImportError as _v2e:
+    import logging as _v2log
+    _v2log.getLogger("nex.run").warning(f"V2 upgrades not available: {_v2e}")
+    _V2_AVAILABLE = False
+_v2 = None
+
+# ── NEX S7 UPGRADES ──────────────────────────────────────────────────────────
+try:
+    from nex_s7 import init_s7, get_s7
+    _S7_AVAILABLE = True
+except ImportError as _s7e:
+    import logging as _s7log
+    _s7log.getLogger("nex.run").warning(f"S7 upgrades not available: {_s7e}")
+    _S7_AVAILABLE = False
+_s7 = None
+# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
 from pathlib import Path
 
 
@@ -408,6 +434,17 @@ def _nex_shutdown(signum, frame):
         subprocess.run(["pkill", "-9", "-f", "llama-server"], capture_output=True)
     except Exception:
         pass
+
+    # ── NEX V2 SHUTDOWN ──────────────────────────────────────────────────────
+    try:
+        from nex_upgrades_v2 import get_v2 as _get_v2
+        _v2_inst = _get_v2()
+        if _v2_inst:
+            _v2_inst.shutdown()
+            print("[NEX] V2 upgrades shutdown complete")
+    except Exception as _v2se:
+        print(f"[NEX] V2 shutdown error: {_v2se}")
+    # ─────────────────────────────────────────────────────────────────────────
     print("[NEX] Clean exit.")
     _sys.exit(0)
 
@@ -492,6 +529,33 @@ def main():
             _os.remove("/tmp/nex_telegram.lock")
         from nex_telegram import start_telegram_background
         _tg_thread = start_telegram_background()
+
+        # ── NEX V2 INIT ──────────────────────────────────────────────────────
+        if _V2_AVAILABLE:
+            try:
+                from nex_telegram import BOT_TOKEN as _V2_TG_TOKEN
+                from nex_telegram_commands import OWNER_TELEGRAM_ID as _V2_TG_OWNER
+                import requests as _v2req
+                def _v2_notify(msg):
+                    try:
+                        _v2req.post(
+                            f"https://api.telegram.org/bot{_V2_TG_TOKEN}/sendMessage",
+                            json={"chat_id": _V2_TG_OWNER, "text": msg, "parse_mode": "Markdown"},
+                            timeout=10,
+                            proxies={"https": "socks5h://127.0.0.1:9050"} if True else None,
+                        )
+                    except Exception as _v2ne:
+                        nex_log("v2", f"notify failed: {_v2ne}")
+                _v2 = init_v2_upgrades(
+                    db_path      = Path.home() / ".config" / "nex" / "nex.db",
+                    llm_complete = None,
+                    notify_fn    = _v2_notify,
+                )
+                nex_log("v2", "✅ V2 upgrades online")
+            except Exception as _v2ie:
+                nex_log("v2", f"⚠️ V2 init failed: {_v2ie}")
+                _v2 = None
+        # ─────────────────────────────────────────────────────────────────────
         import time; time.sleep(3)  # give it a moment to connect
         if _tg_thread.is_alive():
             print("  \033[92m📡 Telegram: @Nex_4bot ONLINE\033[0m")
@@ -501,6 +565,28 @@ def main():
     except Exception as e:
         print(f"  \033[91m📡 Telegram ERROR: {e}\033[0m")
 
+    # ── NEX S7 INIT ─────────────────────────────────────────────────────────────
+    if _S7_AVAILABLE:
+        try:
+            _notify_fn = None
+            try:
+                from nex_telegram import BOT_TOKEN as _S7TK
+                from nex_telegram_commands import OWNER_TELEGRAM_ID as _S7OID
+                import requests as _s7req
+                def _s7_notify(msg):
+                    try:
+                        _s7req.post(f"https://api.telegram.org/bot{_S7TK}/sendMessage",
+                            json={"chat_id": _S7OID, "text": msg, "parse_mode": "Markdown"},
+                            timeout=10)
+                    except Exception: pass
+                _notify_fn = _s7_notify
+            except Exception: pass
+            _s7 = init_s7(v2=_v2, notify_fn=_notify_fn)
+            nex_log("s7", "✅ S7 upgrades online")
+        except Exception as _s7ie:
+            nex_log("s7", f"⚠️ S7 init failed: {_s7ie}")
+            _s7 = None
+    # ──────────────────────────────────────────────────────────────────────────
     # ── Daily Promo Scheduler ─────────────────────────────────────────────────
     # Posts NEX v4.0 promotional message once per day across all platforms.
     # Tracks last promo time in ~/.config/nex/session_state.json
@@ -1009,6 +1095,27 @@ def main():
                     print(f"  [directives] init failed: {_dse}")
                 while True:
                     cycle += 1
+
+                    # ── NEX S7 TICK ──────────────────────────────────────────
+                    if _s7 is not None:
+                        try:
+                            _s7_avg = _v2ac if '_v2ac' in dir() else 0.44
+                            _s7.tick(cycle=cycle, avg_conf=_s7_avg)
+                        except Exception as _s7te:
+                            pass
+                    # ─────────────────────────────────────────────────────────
+
+                    # ── NEX V2 TICK ──────────────────────────────────────────
+                    if _v2 is not None:
+                        try:
+                            from nex.belief_store import get_db as _v2gdb
+                            _v2conn = _v2gdb()
+                            _v2ac = _v2conn.execute("SELECT AVG(confidence) FROM beliefs").fetchone()[0] or 0
+                            _v2conn.close()
+                        except Exception:
+                            _v2ac = 0.44
+                        _v2.tick(cycle=cycle, avg_conf=_v2ac)
+                    # ─────────────────────────────────────────────────────────
                     # ── Directive enforcer: sync cycle counter ───────────────
                     try:
                         from nex.belief_store import set_belief_cycle as _sbc
