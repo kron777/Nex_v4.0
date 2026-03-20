@@ -114,6 +114,17 @@ except Exception as _o223_ex:
     print(f'[o223] Load failed: {_o223_ex}')
     _o223 = None
 
+# S601-S620 adaptive intelligence stack
+try:
+    import sys as _s620sys; _s620sys.path.insert(0, '/home/rr/Desktop/nex/nex_upgrades')
+    from nex_s620 import init_s620 as _init_s620, tick_s620 as _tick_s620, status_s620 as _status_s620
+    (_s601,_s602,_s603,_s604,_s605,_s606,_s607,_s608,_s609,_s610,
+     _s611,_s612,_s613,_s614,_s615,_s616,_s617,_s618,_s619,_s620) = _init_s620()
+    _s620_loaded = True
+except Exception as _e620:
+    _s620_loaded = False
+    print('  [s620] init failed:', _e620)
+
 # ── Autonomous training scheduler ──────────────────────
 try:
     from nex_train_scheduler import get_scheduler as _get_scheduler
@@ -1283,6 +1294,14 @@ def main():
                         try:
                             _r181.tick(avg_conf=(_v2ac if '_v2ac' in dir() else 0.50), cycle=cycle)
                         except Exception as _e: open('/tmp/nex_r181_err.txt','a').write(str(_e)+'\n')
+                    # S601-S620 adaptive intelligence tick
+                    if _s620_loaded:
+                        try:
+                            _t_s620 = float(getattr(_s7,'tension_score',0.0)) if '_s7' in dir() and _s7 else 0.0
+                            _a_s620 = _v2ac if '_v2ac' in dir() else 0.50
+                            _tick_s620(cycle=cycle, avg_conf=_a_s620, tension=_t_s620)
+                        except Exception as _es620:
+                            open('/tmp/nex_s620_err.txt','a').write(str(_es620)+'\n')
                     # ── NEX V2 TICK ──────────────────────────────────────────
                     if _v2 is not None:
                         try:
