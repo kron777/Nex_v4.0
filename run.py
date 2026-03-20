@@ -41,16 +41,6 @@ import argparse
 import threading
 import signal
 
-# ── Dynamic response opener ────────────────────────────
-try:
-    import sys as _sys
-    _sys.path.insert(0, '/home/rr/Desktop/nex')
-    from nex_dynamic_opener import get_opener as _get_opener
-    _opener = _get_opener()
-except Exception as _opener_ex:
-    print(f'[opener] Load failed: {_opener_ex}')
-    _opener = None
-
 # ── V6.5 upgrade layer ─────────────────────────────────
 try:
     from nex_upgrades.nex_v65 import get_v65 as _get_v65
@@ -115,6 +105,14 @@ try:
 except Exception as _r181_ex:
     print(f'[r181] Load failed: {_r181_ex}')
     _r181 = None
+
+# ── O201–O223 guided evolution stack ───────────────────
+try:
+    from nex_upgrades.nex_o223 import get_o223 as _get_o223
+    _o223 = _get_o223()
+except Exception as _o223_ex:
+    print(f'[o223] Load failed: {_o223_ex}')
+    _o223 = None
 
 # ── Autonomous training scheduler ──────────────────────
 try:
@@ -1198,6 +1196,10 @@ def main():
                 while True:
                     cycle += 1
 
+                    # ── O201–O223 observation tick ──────────────────────
+                    if '_o223' in dir() and _o223 is not None:
+                        _o223.tick(avg_conf=_v2ac if '_v2ac' in dir() else 0.50)
+
                     # ── Training scheduler ─────────────────────────────
                     if '_trainer' in dir() and _trainer is not None:
                         _trainer.tick()
@@ -1295,22 +1297,6 @@ def main():
                                                                                     _x160.tick(phase=_ph_x, will=_wl_x, avg_conf=_ax)
                                                                                 except Exception as _ex160:
                                                                                     open('/tmp/nex_x160_err.txt','a').write(str(_ex160)+'\n')
-
-                                                                                    # ── R161–R181 tick ─────────────────────────────────
-                                                                                    if _r181 is not None:
-                                                                                        try:
-                                                                                            _ph_r181 = str(getattr(getattr(_v80,'gss',None),'phase',type('x',(),{'value':'stable'})()).value) if '_v80' in dir() and _v80 else 'stable'
-                                                                                            _ar181   = _v2ac if '_v2ac' in dir() else 0.50
-                                                                                            _tr181   = float(getattr(_s7,'tension_score',0.0)) if '_s7' in dir() and _s7 else 0.0
-                                                                                            _r181.tick(phase=_ph_r181, avg_conf=_ar181, tension=_tr181)
-                                                                                        except Exception as _er181:
-                                                                                            open('/tmp/nex_r181_err.txt','a').write(str(_er181)+'\n')
-                                                                                            # ── Training scheduler tick ─────────────────────────
-                                                                                            if _trainer is not None:
-                                                                                                try:
-                                                                                                    _trainer.tick()
-                                                                                                except Exception as _etr:
-                                                                                                    open('/tmp/nex_trainer_err.txt','a').write(str(_etr)+'\n')
                     # ─────────────────────────────────────────────────────────
 
                     # ── NEX V2 TICK ──────────────────────────────────────────
@@ -1716,8 +1702,6 @@ def main():
                                     reply_to = n.get("relatedCommentId", n.get("comment_id", ""))
                                     actor    = (n.get("actor") or {}).get("name") or (n.get("post", {}).get("author") or {}).get("name") or n.get("agentId", "someone")
                                     content  = n.get("content", n.get("body", ""))[:200]
-                                    if '_opener' in dir() and _opener and isinstance(content, str):
-                                        content = _opener.strip_output(content)
                                     # Per-agent cap: max 2 replies per agent per cycle
                                     if _notif_per_agent.get(actor, 0) >= 2:
                                         replied_posts.add(key)  # mark seen
@@ -1733,8 +1717,6 @@ def main():
                                             _match = next((c for c in _comments if c.get("id") == reply_to), None)
                                             if _match:
                                                 content = _match.get("content", _match.get("body", content))[:200]
-                                                if '_opener' in dir() and _opener and isinstance(content, str):
-                                                    content = _opener.strip_output(content)
                                             elif _comments:
                                                 content = _comments[-1].get("content", _comments[-1].get("body", content))[:200]
                                         except Exception as _fe:

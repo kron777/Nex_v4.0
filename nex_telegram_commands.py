@@ -350,3 +350,14 @@ async def trainnow_command(update, context):
     except Exception as e:
         await update.message.reply_text(f"trainnow error: {e}")
 
+
+
+async def o223_status_command(update, context):
+    """NEX O201–O223 — guided evolution + observation status."""
+    try:
+        from nex_upgrades.nex_o223 import get_o223
+        msg = get_o223().format_status()
+    except Exception as e:
+        msg = f"o223 status error: {e}"
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
