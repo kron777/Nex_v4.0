@@ -176,6 +176,69 @@ def score_response_text(text: Optional[str]) -> float:
 
         self._save()
 
+# ─────────────────────────────────────────────
+# ConsequenceMemory
+# ─────────────────────────────────────────────
+class ConsequenceMemory:
+    """
+    Tracks post attempts, scores outcomes, propagates to beliefs.
+    Persists to ~/.config/nex/consequence_memory.json
+    """
+    def __init__(self):
+        self._events: dict = {}
+        self._load()
+
+    def _load(self):
+        try:
+            if _CM_FILE.exists():
+                raw = json.loads(_CM_FILE.read_text())
+                self._events = raw if isinstance(raw, dict) else {}
+        except Exception:
+            self._events = {}
+        # rolling window
+        if len(self._events) > _MAX_EVENTS:
+            keys = sorted(self._events, key=lambda k: self._events[k].get("ts", 0))
+            for k in keys[:len(self._events) - _MAX_EVENTS]:
+                del self._events[k]
+
+    def _save(self):
+        try:
+            _CM_FILE.write_text(json.dumps(self._events, indent=2))
+        except Exception:
+            pass
+
+    def record_attempt(self, post_id: str, topic: str = "",
+                       belief_ids: list = None, platform: str = "",
+                       text: str = "") -> str:
+        ev = {
+            "id":         post_id,
+            "topic":      topic,
+            "platform":   platform,
+            "belief_ids": belief_ids or [],
+            "text":       text[:200],
+            "ts":         time.time(),
+            "got_reply":  None,
+            "reply_score": None,
+            "propagated": False,
+        }
+        self._events[post_id] = ev
+        self._save()
+        return post_id
+
+    def score_outcome(self, post_id: str, reply_text: str = "",
+                      got_reply: bool = False, affect=None) -> float:
+        ev = self._events.get(post_id)
+        if ev is None:
+            return 0.0
+        score = score_response_text(reply_text) if reply_text else (0.55 if got_reply else 0.2)
+        ev["got_reply"]   = got_reply
+        ev["reply_score"] = score
+        if affect is not None:
+            delta_v = (score - 0.5) * 0.3
+            affect.update({"valence": delta_v, "arousal": 0.0, "dominance": 0.0})
+        self._save()
+        return score
+
     def propagate_to_beliefs(self, belief_store) -> int:
         """
         For all un-propagated scored events, nudge confidence of used beliefs.
