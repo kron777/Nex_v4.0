@@ -512,6 +512,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Discord control commands
     if user_message and user_message.lower().startswith("/discord"):
         response = _handle_discord_command(user_message)
+        try:
+            from nex_dynamic_opener import get_opener as _gop
+            if isinstance(response, str): response = _gop().strip_output(response)
+        except Exception: pass
         await update.message.reply_text(response)
         return
 
@@ -521,6 +525,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Get response from NEX's brain
     history = get_history(user_id)
     response = ask_nex(user_message, history)
+    try:
+        from nex_dynamic_opener import get_opener as _gop
+        if isinstance(response, str): response = _gop().strip_output(response)
+    except Exception: pass
 
     # Record in history
     add_to_history(user_id, "user", user_message)

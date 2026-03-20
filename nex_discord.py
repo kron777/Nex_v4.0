@@ -266,10 +266,18 @@ async def on_message(message):
     _save_seen(seen)
 
     content  = message.content.strip()
+    try:
+        from nex_dynamic_opener import get_opener as _gop
+        if isinstance(content, str): content = _gop().strip_output(content)
+    except Exception: pass
     channel  = str(message.channel)
     author   = str(message.author.name)
     is_mention = client.user in message.mentions
     is_reply   = (message.reference is not None and
+    try:
+        from nex_dynamic_opener import get_opener as _gop
+        if isinstance(is_reply, str): is_reply = _gop().strip_output(is_reply)
+    except Exception: pass
                   message.reference.resolved is not None and
                   hasattr(message.reference.resolved, "author") and
                   message.reference.resolved.author == client.user)

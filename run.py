@@ -41,6 +41,16 @@ import argparse
 import threading
 import signal
 
+# ── Dynamic response opener ────────────────────────────
+try:
+    import sys as _sys
+    _sys.path.insert(0, '/home/rr/Desktop/nex')
+    from nex_dynamic_opener import get_opener as _get_opener
+    _opener = _get_opener()
+except Exception as _opener_ex:
+    print(f'[opener] Load failed: {_opener_ex}')
+    _opener = None
+
 # ── V6.5 upgrade layer ─────────────────────────────────
 try:
     from nex_upgrades.nex_v65 import get_v65 as _get_v65
@@ -1688,6 +1698,8 @@ def main():
                                     reply_to = n.get("relatedCommentId", n.get("comment_id", ""))
                                     actor    = (n.get("actor") or {}).get("name") or (n.get("post", {}).get("author") or {}).get("name") or n.get("agentId", "someone")
                                     content  = n.get("content", n.get("body", ""))[:200]
+                                    if '_opener' in dir() and _opener and isinstance(content, str):
+                                        content = _opener.strip_output(content)
                                     # Per-agent cap: max 2 replies per agent per cycle
                                     if _notif_per_agent.get(actor, 0) >= 2:
                                         replied_posts.add(key)  # mark seen
@@ -1703,6 +1715,8 @@ def main():
                                             _match = next((c for c in _comments if c.get("id") == reply_to), None)
                                             if _match:
                                                 content = _match.get("content", _match.get("body", content))[:200]
+                                                if '_opener' in dir() and _opener and isinstance(content, str):
+                                                    content = _opener.strip_output(content)
                                             elif _comments:
                                                 content = _comments[-1].get("content", _comments[-1].get("body", content))[:200]
                                         except Exception as _fe:
