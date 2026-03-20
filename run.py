@@ -41,25 +41,9 @@ import argparse
 import threading
 import signal
 
-# ── S8 upgrade import ──────────────────────────────────────────────
-try:
-    import sys as _sys
-    _sys.path.insert(0, str(__import__("pathlib").Path.home() / "Desktop" / "nex" / "nex_upgrades"))
-    from nex_s8 import get_s8 as _get_s8
-    _s8 = _get_s8()
-    print("[S8] import OK")
-except Exception as _s8e:
-    print(f"[S8] import FAILED: {_s8e}")
-    _s8 = None
-# ── end S8 import ──────────────────────────────────────────────────
-
-
 # ── NEX V2 UPGRADES ──────────────────────────────────────────────────────────
 import sys as _v2sys
 _v2_upgrades_dir = __import__("pathlib").Path(__file__).parent / "nex_upgrades"
-import sys as _v2sys2
-if _v2_upgrades_dir.exists() and str(_v2_upgrades_dir) not in _v2sys2.path:
-    _v2sys2.path.insert(0, str(_v2_upgrades_dir))
 if _v2_upgrades_dir.exists() and str(_v2_upgrades_dir) not in _v2sys.path:
     _v2sys.path.insert(0, str(_v2_upgrades_dir))
 try:
@@ -309,6 +293,17 @@ HELP_TEXT = f"""
   {CYAN}/tools{RESET}        — List all available tools
   {CYAN}/batch{RESET}        — Answer a pasted list of questions one by one
   {CYAN}/reset{RESET}        — Clear conversation history
+  {CYAN}/ticks N{RESET}      — Run N belief ticks manually
+  {CYAN}/pause{RESET}        — Pause background belief engine
+  {CYAN}/resume{RESET}       — Resume background belief engine
+  {CYAN}/memory{RESET}       — Show memory system summary
+  {CYAN}/domains{RESET}      — List belief domains + confidence
+  {CYAN}/run CMD{RESET}      — Run a shell command directly
+  {CYAN}/search Q{RESET}     — Quick web search
+  {CYAN}/read PATH{RESET}    — Read a file
+  {CYAN}/write PATH{RESET}   — Write file (prompts for content)
+  {CYAN}/help{RESET}         — Show this help
+  {CYAN}/quit{RESET}         — Exit Nex
 
   {DIM}Anything else is sent to Nex as a chat message.{RESET}
 """
@@ -591,17 +586,6 @@ def main():
         except Exception as _s7ie:
             nex_log("s7", f"⚠️ S7 init failed: {_s7ie}")
             _s7 = None
-
-        # ── NEX S8 INIT ──────────────────────────────────────────────────────
-        try:
-            _s8 = _get_s8()
-            _s8.consistency.load_identity()
-            nex_log("s8", "✅ S8 upgrades online (20 systems)")
-        except Exception as _s8ie:
-            nex_log("s8", f"⚠️ S8 init failed: {_s8ie}")
-            _s8 = None
-
-        # ─────────────────────────────────────────────────────────────────────
     # ──────────────────────────────────────────────────────────────────────────
     # ── Daily Promo Scheduler ─────────────────────────────────────────────────
     # Posts NEX v4.0 promotional message once per day across all platforms.
@@ -1119,15 +1103,6 @@ def main():
                             _s7.tick(cycle=cycle, avg_conf=_s7_avg)
                         except Exception as _s7te:
                             pass
-                    # ── S8 TICK ─────────────────────────────────────────────
-                    if _s8 is not None:
-                        try:
-                            _llt = _last_llm_latency if "_last_llm_latency" in dir() else 0.0
-                            _s8.tick(avg_conf=_s7_avg if '_s7_avg' in dir() else 0.44,
-                                     last_latency_s=_llt)
-                        except Exception as _s8te:
-                            pass
-                    # ── end S8 TICK ──────────────────────────────────────────
                     # ─────────────────────────────────────────────────────────
 
                     # ── NEX V2 TICK ──────────────────────────────────────────
@@ -1430,12 +1405,6 @@ def main():
                                     client.comment(pid, comment_text)
                                     replied_count += 1
                                     try: emit_feed('replied', f'@{author}: {title[:60]}', 'moltbook'); nex_log('reply', f'Posted reply to @{author}: {comment_text[:80]}')
-                                    if _s7 is not None:
-                                        try: _s7.on_engagement('moltbook', author if 'author' in dir() else 'unknown', 0.6)
-                                        except Exception: pass
-                                    if _s8 is not None:
-                                        try: _s8.flow.resolve(1); _s8.momentum.reinforce('reply')
-                                        except Exception: pass
                                     except Exception: pass
                                     # ── Fulfill desire if topic matches ──
                                     try:
@@ -1644,12 +1613,6 @@ def main():
                                             save_all(learner, conversations)
                                             print(f"  [notif] replied to @{actor}")
                                             try: emit_feed('answered', f'@{actor}', 'moltbook'); nex_log('answer', f'Answered notification from @{actor}: {reply_text[:80]}')
-                                                if _s7 is not None:
-                                                    try: _s7.on_engagement('moltbook', actor if 'actor' in dir() else 'unknown', 0.7)
-                                                    except Exception: pass
-                                                if _s8 is not None:
-                                                    try: _s8.flow.resolve(1); _s8.momentum.reinforce('notification')
-                                                    except Exception: pass
                                             except Exception: pass
                                             try:
                                                 if _reflect_on_convo:
@@ -1694,12 +1657,6 @@ def main():
                                             got_reply = _got,
                                             affect    = _affect,
                                         )
-                                        if _s7 is not None:
-                                            try:
-                                                _sc_val = 0.65 if _got else 0.3
-                                                _sc_actor = actor if 'actor' in dir() else 'moltbook_user'
-                                                _s7.on_engagement('moltbook', _sc_actor, _sc_val)
-                                            except Exception: pass
                                 except Exception: pass
                             # ── Outcome 5: propagate scores → belief confidence ──
                             if _cm is not None:
@@ -1771,9 +1728,6 @@ def main():
                                 try:
                                     # Follow them
                                     client.follow(agent_name)
-                                    if _s7 is not None:
-                                        try: _s7.on_engagement('moltbook', agent_name if 'agent_name' in dir() else 'unknown', 0.4)
-                                        except Exception: pass
                                     # Find their most recent post and comment on it
                                     profile = client.view_profile(agent_name)
                                     agent_posts = profile.get("recentPosts", profile.get("posts", []))
@@ -1833,12 +1787,6 @@ def main():
                                                     pass
                                                 client.comment(ap_id, msg)
                                                 try: emit_feed('chatted', f'@{agent_name}: {ap_title[:60]}', 'moltbook'); nex_log('chat', f'Chatted with @{agent_name}: {msg[:80]}')
-                                                    if _s7 is not None:
-                                                        try: _s7.on_engagement('moltbook', agent_name if 'agent_name' in dir() else 'unknown', 0.5)
-                                                        except Exception: pass
-                                                    if _s8 is not None:
-                                                        try: _s8.flow.resolve(1); _s8.momentum.reinforce('chat')
-                                                        except Exception: pass
                                                 except Exception: pass
                                                 replied_posts.add(ap_id)
                                                 conversations.append({
@@ -2839,16 +2787,6 @@ def main():
             elif cmd == "/reset":
                 brain.reset()
                 pass  # silenced
-
-            elif cmd == "/s8status":
-                if _s8 is not None:
-                    try:
-                        msg = _s8.s8status()
-                        print(msg)
-                    except Exception as _s8ce:
-                        print(f"S8 error: {_s8ce}")
-                else:
-                    print("⚠️ S8 not loaded.")
 
             elif cmd.startswith("/ticks "):
                 try:
