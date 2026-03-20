@@ -39,6 +39,7 @@ import json
 import time
 import argparse
 import threading
+import signal
 from pathlib import Path
 
 
@@ -248,14 +249,16 @@ class BeliefEngine(threading.Thread):
 # ─────────────────────────────────────────────────────────────────────────────
 
 BANNER = f"""
-{CYAN}{BOLD}
+[38;2;0;255;65m[1m
   ███╗   ██╗███████╗██╗  ██╗
   ████╗  ██║██╔════╝╚██╗██╔╝
   ██╔██╗ ██║█████╗   ╚███╔╝ 
   ██║╚██╗██║██╔══╝   ██╔██╗ 
   ██║ ╚████║███████╗██╔╝ ██╗
   ╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝
-{RESET}{DIM}  Nex  v1.2{RESET}
+[0m[38;2;0;255;65m  ─────────────────────────────
+  ◈  N E X   v 1 . 2   ◈  [ D Y N A M I C   I N T E L L I G E N C E ]
+  ─────────────────────────────[0m
 """
 
 HELP_TEXT = f"""
@@ -387,6 +390,27 @@ def run_claude_bridge(brain, orch, engine, stream, args):
         print("\n\n  " + DIM + "Bridge closed." + RST + "\n")
 
 
+def _nex_shutdown(signum, frame):
+    """Graceful shutdown: flush beliefs, log exit, release GPU."""
+    import sys as _sys
+    print("\n[NEX] SIGTERM received — flushing and exiting cleanly...")
+    try:
+        from nex.belief_store import get_db
+        conn = get_db()
+        total = conn.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+        avg   = conn.execute("SELECT AVG(confidence) FROM beliefs").fetchone()[0] or 0
+        conn.close()
+        print(f"[NEX] Belief state at exit: {total} beliefs, avg_conf={avg:.3f}")
+    except Exception as _e:
+        print(f"[NEX] Belief flush error: {_e}")
+    try:
+        import subprocess
+        subprocess.run(["pkill", "-9", "-f", "llama-server"], capture_output=True)
+    except Exception:
+        pass
+    print("[NEX] Clean exit.")
+    _sys.exit(0)
+
 def main():
     # ── Clean shutdown handler — kills all NEX protocols on exit ──
     import subprocess as _sub, signal as _sig, atexit as _ae
@@ -422,13 +446,15 @@ def main():
     # Kill any stale Telegram instances
     import subprocess
     subprocess.run(['pkill', '-f', 'nex_telegram.py'], stderr=subprocess.DEVNULL)
+    signal.signal(signal.SIGTERM, _nex_shutdown)
+    signal.signal(signal.SIGINT,  _nex_shutdown)
     parser = argparse.ArgumentParser(description="Nex — Dynamical Belief Agent")
     parser.add_argument("--model",     type=str, default=None,  help="Path to .gguf model")
     parser.add_argument("--server",    type=str, default=None,  help="Path to llama-server binary")
     parser.add_argument("--host",      type=str, default="127.0.0.1")
     parser.add_argument("--port",      type=int, default=8080)
-    parser.add_argument("--gpu",       type=int, default=28,    help="GPU layers (0=CPU)")
-    parser.add_argument("--ctx",       type=int, default=4096,  help="Context size")
+    parser.add_argument("--gpu",       type=int, default=20,    help="GPU layers (0=CPU)")
+    parser.add_argument("--ctx",       type=int, default=2048,  help="Context size")
     parser.add_argument("--ticks",     type=int, default=50,    help="Warm-up ticks before chat")
     parser.add_argument("--no-server", action="store_true",     help="Don't auto-start server")
     parser.add_argument("--background", action="store_true",   help="Skip interactive input loop")
@@ -2437,8 +2463,8 @@ def main():
     except Exception as _he: print(f"  [HTTP] {_he}")
 
     # ── Model + server setup ──────────────────────────────────────────
-    model_path  = pick_model(args.model)
-    server_bin  = args.server or find_server_bin(model_path)
+    model_path  = pick_model(args.model) if args.model else "/media/rr/4TB DATA/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf"
+    server_bin  = args.server or "/media/rr/4TB DATA/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/llama.cpp/build/bin/llama-server"
 
     brain = AgentBrain(
         model_path      = model_path,
@@ -2446,9 +2472,10 @@ def main():
         host            = args.host,
         port            = args.port,
         ctx_size        = args.ctx,
-        n_gpu_layers    = args.gpu,
+        n_gpu_layers    = args.gpu if args.gpu != 0 else 20,
         temperature     = args.temp,
         max_tokens      = 1024,
+        lora_path       = "/home/rr/Desktop/nex/nex_lora.gguf",
     )
 
     if not args.no_server:
