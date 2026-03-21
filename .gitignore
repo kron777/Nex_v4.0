@@ -52,3 +52,5 @@ run.py.bak*
 nex_adapter_v1_backup/
 nex_lora.gguf
 nex_adapter/
+backups/
+*.bak*
