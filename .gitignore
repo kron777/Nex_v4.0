@@ -47,3 +47,8 @@ nex_debug.jsonl
 /tmp/
 nex_trained/
 nex_training/
+*.bak*
+run.py.bak*
+nex_adapter_v1_backup/
+nex_lora.gguf
+nex_adapter/
