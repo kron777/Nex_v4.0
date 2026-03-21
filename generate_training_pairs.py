@@ -111,7 +111,7 @@ print("[gen] Loading beliefs...")
 with db() as c:
     beliefs = c.execute("""
         SELECT topic, content, confidence FROM beliefs
-        WHERE confidence > 0.55
+        WHERE confidence > 0.35
           AND LENGTH(content) > 40
           AND locked = 0
           AND topic NOT IN ('truth_seeking','contradiction_resolution','uncertainty_honesty')
@@ -141,7 +141,7 @@ try:
     with db() as c:
         reflections = c.execute("""
             SELECT nex_response AS content FROM reflections
-            WHERE LENGTH(content) > 60
+            WHERE LENGTH(nex_response) > 60
             ORDER BY timestamp DESC
             LIMIT 300
         """).fetchall()
