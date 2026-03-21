@@ -111,7 +111,7 @@ class UncertaintyTracker:
 class BeliefDecay:
     """Beliefs lose strength over time unless reinforced. Recent info weighted higher."""
 
-    DECAY_RATE    = 0.005   # per cycle
+    DECAY_RATE    = 0.001   # per cycle — reduced to prevent D20 collapse loop
     MIN_CONF      = 0.10
     HALF_LIFE_D   = 14      # days before confidence halves without reinforcement
 
