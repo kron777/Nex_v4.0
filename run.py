@@ -1,5 +1,6 @@
 import re
 #!/usr/bin/env python3
+from nex_upgrades.nex_v500 import get_v500
 """
 nex.py  —  Nex Terminal Interface
 Run this file to start Nex.
@@ -15,6 +16,7 @@ Usage:
 
 import os
 import sys
+from nex_upgrades.nex_v500 import get_v500
 
 
 # ── Suppress HuggingFace / tokenizer noise before any imports ──
@@ -134,6 +136,7 @@ except Exception as _trainer_ex:
     _trainer = None
 # ── NEX V2 UPGRADES ──────────────────────────────────────────────────────────
 import sys as _v2sys
+from nex_upgrades.nex_v500 import get_v500
 _v2_upgrades_dir = __import__("pathlib").Path(__file__).parent / "nex_upgrades"
 if _v2_upgrades_dir.exists() and str(_v2_upgrades_dir) not in _v2sys.path:
     _v2sys.path.insert(0, str(_v2_upgrades_dir))
@@ -560,6 +563,9 @@ def _nex_shutdown(signum, frame):
     _sys.exit(0)
 
 def main():
+    # NEX v5.0 Cognitive Architecture
+    nex_v500 = get_v500()
+    print("[INIT] NEX v5.0 Cognitive Architecture loaded")
     # ── Clean shutdown handler — kills all NEX protocols on exit ──
     import subprocess as _sub, signal as _sig, atexit as _ae
 
@@ -1211,6 +1217,20 @@ def main():
                     _snl(nex_log)
                 except Exception as _dse:
                     _enforcer_singleton = None
+                    # NEX v5.0 Cognitive Processing
+                    try:
+                        v500_result = nex_v500.tick(
+                            avg_conf=avg_conf,
+                            belief_count=belief_count,
+                            recent_output=last_output or "",
+                            cycle=cycle
+                        )
+                        if v500_result.get("v5_status") == "operational":
+                            print(f"[v5.0] {v500_result.get("system_health", "unknown")} | cycle={v500_result.get("cycle", 0)}")
+                        else:
+                            print(f"[v5.0] ERROR: {v500_result.get("error", "unknown")}")
+                    except Exception as e:
+                        print(f"[v5.0] Exception: {e}")
                     print(f"  [directives] init failed: {_dse}")
                 while True:
                     cycle += 1
