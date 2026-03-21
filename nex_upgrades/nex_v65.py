@@ -95,7 +95,7 @@ class DecisionEngine:
                             WHERE id = ?
                         """, (time.time(), dominant["id"]))
                         conn.execute("DELETE FROM beliefs WHERE id = ?", (weakest["id"],))
-                        conn.commit()
+                        # commit handled by _db() context manager
                         return {"action": "dominant", "topic": topic,
                                 "belief_id": dominant["id"], "pruned_id": weakest["id"]}
                     else:
@@ -109,7 +109,7 @@ class DecisionEngine:
                             WHERE id = ?
                         """, (merged_conf, merged_content, time.time(), dominant["id"]))
                         conn.execute("DELETE FROM beliefs WHERE id = ?", (weakest["id"],))
-                        conn.commit()
+                        # commit handled by _db() context manager
                         return {"action": "merge", "topic": topic,
                                 "belief_id": dominant["id"], "new_conf": round(merged_conf, 3)}
 
@@ -117,7 +117,7 @@ class DecisionEngine:
             target = min(beliefs, key=lambda x: x["confidence"])
             with _db() as conn:
                 conn.execute("DELETE FROM beliefs WHERE id = ?", (target["id"],))
-                conn.commit()
+                # commit handled by _db() context manager
             return {"action": "prune", "topic": target["topic"],
                     "belief_id": target["id"], "conf": round(target["confidence"], 3)}
 
@@ -135,7 +135,7 @@ class DecisionEngine:
 # ══════════════════════════════════════════════════════════════
 
 class HardPruningSystem:
-    MAX_BELIEFS = 650
+    MAX_BELIEFS = 1000
 
     def __init__(self):
         self.prune_count = 0
@@ -159,7 +159,7 @@ class HardPruningSystem:
                         LIMIT ?
                     )
                 """, (excess,))
-                conn.commit()
+                # commit handled by _db() context manager
                 self.prune_count += excess
                 _log(f"[HardPrune] Pruned {excess} (was {count} → {self.MAX_BELIEFS})")
                 return excess
@@ -324,7 +324,7 @@ class BeliefValidationLayer:
                         "UPDATE beliefs SET confidence=?, last_referenced=? WHERE id=?",
                         (nc, time.time(), b["id"])
                     )
-                    conn.commit()
+                    # commit handled by _db() context manager
                 _log(f"[WikiValidate] {topic} score={score:.2f} "
                      f"conf {b['confidence']:.2f}→{nc:.2f}")
         except Exception as e:
@@ -451,7 +451,7 @@ class MemoryConsolidationPass:
                         ),
                         list(to_delete)
                     )
-                    conn.commit()
+                    # commit handled by _db() context manager
                 self.removed += len(to_delete)
                 _log(f"[Consolidation] Merged {len(to_delete)} duplicates")
         except Exception as e:
@@ -560,7 +560,7 @@ class DriftCorrectionTrigger:
                       AND topic NOT LIKE '%truth%'
                       AND topic NOT LIKE '%contradiction%'
                 """, (time.time(),))
-                conn.commit()
+                # commit handled by _db() context manager
             _log("[DriftCorrection] Realignment complete")
         except Exception as e:
             _log(f"[DriftCorrection] error: {e}")
@@ -603,7 +603,7 @@ class CoreDirectivesLock:
                             VALUES (?,?,?,999,?)
                         """, (topic, content, conf, time.time()))
                         _log(f"[CoreLock] Seeded: {topic}")
-                conn.commit()
+                # commit handled by _db() context manager
         except Exception as e:
             _log(f"[CoreLock] seed error: {e}")
 
@@ -629,7 +629,7 @@ class CoreDirectivesLock:
                             "UPDATE beliefs SET confidence=?, last_referenced=? WHERE id=?",
                             (conf, time.time(), row["id"])
                         )
-                conn.commit()
+                # commit handled by _db() context manager
         except Exception as e:
             _log(f"[CoreLock] tick error: {e}")
 
@@ -813,7 +813,7 @@ class PredictionOutcomeLoop:
                         last_referenced = ?
                     WHERE id = ?
                 """, (adj, time.time(), p["belief_id"]))
-                conn.commit()
+                # commit handled by _db() context manager
         except Exception as e:
             _log(f"[PredictionLoop] db error: {e}")
         _log(f"[PredictionLoop] {pid} accuracy={accuracy:.2f} adj={adj:+.3f}")
@@ -864,7 +864,7 @@ class FailureMemorySystem:
                             SET confidence = MAX(confidence - 0.10, 0.05), last_referenced = ?
                             WHERE id = ?
                         """, (time.time(), belief_id))
-                        conn.commit()
+                        # commit handled by _db() context manager
                 except Exception:
                     pass
         elif failure_type == "failed_resolution":
@@ -941,7 +941,7 @@ class SimulationSandbox:
                         "UPDATE beliefs SET confidence=?, last_referenced=? WHERE id=?",
                         (new_confidence, time.time(), belief_id)
                     )
-                conn.commit()
+                # commit handled by _db() context manager
         except Exception as e:
             _log(f"[Sandbox] commit db error: {e}")
             return False
@@ -1015,7 +1015,7 @@ class BeliefMarket:
                         WHERE id=?
                     """, (self.DECAY_EXTRA, now, bid))
                     self._weights[bid] = 0.5
-                conn.commit()
+                # commit handled by _db() context manager
 
             _log(f"[BeliefMarket] cycle={self.cycles} "
                  f"boosted={len(top_ids)} decayed={len(bottom_ids)}")

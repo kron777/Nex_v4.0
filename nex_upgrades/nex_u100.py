@@ -143,7 +143,7 @@ class DecisiveBeliefUpdateSystem:
                 # Near-death — delete
                 with _db() as c:
                     c.execute("DELETE FROM beliefs WHERE id=?", (bid,))
-                    c.commit()
+                    # commit handled by _db() context manager
                 entry = {"cycle": self.total, "action": "delete",
                          "belief_id": bid, "topic": row["topic"],
                          "old_conf": conf, "new_conf": 0.0}
@@ -158,7 +158,7 @@ class DecisiveBeliefUpdateSystem:
             with _db() as c:
                 c.execute("UPDATE beliefs SET confidence=? WHERE id=?",
                           (new_conf, bid))
-                c.commit()
+                # commit handled by _db() context manager
 
             entry = {"cycle": self.total, "action": action,
                      "belief_id": bid, "topic": row["topic"],
@@ -415,9 +415,9 @@ class ReflectionKillSwitch:
                     c.execute(
                         f"DELETE FROM reflections WHERE rowid IN "
                         f"({','.join('?'*len(kill_ids))})",
-                        kill_ids
+                        tuple(kill_ids)
                     )
-                    c.commit()
+                    # commit handled by _db() context manager
                 _log(f"[RKS] Killed {len(kill_ids)} low-value reflections")
         except Exception as e:
             _log(f"[RKS] error: {e}")
@@ -481,11 +481,11 @@ class SignalDeduplicationCore:
 class AggressiveBeliefMergeV2:
     """Merge mid-conf clusters (0.4–0.7): 5 weak → 1 stronger.
     Track merge lineage. Target: -20% beliefs, +confidence."""
-    INTERVAL   = 600
+    INTERVAL   = 1800  # fix10: raised from 600 — run every 30min not 10min
     MID_LOW    = 0.40
     MID_HIGH   = 0.70
-    CLUSTER_SZ = 5
-    CONF_BOOST = 0.08
+    CLUSTER_SZ = 8  # fix10: raised from 5 — fewer merges per cycle
+    CONF_BOOST = 0.03  # fix10: reduced from 0.08 — prevents artificial conf spikes
 
     def __init__(self):
         self.last_run = 0.0
@@ -517,14 +517,13 @@ class AggressiveBeliefMergeV2:
                 with _db() as c:
                     c.execute(
                         f"DELETE FROM beliefs WHERE id IN ({','.join('?'*len(ids))})",
-                        ids
-                    )
+                        tuple(ids))
                     c.execute("""
                         INSERT OR IGNORE INTO beliefs
                           (topic, content, confidence, reinforce_count, last_referenced)
                         VALUES (?,?,?,0,?)
                     """, (r["topic"], merged, new_conf, _ts()))
-                    c.commit()
+                    # commit handled by _db() context manager
 
                 entry = {"topic": r["topic"], "merged_count": len(ids),
                          "old_conf": round(r["ac"], 3), "new_conf": round(new_conf, 3),
@@ -723,7 +722,7 @@ class CausalTraceUtilization:
                         )
                         self.penalised += 1
 
-                c.commit()
+                # commit handled by _db() context manager
 
             # Build sample chain
             if entries:
@@ -834,7 +833,7 @@ class TensionActionBinding:
                             f"DELETE FROM beliefs WHERE id IN "
                             f"({','.join('?'*len(prune))})", prune
                         )
-                        c.commit()
+                        # commit handled by _db() context manager
                         _log(f"[TAB] FORCED resolution: pruned {len(prune)} "
                              f"from '{topic}'")
         except Exception as e:
@@ -929,7 +928,7 @@ class IndecisionPunishmentV2:
                         UPDATE beliefs SET confidence=MAX(0.05,confidence-?)
                         WHERE topic LIKE ? AND locked=0
                     """, (self.PENALTY, f"%{topic}%"))
-                    c.commit()
+                    # commit handled by _db() context manager
                 self.punishments += 1
                 self._decision_history[topic].clear()
                 _log(f"[IPv2] Punished loop: '{topic}'")
@@ -1115,7 +1114,7 @@ class IdentityDominanceEnforcer:
                            OR topic='nex_identity')
                       AND is_identity=0
                 """)
-                c.commit()
+                # commit handled by _db() context manager
         except Exception as e:
             _log(f"[IDE] error: {e}")
 

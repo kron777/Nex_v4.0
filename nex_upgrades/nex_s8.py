@@ -239,7 +239,7 @@ class RelevanceHalfLife:
                     if self.should_decay(b, current_cycle, active_goals):
                         conn.execute("DELETE FROM beliefs WHERE rowid=?", (row["rowid"],))
                         pruned += 1
-                conn.commit()
+                # commit handled by _db() context manager
                 self._pruned += pruned
                 if pruned:
                     _log(f"RelevanceHalfLife: pruned {pruned} low-relevance beliefs")
@@ -883,7 +883,7 @@ class KnowledgeDistiller:
                     })
                     conn.execute("DELETE FROM beliefs WHERE rowid=?", (row["rowid"],))
                     archived += 1
-                conn.commit()
+                # commit handled by _db() context manager
             self._last_distill  = current_cycle
             self._distillations += 1
             if archived:
@@ -934,7 +934,7 @@ class IdentityReinforcement:
                     if result.rowcount:
                         self._reinforced += result.rowcount
                         _log(f"IdentityReinforcement: +{self.reinforce_amount} × {result.rowcount} [{topic}]")
-                conn.commit()
+                # commit handled by _db() context manager
         except Exception as e:
             _log(f"IdentityReinforcement.run error: {e}")
 
@@ -992,7 +992,7 @@ class LongHorizonConsistency:
                         (self.reversal_penalty, topic)
                     )
                     self._penalised += result.rowcount
-                conn.commit()
+                # commit handled by _db() context manager
                 _log(f"LongHorizonConsistency: penalised {len(reversal_topics)} reversal topics")
         except Exception as e:
             _log(f"LongHorizonConsistency.penalise error: {e}")

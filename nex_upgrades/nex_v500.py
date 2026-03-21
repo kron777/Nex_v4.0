@@ -534,7 +534,7 @@ class StructuredBeliefSystem:
                 with _db() as conn:
                     placeholders = ','.join('?' * len(pruned_ids))
                     conn.execute(f"DELETE FROM beliefs WHERE id IN ({placeholders})", pruned_ids)
-                    conn.commit()
+                    # commit handled by _db() context manager
             
             self.pruning_cycles += 1
             

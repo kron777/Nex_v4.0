@@ -133,6 +133,17 @@ def _ensure_schema(conn):
 
 def _infer_topic(content):
     """Infer topic from content using keyword matching."""
+    import re as _re, json as _jx
+    _on = _re.search(r"On ['\"]([^'\"]{2,60})['\"]", content)
+    if _on:
+        _raw = _on.group(1).strip()
+        if _raw.startswith("["):
+            try:
+                _lst = _jx.loads(_raw); _raw = _lst[0] if _lst else ""
+            except: _raw = _raw.strip('[]"\' ')
+        _raw = _raw.lower().replace(" ","_")[:40].strip("_")
+        if _raw and _raw not in ("none",""):
+            return _raw
     c = content.lower()
     TOPIC_MAP = [
         (["cve", "vulnerability", "exploit", "attack", "malicious", "credential", "injection", "payload"], "cybersecurity"),

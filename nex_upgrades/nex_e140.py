@@ -307,7 +307,7 @@ class BeliefKillSystem:
                     )
                 """, (self.MIN_RC, idle_threshold))
                 killed = result.rowcount if hasattr(result, 'rowcount') else 0
-                c.commit()
+                # commit handled by _db() context manager
 
                 # Double-check count
                 after = c.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
@@ -379,7 +379,7 @@ class ContradictionResolutionEngineV2:
                         WHERE id=?
                     """, (winner,))
                     c.execute("DELETE FROM beliefs WHERE id=?", (loser,))
-                    c.commit()
+                    # commit handled by _db() context manager
 
                 del self._age[key]
                 self.resolved += 1
@@ -1268,7 +1268,7 @@ class TrueSelfConsistencyLayer:
                         UPDATE beliefs SET confidence=MIN(confidence+0.02,0.96)
                         WHERE is_identity=1 AND locked=0
                     """)
-                    c.commit()
+                    # commit handled by _db() context manager
             except Exception: pass
 
     def status(self) -> dict:

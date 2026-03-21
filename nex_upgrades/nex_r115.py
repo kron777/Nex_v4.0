@@ -163,7 +163,7 @@ class CriticalActionTrainingLoop:
                         UPDATE beliefs SET confidence=MIN(confidence+0.03,0.95)
                         WHERE topic LIKE ? AND locked=0
                     """, (f"%{topic}%",))
-                    c.commit()
+                    # commit handled by _db() context manager
             except Exception: pass
 
         return entry
@@ -497,7 +497,7 @@ class SelfHealingSystemLoop:
                             SET confidence = MIN(confidence + 0.05, 0.85)
                             WHERE topic LIKE ? AND locked=0
                         """, (f"%{module.lower()[:8]}%",))
-                        c.commit()
+                        # commit handled by _db() context manager
                 except Exception: pass
                 self._failures[module] = 0
                 self.resets += 1
@@ -544,7 +544,7 @@ class MemoryValidationPipeline:
                         release_ts  TEXT
                     )
                 """)
-                c.commit()
+                # commit handled by _db() context manager
         except Exception: pass
 
     def tick(self):
@@ -573,7 +573,7 @@ class MemoryValidationPipeline:
                             VALUES (?,?,?)
                         """, (r["id"], f"low_conf={r['confidence']:.2f}",
                               _ts()))
-                        c.commit()
+                        # commit handled by _db() context manager
 
             # Release quarantine for beliefs that improved
             for bid in list(self._quarantine):
@@ -589,7 +589,7 @@ class MemoryValidationPipeline:
                             "UPDATE belief_quarantine SET release_ts=? WHERE belief_id=?",
                             (_ts(), bid)
                         )
-                        c.commit()
+                        # commit handled by _db() context manager
 
             self.validated += len(rows)
         except Exception as e:
@@ -897,19 +897,19 @@ class ContinuousPolicyEvolution:
         adj = 0.01 if rate > 0.65 else -0.01
 
         self._policy["prune_threshold"]   = round(
-            max(0.10, min(0.45, self._policy["prune_threshold"]   + adj)), 3)
+            max(0.10, min(0.45, self._policy.get("prune_threshold", 0.50)   + adj)), 3)
         self._policy["insight_threshold"] = round(
-            max(0.40, min(0.80, self._policy["insight_threshold"] - adj)), 3)
+            max(0.40, min(0.80, self._policy.get("insight_threshold", 0.50) - adj)), 3)
         self._policy["merge_threshold"]   = round(
-            max(0.50, min(0.85, self._policy["merge_threshold"]   + adj * 0.5)), 3)
+            max(0.50, min(0.85, self._policy.get("merge_threshold", 0.50)   + adj * 0.5)), 3)
         self._policy["tension_threshold"] = round(
-            max(0.40, min(0.80, self._policy["tension_threshold"] - adj * 0.5)), 3)
+            max(0.40, min(0.80, self._policy.get("tension_threshold", 0.50) - adj * 0.5)), 3)
 
         self._policy["version"] += 1
         self._policy["updates"] += 1
         self.updates += 1
         _save_json(POLICY_F, self._policy)
-        _log(f"[CPE] Policy v{self._policy['version']} updated "
+        _log(f"[CPE] Policy v{self._policy.get('version', 0.50)} updated "
              f"(rate={rate:.2f} adj={adj:+.2f})")
 
     def tick(self):

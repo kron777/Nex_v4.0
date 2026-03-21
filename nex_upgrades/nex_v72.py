@@ -56,7 +56,7 @@ class DecisionQualityScoring:
                         last_updated TEXT
                     )
                 """)
-                c.commit()
+                # commit handled by _db() context manager
         except Exception as e:
             _log(f"[DQS] table error: {e}")
 
@@ -90,7 +90,7 @@ class DecisionQualityScoring:
                         UPDATE beliefs SET confidence = MAX(0.05, MIN(confidence+?, 0.99))
                         WHERE topic LIKE ?
                     """, (adj, f"%{cluster}%"))
-                c.commit()
+                # commit handled by _db() context manager
             _log(f"[DQS] Scored {len(self._scores)} clusters")
         except Exception as e:
             _log(f"[DQS] tick error: {e}")
@@ -157,7 +157,7 @@ class ForcedTensionResolution:
                     for kid in keep_ids:
                         c.execute("UPDATE beliefs SET confidence=MIN(confidence+0.06,0.90) WHERE id=?",
                                   (kid,))
-                    c.commit()
+                    # commit handled by _db() context manager
                 self._tension_age[topic] = 0
                 self.forced += 1
                 _log(f"[FTR] Forced resolution: {topic} deleted={len(del_ids)}")
@@ -210,7 +210,7 @@ class DynamicBeliefCap:
                         LIMIT ?
                     )
                 """, (excess,))
-                c.commit()
+                # commit handled by _db() context manager
                 self.prunes += excess
                 _log(f"[DBC] cap={self.current_cap} pruned={excess} "
                      f"(conf={avg_conf:.2f})")
@@ -259,7 +259,7 @@ class ClusterLevelPruning:
                 with _db() as c:
                     c.execute("DELETE FROM beliefs WHERE topic=? AND locked=0",
                               (r["topic"],))
-                    c.commit()
+                    # commit handled by _db() context manager
                 self.clusters_pruned += 1
                 self.beliefs_pruned  += r["n"]
                 _log(f"[CLP] Pruned cluster '{r['topic']}' "
@@ -315,7 +315,7 @@ class MultiPassValidation:
                         "UPDATE beliefs SET confidence=MAX(0.05,MIN(confidence+?,0.99)) WHERE id=?",
                         (adj, r["id"])
                     )
-                    c.commit()
+                    # commit handled by _db() context manager
                 self.validated += 1
         except Exception as e:
             _log(f"[MPV] error: {e}")
@@ -357,9 +357,8 @@ class BeliefEntropyReduction:
                 if rows:
                     ids = [r["id"] for r in rows]
                     c.execute(
-                        f"DELETE FROM beliefs WHERE id IN ({','.join('?'*len(ids))})", ids
-                    )
-                    c.commit()
+                        f"DELETE FROM beliefs WHERE id IN ({','.join('?'*len(ids))})", tuple(ids))
+                    # commit handled by _db() context manager
                     self.removed += len(ids)
                     _log(f"[BER] Removed {len(ids)} isolated low-entropy beliefs")
         except Exception as e:
@@ -404,7 +403,7 @@ class BeliefMarketFeedbackLoop:
                         SET confidence = MAX(0.05, MIN(confidence+?, 0.99))
                         WHERE topic LIKE ? AND locked=0
                     """, (adj, f"%{cluster}%"))
-                    c.commit()
+                    # commit handled by _db() context manager
                 self.updates += 1
         except Exception as e:
             _log(f"[BMFL] error: {e}")
@@ -457,7 +456,7 @@ class ReflectionActionBinding:
                                 "UPDATE beliefs SET confidence=MIN(confidence+?,0.95) WHERE id=?",
                                 (adj, hit["id"])
                             )
-                            c.commit()
+                            # commit handled by _db() context manager
                             self.bindings += 1
                             break
 
@@ -509,7 +508,7 @@ class TemporalIntelligenceV2:
                         "UPDATE beliefs SET confidence=MAX(0.05,confidence-?) WHERE id=?",
                         (decay, r["id"])
                     )
-                    c.commit()
+                    # commit handled by _db() context manager
                 self.classified += 1
         except Exception as e:
             _log(f"[TIv2] error: {e}")
@@ -560,7 +559,7 @@ class IdentityGravity:
                         "UPDATE beliefs SET confidence=MAX(0.05,MIN(confidence+?,0.99)) WHERE id=?",
                         (adj, r["id"])
                     )
-                    c.commit()
+                    # commit handled by _db() context manager
         except Exception as e:
             _log(f"[IG] error: {e}")
 
@@ -709,7 +708,7 @@ class MemoryCompressionV2:
                           (topic, content, confidence, reinforce_count, last_referenced)
                         VALUES (?,?,?,0,?)
                     """, (r["topic"], comp, r["ac"], _ts()))
-                    c.commit()
+                    # commit handled by _db() context manager
                 self.compressed += 1
                 _log(f"[MCv2] Compressed cluster '{r['topic']}' ({r['n']} → 1)")
         except Exception as e:
@@ -761,7 +760,7 @@ class ContextResolutionEngine:
                 with _db() as c:
                     c.execute("UPDATE beliefs SET topic=? WHERE id=?",
                               (domain, r["id"]))
-                    c.commit()
+                    # commit handled by _db() context manager
                 self.resolved += 1
         except Exception as e:
             _log(f"[CRE] error: {e}")
@@ -862,7 +861,7 @@ class FailureMemoryPenalty:
                         SET confidence = MAX(0.05, confidence - ?)
                         WHERE topic LIKE ? AND locked=0
                     """, (self.PENALTY, f"%{topic}%"))
-                    c.commit()
+                    # commit handled by _db() context manager
                 self.penalties += 1
                 self._failure_counts[topic] = 0
                 _log(f"[FMP] Penalised cluster '{topic}' (failures={count})")
@@ -908,7 +907,7 @@ class PredictionConfidenceCalibration:
                     SET confidence = MAX(0.05, MIN(confidence+?, 0.99))
                     WHERE topic LIKE ? AND locked=0
                 """, (adj, f"%{p['topic']}%"))
-                c.commit()
+                # commit handled by _db() context manager
             self.calibrated += 1
         except Exception as e:
             _log(f"[PCC] error: {e}")
@@ -962,7 +961,7 @@ class SimulationValidationLoop:
                 else:
                     c.execute("UPDATE beliefs SET confidence=? WHERE id=?",
                               (new_conf, belief_id))
-                c.commit()
+                # commit handled by _db() context manager
             self.committed += 1
             return True
         except Exception as e:

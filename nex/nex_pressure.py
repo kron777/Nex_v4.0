@@ -304,11 +304,11 @@ class TensionResolver:
             return "paradox"
 
         # High similarity + mild opposition → merge (compatible angles)
-        if similarity > 0.88:
+        if similarity > 0.80:  # fix9: lowered from 0.88 → more merges
             return "merge"
 
         # Moderate similarity → split (different sub-topics)
-        if similarity > 0.75:
+        if similarity > 0.90:  # fix9: raised from 0.75 → far fewer splits
             return "split"
 
         return "paradox"

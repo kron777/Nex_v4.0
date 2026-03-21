@@ -1,3 +1,4 @@
+from pathlib import Path
 """
 NEX :: COGNITION ENGINE v1.0
 Level 1: Belief Synthesis — compress raw beliefs into distilled insights
@@ -118,7 +119,7 @@ def cluster_beliefs(beliefs, min_cluster=2):  # lowered from 3 → more insights
                 import json as _jt; _lst = _jt.loads(_raw_topic)
                 _raw_topic = _lst[0] if _lst else None
             except: _raw_topic = None
-        topic = _raw_topic or None
+        topic = _raw_topic or "general"  # fix11: never store None topic
         if topic:
             # Fast path: use DB topic directly
             if topic not in clusters:
@@ -1103,6 +1104,7 @@ def run_cognition_cycle(client, learner, conversations, cycle_num, llm_fn=None):
     if _tr is not None and cycle_num % 10 == 0:
         try:
             from nex.cognition import load_json as _lj
+            _CONFIG_DIR = Path.home() / ".config" / "nex"
             _contras = _lj(str(_CONFIG_DIR / "contradictions.json"), [])
             _n_resolved = _tr.resolve_batch(_contras, beliefs, llm_fn=llm_fn, max_per_cycle=5)
             if _n_resolved > 0:

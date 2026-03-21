@@ -226,9 +226,9 @@ def _split_tension_into_beliefs(conn, split_info):
         try:
             conn.execute("""
                 INSERT OR IGNORE INTO beliefs
-                (content, confidence, source, timestamp, last_referenced, tags)
-                VALUES (?, 0.4, 'tension_split', ?, ?, ?)
-            """, (belief_content, now, now, json.dumps(["tension", "split", side, topic[:30]])))
+                (content, topic, confidence, source, timestamp, last_referenced, tags)
+                VALUES (?, ?, 0.4, 'tension_split', ?, ?, ?)
+            """, (belief_content, topic[:40], now, now, json.dumps(["tension", "split", side, topic[:30]])))
         except Exception:
             pass
 

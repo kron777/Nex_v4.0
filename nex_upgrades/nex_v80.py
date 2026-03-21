@@ -64,7 +64,7 @@ class GlobalSystemState:
         elif tension > 0.55:
             new = SystemPhase.RESOLVING
         elif avg_conf < 0.42:
-            new = SystemPhase.PRUNING
+            new = SystemPhase.EXPLORING  # DISABLED PRUNING
         elif belief_growth > 0.04:
             new = SystemPhase.EXPLORING
         elif avg_conf > 0.58 and tension < 0.30:
@@ -297,8 +297,8 @@ class ReflectionQualityFilter:
                 score = self._score(r["content"] or "")
                 if score < self.DISCARD_THR:
                     with _db() as c:
-                        c.execute("DELETE FROM reflections WHERE rowid=?", (r["rowid"],))
-                        c.commit()
+                        c.execute("DELETE FROM reflections WHERE rowid=?", ((r["rowid"] if "rowid" in r.keys() else r[0]),))
+                        # commit handled by _db() context manager
                     self.discarded += 1
                 elif score > self.PROMOTE_THR:
                     # Promote to insights table if it exists
@@ -308,8 +308,8 @@ class ReflectionQualityFilter:
                                 INSERT OR IGNORE INTO insights
                                   (content, confidence, source, timestamp)
                                 VALUES (?,0.65,'reflection_promoted',?)
-                            """, (r["content"], _ts()))
-                            c.commit()
+                            """, ((r["content"] or ""), _ts()))
+                            # commit handled by _db() context manager
                         except Exception: pass
                     self.promoted += 1
         except Exception as e:
@@ -505,7 +505,7 @@ class IndecisionPenalty:
                         WHERE topic LIKE ? AND locked=0
                     """, (self.PENALTY * (count - self.MAX_DEFERRALS + 1),
                           f"%{topic}%"))
-                    c.commit()
+                    # commit handled by _db() context manager
                 self.penalties += 1
                 self._deferrals[topic] = 0
                 _log(f"[IDP] Penalised '{topic}' for {count} deferrals")
@@ -595,7 +595,7 @@ class AggressiveCompression:
                             f"DELETE FROM beliefs WHERE id IN ({','.join('?'*len(to_delete))})",
                             list(to_delete)
                         )
-                        c.commit()
+                        # commit handled by _db() context manager
 
             # Pass 2: compress mid-conf clusters
             with _db() as c:
@@ -618,7 +618,7 @@ class AggressiveCompression:
                           (topic, content, confidence, reinforce_count, last_referenced)
                         VALUES (?,?,?,0,?)
                     """, (r["topic"], centroid, r["ac"], _ts()))
-                    c.commit()
+                    # commit handled by _db() context manager
                 self.compressed_clusters += 1
                 _log(f"[AGC] Compressed mid-conf cluster '{r['topic']}' n={r['n']}")
 

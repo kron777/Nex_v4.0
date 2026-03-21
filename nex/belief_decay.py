@@ -111,7 +111,7 @@ def cluster_beliefs(beliefs, min_cluster=2):  # lowered from 3 → more insights
                 import json as _jt; _lst = _jt.loads(_raw_topic)
                 _raw_topic = _lst[0] if _lst else None
             except: _raw_topic = None
-        topic = _raw_topic or None
+        topic = _raw_topic or "general"  # fix11: never store None topic
         if topic:
             # Fast path: use DB topic directly
             if topic not in clusters:
