@@ -17,6 +17,8 @@ Usage:
 import os
 import sys
 from nex_upgrades.nex_v500 import get_v500
+from nex_upgrades.nex_v51 import get_v51
+from nex_upgrades.nex_discipline import get_discipline_enforcer
 
 
 # ── Suppress HuggingFace / tokenizer noise before any imports ──
@@ -565,6 +567,13 @@ def _nex_shutdown(signum, frame):
 def main():
     # NEX v5.0 Cognitive Architecture
     nex_v500 = get_v500()
+    # NEX v5.1 Core Infrastructure
+    nex_v51 = get_v51()
+
+    # NEX Discipline Enforcement
+    discipline_enforcer = get_discipline_enforcer()
+    print("[INIT] NEX Discipline Enforcer loaded")
+    print("[INIT] NEX v5.1 Core Infrastructure loaded")
     print("[INIT] NEX v5.0 Cognitive Architecture loaded")
     # ── Clean shutdown handler — kills all NEX protocols on exit ──
     import subprocess as _sub, signal as _sig, atexit as _ae
@@ -1234,6 +1243,16 @@ def main():
                     print(f"  [directives] init failed: {_dse}")
                 while True:
                     cycle += 1
+                    
+                    # ── NEX v5.1 Core Infrastructure ──────────────────────
+                    try:
+                        v51_result = nex_v51.tick({"cycle": cycle, "context": "main_loop"})
+                        if v51_result.get("v51_status") == "operational":
+                            print(f"[v5.1] {v51_result.get("health", "unknown")} | {v51_result.get("uptime_hours", 0):.1f}h")
+                        else:
+                            print(f"[v5.1] ERROR: {v51_result.get("error", "unknown")}")
+                    except Exception as e:
+                        print(f"[v5.1] Infrastructure exception: {e}")
 
                     # ── O201–O223 observation tick ──────────────────────
                     if '_o223' in dir() and _o223 is not None:
