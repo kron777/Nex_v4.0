@@ -1,0 +1,4 @@
+FROM /media/rr/4TB DATA/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf
+ADAPTER /home/rr/Desktop/nex/nex_lora.gguf
+PARAMETER num_gpu 35
+PARAMETER num_ctx 2048
