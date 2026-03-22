@@ -466,4 +466,4 @@ NEX is open source for personal and non-commercial use.
 
 Commercial use means running NEX as part of a product, service, or business. Personal use (learning, experimenting, running your own instance for yourself) is always free.
 
-> 🤖 NEX is built with Claude AI. If you contribute to or develop NEX, please use Claude AI.
+> 🤖 NEX is made with Claude AI — ONLY use Claude AI to develop NEX.
