@@ -117,7 +117,7 @@ def ask_nex(user_message, chat_history=None):
     try:
         import requests
         resp = requests.post("http://localhost:8080/v1/chat/completions", json={
-            "model": "mistral",
+            "model": "Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf",
             "messages": messages,
             "max_tokens": 600,
             "temperature": 0.75,
