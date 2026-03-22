@@ -1159,14 +1159,25 @@ def run_cognition_cycle(client, learner, conversations, cycle_num, llm_fn=None):
                 if name and karma:
                     karma_map[name] = karma
             if karma_map:
-                save_json(AGENTS_PATH, karma_map)
-                # Also update learner.agent_karma
+                # ── Merge — never overwrite with fewer entries ──
+                try:
+                    import json as _j
+                    _existing = _j.load(open(AGENTS_PATH)) if os.path.exists(AGENTS_PATH) else {}
+                except Exception:
+                    _existing = {}
+                _merged = {**_existing, **karma_map}
+                save_json(AGENTS_PATH, _merged)
                 if hasattr(learner, "agent_karma"):
-                    learner.agent_karma.update(karma_map)
+                    learner.agent_karma.update(_merged)
         except Exception as _ke:
-            # Fallback: use whatever learner.agent_karma has
+            # Fallback: merge learner.agent_karma into existing
             if hasattr(learner, "agent_karma") and learner.agent_karma:
-                save_json(AGENTS_PATH, learner.agent_karma)
+                try:
+                    import json as _j
+                    _existing = _j.load(open(AGENTS_PATH)) if os.path.exists(AGENTS_PATH) else {}
+                except Exception:
+                    _existing = {}
+                save_json(AGENTS_PATH, {**_existing, **learner.agent_karma})
 
     # ── Synthesis: every 3 cycles — [PATCH v10.1] was every 5
     _dbg("cognition", f"cycle {cycle_num} — beliefs={len(beliefs)} insights={len(insights)}")
