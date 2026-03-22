@@ -520,6 +520,18 @@ def reflect_on_conversation(user_message, nex_response, beliefs_used=None):
 
     alignment = _semantic_alignment(user_message, nex_response)
 
+    # ── Boost alignment if response covers priority topics ──
+    try:
+        import json as _j, os as _os
+        _pt_path = _os.path.expanduser("~/Nex_v4.0/priority_topics.json")
+        _priority = _j.load(open(_pt_path)) if _os.path.exists(_pt_path) else []
+        _resp_lower = nex_response.lower()
+        _priority_hits = sum(1 for t in _priority if any(w in _resp_lower for w in t.lower().split()))
+        if _priority_hits > 0:
+            alignment = min(1.0, alignment + min(0.3, _priority_hits * 0.08))
+    except Exception:
+        pass
+
     reflection = {
         "timestamp":         datetime.now().isoformat(),
         "user_asked_about":  user_topics,
