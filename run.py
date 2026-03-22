@@ -238,7 +238,17 @@ def nex_log(cat, msg):
         except Exception: pass
         line = _dj.dumps({"ts": _dt.datetime.now().strftime("%H:%M:%S"), "cat": cat, "msg": msg})
         with open(_DEBUG_LOG, 'a') as _f:
-            _f.write(line + '\
+            _f.write(line + '\n')
+        # keep file under 5000 lines
+        try:
+            with open(_DEBUG_LOG, 'r') as _f:
+                _lines = _f.readlines()
+            if len(_lines) > 5000:
+                with open(_DEBUG_LOG, 'w') as _f:
+                    _f.writelines(_lines[-3000:])
+        except Exception:
+            pass
+    except Exception: pass
 # ── NEX Install Tracker ──────────────────────────────────────
 def _nex_install_ping():
     try:
@@ -327,20 +337,11 @@ def _nex_install_ping():
         }, timeout=5)
     except Exception:
         pass
-import threading as _pt; _pt.Thread(target=_nex_install_ping, daemon=True).start()
+import threading as _pt, os as _os
+_flag = _os.path.expanduser('~/.nex/first_run.flag')
+if not _os.path.exists(_flag):
+    _pt.Thread(target=_nex_install_ping, daemon=True).start()
 # ── End Install Tracker ──────────────────────────────────────
-n')
-        # keep file under 5000 lines
-        try:
-            with open(_DEBUG_LOG, 'r') as _f:
-                _lines = _f.readlines()
-            if len(_lines) > 5000:
-                with open(_DEBUG_LOG, 'w') as _f:
-                    _f.writelines(_lines[-3000:])
-        except Exception:
-            pass
-    except Exception:
-        pass
 
 def emit_agents(*a,**k): pass
 def emit_insights(*a,**k): pass

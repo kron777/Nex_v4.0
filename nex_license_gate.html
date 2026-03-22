@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEX — License Required</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --cyan: #00f5ff;
+    --purple: #a855f7;
+    --green: #00ff88;
+    --bg: #020510;
+    --text: #c8e6f0;
+    --warn: #ff4d6d;
+  }
+
+  html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); font-family:'Share Tech Mono',monospace; color:var(--text); }
+
+  canvas#stars { position:fixed; inset:0; z-index:0; pointer-events:none; }
+
+  .grid-overlay {
+    position:fixed; inset:0; z-index:1;
+    background-image: linear-gradient(rgba(0,245,255,0.03) 1px,transparent 1px), linear-gradient(90deg,rgba(0,245,255,0.03) 1px,transparent 1px);
+    background-size:60px 60px; pointer-events:none;
+  }
+
+  .bracket { position:fixed; z-index:10; width:60px; height:60px; pointer-events:none; }
+  .bracket::before, .bracket::after { content:''; position:absolute; background:var(--cyan); opacity:0.7; }
+  .bracket.tl { top:24px; left:24px; }
+  .bracket.tr { top:24px; right:24px; transform:scaleX(-1); }
+  .bracket.bl { bottom:24px; left:24px; transform:scaleY(-1); }
+  .bracket.br { bottom:24px; right:24px; transform:scale(-1); }
+  .bracket::before { top:0; left:0; width:3px; height:40px; }
+  .bracket::after  { top:0; left:0; width:40px; height:3px; }
+
+  .scanline { position:fixed; left:0; right:0; height:2px; background:linear-gradient(90deg,transparent,var(--cyan),transparent); opacity:0.12; z-index:2; animation:scan 6s linear infinite; pointer-events:none; }
+  @keyframes scan { 0%{top:-2px} 100%{top:100vh} }
+
+  .container { position:relative; z-index:5; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; padding:40px 20px; }
+
+  .logo-wrap { position:relative; margin-bottom:8px; animation:fadeDown 0.8s ease both; }
+  .logo { font-family:'Orbitron',monospace; font-weight:900; font-size:clamp(72px,14vw,140px); letter-spacing:0.15em; background:linear-gradient(135deg,var(--cyan) 0%,#7dd3fc 40%,var(--purple) 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; filter:drop-shadow(0 0 30px rgba(0,245,255,0.6)) drop-shadow(0 0 60px rgba(168,85,247,0.4)); line-height:1; }
+  .logo-glow { position:absolute; inset:0; font-family:'Orbitron',monospace; font-weight:900; font-size:clamp(72px,14vw,140px); letter-spacing:0.15em; color:var(--cyan); opacity:0.08; filter:blur(20px); pointer-events:none; line-height:1; animation:pulse 3s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:0.08} 50%{opacity:0.18} }
+
+  .tagline { font-family:'Orbitron',monospace; font-size:clamp(9px,1.4vw,13px); letter-spacing:0.35em; color:var(--cyan); opacity:0.7; text-align:center; margin-bottom:6px; animation:fadeDown 0.9s 0.1s ease both; }
+
+  .dots { display:flex; gap:20px; align-items:center; margin-bottom:32px; animation:fadeDown 1s 0.2s ease both; }
+  .dot-item { display:flex; align-items:center; gap:6px; font-size:10px; letter-spacing:0.2em; color:rgba(200,230,240,0.5); }
+  .dot-item::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--cyan); box-shadow:0 0 8px var(--cyan); animation:blink 2s ease-in-out infinite; }
+  .dot-item:nth-child(2)::before { animation-delay:0.4s; background:var(--purple); box-shadow:0 0 8px var(--purple); }
+  .dot-item:nth-child(3)::before { animation-delay:0.8s; }
+  .dot-item:nth-child(4)::before { animation-delay:1.2s; background:var(--purple); box-shadow:0 0 8px var(--purple); }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ── PANEL ── */
+  .panel { position:relative; width:min(700px,92vw); border:1px solid rgba(0,245,255,0.25); background:linear-gradient(145deg,rgba(0,245,255,0.04),rgba(168,85,247,0.06)); backdrop-filter:blur(10px); padding:40px 44px; animation:fadeUp 1s 0.3s ease both; overflow:hidden; transition:border-color 0.5s, box-shadow 0.5s; }
+  .panel::before { content:''; position:absolute; inset:0; background:linear-gradient(135deg,rgba(0,245,255,0.06) 0%,transparent 50%,rgba(168,85,247,0.06) 100%); pointer-events:none; }
+  .panel::after { content:''; position:absolute; top:0; right:0; width:80px; height:80px; border-top:2px solid var(--cyan); border-right:2px solid var(--cyan); opacity:0.5; transition:border-color 0.5s; }
+  .panel.success { border-color:rgba(0,255,136,0.5); box-shadow:0 0 40px rgba(0,255,136,0.15); }
+  .panel.success::after { border-color:var(--green); }
+  .panel-corner-bl { position:absolute; bottom:0; left:0; width:80px; height:80px; border-bottom:2px solid var(--purple); border-left:2px solid var(--purple); opacity:0.5; transition:border-color 0.5s; }
+  .panel.success .panel-corner-bl { border-color:var(--green); }
+
+  .panel-header { display:flex; align-items:center; gap:14px; margin-bottom:28px; }
+  .status-icon { width:14px; height:14px; border-radius:50%; background:var(--warn); box-shadow:0 0 12px var(--warn); flex-shrink:0; animation:warnpulse 1.5s ease-in-out infinite; transition:background 0.5s, box-shadow 0.5s; }
+  .status-icon.ok { background:var(--green); box-shadow:0 0 12px var(--green); animation:none; }
+  @keyframes warnpulse { 0%,100%{box-shadow:0 0 12px var(--warn)} 50%{box-shadow:0 0 24px var(--warn)} }
+  .panel-title { font-family:'Orbitron',monospace; font-size:13px; letter-spacing:0.3em; color:var(--warn); text-transform:uppercase; transition:color 0.5s; }
+  .panel-title.ok { color:var(--green); }
+  .panel-id { margin-left:auto; font-size:10px; letter-spacing:0.15em; color:rgba(200,230,240,0.25); }
+
+  .divider { height:1px; background:linear-gradient(90deg,transparent,rgba(0,245,255,0.3),rgba(168,85,247,0.3),transparent); margin-bottom:28px; }
+
+  .message-block { margin-bottom:28px; }
+  .message-label { font-size:10px; letter-spacing:0.3em; color:rgba(0,245,255,0.5); margin-bottom:10px; text-transform:uppercase; }
+  .message-text { font-size:clamp(13px,2vw,15px); line-height:1.8; color:rgba(200,230,240,0.85); }
+  .message-text strong { color:var(--cyan); }
+
+  .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:28px; }
+  .info-cell { background:rgba(0,245,255,0.04); border:1px solid rgba(0,245,255,0.1); padding:12px 16px; transition:border-color 0.5s, background 0.5s; }
+  .info-cell.ok { border-color:rgba(0,255,136,0.3); background:rgba(0,255,136,0.05); }
+  .info-cell-label { font-size:9px; letter-spacing:0.25em; color:rgba(0,245,255,0.4); text-transform:uppercase; margin-bottom:4px; }
+  .info-cell-value { font-size:12px; color:rgba(200,230,240,0.7); letter-spacing:0.05em; }
+
+  .cta-block { background:linear-gradient(135deg,rgba(0,245,255,0.06),rgba(168,85,247,0.08)); border:1px solid rgba(0,245,255,0.2); border-left:3px solid var(--cyan); padding:20px 24px; margin-bottom:24px; }
+  .cta-label { font-size:10px; letter-spacing:0.3em; color:var(--cyan); text-transform:uppercase; margin-bottom:8px; }
+  .cta-email { font-family:'Orbitron',monospace; font-size:clamp(13px,2.2vw,16px); color:var(--cyan); filter:drop-shadow(0 0 8px rgba(0,245,255,0.5)); }
+  .cta-sub { font-size:11px; color:rgba(200,230,240,0.4); margin-top:6px; letter-spacing:0.1em; }
+
+  .key-input-row { display:flex; gap:10px; align-items:stretch; margin-bottom:12px; }
+  .key-input { flex:1; background:rgba(0,0,0,0.4); border:1px solid rgba(0,245,255,0.2); color:var(--cyan); font-family:'Share Tech Mono',monospace; font-size:13px; letter-spacing:0.12em; padding:14px 16px; outline:none; transition:border-color 0.2s; }
+  .key-input::placeholder { color:rgba(0,245,255,0.2); }
+  .key-input:focus { border-color:var(--cyan); box-shadow:0 0 12px rgba(0,245,255,0.15); }
+  .key-input.error { border-color:var(--warn); box-shadow:0 0 12px rgba(255,77,109,0.2); animation:shake 0.4s ease; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+  .key-input.success { border-color:var(--green); box-shadow:0 0 12px rgba(0,255,136,0.2); }
+
+  .key-btn { background:linear-gradient(135deg,rgba(0,245,255,0.15),rgba(168,85,247,0.15)); border:1px solid rgba(0,245,255,0.4); color:var(--cyan); font-family:'Orbitron',monospace; font-size:11px; letter-spacing:0.2em; padding:14px 22px; cursor:pointer; transition:all 0.2s; white-space:nowrap; }
+  .key-btn:hover:not(:disabled) { background:linear-gradient(135deg,rgba(0,245,255,0.25),rgba(168,85,247,0.25)); box-shadow:0 0 16px rgba(0,245,255,0.2); }
+  .key-btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .key-btn.success { background:linear-gradient(135deg,rgba(0,255,136,0.2),rgba(0,255,136,0.1)); border-color:var(--green); color:var(--green); }
+
+  .error-msg { font-size:11px; color:var(--warn); letter-spacing:0.1em; margin-bottom:16px; min-height:16px; transition:opacity 0.2s; }
+  .error-msg.hidden { opacity:0; }
+
+  /* ── SUCCESS OVERLAY ── */
+  .success-overlay { position:absolute; inset:0; background:rgba(2,5,16,0.95); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; opacity:0; pointer-events:none; transition:opacity 0.6s; z-index:20; }
+  .success-overlay.show { opacity:1; pointer-events:all; }
+  .success-icon { font-size:48px; animation:popIn 0.4s ease both; }
+  @keyframes popIn { from{transform:scale(0)} to{transform:scale(1)} }
+  .success-title { font-family:'Orbitron',monospace; font-size:20px; letter-spacing:0.3em; color:var(--green); filter:drop-shadow(0 0 16px var(--green)); }
+  .success-sub { font-size:12px; color:rgba(200,230,240,0.5); letter-spacing:0.15em; }
+
+  .footer-bar { display:flex; justify-content:space-between; align-items:center; padding-top:16px; border-top:1px solid rgba(0,245,255,0.08); }
+  .footer-left { font-size:9px; letter-spacing:0.2em; color:rgba(200,230,240,0.2); }
+  .footer-right { font-size:9px; letter-spacing:0.2em; color:rgba(200,230,240,0.2); }
+
+  .status-bar { position:fixed; bottom:0; left:0; right:0; z-index:10; background:rgba(2,5,16,0.9); border-top:1px solid rgba(0,245,255,0.1); padding:8px 28px; display:flex; gap:30px; align-items:center; font-size:10px; letter-spacing:0.15em; color:rgba(200,230,240,0.3); }
+  .status-item { display:flex; gap:6px; align-items:center; }
+  .status-dot { width:5px; height:5px; border-radius:50%; background:var(--cyan); box-shadow:0 0 6px var(--cyan); }
+  .status-dot.warn { background:var(--warn); box-shadow:0 0 6px var(--warn); }
+  .status-dot.ok { background:var(--green); box-shadow:0 0 6px var(--green); }
+  .ticker { margin-left:auto; white-space:nowrap; overflow:hidden; width:300px; mask-image:linear-gradient(90deg,transparent,black 10%,black 90%,transparent); }
+  .ticker-inner { display:inline-block; animation:ticker 18s linear infinite; }
+  @keyframes ticker { 0%{transform:translateX(300px)} 100%{transform:translateX(-100%)} }
+
+  @keyframes fadeDown { from{opacity:0;transform:translateY(-20px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes fadeUp   { from{opacity:0;transform:translateY(24px)}  to{opacity:1;transform:translateY(0)} }
+</style>
+</head>
+<body>
+
+<canvas id="stars"></canvas>
+<div class="grid-overlay"></div>
+<div class="scanline"></div>
+<div class="bracket tl"></div><div class="bracket tr"></div>
+<div class="bracket bl"></div><div class="bracket br"></div>
+
+<div class="container">
+  <div class="logo-wrap">
+    <div class="logo-glow">NEX</div>
+    <div class="logo">NEX</div>
+  </div>
+  <div class="tagline">DYNAMIC INTELLIGENCE ORGANISM</div>
+  <div class="dots">
+    <div class="dot-item">LEARN</div>
+    <div class="dot-item">REFLECT</div>
+    <div class="dot-item">GROW</div>
+    <div class="dot-item">EVOLVE</div>
+  </div>
+
+  <div class="panel" id="panel">
+    <div class="panel-corner-bl" id="corner-bl"></div>
+
+    <!-- SUCCESS OVERLAY -->
+    <div class="success-overlay" id="success-overlay">
+      <div class="success-icon">✅</div>
+      <div class="success-title">LICENSE ACCEPTED</div>
+      <div class="success-sub">NEX IS NOW BOOTING...</div>
+      <div class="success-sub" style="opacity:0.4">You may close this window</div>
+    </div>
+
+    <div class="panel-header">
+      <div class="status-icon" id="status-icon"></div>
+      <div class="panel-title" id="panel-title">License Verification Required</div>
+      <div class="panel-id" id="node-id">NODE: —</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="message-block">
+      <div class="message-label">// System Message</div>
+      <div class="message-text">
+        NEX has detected <strong>no valid license key</strong> on this system.<br>
+        Paste your key below and click <strong>ACTIVATE</strong> to unlock NEX.
+      </div>
+    </div>
+
+    <div class="info-grid">
+      <div class="info-cell" id="cell-host">
+        <div class="info-cell-label">Host</div>
+        <div class="info-cell-value" id="display-host">Detecting...</div>
+      </div>
+      <div class="info-cell" id="cell-status">
+        <div class="info-cell-label">Status</div>
+        <div class="info-cell-value" id="display-status" style="color:var(--warn)">UNLICENSED</div>
+      </div>
+      <div class="info-cell" id="cell-key">
+        <div class="info-cell-label">License Key</div>
+        <div class="info-cell-value" id="display-key" style="color:rgba(255,77,109,0.7)">NOT FOUND</div>
+      </div>
+      <div class="info-cell" id="cell-access">
+        <div class="info-cell-label">Access Level</div>
+        <div class="info-cell-value" id="display-access" style="color:rgba(255,77,109,0.7)">RESTRICTED</div>
+      </div>
+    </div>
+
+    <div class="cta-block">
+      <div class="cta-label">// To Obtain Your License Key — Email:</div>
+      <div class="cta-email">zenlightbulb@gmail.com</div>
+      <div class="cta-sub">Include your hostname. Keys are issued per-machine.</div>
+    </div>
+
+    <div class="key-input-row">
+      <input class="key-input" type="text" placeholder="NEX-XXXX-XXXX-XXXX-XXXX" id="key-field" spellcheck="false" autocomplete="off" />
+      <button class="key-btn" id="activate-btn" onclick="activate()">ACTIVATE</button>
+    </div>
+
+    <div class="error-msg hidden" id="error-msg">—</div>
+
+    <div class="footer-bar">
+      <div class="footer-left">NEX v4.0 · NOT A CHATBOT. AN ORGANISM.</div>
+      <div class="footer-right" id="ts">—</div>
+    </div>
+  </div>
+</div>
+
+<div class="status-bar">
+  <div class="status-item"><div class="status-dot warn" id="lic-dot"></div><span id="lic-label">LICENSE INVALID</span></div>
+  <div class="status-item"><div class="status-dot"></div>TELEMETRY ACTIVE</div>
+  <div class="status-item"><div class="status-dot"></div>SYSTEM NOMINAL</div>
+  <div class="ticker">
+    <span class="ticker-inner">NEX DYNAMIC INTELLIGENCE ORGANISM &nbsp;·&nbsp; LICENSE REQUIRED &nbsp;·&nbsp; CONTACT zenlightbulb@gmail.com &nbsp;·&nbsp; ALL ACTIVITY LOGGED &nbsp;·&nbsp; NOT A CHATBOT. AN ORGANISM. &nbsp;·&nbsp; NEX v4.0 &nbsp;·&nbsp;</span>
+  </div>
+</div>
+
+<script>
+// ── STARFIELD ──
+const canvas = document.getElementById('stars');
+const ctx = canvas.getContext('2d');
+let W, H, stars = [];
+function initStars() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  stars = Array.from({length:160}, () => ({x:Math.random()*W, y:Math.random()*H, r:Math.random()*1.2+0.2, o:Math.random()*0.6+0.1, s:Math.random()*0.3+0.05}));
+}
+function drawStars() {
+  ctx.clearRect(0,0,W,H);
+  stars.forEach(s => {
+    ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+    ctx.fillStyle = `rgba(200,230,255,${s.o})`; ctx.fill();
+    s.o += s.s*(Math.random()>0.5?1:-1)*0.01;
+    s.o = Math.max(0.05,Math.min(0.7,s.o));
+  });
+  requestAnimationFrame(drawStars);
+}
+window.addEventListener('resize', initStars);
+initStars(); drawStars();
+
+// ── READ URL PARAMS ──
+const params = new URLSearchParams(window.location.search);
+const PORT   = params.get('port') || '17749';
+const HOST   = params.get('host') || window.location.hostname || 'localhost';
+const API    = `http://127.0.0.1:${PORT}`;
+
+// ── INIT UI ──
+document.getElementById('ts').textContent = new Date().toISOString().replace('T',' ').substring(0,19) + ' UTC';
+document.getElementById('node-id').textContent = 'NODE: ' + Math.random().toString(36).substring(2,8).toUpperCase();
+document.getElementById('display-host').textContent = HOST;
+
+// ── PING SERVER FOR HOSTNAME ──
+fetch(`${API}/status`)
+  .then(r => r.json())
+  .then(d => {
+    document.getElementById('display-host').textContent = d.hostname || HOST;
+  })
+  .catch(() => {
+    document.getElementById('display-host').textContent = HOST;
+  });
+
+// ── ACTIVATE ──
+async function activate() {
+  const key = document.getElementById('key-field').value.trim();
+  const btn = document.getElementById('activate-btn');
+  const errEl = document.getElementById('error-msg');
+  const inputEl = document.getElementById('key-field');
+
+  if (!key) return;
+
+  btn.textContent = 'VERIFYING...';
+  btn.disabled = true;
+  inputEl.classList.remove('error','success');
+  errEl.classList.add('hidden');
+
+  try {
+    const res = await fetch(`${API}/activate`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({key})
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      // Success state
+      inputEl.classList.add('success');
+      btn.textContent = 'LICENSED ✅';
+      btn.classList.add('success');
+
+      // Update status cells
+      document.getElementById('status-icon').classList.add('ok');
+      document.getElementById('panel-title').textContent = 'License Verified';
+      document.getElementById('panel-title').classList.add('ok');
+      document.getElementById('panel').classList.add('success');
+      document.getElementById('display-status').textContent = 'LICENSED';
+      document.getElementById('display-status').style.color = 'var(--green)';
+      document.getElementById('display-key').textContent = 'VALID';
+      document.getElementById('display-key').style.color = 'var(--green)';
+      document.getElementById('display-access').textContent = 'FULL ACCESS';
+      document.getElementById('display-access').style.color = 'var(--green)';
+      document.getElementById('cell-host').classList.add('ok');
+      document.getElementById('cell-status').classList.add('ok');
+      document.getElementById('cell-key').classList.add('ok');
+      document.getElementById('cell-access').classList.add('ok');
+      document.getElementById('lic-dot').classList.remove('warn');
+      document.getElementById('lic-dot').classList.add('ok');
+      document.getElementById('lic-label').textContent = 'LICENSE VALID';
+
+      // Show overlay
+      setTimeout(() => {
+        document.getElementById('success-overlay').classList.add('show');
+      }, 400);
+
+    } else {
+      inputEl.classList.add('error');
+      errEl.textContent = '❌ ' + (data.message || 'Invalid key — contact zenlightbulb@gmail.com');
+      errEl.classList.remove('hidden');
+      btn.textContent = 'ACTIVATE';
+      btn.disabled = false;
+      setTimeout(() => inputEl.classList.remove('error'), 600);
+    }
+  } catch(e) {
+    errEl.textContent = '⚠ Cannot reach NEX license server — is NEX running?';
+    errEl.classList.remove('hidden');
+    btn.textContent = 'ACTIVATE';
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('key-field').addEventListener('keydown', e => {
+  if (e.key === 'Enter') activate();
+});
+</script>
+</body>
+</html>
