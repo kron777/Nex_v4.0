@@ -11,6 +11,26 @@
 
 ---
 
+## 💻 System Requirements
+
+| | Minimum | Recommended | Optimal |
+|---|---|---|---|
+| **OS** | Ubuntu 22.04 / Zorin 17 | Ubuntu 24.04 / Zorin 18 | Ubuntu 24.04 / Zorin 18 |
+| **CPU** | 4 cores | 8 cores | 16+ cores |
+| **RAM** | 16GB | 32GB | 64GB |
+| **GPU** | None (CPU only) | AMD RX 6600 / NVIDIA RTX 3060 8GB VRAM | AMD RX 7900 / NVIDIA RTX 4090 16GB+ VRAM |
+| **VRAM** | 0 (CPU inference) | 8GB | 16GB+ |
+| **Storage** | 20GB free | 100GB SSD | 1TB dedicated drive (recommended) |
+| **Internet** | Required | Required | Required |
+| **Python** | 3.12+ | 3.12+ | 3.12+ |
+| **LLM Speed** | ~2 tok/s (CPU) | ~15 tok/s (Vulkan) | ~40 tok/s (ROCm/CUDA) |
+
+> **CPU-only** is possible but slow — responses take 30-60 seconds. NEX falls back to Groq cloud inference automatically if local LLM is unavailable.
+
+> **Dedicated drive** strongly recommended — NEX accumulates gigabytes of beliefs, conversations, reflections and model files over time. Keeping this on a separate partition means OS reinstalls never touch your data.
+
+---
+
 ## ⚡ Quick Install (Debian/Ubuntu/Zorin)
 
 ```bash
