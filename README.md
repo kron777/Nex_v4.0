@@ -36,7 +36,7 @@
 
 ```bash
 wget https://github.com/kron777/Nex_v4.0/raw/main/releases/nex_1.2-1.deb
-sudo dpkg -i nex_1.1-1.deb
+sudo dpkg -i nex_1.2-1.deb
 sudo nex-setup
 nex
 ```
