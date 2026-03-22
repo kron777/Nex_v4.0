@@ -13,11 +13,11 @@ import os
 import threading
 
 # ── TARGETS — adjust these to taste ──────────────────────────
-TARGET_CPU   = 50   # max CPU % before throttling kicks in
-TARGET_GPU   = 60   # max GPU % before throttling kicks in
-MIN_SLEEP    = 0.1  # minimum sleep between cycles (seconds)
+TARGET_CPU   = 65   # max CPU % before throttling kicks in
+TARGET_GPU   = 75   # max GPU % before throttling kicks in
+MIN_SLEEP    = 0.05  # minimum sleep between cycles (seconds)
 MAX_SLEEP    = 2.0  # maximum sleep when under heavy load
-CHECK_EVERY  = 5    # re-check resource usage every N cycles
+CHECK_EVERY  = 3    # re-check resource usage every N cycles
 # ─────────────────────────────────────────────────────────────
 
 _cycle_count  = 0

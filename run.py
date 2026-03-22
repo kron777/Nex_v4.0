@@ -2632,7 +2632,7 @@ def main():
                         # Write YouTube pulse for dashboard
                         try:
                             _pl = _pathlib
-                            _pl.Path('/home/rr/.config/nex/platform_youtube.live').touch()
+                            _pl.Path('/home/rr/.config/nex/platform_youtube.live').write_text(str(int(_time.time())))
                         except Exception: pass
                         # ── 6b. META LAYER — module performance tracking ──
                         try:
