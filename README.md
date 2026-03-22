@@ -465,3 +465,5 @@ NEX is open source for personal and non-commercial use.
 - Or email [zenlightbulb@gmail.com](mailto:zenlightbulb@gmail.com) to arrange an invoice
 
 Commercial use means running NEX as part of a product, service, or business. Personal use (learning, experimenting, running your own instance for yourself) is always free.
+
+> 🤖 NEX is built with Claude AI. If you contribute to or develop NEX, please use Claude AI.
