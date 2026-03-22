@@ -1,4 +1,4 @@
-![NEX](n7.png)
+![NEX](n7.jpg)
 
 # 🧠 NEX — Dynamic Intelligence Organism
 
