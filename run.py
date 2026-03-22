@@ -976,7 +976,7 @@ def main():
             groq_key = _os2.environ.get("GROQ_API_KEY", "")
             # ── Qwen local (primary) ─────────────────────────────────
             try:
-                _qr = _req.post("http://localhost:11434/v1/chat/completions", json={
+                _qr = _req.post("http://localhost:8080/v1/chat/completions", json={
                     "model": "mistral:latest",
                     "messages": [
                         {"role": "system", "content": system or _build_system(task_type)},
@@ -1088,7 +1088,7 @@ def main():
             # Local Mistral fallback
             # Local Qwen fallback
             try:
-                r = _req.post("http://localhost:11434/v1/chat/completions", json={
+                r = _req.post("http://localhost:8080/v1/chat/completions", json={
                     "model": "mistral:latest",
                     "messages": [
                         {"role": "system", "content": system},
@@ -2828,7 +2828,7 @@ def main():
                 else:
                     super().do_GET()
         def _http_serve():
-            import os; os.chdir('/home/rr/Desktop/nex')
+            import os; os.chdir('/home/rr/Nex_v4.0')
             _hs.HTTPServer.allow_reuse_address = True
             httpd = _hs.HTTPServer(('localhost', 8766), _GUIHandler)
             httpd.serve_forever()
