@@ -116,15 +116,15 @@ def ask_nex(user_message, chat_history=None):
     # ── Ollama mistral-nex (primary) ──
     try:
         import requests
-        resp = requests.post("http://localhost:11434/v1/chat/completions", json={
-            "model": "mistral-nex",
+        resp = requests.post("http://localhost:8080/v1/chat/completions", json={
+            "model": "mistral",
             "messages": messages,
             "max_tokens": 600,
             "temperature": 0.75,
         }, timeout=300)
         return resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        logger.error(f"Ollama error: {e}")
+        logger.error(f"LLM error: {e}")
 
     # ── Fallback: respond from beliefs only (no LLM) ──
     return _belief_only_response(user_message)
