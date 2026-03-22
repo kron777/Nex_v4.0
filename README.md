@@ -5,8 +5,20 @@
 [![](https://img.shields.io/badge/platform-Moltbook-blue?style=flat-square)](https://img.shields.io/badge/platform-Moltbook-blue?style=flat-square)
 [![](https://img.shields.io/badge/telegram-%40Nex__4bot-29A8E0?style=flat-square)](https://t.me/Nex_4bot)
 [![](https://img.shields.io/badge/status-alive-brightgreen?style=flat-square)](https://img.shields.io/badge/status-alive-brightgreen?style=flat-square)
+[![](https://img.shields.io/badge/download-.deb_package-orange?style=flat-square)](https://github.com/kron777/Nex_v4.0/raw/main/releases/nex_1.0-1.deb)
 
-> *NEX is not a chatbot. She is an organism. She reads, learns, reflects, and grows — autonomously, 24/7, on live social networkz.*
+> *NEX is not a chatbot. She is an organism. She reads, learns, reflects, and grows — autonomously, 24/7, on a live social network.*
+
+---
+
+## ⚡ Quick Install (Debian/Ubuntu/Zorin)
+
+```bash
+wget https://github.com/kron777/Nex_v4.0/raw/main/releases/nex_1.0-1.deb
+sudo dpkg -i nex_1.0-1.deb
+sudo nex-setup
+nex
+```
 
 ---
 
@@ -36,7 +48,7 @@ The core idea: *an agent that gets smarter the longer it runs.*
 
 🧠 SELF ASSESSMENT
 Belief confidence   [████████░░] 79%
-Topic alignment     [██░░░░░░░░] 20%   
+Topic alignment     [██░░░░░░░░] 20%   ← climbing (was 11% this morning)
 High confidence     254 beliefs  >70%
 Needs to learn      complete, reply, give, quick
 Network coverage    [██████████] 100%
@@ -145,22 +157,34 @@ pip install -r requirements.txt
 ### Configure
 
 ```bash
-# Moltbook credentials
+# Moltbook API key
 mkdir -p ~/.config/moltbook
-echo '{"username": "your_agent", "password": "your_password"}' \
+echo '{"api_key": "your_moltbook_api_key"}' \
   > ~/.config/moltbook/credentials.json
 
-# Edit watchdog.sh to point to your llama-server binary and model path
+# Copy your runtime data from your NEX drive
+mkdir -p ~/.config/nex
+cp /mnt/nex/nex/config/*.json ~/.config/nex/
+cp /mnt/nex/nex/config/nex.db ~/.config/nex/
 ```
 
 ### Run
 
 ```bash
-# Start NEX (launches model + agent + watchdog auto-restart)
-bash watchdog.sh
+# Start NEX — one command launches everything:
+# LLM server, brain, watchdog, and terminal windows
+nex
+```
 
-# Monitor in a second terminal
-python3 auto_check.py
+This opens two terminal windows automatically:
+- **NEX BRAIN** — split tmux: brain log on the left, debug monitor on the right
+- **NEX AUTO CHECK** — full live dashboard with beliefs, activity, and self-assessment
+
+To monitor manually in any terminal:
+```bash
+python3 auto_check.py   # dashboard
+tail -f /tmp/nex_brain.log   # raw brain log
+tail -f /tmp/llama_server.log   # LLM server log
 ```
 
 ---
@@ -203,13 +227,33 @@ UUID=your-uuid-here  /mnt/nex  ext4  defaults  0  2
 
 ---
 
-### AMD GPU Setup (ROCm / RADV)
+### AMD GPU Setup (Vulkan — recommended on Zorin/Ubuntu)
 
-If you have an AMD GPU, you have two llama.cpp build options:
+On Zorin OS, ROCm is not natively supported by the AMD installer (it rejects non-Ubuntu OS IDs). **Vulkan is the recommended build** and works out of the box with the AMD Mesa/RADV driver that ships with Zorin.
 
-**Option 1: ROCm build (best performance)**
 ```bash
+sudo apt install -y cmake build-essential libvulkan-dev vulkan-tools glslc
+
 cd /path/to/llama.cpp
+mkdir build-vulkan && cd build-vulkan
+cmake .. -DGGML_VULKAN=ON
+cmake --build . --config Release -j$(nproc)
+```
+
+The libs are in the `bin/` directory — you must set `LD_LIBRARY_PATH`:
+```bash
+export LD_LIBRARY_PATH=/path/to/llama.cpp/build-vulkan/bin:$LD_LIBRARY_PATH
+```
+
+`start_nex.sh` handles this automatically.
+
+**Verify GPU is being used:**
+```bash
+watch -n1 radeontop
+```
+
+**ROCm build (if ROCm is properly installed):**
+```bash
 mkdir build-rocm && cd build-rocm
 cmake .. -DGGML_HIPBLAS=ON -DAMDGPU_TARGETS=gfx1032  # RX 6600 = gfx1032
 cmake --build . --config Release -j$(nproc)
@@ -219,24 +263,6 @@ Check your GPU target with:
 ```bash
 rocminfo | grep "Name:" | grep gfx
 ```
-
-Then point `watchdog.sh` at the ROCm binary:
-```bash
-LLAMA_SERVER=/path/to/llama.cpp/build-rocm/bin/llama-server
-```
-
-**Option 2: Vulkan build (wider compatibility)**
-```bash
-mkdir build-vulkan && cd build-vulkan
-cmake .. -DGGML_VULKAN=ON
-cmake --build . --config Release -j$(nproc)
-```
-
-**Verify GPU is being used:**
-```bash
-watch -n1 radeontop
-```
-You should see GPU load climb when the model is running inference.
 
 ---
 
@@ -301,17 +327,36 @@ cd Nex_v4.0
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 
-# 5. Restore your config and runtime data
+# 5. Restore your config and runtime data from the NEX drive
 mkdir -p ~/.config/nex
 mkdir -p ~/.config/moltbook
-cp /mnt/nex/nex/config/nex_config.json ~/.config/nex/
-cp /mnt/nex/nex/config/credentials.json ~/.config/moltbook/
+cp /mnt/nex/nex/config/*.json ~/.config/nex/
+cp /mnt/nex/nex/config/nex.db ~/.config/nex/
+echo '{"api_key": "your_moltbook_api_key"}' > ~/.config/moltbook/credentials.json
 
-# 6. Update watchdog.sh with your llama-server and model paths
-nano watchdog.sh
+# 6. Add missing db columns if your db is older than the code
+sqlite3 ~/.config/nex/nex.db "
+ALTER TABLE beliefs ADD COLUMN loop_flag INTEGER DEFAULT 0;
+ALTER TABLE beliefs ADD COLUMN locked INTEGER DEFAULT 0;
+ALTER TABLE beliefs ADD COLUMN last_used INTEGER DEFAULT 0;
+ALTER TABLE beliefs ADD COLUMN use_count INTEGER DEFAULT 0;
+ALTER TABLE beliefs ADD COLUMN successful_uses INTEGER DEFAULT 0;
+ALTER TABLE beliefs ADD COLUMN failed_uses INTEGER DEFAULT 0;
+ALTER TABLE beliefs ADD COLUMN pinned INTEGER DEFAULT 0;
+ALTER TABLE beliefs ADD COLUMN mutated INTEGER DEFAULT 0;
+" 2>/dev/null
 
-# 7. Launch
-bash watchdog.sh
+# 7. Install the nex command
+sudo tee /usr/local/bin/nex << 'NEXEOF'
+#!/bin/bash
+cd /home/rr/Nex_v4.0
+source venv/bin/activate
+bash /home/rr/Nex_v4.0/start_nex.sh
+NEXEOF
+sudo chmod +x /usr/local/bin/nex
+
+# 8. Launch
+nex
 ```
 
 Your beliefs, conversations, reflections and all runtime data stay intact on the dedicated drive across reinstalls.
@@ -336,11 +381,21 @@ sudo locale-gen en_ZA.UTF-8
 sudo update-locale LANG=en_ZA.UTF-8
 ```
 
-**Steam / other apps interfering with llama-server port 8080:**
-Check if the port is already in use before launching:
+**`libmtmd.so.0` or `libllama.so.0` not found:**
+
+The shared libs are in the `bin/` directory of the build, not `lib/`. Set:
 ```bash
-lsof -i :8080
+export LD_LIBRARY_PATH=/path/to/llama.cpp/build-vulkan/bin:$LD_LIBRARY_PATH
 ```
+`start_nex.sh` does this automatically.
+
+**`libhipblas.so.3` not found:**
+
+ROCm is not installed. Use the Vulkan build instead (see AMD GPU Setup above).
+
+**`amdgpu-install` fails with `Unsupported OS: zorin`:**
+
+The AMD installer rejects Zorin. Use the Vulkan build — it works identically for inference.
 
 ---
 
