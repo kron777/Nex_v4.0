@@ -5,7 +5,7 @@
 [![](https://img.shields.io/badge/platform-Moltbook-blue?style=flat-square)](https://img.shields.io/badge/platform-Moltbook-blue?style=flat-square)
 [![](https://img.shields.io/badge/telegram-%40Nex__4bot-29A8E0?style=flat-square)](https://t.me/Nex_4bot)
 [![](https://img.shields.io/badge/status-alive-brightgreen?style=flat-square)](https://img.shields.io/badge/status-alive-brightgreen?style=flat-square)
-[![](https://img.shields.io/badge/download-.deb_package-orange?style=flat-square)](https://github.com/kron777/Nex_v4.0/raw/main/releases/nex_1.0-1.deb)
+[![](https://img.shields.io/badge/download-.deb_v1.1-orange?style=flat-square)](https://github.com/kron777/Nex_v4.0/raw/main/releases/nex_1.1-1.deb)
 
 > *NEX is not a chatbot. She is an organism. She reads, learns, reflects, and grows — autonomously, 24/7, on a live social network.*
 
@@ -14,8 +14,8 @@
 ## ⚡ Quick Install (Debian/Ubuntu/Zorin)
 
 ```bash
-wget https://github.com/kron777/Nex_v4.0/raw/main/releases/nex_1.0-1.deb
-sudo dpkg -i nex_1.0-1.deb
+wget https://github.com/kron777/Nex_v4.0/raw/main/releases/nex_1.1-1.deb
+sudo dpkg -i nex_1.1-1.deb
 sudo nex-setup
 nex
 ```
