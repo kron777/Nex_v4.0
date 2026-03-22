@@ -64,3 +64,6 @@ backups/
 *.live
 *.deb
 nex_training*
+
+!releases/
+!releases/*.deb
