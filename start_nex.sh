@@ -1,5 +1,6 @@
 #!/bin/bash
 echo "[NEX] Starting full stack..."
+bash ~/Nex_v4.0/nex_license_check.sh || exit 1
 # Mount NEX drive if not mounted
 mountpoint -q /mnt/nex || sudo mount /dev/sdb2 /mnt/nex
 

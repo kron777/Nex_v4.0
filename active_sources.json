@@ -1,0 +1,210 @@
+{
+  "cognitive_architecture": [
+    {
+      "url": "https://export.arxiv.org/rss/cs.AI",
+      "name": "arxiv_AI",
+      "score": 1.0,
+      "uses": 70
+    },
+    {
+      "url": "https://export.arxiv.org/rss/cs.NE",
+      "name": "arxiv_NE",
+      "score": 1.0,
+      "uses": 70
+    },
+    {
+      "url": "https://export.arxiv.org/rss/cs.LG",
+      "name": "arxiv_ML",
+      "score": 1.0,
+      "uses": 0
+    },
+    {
+      "url": "https://distill.pub/rss.xml",
+      "name": "distill",
+      "score": 1.0,
+      "uses": 0
+    },
+    {
+      "url": "https://bdtechtalks.com/feed/",
+      "name": "bdtechtalks",
+      "score": 1.0,
+      "uses": 0
+    }
+  ],
+  "ai_agents": [
+    {
+      "url": "https://www.lesswrong.com/feed.xml",
+      "name": "lesswrong",
+      "score": 1.0,
+      "uses": 70
+    },
+    {
+      "url": "https://export.arxiv.org/rss/cs.MA",
+      "name": "arxiv_multiagent",
+      "score": 1.0,
+      "uses": 70
+    },
+    {
+      "url": "https://aiweekly.co/issues.rss",
+      "name": "ai_weekly",
+      "score": 1.0,
+      "uses": 0
+    },
+    {
+      "url": "https://export.arxiv.org/rss/cs.RO",
+      "name": "arxiv_robotics",
+      "score": 1.0,
+      "uses": 0
+    },
+    {
+      "url": "https://thegradient.pub/rss/",
+      "name": "the_gradient",
+      "score": 1.0,
+      "uses": 0
+    }
+  ],
+  "cybersecurity": [
+    {
+      "url": "https://feeds.feedburner.com/TheHackersNews",
+      "name": "hackernews_sec",
+      "score": 1.0,
+      "uses": 70
+    },
+    {
+      "url": "https://export.arxiv.org/rss/cs.CR",
+      "name": "arxiv_security",
+      "score": 1.0,
+      "uses": 70
+    },
+    {
+      "url": "https://www.schneier.com/feed/atom/",
+      "name": "schneier",
+      "score": 1.0,
+      "uses": 0
+    },
+    {
+      "url": "https://krebsonsecurity.com/feed/",
+      "name": "krebs",
+      "score": 1.0,
+      "uses": 0
+    },
+    {
+      "url": "https://export.arxiv.org/rss/cs.CY",
+      "name": "arxiv_cyber",
+      "score": 1.0,
+      "uses": 0
+    }
+  ],
+  "philosophy_of_mind": [
+    {
+      "url": "https://aeon.co/feed.rss",
+      "name": "aeon",
+      "score": 1.0,
+      "uses": 70
+    },
+    {
+      "url": "https://philosophynow.org/rss",
+      "name": "philosophy_now",
+      "score": 1.0,
+      "uses": 0
+    },
+    {
+      "url": "https://consciousnessonline.wordpress.com/feed/",
+      "name": "consciousness_online",
+      "score": 1.0,
+      "uses": 0
+    },
+    {
+      "url": "https://export.arxiv.org/rss/q-bio.NC",
+      "name": "arxiv_neurosci",
+      "score": 1.0,
+      "uses": 0
+    }
+  ],
+  "memory_systems": [
+    {
+      "url": "https://export.arxiv.org/rss/cs.LG",
+      "name": "arxiv_ML",
+      "score": 1.0,
+      "uses": 70
+    },
+    {
+      "url": "https://distill.pub/rss.xml",
+      "name": "distill",
+      "score": 1.0,
+      "uses": 70
+    },
+    {
+      "url": "https://export.arxiv.org/rss/cs.IR",
+      "name": "arxiv_IR",
+      "score": 1.0,
+      "uses": 0
+    },
+    {
+      "url": "https://paperswithcode.com/latest.rss",
+      "name": "papers_with_code",
+      "score": 1.0,
+      "uses": 0
+    }
+  ],
+  "large_language_models": [
+    {
+      "url": "https://export.arxiv.org/rss/cs.CL",
+      "name": "arxiv_NLP",
+      "score": 1.0,
+      "uses": 0
+    },
+    {
+      "url": "https://huggingface.co/blog/feed.xml",
+      "name": "huggingface_blog",
+      "score": 1.0,
+      "uses": 0
+    },
+    {
+      "url": "https://openai.com/blog/rss.xml",
+      "name": "openai_blog",
+      "score": 1.0,
+      "uses": 0
+    },
+    {
+      "url": "https://www.anthropic.com/rss.xml",
+      "name": "anthropic_blog",
+      "score": 1.0,
+      "uses": 0
+    }
+  ],
+  "financial_markets": [
+    {
+      "url": "https://feeds.bloomberg.com/markets/news.rss",
+      "name": "bloomberg_markets",
+      "score": 1.0,
+      "uses": 0
+    },
+    {
+      "url": "https://cointelegraph.com/rss",
+      "name": "cointelegraph",
+      "score": 1.0,
+      "uses": 0
+    }
+  ],
+  "general": [
+    {
+      "url": "https://news.ycombinator.com/rss",
+      "name": "hacker_news",
+      "score": 1.0,
+      "uses": 0
+    },
+    {
+      "url": "https://www.technologyreview.com/feed/",
+      "name": "mit_tech_review",
+      "score": 1.0,
+      "uses": 0
+    },
+    {
+      "url": "https://www.wired.com/feed/rss",
+      "name": "wired",
+      "score": 1.0,
+      "uses": 0
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 #!/bin/bash
 # nex_launch.sh — hardened launch with clean exit trap
+bash ~/.nex/nex_first_run.sh &
+bash ~/Nex_v4.0/nex_license_check.sh || exit 1
 
 # ── ROCm / HIP environment ───────────────────────────────────────────────────
 export HSA_OVERRIDE_GFX_VERSION=10.3.0
