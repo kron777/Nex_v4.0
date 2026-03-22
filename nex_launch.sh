@@ -3,15 +3,16 @@
 
 # ── ROCm / HIP environment ───────────────────────────────────────────────────
 export HSA_OVERRIDE_GFX_VERSION=10.3.0
+export LD_LIBRARY_PATH=/mnt/steam_library/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/llama.cpp/build-vulkan/bin:$LD_LIBRARY_PATH
 export GGML_CUDA_NO_CUDA_GRAPHS=1
 export HSA_ENABLE_SDMA=0
 export ROCR_VISIBLE_DEVICES=0
 export AMD_SERIALIZE_KERNEL=3
 export AMD_SERIALIZE_COPY=3
 
-BUILD="/media/rr/4TB DATA/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/llama.cpp/build/bin"
-MODEL="/media/rr/4TB DATA/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf"
-NEX_DIR="/home/rr/Desktop/nex"
+BUILD="/mnt/steam_library/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/llama.cpp/build-vulkan/bin"
+MODEL="/mnt/steam_library/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf"
+NEX_DIR="/home/rr/Nex_v4.0"
 
 # ── Clean any existing processes first ───────────────────────────────────────
 echo "[NEX] Stopping existing processes..."
@@ -23,7 +24,7 @@ echo "[NEX] Starting llama-server (GPU ngl=28)..."
 "$BUILD/llama-server" \
     -m "$MODEL" \
     --port 8080 \
-    -ngl 28 \
+    -ngl 20 \
     --host 0.0.0.0 \
     > /tmp/llama_server.log 2>&1 &
 LLAMA_PID=$!
