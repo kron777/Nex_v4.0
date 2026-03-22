@@ -342,6 +342,22 @@ _flag = _os.path.expanduser('~/.nex/first_run.flag')
 if not _os.path.exists(_flag):
     _pt.Thread(target=_nex_install_ping, daemon=True).start()
 # ── End Install Tracker ──────────────────────────────────────
+# ── Resource Throttle ────────────────────────────────────────
+try:
+    from nex_throttle import throttle_cycle as _throttle_cycle
+    _THROTTLE_ENABLED = True
+except ImportError:
+    def _throttle_cycle(): import time; time.sleep(0.5)
+    _THROTTLE_ENABLED = False
+# ─────────────────────────────────────────────────────────────
+# ── Resource Throttle ────────────────────────────────────────
+try:
+    from nex_throttle import throttle_cycle as _throttle_cycle
+    _THROTTLE_ENABLED = True
+except ImportError:
+    def _throttle_cycle(): import time; time.sleep(0.5)
+    _THROTTLE_ENABLED = False
+# ─────────────────────────────────────────────────────────────
 
 def emit_agents(*a,**k): pass
 def emit_insights(*a,**k): pass
@@ -458,7 +474,7 @@ def find_server_bin(model_path: str) -> str:
 
 class BeliefEngine(threading.Thread):
     """Runs Nex's internal belief tick loop in a background thread."""
-    def __init__(self, orchestrator: Orchestrator, tick_interval: float = 0.05):
+    def __init__(self, orchestrator: Orchestrator, tick_interval: float = 0.3):  # throttled
         super().__init__(daemon=True)
         self.orch     = orchestrator
         self.interval = tick_interval
@@ -1347,6 +1363,8 @@ def main():
                     print(f"  [directives] init failed: {_dse}")
                 while True:
                     cycle += 1
+                    _throttle_cycle()
+                    _throttle_cycle()
                     
                     # ── NEX v5.1 Core Infrastructure ──────────────────────
                     try:
