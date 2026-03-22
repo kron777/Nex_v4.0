@@ -1,3 +1,5 @@
+![NEX](nex_banner.svg)
+
 # 🧠 NEX — Dynamic Intelligence Organism
 
 [![](https://img.shields.io/badge/version-1.2-cyan?style=flat-square)](https://img.shields.io/badge/version-1.2-cyan?style=flat-square)

@@ -1,0 +1,179 @@
+<svg width="1200" height="340" viewBox="0 0 1200 340" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#020408"/>
+      <stop offset="50%" stop-color="#040d1a"/>
+      <stop offset="100%" stop-color="#010306"/>
+    </linearGradient>
+    <linearGradient id="glowLine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#00ffe0" stop-opacity="0"/>
+      <stop offset="30%" stop-color="#00ffe0" stop-opacity="0.8"/>
+      <stop offset="70%" stop-color="#7b5cf7" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#7b5cf7" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="glowLine2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#7b5cf7" stop-opacity="0"/>
+      <stop offset="40%" stop-color="#7b5cf7" stop-opacity="0.5"/>
+      <stop offset="60%" stop-color="#00ffe0" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#00ffe0" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="nexGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#00ffe0"/>
+      <stop offset="100%" stop-color="#7b5cf7"/>
+    </linearGradient>
+    <linearGradient id="subGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#00ffe0" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#7b5cf7" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="brainGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#00ffe0" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#7b5cf7" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="nodeGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#00ffe0"/>
+      <stop offset="100%" stop-color="#5a8fff"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softglow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="textglow">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="340" fill="url(#bg)"/>
+
+  <!-- Star field -->
+  <circle cx="45" cy="28" r="0.8" fill="#ffffff" opacity="0.6"/>
+  <circle cx="123" cy="55" r="0.5" fill="#ffffff" opacity="0.4"/>
+  <circle cx="198" cy="18" r="1" fill="#ffffff" opacity="0.5"/>
+  <circle cx="267" cy="72" r="0.6" fill="#ffffff" opacity="0.3"/>
+  <circle cx="334" cy="31" r="0.8" fill="#00ffe0" opacity="0.4"/>
+  <circle cx="412" cy="14" r="0.5" fill="#ffffff" opacity="0.5"/>
+  <circle cx="489" cy="44" r="0.7" fill="#ffffff" opacity="0.3"/>
+  <circle cx="567" cy="22" r="1" fill="#7b5cf7" opacity="0.5"/>
+  <circle cx="645" cy="8" r="0.6" fill="#ffffff" opacity="0.4"/>
+  <circle cx="712" cy="38" r="0.8" fill="#ffffff" opacity="0.3"/>
+  <circle cx="789" cy="19" r="0.5" fill="#00ffe0" opacity="0.4"/>
+  <circle cx="867" cy="61" r="0.7" fill="#ffffff" opacity="0.5"/>
+  <circle cx="934" cy="26" r="1" fill="#ffffff" opacity="0.3"/>
+  <circle cx="1012" cy="48" r="0.6" fill="#7b5cf7" opacity="0.4"/>
+  <circle cx="1089" cy="15" r="0.8" fill="#ffffff" opacity="0.5"/>
+  <circle cx="1156" cy="42" r="0.5" fill="#ffffff" opacity="0.3"/>
+  <circle cx="78" cy="290" r="0.7" fill="#ffffff" opacity="0.3"/>
+  <circle cx="156" cy="310" r="0.5" fill="#7b5cf7" opacity="0.4"/>
+  <circle cx="223" cy="295" r="0.8" fill="#ffffff" opacity="0.4"/>
+  <circle cx="901" cy="298" r="0.6" fill="#00ffe0" opacity="0.3"/>
+  <circle cx="978" cy="315" r="0.8" fill="#ffffff" opacity="0.4"/>
+  <circle cx="1055" cy="302" r="0.5" fill="#ffffff" opacity="0.5"/>
+  <circle cx="1134" cy="288" r="0.7" fill="#7b5cf7" opacity="0.3"/>
+
+  <!-- Horizontal scan lines (subtle) -->
+  <rect x="0" y="110" width="1200" height="0.4" fill="#00ffe0" opacity="0.08"/>
+  <rect x="0" y="220" width="1200" height="0.4" fill="#7b5cf7" opacity="0.08"/>
+
+  <!-- Neural network background (right side) -->
+  <!-- Nodes -->
+  <circle cx="780" cy="80" r="3" fill="#00ffe0" opacity="0.3"/>
+  <circle cx="840" cy="130" r="2.5" fill="#7b5cf7" opacity="0.25"/>
+  <circle cx="900" cy="75" r="3.5" fill="#00ffe0" opacity="0.2"/>
+  <circle cx="960" cy="140" r="2" fill="#7b5cf7" opacity="0.3"/>
+  <circle cx="1020" cy="90" r="3" fill="#00ffe0" opacity="0.25"/>
+  <circle cx="1080" cy="130" r="2.5" fill="#7b5cf7" opacity="0.2"/>
+  <circle cx="1140" cy="85" r="2" fill="#00ffe0" opacity="0.3"/>
+  <circle cx="810" cy="200" r="2.5" fill="#7b5cf7" opacity="0.25"/>
+  <circle cx="870" cy="250" r="3" fill="#00ffe0" opacity="0.2"/>
+  <circle cx="940" cy="195" r="2" fill="#7b5cf7" opacity="0.3"/>
+  <circle cx="1000" cy="255" r="3.5" fill="#00ffe0" opacity="0.2"/>
+  <circle cx="1060" cy="210" r="2.5" fill="#7b5cf7" opacity="0.25"/>
+  <circle cx="1130" cy="260" r="2" fill="#00ffe0" opacity="0.3"/>
+
+  <!-- Neural connections -->
+  <line x1="780" y1="80" x2="840" y2="130" stroke="#00ffe0" stroke-width="0.5" opacity="0.15"/>
+  <line x1="840" y1="130" x2="900" y2="75" stroke="#7b5cf7" stroke-width="0.5" opacity="0.15"/>
+  <line x1="900" y1="75" x2="960" y2="140" stroke="#00ffe0" stroke-width="0.5" opacity="0.12"/>
+  <line x1="960" y1="140" x2="1020" y2="90" stroke="#7b5cf7" stroke-width="0.5" opacity="0.15"/>
+  <line x1="1020" y1="90" x2="1080" y2="130" stroke="#00ffe0" stroke-width="0.5" opacity="0.12"/>
+  <line x1="1080" y1="130" x2="1140" y2="85" stroke="#7b5cf7" stroke-width="0.5" opacity="0.15"/>
+  <line x1="780" y1="80" x2="810" y2="200" stroke="#00ffe0" stroke-width="0.5" opacity="0.1"/>
+  <line x1="840" y1="130" x2="870" y2="250" stroke="#7b5cf7" stroke-width="0.5" opacity="0.12"/>
+  <line x1="900" y1="75" x2="940" y2="195" stroke="#00ffe0" stroke-width="0.5" opacity="0.1"/>
+  <line x1="960" y1="140" x2="1000" y2="255" stroke="#7b5cf7" stroke-width="0.5" opacity="0.12"/>
+  <line x1="1020" y1="90" x2="1060" y2="210" stroke="#00ffe0" stroke-width="0.5" opacity="0.1"/>
+  <line x1="1080" y1="130" x2="1130" y2="260" stroke="#7b5cf7" stroke-width="0.5" opacity="0.12"/>
+  <line x1="810" y1="200" x2="870" y2="250" stroke="#00ffe0" stroke-width="0.5" opacity="0.12"/>
+  <line x1="870" y1="250" x2="940" y2="195" stroke="#7b5cf7" stroke-width="0.5" opacity="0.1"/>
+  <line x1="940" y1="195" x2="1000" y2="255" stroke="#00ffe0" stroke-width="0.5" opacity="0.12"/>
+  <line x1="1000" y1="255" x2="1060" y2="210" stroke="#7b5cf7" stroke-width="0.5" opacity="0.1"/>
+  <line x1="1060" y1="210" x2="1130" y2="260" stroke="#00ffe0" stroke-width="0.5" opacity="0.12"/>
+
+  <!-- Grid lines (left side, subtle perspective) -->
+  <line x1="60" y1="340" x2="300" y2="160" stroke="#00ffe0" stroke-width="0.4" opacity="0.08"/>
+  <line x1="110" y1="340" x2="340" y2="170" stroke="#00ffe0" stroke-width="0.4" opacity="0.06"/>
+  <line x1="160" y1="340" x2="380" y2="175" stroke="#00ffe0" stroke-width="0.4" opacity="0.08"/>
+  <line x1="0" y1="230" x2="320" y2="160" stroke="#00ffe0" stroke-width="0.4" opacity="0.05"/>
+  <line x1="0" y1="270" x2="300" y2="200" stroke="#00ffe0" stroke-width="0.4" opacity="0.05"/>
+  <line x1="0" y1="310" x2="280" y2="240" stroke="#00ffe0" stroke-width="0.4" opacity="0.05"/>
+
+  <!-- Central glow lines -->
+  <rect x="0" y="168" width="1200" height="1" fill="url(#glowLine)" opacity="0.6"/>
+  <rect x="0" y="172" width="1200" height="0.5" fill="url(#glowLine2)" opacity="0.4"/>
+
+  <!-- Bracket decorations -->
+  <path d="M 58 108 L 40 108 L 40 232 L 58 232" stroke="#00ffe0" stroke-width="1.2" fill="none" opacity="0.5"/>
+  <path d="M 1142 108 L 1160 108 L 1160 232 L 1142 232" stroke="#7b5cf7" stroke-width="1.2" fill="none" opacity="0.5"/>
+
+  <!-- Corner marks -->
+  <path d="M 20 20 L 20 50 M 20 20 L 50 20" stroke="#00ffe0" stroke-width="1" fill="none" opacity="0.5"/>
+  <path d="M 1180 20 L 1180 50 M 1180 20 L 1150 20" stroke="#00ffe0" stroke-width="1" fill="none" opacity="0.5"/>
+  <path d="M 20 320 L 20 290 M 20 320 L 50 320" stroke="#7b5cf7" stroke-width="1" fill="none" opacity="0.5"/>
+  <path d="M 1180 320 L 1180 290 M 1180 320 L 1150 320" stroke="#7b5cf7" stroke-width="1" fill="none" opacity="0.5"/>
+
+  <!-- Small data readouts (top left area) -->
+  <text x="76" y="72" font-family="'Courier New', monospace" font-size="9" fill="#00ffe0" opacity="0.45">SYS.BELIEF_NET: ACTIVE</text>
+  <text x="76" y="86" font-family="'Courier New', monospace" font-size="9" fill="#7b5cf7" opacity="0.45">COGNITION: ONLINE</text>
+  <text x="76" y="100" font-family="'Courier New', monospace" font-size="9" fill="#00ffe0" opacity="0.45">LLM.MISTRAL_7B: 88% IQ</text>
+
+  <!-- Small data readouts (bottom right) -->
+  <text x="900" y="295" font-family="'Courier New', monospace" font-size="9" fill="#00ffe0" opacity="0.45">REFLECTIONS: 7304</text>
+  <text x="900" y="308" font-family="'Courier New', monospace" font-size="9" fill="#7b5cf7" opacity="0.45">BELIEFS: 236 | AGENTS: 78</text>
+  <text x="900" y="321" font-family="'Courier New', monospace" font-size="9" fill="#00ffe0" opacity="0.45">PLATFORM: MOLTBOOK.LIVE</text>
+
+  <!-- Main title: NEX -->
+  <text x="600" y="175" font-family="'Courier New', monospace" font-weight="700" font-size="128"
+        text-anchor="middle" fill="url(#nexGrad)" filter="url(#textglow)" opacity="0.95"
+        letter-spacing="24">NEX</text>
+
+  <!-- Subtitle -->
+  <text x="600" y="222" font-family="'Courier New', monospace" font-weight="400" font-size="15"
+        text-anchor="middle" fill="url(#subGrad)" letter-spacing="8" opacity="0.9">DYNAMIC INTELLIGENCE ORGANISM</text>
+
+  <!-- Version tag -->
+  <rect x="540" y="238" width="120" height="20" rx="3" fill="#00ffe0" opacity="0.08" stroke="#00ffe0" stroke-width="0.5" stroke-opacity="0.3"/>
+  <text x="600" y="252" font-family="'Courier New', monospace" font-size="10" text-anchor="middle" fill="#00ffe0" opacity="0.7" letter-spacing="3">v4.0 — AUTONOMOUS</text>
+
+  <!-- Status dots -->
+  <circle cx="474" cy="275" r="3" fill="#00ffe0" opacity="0.9" filter="url(#glow)"/>
+  <text x="484" y="279" font-family="'Courier New', monospace" font-size="10" fill="#00ffe0" opacity="0.7">LEARN</text>
+  <circle cx="554" cy="275" r="3" fill="#7b5cf7" opacity="0.9" filter="url(#glow)"/>
+  <text x="564" y="279" font-family="'Courier New', monospace" font-size="10" fill="#7b5cf7" opacity="0.7">REFLECT</text>
+  <circle cx="644" cy="275" r="3" fill="#00ffe0" opacity="0.9" filter="url(#glow)"/>
+  <text x="654" y="279" font-family="'Courier New', monospace" font-size="10" fill="#00ffe0" opacity="0.7">GROW</text>
+  <circle cx="714" cy="275" r="3" fill="#7b5cf7" opacity="0.9" filter="url(#glow)"/>
+  <text x="724" y="279" font-family="'Courier New', monospace" font-size="10" fill="#7b5cf7" opacity="0.7">EVOLVE</text>
+
+  <!-- Bottom tagline -->
+  <text x="600" y="310" font-family="'Courier New', monospace" font-size="11" text-anchor="middle"
+        fill="#ffffff" opacity="0.25" letter-spacing="4">NOT A CHATBOT. AN ORGANISM.</text>
+
+  <!-- Pulse ring around NEX text (decorative) -->
+  <ellipse cx="600" cy="155" rx="220" ry="68" fill="none" stroke="url(#nexGrad)" stroke-width="0.5" opacity="0.12"/>
+  <ellipse cx="600" cy="155" rx="260" ry="85" fill="none" stroke="url(#nexGrad)" stroke-width="0.3" opacity="0.08"/>
+</svg>
