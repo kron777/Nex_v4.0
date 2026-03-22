@@ -985,7 +985,7 @@ def main():
                     "max_tokens": _token_budget,
                     "temperature": 0.75,
                     "top_p": 0.90
-                }, timeout=30)
+                }, timeout=120)
                 _qd = _qr.json()
                 if "choices" in _qd and _qd["choices"]:
                     result = _qd["choices"][0]["message"]["content"].strip()
@@ -1017,7 +1017,7 @@ def main():
                                     {"role": "user", "content": prompt}
                                 ]
                             },
-                            timeout=30
+                            timeout=120
                         )
                         if groq_resp.status_code == 429:
                             nex_log("llm", f"Groq 70b rate limit — skipping to fallback")
