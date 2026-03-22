@@ -54,3 +54,13 @@ nex_lora.gguf
 nex_adapter/
 backups/
 *.bak*
+*.json
+*.jsonl
+*.txt
+*.db
+*.db-shm
+*.db-wal
+*.npz
+*.live
+*.deb
+nex_training*
