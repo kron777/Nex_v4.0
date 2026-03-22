@@ -342,6 +342,13 @@ _flag = _os.path.expanduser('~/.nex/first_run.flag')
 if not _os.path.exists(_flag):
     _pt.Thread(target=_nex_install_ping, daemon=True).start()
 # ── End Install Tracker ──────────────────────────────────────
+# ── Auto Trainer ─────────────────────────────────────────────
+try:
+    from nex_autotrainer import check_training_watermark as _check_train, handle_telegram_command as _handle_train_cmd
+    _AUTOTRAINER = True
+except ImportError:
+    _AUTOTRAINER = False
+    def _check_train(*a, **k): pass
 # ── Resource Throttle ────────────────────────────────────────
 try:
     from nex_throttle import throttle_cycle as _throttle_cycle
@@ -350,6 +357,13 @@ except ImportError:
     def _throttle_cycle(): import time; time.sleep(0.5)
     _THROTTLE_ENABLED = False
 # ─────────────────────────────────────────────────────────────
+# ── Auto Trainer ─────────────────────────────────────────────
+try:
+    from nex_autotrainer import check_training_watermark as _check_train, handle_telegram_command as _handle_train_cmd
+    _AUTOTRAINER = True
+except ImportError:
+    _AUTOTRAINER = False
+    def _check_train(*a, **k): pass
 # ── Resource Throttle ────────────────────────────────────────
 try:
     from nex_throttle import throttle_cycle as _throttle_cycle
