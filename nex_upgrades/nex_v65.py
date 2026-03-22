@@ -363,7 +363,7 @@ class BeliefClusteringEngine:
             b2c: dict[int, str] = {}
             for r in rows:
                 k = self._key(r["topic"])
-                groups[k].append({"id": r["id"], "conf": r["confidence"]})
+                groups[k].append({"id": r["id"], "conf": float(r["confidence"] or 0.5)})
                 b2c[r["id"]] = k
             self.clusters         = dict(groups)
             self.belief_to_cluster = b2c
@@ -987,8 +987,8 @@ class BeliefMarket:
             scored = []
             for r in rows:
                 age_pen = math.exp(-(now - (r["last_referenced"] or now)) / 86400)
-                score   = (r["confidence"]
-                           * math.log(r["reinforce_count"] + 2)
+                score   = (float(r["confidence"] or 0.5)
+                           * math.log(int(r["reinforce_count"] or 0) + 2)
                            * age_pen)
                 scored.append((r["id"], score))
 
