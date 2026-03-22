@@ -601,7 +601,7 @@ class NexDB:
                          post_id: str = None, content: str = None,
                          response: str = None, platform: str = "unknown"):
         self.run("""
-            INSERT INTO conversations
+            INSERT OR IGNORE INTO conversations
                 (type, agent_id, post_id, content, response, platform, timestamp)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (conv_type, agent_id, post_id, content, response,

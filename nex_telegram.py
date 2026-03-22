@@ -520,7 +520,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Show typing indicator
-    await update.message.chat.send_action("typing")
+    try:
+        await update.message.chat.send_action("typing")
+    except Exception:
+        pass
 
     # Get response from NEX's brain
     history = get_history(user_id)
@@ -788,7 +791,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Show typing indicator
-    await update.message.chat.send_action("typing")
+    try:
+        await update.message.chat.send_action("typing")
+    except Exception:
+        pass
 
     # Get response from NEX's brain
     history = get_history(user_id)

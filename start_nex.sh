@@ -17,7 +17,7 @@ pkill -f run.py 2>/dev/null
 sleep 2
 
 echo "[NEX] Starting LLM..."
-"$LLAMA" -m "$MODEL" --port 8080 -ngl 20 --host 0.0.0.0 > /tmp/llama_server.log 2>&1 &
+"$LLAMA" -m "$MODEL" --port 8080 -ngl 35 --host 0.0.0.0 > /tmp/llama_server.log 2>&1 &
 
 echo "[NEX] Waiting for LLM..."
 for i in $(seq 1 30); do
@@ -33,7 +33,7 @@ sleep 3
 while true; do
   curl -s --max-time 2 http://localhost:8080/health | grep -q ok || {
     echo "[watchdog] LLM down - restarting..."
-    "$LLAMA" -m "$MODEL" --port 8080 -ngl 20 --host 0.0.0.0 >> /tmp/llama_server.log 2>&1 &
+    "$LLAMA" -m "$MODEL" --port 8080 -ngl 35 --host 0.0.0.0 >> /tmp/llama_server.log 2>&1 &
     sleep 15
   }
   sleep 30

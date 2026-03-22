@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
 NEX FULL PIPELINE AUDIT
-Tests every component and writes a report to ~/Desktop/nex_audit.txt
+Tests every component and writes a report to ~/Nex_v4.0_audit.txt
 """
 import json, os, re, sys, subprocess, traceback
 from pathlib import Path
 from datetime import datetime
 from collections import Counter
 
-sys.path.insert(0, str(Path.home() / "Desktop/nex"))
+sys.path.insert(0, str(Path.home() / "Nex_v4.0"))
 
 CONFIG   = Path.home() / ".config/nex"
 DESKTOP  = Path.home() / "Desktop"
@@ -61,7 +61,7 @@ lines.append("")
 section("1. FILE SYSTEM")
 # ══════════════════════════════════════════════════════════════
 
-nex_root = Path.home() / "Desktop/nex"
+nex_root = Path.home() / "Nex_v4.0"
 nex_pkg  = nex_root / "nex"
 
 critical_files = [

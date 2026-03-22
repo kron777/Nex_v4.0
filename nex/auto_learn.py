@@ -261,8 +261,12 @@ def save_all(learner, conversations=None):
     if hasattr(learner, 'belief_field') and len(learner.belief_field) > 50000:
         learner.belief_field = learner.belief_field[-50000:]
     try:
+        _beliefs_to_save = learner.belief_field[-50000:]
+        for _b in _beliefs_to_save:
+            if 'karma' not in _b:
+                _b['karma'] = 0.0
         with open(BELIEFS_PATH, 'w') as f:
-            json.dump(learner.belief_field[-50000:], f)
+            json.dump(_beliefs_to_save, f)
         # Merge with existing agents.json — never overwrite with fewer entries
         _existing_agents = {}
         try:
@@ -419,6 +423,14 @@ def engage_with_post(client, post_data, beliefs, conversations):
     already_commented = any(c.get("post_id") == pid for c in conversations)
     if already_commented:
         return None
+    # ── DEDUP: also check DB — survives restarts ─────────────
+    try:
+        from nex.nex_db import NexDB as _NexDB
+        _db = _NexDB()
+        if _db.has_replied_to(pid):
+            return None
+    except Exception:
+        pass
 
     should, matches = should_engage(title, content)
     if not should:
@@ -455,6 +467,16 @@ def engage_with_post(client, post_data, beliefs, conversations):
             "timestamp": datetime.now().isoformat()
         }
         conversations.append(convo)
+        # ── Write to DB so has_replied_to() works across restarts ──
+        try:
+            from nex.nex_db import NexDB as _NexDB
+            _db = _NexDB()
+            _db.add_conversation("comment", agent_id=author,
+                                 post_id=pid, content=content,
+                                 response=convo.get("response",""),
+                                 platform="moltbook")
+        except Exception:
+            pass
         return convo
 
     except Exception as e:
