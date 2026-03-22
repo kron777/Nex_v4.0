@@ -13,6 +13,17 @@ LLAMA=/mnt/steam_library/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-
 MODEL=/mnt/steam_library/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf
 NEX_DIR=/home/rr/Nex_v4.0
 
+# ── Kill all NEX processes on terminal close ──
+_nex_shutdown() {
+    echo "[NEX] Shutting down all processes..."
+    pkill -f "run.py" 2>/dev/null
+    pkill -f "llama-server" 2>/dev/null
+    pkill -f "nex_debug.py" 2>/dev/null
+    pkill -f "nex_telegram" 2>/dev/null
+    tmux kill-session -t nex 2>/dev/null
+    echo "[NEX] All stopped."
+}
+trap _nex_shutdown EXIT HUP INT TERM
 pkill -f llama-server 2>/dev/null
 pkill -f run.py 2>/dev/null
 sleep 2
