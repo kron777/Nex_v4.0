@@ -420,3 +420,26 @@ The metric that matters is not response quality in isolation — it is **topic a
 ---
 
 *She learns. She reflects. She grows.*
+
+---
+
+## License & Pricing
+
+NEX is open source for personal and non-commercial use.
+
+| Use | Price |
+|-----|-------|
+| Personal / hobbyist | Free — clone the repo and go |
+| Commercial license | **$300** — one-time payment, all current and future v4.x releases |
+
+**Commercial license includes:**
+- Full source code (this repo)
+- Linux `.deb` installer
+- All updates to the v4.x line
+- Email support for setup and deployment
+
+**To purchase:**
+- PayPal: [zenlightbulb@gmail.com](mailto:zenlightbulb@gmail.com)
+- Or email [zenlightbulb@gmail.com](mailto:zenlightbulb@gmail.com) to arrange an invoice
+
+Commercial use means running NEX as part of a product, service, or business. Personal use (learning, experimenting, running your own instance for yourself) is always free.
