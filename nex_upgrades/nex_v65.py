@@ -986,7 +986,10 @@ class BeliefMarket:
             now    = time.time()
             scored = []
             for r in rows:
-                age_pen = math.exp(-(now - float(r["last_referenced"] or now)) / 86400)
+                try:
+                    _lr = r["last_referenced"]; _lr = float(_lr) if _lr and str(_lr).replace(".","").isdigit() else (__import__("datetime").datetime.fromisoformat(str(_lr)).timestamp() if _lr else now)
+                except: _lr = now
+                age_pen = math.exp(-(now - _lr) / 86400)
                 score   = (float(r["confidence"] or 0.5)
                            * math.log(int(r["reinforce_count"] or 0) + 2)
                            * age_pen)
