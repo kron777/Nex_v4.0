@@ -39,3 +39,7 @@ while true; do
   sleep 30
 done &
 
+
+gnome-terminal --title="NEX BRAIN" -- bash -c "cd /home/rr/Nex_v4.0 && source venv/bin/activate && tail -f /tmp/nex_brain.log; exec bash" &
+gnome-terminal --title="NEX AUTO CHECK" -- bash -c "cd /home/rr/Nex_v4.0 && source venv/bin/activate && sleep 5 && python3 auto_check.py; exec bash" &
+echo "[NEX] All systems live!"
