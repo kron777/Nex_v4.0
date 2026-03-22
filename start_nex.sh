@@ -40,6 +40,6 @@ while true; do
 done &
 
 
-gnome-terminal --title="NEX BRAIN" -- bash -c "cd /home/rr/Nex_v4.0 && source venv/bin/activate && tail -f /tmp/nex_brain.log; exec bash" &
+gnome-terminal --title="NEX BRAIN" -- bash -c "cd /home/rr/Nex_v4.0 && source venv/bin/activate && tmux kill-session -t nex 2>/dev/null; tmux new-session -d -s nex && tmux split-window -h -t nex && tmux send-keys -t nex:0.0 'tail -f /tmp/nex_brain.log' Enter && tmux send-keys -t nex:0.1 'cd /home/rr/Nex_v4.0 && source venv/bin/activate && sleep 5 && python3 nex_debug.py' Enter && tmux attach -t nex; exec bash" &
 gnome-terminal --title="NEX AUTO CHECK" -- bash -c "cd /home/rr/Nex_v4.0 && source venv/bin/activate && sleep 5 && python3 auto_check.py; exec bash" &
 echo "[NEX] All systems live!"
