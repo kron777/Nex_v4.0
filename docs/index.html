@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEX — License Key</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600&display=swap');
+
+:root {
+  --bg: #020c14;
+  --panel: rgba(4, 20, 38, 0.95);
+  --border: rgba(0, 200, 255, 0.15);
+  --border-bright: rgba(0, 200, 255, 0.45);
+  --cyan: #00c8ff;
+  --purple: #a855f7;
+  --red: #ff3b5c;
+  --green: #00ff9d;
+  --text: #c8dce8;
+  --text-dim: #4a6a7a;
+  --text-bright: #e8f4ff;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Share Tech Mono', monospace;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Starfield */
+.stars { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+.star { position: absolute; width: 1px; height: 1px; background: white; border-radius: 50%; animation: twinkle var(--d) ease-in-out infinite; }
+@keyframes twinkle { 0%,100%{opacity:0.1} 50%{opacity:0.7} }
+
+/* Scanline */
+.scanline {
+  position: fixed; left: 0; width: 100%; height: 3px;
+  pointer-events: none; z-index: 200;
+  background: linear-gradient(180deg, transparent 0%, rgba(0,200,255,0.08) 20%, rgba(0,200,255,0.18) 50%, rgba(0,200,255,0.08) 80%, transparent 100%);
+  filter: blur(0.5px);
+  animation: scanDown 8s linear infinite;
+}
+.scanline::before { content:''; position:absolute; left:0; top:-1px; width:100%; height:1px; background:rgba(0,200,255,0.35); }
+@keyframes scanDown { 0%{top:-4px;opacity:0} 3%{opacity:1} 97%{opacity:1} 100%{top:100vh;opacity:0} }
+
+/* Scanlines overlay */
+body::after {
+  content: ''; position: fixed; top:0; left:0; width:100%; height:100%;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.025) 2px, rgba(0,0,0,0.025) 4px);
+  pointer-events: none; z-index: 100;
+}
+
+/* Corner brackets */
+.corner { position: fixed; width: 36px; height: 36px; z-index: 50; }
+.corner::before, .corner::after { content:''; position:absolute; background:var(--cyan); }
+.corner::before { width:2px; height:100%; } .corner::after { width:100%; height:2px; }
+.corner.tl{top:16px;left:16px} .corner.tr{top:16px;right:16px;transform:scaleX(-1)} .corner.bl{bottom:16px;left:16px;transform:scaleY(-1)} .corner.br{bottom:16px;right:16px;transform:scale(-1)}
+
+/* Main card */
+.card {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 620px;
+  background: var(--panel);
+  border: 1px solid var(--border-bright);
+  backdrop-filter: blur(12px);
+}
+
+/* Top glow line */
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--cyan) 30%, var(--purple) 70%, transparent 100%);
+}
+
+/* Header */
+.card-header {
+  padding: 32px 40px 28px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  position: relative;
+}
+
+.transmission-label {
+  font-size: 10px;
+  letter-spacing: 0.35em;
+  color: var(--text-dim);
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.transmission-label::before,
+.transmission-label::after {
+  content: '';
+  height: 1px;
+  width: 60px;
+  background: linear-gradient(90deg, transparent, var(--border-bright));
+}
+.transmission-label::after { transform: scaleX(-1); }
+
+.nex-logo {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 72px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  background: linear-gradient(135deg, #00c8ff 0%, #a855f7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 8px;
+}
+
+.tagline {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.45em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+/* Signal bars decoration */
+.signal-bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  margin-top: 20px;
+  height: 16px;
+}
+.bar {
+  width: 4px;
+  background: var(--cyan);
+  opacity: 0.6;
+  animation: barPulse var(--bd) ease-in-out infinite;
+}
+@keyframes barPulse { 0%,100%{opacity:0.2} 50%{opacity:0.8} }
+
+/* Body */
+.card-body { padding: 32px 40px; }
+
+/* Welcome block */
+.welcome {
+  border-left: 2px solid rgba(0,200,255,0.3);
+  padding: 0 0 0 16px;
+  margin-bottom: 28px;
+  font-size: 12px;
+  line-height: 1.9;
+  color: var(--text);
+}
+.welcome .hi { color: var(--cyan); font-size: 13px; margin-bottom: 4px; }
+.welcome .dim { color: var(--text-dim); }
+
+/* Divider */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 24px 0;
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  color: var(--text-dim);
+}
+.divider::before, .divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Key block */
+.key-block {
+  border: 1px solid var(--border-bright);
+  background: rgba(0,0,0,0.4);
+  position: relative;
+  margin-bottom: 24px;
+}
+
+.key-block::before {
+  content: 'LICENSE KEY';
+  position: absolute;
+  top: -8px;
+  left: 16px;
+  background: #041020;
+  padding: 0 8px;
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  color: var(--cyan);
+}
+
+.key-value {
+  padding: 22px 24px;
+  font-size: 22px;
+  letter-spacing: 0.15em;
+  color: var(--cyan);
+  text-align: center;
+  /* KEY GOES HERE — paste between these quotes */
+  /* Replace the placeholder below with the actual key */
+}
+
+.key-placeholder {
+  color: rgba(0,200,255,0.25);
+  font-size: 17px;
+  letter-spacing: 0.12em;
+}
+
+/* Bound node */
+.node-info {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+.node-cell {
+  background: rgba(4,20,38,0.9);
+  padding: 12px 16px;
+}
+.node-label { font-size: 9px; letter-spacing: 0.2em; color: var(--text-dim); margin-bottom: 4px; }
+.node-val { font-size: 12px; color: var(--text-bright); }
+.node-val.green { color: var(--green); }
+.node-val.cyan { color: var(--cyan); }
+
+/* Instructions */
+.instructions {
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--text-dim);
+  margin-bottom: 24px;
+}
+.instructions .step { display: flex; gap: 12px; margin-bottom: 8px; }
+.step-n { color: var(--cyan); min-width: 16px; }
+.step-t { color: var(--text); }
+.step-t strong { color: var(--text-bright); font-weight: normal; border-bottom: 1px solid rgba(0,200,255,0.25); }
+
+/* Footer */
+.card-footer {
+  border-top: 1px solid var(--border);
+  padding: 16px 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  color: var(--text-dim);
+}
+
+.footer-dot { display: flex; align-items: center; gap: 8px; }
+.fdot { width: 5px; height: 5px; border-radius: 50%; }
+.fdot.g { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 2s ease-in-out infinite; }
+.fdot.c { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); animation: pulse 2.5s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:0.4} 50%{opacity:1} }
+
+/* Vertical decoration lines */
+.deco-line {
+  position: absolute;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(0,200,255,0.15), transparent);
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+
+<div class="stars" id="stars"></div>
+<div class="scanline"></div>
+
+<div class="corner tl"></div>
+<div class="corner tr"></div>
+<div class="corner bl"></div>
+<div class="corner br"></div>
+
+<div class="card">
+
+  <div class="card-header">
+    <div class="transmission-label">ENCRYPTED TRANSMISSION</div>
+    <div class="nex-logo">NEX</div>
+    <div class="tagline">Dynamic Intelligence Organism</div>
+    <div class="signal-bars">
+      <div class="bar" style="height:4px;--bd:1.8s"></div>
+      <div class="bar" style="height:7px;--bd:2.2s"></div>
+      <div class="bar" style="height:11px;--bd:1.5s"></div>
+      <div class="bar" style="height:14px;--bd:2.8s"></div>
+      <div class="bar" style="height:16px;--bd:1.2s"></div>
+      <div class="bar" style="height:14px;--bd:2.0s"></div>
+      <div class="bar" style="height:11px;--bd:2.5s"></div>
+      <div class="bar" style="height:7px;--bd:1.7s"></div>
+      <div class="bar" style="height:4px;--bd:2.3s"></div>
+    </div>
+  </div>
+
+  <div class="card-body">
+
+    <div class="welcome">
+      <div class="hi">// TRANSMISSION RECEIVED</div>
+      Your NEX license has been issued and bound to your node.<br>
+      <span class="dim">This key is unique to your machine. Do not share it.</span>
+    </div>
+
+    <div class="divider">LICENSE PAYLOAD</div>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- PASTE THE KEY BELOW — replace the span content -->
+    <div class="key-block">
+      <div class="key-value">
+        <span class="key-placeholder">NEX-XXXX-XXXX-XXXX-XXXX</span>
+      </div>
+    </div>
+    <!-- ═══════════════════════════════════════════ -->
+
+    <div class="node-info">
+      <div class="node-cell">
+        <div class="node-label">BOUND NODE</div>
+        <div class="node-val cyan">YOUR-HOSTNAME</div>
+      </div>
+      <div class="node-cell">
+        <div class="node-label">ACCESS LEVEL</div>
+        <div class="node-val green">FULL ACCESS</div>
+      </div>
+      <div class="node-cell">
+        <div class="node-label">LICENSE TYPE</div>
+        <div class="node-val">PERPETUAL</div>
+      </div>
+      <div class="node-cell">
+        <div class="node-label">STATUS</div>
+        <div class="node-val green">ACTIVE</div>
+      </div>
+    </div>
+
+    <div class="instructions">
+      <div class="step"><span class="step-n">01</span><span class="step-t">Open a terminal and type <strong>nex</strong> — the license gate will open in your browser.</span></div>
+      <div class="step"><span class="step-n">02</span><span class="step-t">Paste your key into the <strong>ACTIVATE</strong> field and click the button.</span></div>
+      <div class="step"><span class="step-n">03</span><span class="step-t">NEX will verify your node and boot. <strong>The organism is now yours.</strong></span></div>
+    </div>
+
+  </div>
+
+  <div class="card-footer">
+    <div class="footer-dot"><div class="fdot g"></div>SYSTEM NOMINAL</div>
+    <span>NEX v4.0 — NOT A CHATBOT. AN ORGANISM.</span>
+    <div class="footer-dot"><div class="fdot c"></div>ENCRYPTED</div>
+  </div>
+
+</div>
+
+<script>
+const s = document.getElementById('stars');
+for (let i = 0; i < 120; i++) {
+  const el = document.createElement('div');
+  el.className = 'star';
+  el.style.cssText = `left:${Math.random()*100}%;top:${Math.random()*100}%;--d:${2+Math.random()*5}s;opacity:${Math.random()*0.4}`;
+  s.appendChild(el);
+}
+// Live timestamp in footer
+const ts = document.querySelector('.card-footer span');
+const now = new Date();
+ts.textContent = `ISSUED ${now.toISOString().slice(0,10)} — NEX v4.0`;
+</script>
+</body>
+</html>

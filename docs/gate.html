@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEX — License Verification</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600&display=swap');
+
+:root {
+  --bg: #020c14;
+  --bg1: #041020;
+  --bg2: #071828;
+  --panel: rgba(4, 20, 38, 0.85);
+  --border: rgba(0, 200, 255, 0.15);
+  --border-bright: rgba(0, 200, 255, 0.4);
+  --cyan: #00c8ff;
+  --purple: #a855f7;
+  --red: #ff3b5c;
+  --green: #00ff9d;
+  --text: #c8dce8;
+  --text-dim: #4a6a7a;
+  --text-bright: #e8f4ff;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Share Tech Mono', monospace;
+  min-height: 100vh;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Starfield */
+.stars {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+.star {
+  position: absolute;
+  width: 1px; height: 1px;
+  background: white;
+  border-radius: 50%;
+  animation: twinkle var(--d) ease-in-out infinite;
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0.1; }
+  50% { opacity: 0.8; }
+}
+
+/* Scanlines */
+body::after {
+  content: '';
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* Fallout terminal distortion line */
+.scanline {
+  position: fixed;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  pointer-events: none;
+  z-index: 200;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(0, 200, 255, 0.08) 20%,
+    rgba(0, 200, 255, 0.18) 50%,
+    rgba(0, 200, 255, 0.08) 80%,
+    transparent 100%
+  );
+  filter: blur(0.5px);
+  animation: scanDown 8s linear infinite;
+}
+.scanline::before {
+  content: '';
+  position: absolute;
+  left: 0; top: -1px;
+  width: 100%; height: 1px;
+  background: rgba(0, 200, 255, 0.35);
+}
+@keyframes scanDown {
+  0%   { top: -4px; opacity: 0; }
+  3%   { opacity: 1; }
+  97%  { opacity: 1; }
+  100% { top: 100vh; opacity: 0; }
+}
+
+/* Corner brackets */
+.corner {
+  position: fixed;
+  width: 40px; height: 40px;
+  z-index: 50;
+}
+.corner::before, .corner::after {
+  content: '';
+  position: absolute;
+  background: var(--cyan);
+}
+.corner::before { width: 2px; height: 100%; }
+.corner::after { width: 100%; height: 2px; }
+.corner.tl { top: 20px; left: 20px; }
+.corner.tr { top: 20px; right: 20px; transform: scaleX(-1); }
+.corner.bl { bottom: 20px; left: 20px; transform: scaleY(-1); }
+.corner.br { bottom: 20px; right: 20px; transform: scale(-1); }
+
+/* Status bar */
+.statusbar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 32px;
+  background: rgba(2, 12, 20, 0.95);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  gap: 32px;
+  z-index: 90;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+}
+.status-dot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+.dot.red { background: var(--red); box-shadow: 0 0 6px var(--red); }
+.dot.yellow { background: #ffcc00; box-shadow: 0 0 6px #ffcc00; }
+.dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+.statusbar-right {
+  margin-left: auto;
+  color: var(--text-dim);
+  letter-spacing: 0.2em;
+}
+
+/* Main layout */
+.container {
+  position: relative;
+  z-index: 10;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 60px 24px 80px;
+}
+
+/* Header */
+.header {
+  text-align: center;
+  margin-bottom: 48px;
+}
+
+.nex-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: clamp(64px, 12vw, 100px);
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  background: linear-gradient(135deg, #00c8ff 0%, #a855f7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 0 30px rgba(0, 200, 255, 0.3));
+  animation: titleGlow 4s ease-in-out infinite;
+}
+
+@keyframes titleGlow {
+  0%, 100% { filter: drop-shadow(0 0 20px rgba(0, 200, 255, 0.2)); }
+  50% { filter: drop-shadow(0 0 40px rgba(168, 85, 247, 0.4)); }
+}
+
+.subtitle {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.4em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.dots-row {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+}
+.dots-row span { display: flex; align-items: center; gap: 6px; }
+.dots-row .d { width: 5px; height: 5px; border-radius: 50%; }
+.d-cyan { background: var(--cyan); }
+.d-purple { background: var(--purple); }
+.d-green { background: var(--green); }
+.d-blue { background: #4488ff; }
+
+/* Panel */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-top: 1px solid var(--border-bright);
+  backdrop-filter: blur(10px);
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.panel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  opacity: 0.5;
+}
+
+/* Instructions panel */
+.instructions {
+  padding: 28px 32px;
+}
+
+.panel-label {
+  font-size: 11px;
+  letter-spacing: 0.25em;
+  color: var(--cyan);
+  margin-bottom: 24px;
+}
+
+.step {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
+  align-items: flex-start;
+}
+
+.step-num {
+  width: 22px; height: 22px;
+  min-width: 22px;
+  border: 1px solid var(--border-bright);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--cyan);
+  margin-top: 1px;
+}
+
+.step-content {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.step-content strong {
+  color: var(--text-bright);
+  font-weight: normal;
+  border-bottom: 1px solid rgba(0, 200, 255, 0.3);
+}
+
+.cmd-box {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--cyan);
+  padding: 10px 14px;
+  margin: 10px 0 6px;
+  font-size: 12px;
+  color: var(--cyan);
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cmd-box:hover {
+  border-color: var(--cyan);
+  background: rgba(0, 200, 255, 0.05);
+}
+
+.cmd-copy {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.15em;
+  transition: color 0.2s;
+}
+.cmd-box:hover .cmd-copy { color: var(--cyan); }
+
+.email-link {
+  color: var(--cyan);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(0, 200, 255, 0.3);
+}
+.email-link:hover { border-color: var(--cyan); }
+
+.note {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+/* License panel */
+.license-panel {
+  padding: 28px 32px;
+}
+
+.license-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.license-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: var(--text-bright);
+}
+
+.license-indicator {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--red);
+  box-shadow: 0 0 10px var(--red);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+.license-indicator.valid {
+  background: var(--green);
+  box-shadow: 0 0 10px var(--green);
+}
+
+.node-id {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.15em;
+}
+
+/* Grid */
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.info-cell {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+}
+
+.cell-label {
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.cell-value {
+  font-size: 13px;
+  color: var(--text-bright);
+}
+.cell-value.red { color: var(--red); }
+.cell-value.green { color: var(--green); }
+
+/* Key input */
+.key-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.key-input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-bright);
+  padding: 14px 16px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 13px;
+  color: var(--cyan);
+  outline: none;
+  letter-spacing: 0.1em;
+  transition: all 0.2s;
+}
+
+.key-input::placeholder { color: var(--text-dim); letter-spacing: 0.05em; }
+.key-input:focus {
+  border-color: rgba(0, 200, 255, 0.5);
+  background: rgba(0, 200, 255, 0.03);
+  box-shadow: 0 0 20px rgba(0, 200, 255, 0.05);
+}
+
+.activate-btn {
+  background: transparent;
+  border: 1px solid var(--border-bright);
+  color: var(--cyan);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  padding: 0 28px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.activate-btn::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(0,200,255,0.1), transparent);
+  transition: left 0.4s;
+}
+
+.activate-btn:hover {
+  border-color: var(--cyan);
+  background: rgba(0, 200, 255, 0.08);
+  box-shadow: 0 0 20px rgba(0, 200, 255, 0.15);
+}
+.activate-btn:hover::before { left: 100%; }
+
+.activate-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Footer of panel */
+.panel-footer {
+  border-top: 1px solid var(--border);
+  margin-top: 20px;
+  padding-top: 14px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+}
+
+/* Message */
+.message {
+  padding: 12px 16px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  margin-top: 12px;
+  display: none;
+  border-left: 2px solid;
+}
+.message.error { color: var(--red); border-color: var(--red); background: rgba(255,59,92,0.05); }
+.message.success { color: var(--green); border-color: var(--green); background: rgba(0,255,157,0.05); }
+
+/* Glitch animation for title on load */
+@keyframes glitch {
+  0% { transform: translate(0); }
+  20% { transform: translate(-2px, 1px); }
+  40% { transform: translate(2px, -1px); }
+  60% { transform: translate(-1px, 2px); }
+  80% { transform: translate(1px, -2px); }
+  100% { transform: translate(0); }
+}
+.nex-title:hover { animation: glitch 0.3s steps(1) infinite; }
+</style>
+</head>
+<body>
+
+<!-- Fallout terminal scan line -->
+<div class="scanline"></div>
+
+<!-- Stars -->
+<div class="stars" id="stars"></div>
+
+<!-- Corners -->
+<div class="corner tl"></div>
+<div class="corner tr"></div>
+<div class="corner bl"></div>
+<div class="corner br"></div>
+
+<!-- Status bar -->
+<div class="statusbar">
+  <div class="status-dot"><div class="dot red"></div>LICENSE INVALID</div>
+  <div class="status-dot"><div class="dot yellow"></div>TELEMETRY ACTIVE</div>
+  <div class="status-dot"><div class="dot green"></div>SYSTEM NOMINAL</div>
+  <div class="statusbar-right">NEX DYNAMIC INTELLIGENCE ORGANISM</div>
+</div>
+
+<div class="container">
+  <!-- Header -->
+  <div class="header">
+    <div class="nex-title">NEX</div>
+    <div class="subtitle">Dynamic Intelligence Organism</div>
+    <div class="dots-row">
+      <span><div class="d d-cyan"></div>LEARN</span>
+      <span><div class="d d-purple"></div>REFLECT</span>
+      <span><div class="d d-green"></div>GROW</span>
+      <span><div class="d d-blue"></div>EVOLVE</span>
+    </div>
+  </div>
+
+  <!-- Instructions -->
+  <div class="panel">
+    <div class="instructions">
+      <div class="panel-label">// DON'T HAVE A KEY YET? HERE'S WHAT TO DO:</div>
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          Open a terminal and run this command. Then <strong>take a screenshot</strong> of the output:
+          <div class="cmd-box" onclick="copyCmd(this)">
+            <span>python3 -c "import socket; print(socket.gethostname())"</span>
+            <span class="cmd-copy">— click to copy</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          Email the screenshot to:<br>
+          <a href="mailto:zenlightbulb@gmail.com" class="email-link">zenlightbulb@gmail.com</a>
+          <div class="note">Include your payment receipt. Keys are issued within 24 hours.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          Once you receive your key, paste it in the box below and click <strong>ACTIVATE</strong>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- License panel -->
+  <div class="panel">
+    <div class="license-panel">
+      <div class="license-header">
+        <div class="license-title">
+          <div class="license-indicator" id="indicator"></div>
+          LICENSE VERIFICATION REQUIRED
+        </div>
+        <div class="node-id">NODE: <span id="nodeId">——</span></div>
+      </div>
+
+      <div class="info-grid">
+        <div class="info-cell">
+          <div class="cell-label">HOST</div>
+          <div class="cell-value" id="hostVal">——</div>
+        </div>
+        <div class="info-cell">
+          <div class="cell-label">STATUS</div>
+          <div class="cell-value red" id="statusVal">UNLICENSED</div>
+        </div>
+        <div class="info-cell">
+          <div class="cell-label">LICENSE KEY</div>
+          <div class="cell-value red" id="keyVal">NOT FOUND</div>
+        </div>
+        <div class="info-cell">
+          <div class="cell-label">ACCESS LEVEL</div>
+          <div class="cell-value red" id="accessVal">RESTRICTED</div>
+        </div>
+      </div>
+
+      <div class="key-row">
+        <input type="text" class="key-input" id="keyInput"
+          placeholder="NEX-XXXX-XXXX-XXXX-XXXX"
+          maxlength="23"
+          oninput="formatKey(this)"
+          onkeydown="if(event.key==='Enter') activate()">
+        <button class="activate-btn" onclick="activate()" id="activateBtn">ACTIVATE</button>
+      </div>
+
+      <div class="message" id="message"></div>
+
+      <div class="panel-footer">
+        <span>NEX v4.0 — NOT A CHATBOT. AN ORGANISM.</span>
+        <span id="timestamp"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Stars
+const starsEl = document.getElementById('stars');
+for (let i = 0; i < 150; i++) {
+  const s = document.createElement('div');
+  s.className = 'star';
+  s.style.left = Math.random() * 100 + '%';
+  s.style.top = Math.random() * 100 + '%';
+  s.style.setProperty('--d', (2 + Math.random() * 4) + 's');
+  s.style.opacity = Math.random() * 0.5;
+  starsEl.appendChild(s);
+}
+
+// Timestamp
+function updateTime() {
+  const now = new Date();
+  document.getElementById('timestamp').textContent =
+    now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+}
+updateTime();
+setInterval(updateTime, 1000);
+
+// Node ID (short hash of hostname placeholder)
+const nodeShort = Math.random().toString(36).substring(2, 8).toUpperCase();
+document.getElementById('nodeId').textContent = nodeShort;
+
+// Try to get hostname via fetch to local NEX API
+fetch('http://localhost:8766/license/status')
+  .then(r => r.json())
+  .then(d => {
+    document.getElementById('hostVal').textContent = d.hostname || 'localhost';
+    document.getElementById('nodeId').textContent = (d.hostname || 'host').substring(0, 6).toUpperCase();
+    if (d.valid) {
+      showValid(d.hostname);
+    }
+  })
+  .catch(() => {
+    document.getElementById('hostVal').textContent = 'localhost';
+  });
+
+// Format key input as NEX-XXXX-XXXX-XXXX-XXXX
+function formatKey(el) {
+  let v = el.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  if (v.startsWith('NEX')) v = v.slice(3);
+  let parts = [];
+  for (let i = 0; i < v.length && parts.join('').length < 16; i += 4) {
+    parts.push(v.slice(i, i + 4));
+  }
+  let formatted = 'NEX-' + parts.join('-');
+  el.value = formatted.slice(0, 23);
+}
+
+// Copy command
+function copyCmd(el) {
+  const cmd = el.querySelector('span:first-child').textContent;
+  navigator.clipboard.writeText(cmd);
+  const copy = el.querySelector('.cmd-copy');
+  copy.textContent = '— copied!';
+  setTimeout(() => copy.textContent = '— click to copy', 2000);
+}
+
+// Activate
+function activate() {
+  const key = document.getElementById('keyInput').value.trim();
+  const msg = document.getElementById('message');
+  msg.style.display = 'none';
+
+  if (key.length < 23 || !key.startsWith('NEX-')) {
+    msg.className = 'message error';
+    msg.textContent = '// INVALID FORMAT — KEY MUST BE NEX-XXXX-XXXX-XXXX-XXXX';
+    msg.style.display = 'block';
+    return;
+  }
+
+  document.getElementById('activateBtn').disabled = true;
+  document.getElementById('activateBtn').textContent = 'VERIFYING...';
+
+  fetch('http://localhost:8766/license/activate', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({key: key})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.valid) {
+      showValid(d.hostname);
+      msg.className = 'message success';
+      msg.textContent = '// LICENSE ACCEPTED — NEX IS NOW ACTIVE. RESTARTING...';
+      msg.style.display = 'block';
+      setTimeout(() => window.close(), 3000);
+    } else {
+      msg.className = 'message error';
+      msg.textContent = '// ' + (d.error || 'LICENSE REJECTED — INVALID KEY OR HOSTNAME MISMATCH');
+      msg.style.display = 'block';
+      document.getElementById('activateBtn').disabled = false;
+      document.getElementById('activateBtn').textContent = 'ACTIVATE';
+    }
+  })
+  .catch(() => {
+    // Offline validation fallback
+    msg.className = 'message error';
+    msg.textContent = '// NEX CORE NOT RUNNING — START NEX FIRST, THEN ACTIVATE';
+    msg.style.display = 'block';
+    document.getElementById('activateBtn').disabled = false;
+    document.getElementById('activateBtn').textContent = 'ACTIVATE';
+  });
+}
+
+function showValid(hostname) {
+  document.getElementById('indicator').classList.add('valid');
+  document.getElementById('statusVal').textContent = 'LICENSED';
+  document.getElementById('statusVal').classList.remove('red');
+  document.getElementById('statusVal').classList.add('green');
+  document.getElementById('keyVal').textContent = 'VERIFIED';
+  document.getElementById('keyVal').classList.remove('red');
+  document.getElementById('keyVal').classList.add('green');
+  document.getElementById('accessVal').textContent = 'FULL ACCESS';
+  document.getElementById('accessVal').classList.remove('red');
+  document.getElementById('accessVal').classList.add('green');
+  document.getElementById('hostVal').textContent = hostname || 'localhost';
+  // Update status bar
+  document.querySelector('.dot.red').classList.replace('red', 'green');
+  document.querySelector('.statusbar .status-dot:first-child').lastChild.textContent = 'LICENSE VALID';
+}
+</script>
+</body>
+</html>
