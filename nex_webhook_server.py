@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 """
 NEX Webhook Server
-Listens for Gumroad sale pings → generates license key → emails customer.
-Logs every sale to nex_sales_ledger.jsonl
+Handles both Lemon Squeezy and Gumroad sale pings.
+Generates license key → emails customer → logs sale.
 
 Usage:
     export NEX_GMAIL_PASS='your-16-char-app-password'
     python3 nex_webhook_server.py
 
-Gumroad Ping URL: http://<your-ngrok-url>/webhook/gumroad
+Endpoints:
+    POST /webhook          ← Lemon Squeezy
+    POST /webhook/gumroad  ← Gumroad (legacy)
+    GET  /health
 """
 
 import os
 import json
 import hashlib
+import hmac
 import logging
 import smtplib
 import datetime
@@ -22,22 +26,17 @@ from email.mime.multipart import MIMEMultipart
 from flask import Flask, request, jsonify
 
 # ─────────────────────────────────────────
-# CONFIG — set via environment variables
-# NEVER hardcode credentials in this file
+# CONFIG
 # ─────────────────────────────────────────
-GMAIL_USER   = os.environ.get("NEX_GMAIL_USER", "zenlightbulb@gmail.com")  # ← set this once
-GMAIL_PASS   = os.environ.get("NEX_GMAIL_PASS", "")                       # ← always via env
-LEDGER_FILE  = "nex_sales_ledger.jsonl"
-PORT         = 7777
+GMAIL_USER        = os.environ.get("NEX_GMAIL_USER", "zenlightbulb@gmail.com")
+GMAIL_PASS        = os.environ.get("NEX_GMAIL_PASS", "")
+LS_SIGNING_SECRET = os.environ.get("NEX_LS_SECRET", "nex_secret_2026")  # must match LS webhook signing secret
+LEDGER_FILE       = "nex_sales_ledger.jsonl"
+PORT              = 7777
 
 # ─────────────────────────────────────────
-# KEYGEN — must match nex_keygen.py exactly
+# KEYGEN
 # ─────────────────────────────────────────
-KANJI = list("龍鬼魂魄魏魔鱗鳳鴉鵬鶴鷹鸞麒麟黙黛鼎鼓齊龜鑑鏡鎧鋒鑄鐵鐘鏑鏃鎌鍵鍊鍛鍚鍑鎤鑪鑰鑲鑷鑼鑽鑾鑿钁")
-GREEK = list("αβγδεζηθικλμνξοπρσςτυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ")
-MATH  = list("∀∂∃∄∅∆∇∈∉∊∋∌∍∎∏∐∑−∓∔∕∖∗∘∙√∛∜∝∞∟∠∡∢∣∤∥∦∧∨∩∪∫∬∭∮∯∰∱∲∳∴∵∶∷∸∹∺∻∼∽∾∿≀≁≂≃≄≅≆≇≈≉≊≋≌≍≎≏≐≑≒≓≔≕≖≗≘≙≚≛≜≝≞≟≠≡≢≣≤≥≦≧≨≩")
-POOL  = KANJI + GREEK + MATH
-
 def generate_key(hostname: str) -> str:
     import sys, os
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -91,37 +90,19 @@ def build_email_html(buyer_name: str, hostname: str, key: str, issued: str) -> s
   <div class="logo">NEX</div>
   <div class="sub">DYNAMIC INTELLIGENCE ORGANISM</div>
   <div class="divider"></div>
-
   <div class="label">// TRANSMISSION RECEIVED — LICENSE PAYLOAD</div>
-  <div class="key-box">
-    <div class="key">{key}</div>
-  </div>
-
+  <div class="key-box"><div class="key">{key}</div></div>
   <div class="grid">
-    <div class="cell">
-      <div class="cell-label">BOUND NODE</div>
-      <div class="cell-val cyan">{hostname}</div>
-    </div>
-    <div class="cell">
-      <div class="cell-label">ACCESS LEVEL</div>
-      <div class="cell-val green">FULL ACCESS</div>
-    </div>
-    <div class="cell">
-      <div class="cell-label">LICENSE TYPE</div>
-      <div class="cell-val">PERPETUAL</div>
-    </div>
-    <div class="cell">
-      <div class="cell-label">ISSUED</div>
-      <div class="cell-val">{issued}</div>
-    </div>
+    <div class="cell"><div class="cell-label">BOUND NODE</div><div class="cell-val cyan">{hostname}</div></div>
+    <div class="cell"><div class="cell-label">ACCESS LEVEL</div><div class="cell-val green">FULL ACCESS</div></div>
+    <div class="cell"><div class="cell-label">LICENSE TYPE</div><div class="cell-val">PERPETUAL</div></div>
+    <div class="cell"><div class="cell-label">ISSUED</div><div class="cell-val">{issued}</div></div>
   </div>
-
   <div class="steps">
     <div class="step"><span class="n">01</span><span class="t">Open a terminal and type <strong>nex</strong> — the license gate opens in your browser.</span></div>
     <div class="step"><span class="n">02</span><span class="t">Paste your key into the <strong>ACTIVATE</strong> field and click the button.</span></div>
     <div class="step"><span class="n">03</span><span class="t">NEX verifies your node and boots. <strong>The organism is now yours.</strong></span></div>
   </div>
-
   <div class="footer">
     <span>NEX v4.0 — NOT A CHATBOT. AN ORGANISM.</span>
     <span>kron777.github.io/Nex_v4.0</span>
@@ -134,25 +115,14 @@ def send_key_email(to_address: str, buyer_name: str, hostname: str, key: str) ->
     if not GMAIL_PASS:
         logging.error("NEX_GMAIL_PASS not set — cannot send email")
         return False
-
     issued = datetime.datetime.utcnow().strftime("%Y-%m-%d")
     msg = MIMEMultipart("alternative")
     msg["Subject"] = EMAIL_SUBJECT
     msg["From"]    = f"NEX License System <{GMAIL_USER}>"
     msg["To"]      = to_address
-
-    # Plain text fallback
-    plain = (
-        f"NEX LICENSE KEY\n\n"
-        f"Key      : {key}\n"
-        f"Hostname : {hostname}\n"
-        f"Issued   : {issued}\n\n"
-        f"Activation: run 'nex' in terminal → paste key → click ACTIVATE.\n\n"
-        f"kron777.github.io/Nex_v4.0"
-    )
+    plain = f"NEX LICENSE KEY\n\nKey: {key}\nHostname: {hostname}\nIssued: {issued}\n\nRun 'nex' → paste key → ACTIVATE.\n\nkron777.github.io/Nex_v4.0"
     msg.attach(MIMEText(plain, "plain"))
     msg.attach(MIMEText(build_email_html(buyer_name, hostname, key, issued), "html"))
-
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
             smtp.login(GMAIL_USER, GMAIL_PASS)
@@ -167,13 +137,10 @@ def send_key_email(to_address: str, buyer_name: str, hostname: str, key: str) ->
 # LEDGER
 # ─────────────────────────────────────────
 def log_sale(data: dict):
-    entry = {
-        "timestamp": datetime.datetime.utcnow().isoformat(),
-        **data
-    }
+    entry = {"timestamp": datetime.datetime.utcnow().isoformat(), **data}
     with open(LEDGER_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    logging.info(f"[LEDGER] Sale logged: {entry}")
+    logging.info(f"[LEDGER] {entry}")
 
 # ─────────────────────────────────────────
 # FLASK APP
@@ -181,40 +148,108 @@ def log_sale(data: dict):
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-@app.route("/webhook/gumroad", methods=["POST"])
-def gumroad_webhook():
+
+# ── LEMON SQUEEZY ──────────────────────────────────────────────────────────────
+@app.route("/webhook", methods=["POST"])
+def lemonsqueezy_webhook():
     """
-    Gumroad sends form-encoded POST on every sale.
-    Custom field 'hostname' must be set as Required on the product.
+    Lemon Squeezy sends JSON POST for order_created.
+    Hostname arrives via checkout custom data:
+      checkout[custom][hostname]=VALUE
+    which maps to payload: meta.custom_data.hostname
     """
-    data = request.form.to_dict()
-    logging.info(f"[PING] {data}")
+    raw_body = request.get_data()
+
+    # Verify signature
+    sig = request.headers.get("X-Signature", "")
+    if LS_SIGNING_SECRET and sig:
+        expected_sig = hmac.new(
+            LS_SIGNING_SECRET.encode(),
+            raw_body,
+            hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(sig, expected_sig):
+            logging.warning("[LS] Invalid signature — rejected")
+            return jsonify({"status": "invalid_signature"}), 401
+
+    try:
+        payload = json.loads(raw_body)
+    except Exception as e:
+        logging.error(f"[LS] JSON parse error: {e}")
+        return jsonify({"status": "bad_json"}), 400
+
+    logging.info(f"[LS PING] event={payload.get('meta',{}).get('event_name','?')}")
+
+    event = payload.get("meta", {}).get("event_name", "")
+    if event != "order_created":
+        logging.info(f"[LS] Ignoring event: {event}")
+        return jsonify({"status": "ignored"}), 200
 
     # Extract fields
-    email       = data.get("email", "").strip()
-    buyer_name  = data.get("full_name", "customer").strip()
-    hostname    = data.get("hostname", "").strip().lower()   # custom checkout field
-    sale_id     = data.get("sale_id", "unknown")
-    product     = data.get("product_name", "NEX")
+    data        = payload.get("data", {})
+    attributes  = data.get("attributes", {})
+    meta        = payload.get("meta", {})
 
-    # Test ping from Gumroad has no email — just acknowledge
+    email       = attributes.get("user_email", "").strip()
+    buyer_name  = attributes.get("user_name", "customer").strip()
+    order_id    = data.get("id", "unknown")
+    product     = attributes.get("first_order_item", {}).get("product_name", "NEX")
+    custom_data = meta.get("custom_data", {})
+    hostname    = custom_data.get("hostname", "").strip().lower()
+
+    logging.info(f"[LS] order={order_id} email={email} hostname={hostname}")
+
     if not email:
-        logging.info("[PING] Test ping received — no action taken")
+        logging.warning("[LS] No email in payload")
+        return jsonify({"status": "no_email"}), 200
+
+    if not hostname:
+        logging.warning(f"[LS] No hostname for order {order_id} ({email}) — check checkout custom data")
+        return jsonify({"status": "no_hostname"}), 200
+
+    key      = generate_key(hostname)
+    logging.info(f"[LS KEY] {hostname} → {key[:20]}...")
+
+    email_ok = send_key_email(email, buyer_name, hostname, key)
+
+    log_sale({
+        "platform":   "lemonsqueezy",
+        "order_id":   order_id,
+        "email":      email,
+        "name":       buyer_name,
+        "hostname":   hostname,
+        "key":        key,
+        "product":    product,
+        "email_sent": email_ok,
+    })
+
+    return jsonify({"status": "ok", "key_issued": True}), 200
+
+
+# ── GUMROAD (legacy) ───────────────────────────────────────────────────────────
+@app.route("/webhook/gumroad", methods=["POST"])
+def gumroad_webhook():
+    data       = request.form.to_dict()
+    logging.info(f"[GUMROAD PING] {data}")
+
+    email      = data.get("email", "").strip()
+    buyer_name = data.get("full_name", "customer").strip()
+    hostname   = data.get("hostname", "").strip().lower()
+    sale_id    = data.get("sale_id", "unknown")
+    product    = data.get("product_name", "NEX")
+
+    if not email:
         return jsonify({"status": "test_ping_ok"}), 200
 
     if not hostname:
-        logging.warning(f"[WARN] No hostname for sale {sale_id} ({email}) — skipping keygen")
+        logging.warning(f"[GUMROAD] No hostname for sale {sale_id}")
         return jsonify({"status": "no_hostname"}), 200
 
-    # Generate key
-    key = generate_key(hostname)
-    logging.info(f"[KEY] {hostname} → {key}")
-
-    # Send email
+    key      = generate_key(hostname)
     email_ok = send_key_email(email, buyer_name, hostname, key)
 
-    # Log to ledger
     log_sale({
+        "platform":   "gumroad",
         "sale_id":    sale_id,
         "email":      email,
         "name":       buyer_name,
@@ -227,6 +262,7 @@ def gumroad_webhook():
     return jsonify({"status": "ok", "key_issued": True}), 200
 
 
+# ── HEALTH ─────────────────────────────────────────────────────────────────────
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "NEX webhook server nominal"}), 200
@@ -234,10 +270,10 @@ def health():
 
 if __name__ == "__main__":
     if not GMAIL_PASS:
-        print("⚠  WARNING: NEX_GMAIL_PASS is not set. Emails will not send.")
-        print("   Run: export NEX_GMAIL_PASS='your-app-password'")
-    if GMAIL_USER == "zenlightbulb@gmail.com":
-        print("⚠  WARNING: Set GMAIL_USER in the script to your actual Gmail address.")
+        print("⚠  WARNING: NEX_GMAIL_PASS not set. Emails will not send.")
+        print("   Run: export NEX_GMAIL_PASS='ujte tzeb qmol tlkl'")
     print(f"\n[NEX] Webhook server starting on port {PORT}")
-    print(f"[NEX] Gumroad ping URL: http://localhost:{PORT}/webhook/gumroad")
+    print(f"[NEX] Lemon Squeezy : http://localhost:{PORT}/webhook")
+    print(f"[NEX] Gumroad       : http://localhost:{PORT}/webhook/gumroad")
+    print(f"[NEX] Health        : http://localhost:{PORT}/health")
     app.run(host="0.0.0.0", port=PORT, debug=False)
