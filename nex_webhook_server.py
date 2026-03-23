@@ -39,13 +39,10 @@ MATH  = list("∀∂∃∄∅∆∇∈∉∊∋∌∍∎∏∐∑−∓∔∕∖
 POOL  = KANJI + GREEK + MATH
 
 def generate_key(hostname: str) -> str:
-    hostname = hostname.strip().lower()
-    seed = hashlib.sha256(hostname.encode("utf-8")).digest()
-    chars = []
-    for i in range(16):
-        val = (seed[i % 32] << 8 | seed[(i + 1) % 32]) + (i * 7919)
-        chars.append(POOL[val % len(POOL)])
-    return "NEX-" + "".join(chars)
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from nex_license_server import expected_key
+    return expected_key(hostname)
 
 # ─────────────────────────────────────────
 # EMAIL
