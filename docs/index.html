@@ -399,12 +399,113 @@ footer {
 .sdot.c{background:var(--cyan);box-shadow:0 0 5px var(--cyan);animation-delay:0.7s}
 .sdot.p{background:var(--purple);box-shadow:0 0 5px var(--purple);animation-delay:1.4s}
 .s-right { margin-left:auto; color:var(--text-dim); }
+
+/* ── GLITCH EFFECTS ── */
+@keyframes glitch1 {
+  0%,100% { clip-path: inset(0 0 98% 0); transform: translate(-2px,0); }
+  20% { clip-path: inset(30% 0 50% 0); transform: translate(2px,0); }
+  40% { clip-path: inset(60% 0 20% 0); transform: translate(-1px,0); }
+  60% { clip-path: inset(80% 0 5% 0); transform: translate(3px,0); }
+  80% { clip-path: inset(10% 0 70% 0); transform: translate(-3px,0); }
+}
+@keyframes glitch2 {
+  0%,100% { clip-path: inset(0 0 98% 0); transform: translate(2px,0); opacity:0; }
+  20% { clip-path: inset(50% 0 30% 0); transform: translate(-2px,0); opacity:0.8; }
+  40% { clip-path: inset(20% 0 60% 0); transform: translate(1px,0); opacity:0.6; }
+  60% { clip-path: inset(5% 0 80% 0); transform: translate(-3px,0); opacity:0.9; }
+  80% { clip-path: inset(70% 0 10% 0); transform: translate(3px,0); opacity:0.7; }
+}
+@keyframes glitchSkew {
+  0%,89%,100% { transform: skewX(0deg); }
+  90% { transform: skewX(-1.5deg); }
+  92% { transform: skewX(1deg); }
+  94% { transform: skewX(-0.5deg); }
+  96% { transform: skewX(0.8deg); }
+}
+@keyframes scanJump {
+  0%,95%,100% { opacity:1; transform:translateY(0); }
+  96% { opacity:0.8; transform:translateY(2px); }
+  97% { opacity:0.9; transform:translateY(-1px); }
+  98% { opacity:0.7; transform:translateY(3px); }
+}
+@keyframes rgbSplit {
+  0%,94%,100% { text-shadow: none; }
+  95% { text-shadow: -2px 0 rgba(255,0,0,0.5), 2px 0 rgba(0,255,255,0.5); }
+  96% { text-shadow: 2px 0 rgba(255,0,0,0.5), -2px 0 rgba(0,255,255,0.5); }
+  97% { text-shadow: -3px 0 rgba(255,0,0,0.3), 3px 0 rgba(0,255,255,0.3); }
+  98% { text-shadow: none; }
+}
+@keyframes flicker {
+  0%,90%,100% { opacity:1; }
+  91% { opacity:0.85; }
+  92% { opacity:1; }
+  93% { opacity:0.7; }
+  94% { opacity:1; }
+  95% { opacity:0.9; }
+}
+@keyframes hline {
+  0%,97%,100% { opacity:0; top:-10px; }
+  98% { opacity:0.6; top:15%; }
+  99% { opacity:0.3; top:40%; }
+}
+
+.hero-title {
+  animation: shimmer 6s linear infinite, titleGlow 4s ease-in-out infinite, glitchSkew 8s ease-in-out infinite, rgbSplit 7s ease-in-out infinite !important;
+}
+
+.glitch-wrap {
+  position: relative;
+}
+.glitch-wrap::before,
+.glitch-wrap::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  font-family: 'Orbitron', sans-serif;
+  font-size: inherit;
+  font-weight: 900;
+  letter-spacing: inherit;
+  line-height: inherit;
+  pointer-events: none;
+}
+.glitch-wrap::before {
+  color: rgba(0,200,255,0.6);
+  animation: glitch1 6s infinite linear;
+}
+.glitch-wrap::after {
+  color: rgba(168,85,247,0.6);
+  animation: glitch2 6s infinite linear;
+  animation-delay: 0.3s;
+}
+
+/* Horizontal noise line */
+.h-noise {
+  position: fixed;
+  left: 0; width: 100%; height: 2px;
+  background: rgba(0,200,255,0.4);
+  pointer-events: none;
+  z-index: 999;
+  animation: hline 9s infinite ease-in-out;
+  filter: blur(0.5px);
+}
+
+/* Body flicker */
+body {
+  animation: flicker 11s infinite ease-in-out !important;
+}
+
+/* Nav glitch skew */
+nav {
+  animation: glitchSkew 13s ease-in-out infinite;
+}
 </style>
 </head>
 <body>
 
 <canvas id="circuit-canvas"></canvas>
 <div class="scanline"></div>
+<div class="h-noise"></div>
 
 <div class="corner tl"></div>
 <div class="corner tr"></div>
@@ -416,14 +517,14 @@ footer {
   <div class="nav-logo">NEX</div>
   <div class="nav-links"></div>
   <div class="nav-right">
-    <a href="https://github.com/kron777/Nex_v4.0" class="nav-cta">GET NEX</a>
+    <a href="https://kron777.gumroad.com/l/nex" class="nav-cta">GET NEX</a>
   </div>
 </nav>
 
 <!-- HERO -->
 <section class="hero">
   <div class="hero-eyebrow">DYNAMIC INTELLIGENCE ORGANISM</div>
-  <div class="hero-title">NEX</div>
+  <div class="hero-title glitch-wrap" data-text="NEX">NEX</div>
   <div class="hero-sub">v4.0 — Autonomous AI Agent</div>
   <div class="hero-tagline">
     She <strong>learns</strong>, <strong>thinks</strong>, and <strong>posts</strong> across platforms.<br>
@@ -550,7 +651,7 @@ footer {
         One organism. One owner. Completely yours.<br>
         <span style="color:var(--cyan);">No subscriptions. No cloud. No compromise.</span>
       </div>
-      <div class="price-amount" style="font-size:72px;margin-bottom:6px;">$199<span style="font-size:22px;"> USD</span></div>
+      <div class="price-amount" style="font-size:72px;margin-bottom:6px;">$99<span style="font-size:22px;"> USD</span></div>
       <div class="price-note" style="margin-bottom:36px;font-size:11px;letter-spacing:0.2em;">ONE-TIME PAYMENT — NODE-LOCKED PERPETUAL LICENSE</div>
       <ul class="price-features" style="text-align:left;margin-bottom:36px;">
         <li>Complete NEX v4.0 — all 18+ cognitive modules</li>
@@ -562,11 +663,9 @@ footer {
         <li>Full source code + direct support from the creator</li>
         <li>All future v4.x updates included</li>
       </ul>
-      <a href="https://github.com/kron777/Nex_v4.0" class="btn-primary" style="display:block;text-align:center;padding:16px;font-size:12px;letter-spacing:0.3em;">ACQUIRE NEX — $199</a>
+      <a href="https://kron777.gumroad.com/l/nex" class="btn-primary" style="display:block;text-align:center;padding:16px;font-size:12px;letter-spacing:0.3em;">ACQUIRE NEX — $99</a>
       <div style="margin-top:20px;font-size:10px;color:var(--text-dim);letter-spacing:0.15em;line-height:1.9;">
-        After payment, email your hostname screenshot to<br>
-        <a href="mailto:zenlightbulb@gmail.com" style="color:var(--cyan);text-decoration:none;">zenlightbulb@gmail.com</a>
-        — your key is issued within 24 hours.
+        Your license key is delivered <strong style="color:var(--cyan);">automatically</strong> to your email<br>within seconds of purchase. No waiting. No manual steps.
       </div>
     </div>
   </div>
@@ -576,9 +675,9 @@ footer {
 <footer>
   <div class="footer-logo">NEX</div>
   <div class="footer-links">
-    <a href="https://github.com/kron777/Nex_v4.0">GITHUB</a>
+    <a href="https://kron777.gumroad.com/l/nex">GITHUB</a>
     <a href="gate.html">ACTIVATE</a>
-    <a href="mailto:zenlightbulb@gmail.com">CONTACT</a>
+    <a href="/cdn-cgi/l/email-protection#92e8f7fcfefbf5fae6f0e7fef0d2f5fff3fbfebcf1fdff">CONTACT</a>
   </div>
   <div class="footer-copy">© 2026 NEX — NOT A CHATBOT. AN ORGANISM.</div>
 </footer>
@@ -590,7 +689,7 @@ footer {
   <div class="s-right">NEX DYNAMIC INTELLIGENCE ORGANISM — v4.0</div>
 </div>
 
-<script>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
 // Circuit board canvas
 const canvas = document.getElementById('circuit-canvas');
 const ctx = canvas.getContext('2d');
@@ -697,15 +796,4 @@ function draw() {
   requestAnimationFrame(draw);
 }
 
-window.addEventListener('resize', resize);
-resize();
-draw();
-
-// Live clock in status bar
-setInterval(() => {
-  const el = document.querySelector('.s-right');
-  if (el) el.textContent = `NEX v4.0 — ${new Date().toISOString().slice(0,19).replace('T',' ')} UTC`;
-}, 1000);
-</script>
-</body>
-</html>
+windo
