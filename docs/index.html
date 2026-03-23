@@ -590,9 +590,7 @@ nav {
     <span><div class="hdot g"></div>GROW</span>
     <span><div class="hdot a"></div>EVOLVE</span>
   </div>
-  <div class="hero-btns">
-    <a href="#pricing" class="btn-primary">ACQUIRE NEX</a>
-  </div>
+
   <div class="scroll-hint">
     <span>SCROLL</span>
     <div class="scroll-arrow"></div>
@@ -977,7 +975,7 @@ function proceedToCheckout() {
   // Pass hostname to Gumroad via ?wanted=true&hostname= param
   // The Gumroad checkout custom field is pre-filled via the URL
   const encoded = encodeURIComponent(hostname);
-  const checkoutUrl = `https://nexsales.lemonsqueezy.com/checkout/buy/e6713a1b-0138-4b0e-9863-957d7227f94ed?checkout[custom][hostname]=${encoded}`;
+  const checkoutUrl = `https://nexsales.lemonsqueezy.com/checkout/buy/e6713a1b-0138-4b0e-9863-957d7227f94ed?checkout%5Bcustom%5D%5Bhostname%5D=${encoded}`;
 
   setTimeout(()=>{ window.open(checkoutUrl, '_blank'); }, 600);
 
