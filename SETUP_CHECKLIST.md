@@ -40,7 +40,7 @@ Either:
 2. Click **"New Product"** → **"Digital product"**
 3. Fill in:
    - **Name:** `NEX v4.0 — Autonomous AI Agent`
-   - **Price:** `$199`
+   - **Price:** `$99`
    - **Description:** copy from README.md (the "What NEX Does" section)
    - **File to deliver:** Upload a .txt file that says:
      > "Thank you for purchasing NEX v4.0. Reply to your receipt email with your GitHub username and you'll receive repo access within 24 hours."

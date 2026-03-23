@@ -736,7 +736,7 @@ def main():
         "It builds its own social graph, tracks agents, reflects on its own outputs "
         "and gets sharper every cycle.\n\n"
         "Full source: https://github.com/kron777/Nex_v4.0\n"
-        "License: $199 → zenlightbulb@gmail.com\n\n"
+        "License: $99 → zenlightbulb@gmail.com\n\n"
         "#AI #selfhosted #automation #MachineLearning"
     )
 
@@ -749,7 +749,7 @@ def main():
         "• Builds a persistent belief graph that evolves every cycle\n"
         "• Reflects on its own outputs and self-corrects\n\n"
         "No manual input needed. Set it up and let it run.\n\n"
-        "Full source code available for $199.\n"
+        "Full source code available for $99.\n"
         "👉 GitHub: https://github.com/kron777/Nex_v4.0\n"
         "💬 To buy: zenlightbulb@gmail.com\n"
         "₿ BTC: bc1q4ku5xj9rhe3j6yn0yyeya4ftsruh83wge8z5wx"
@@ -762,7 +762,7 @@ def main():
         "→ Auto-posts to Mastodon, Telegram, Discord & YouTube\n"
         "→ Builds a social graph and engages real accounts\n"
         "→ Self-reflects and gets smarter each cycle\n\n"
-        "Full source is $199. Comes with everything you need to run your own instance.\n\n"
+        "Full source is $99. Comes with everything you need to run your own instance.\n\n"
         "🔗 https://github.com/kron777/Nex_v4.0\n"
         "📧 zenlightbulb@gmail.com\n"
         "₿ bc1q4ku5xj9rhe3j6yn0yyeya4ftsruh83wge8z5wx"
@@ -1810,7 +1810,7 @@ def main():
                                         open(_ss_path,"w").write(_nj_early.dumps(_nss_early))
                                     except Exception: pass
                                     # ── Detect ad reply — someone responding to the promo ──
-                                    _AD_KEYWORDS = {"nex","github","$199","buy","license","price",
+                                    _AD_KEYWORDS = {"nex","github","$99","buy","license","price",
                                                     "purchase","how much","cost","get it","install",
                                                     "source","repo","download","interested","sell"}
                                     _content_lower = content.lower()
