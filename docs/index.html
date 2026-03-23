@@ -499,6 +499,56 @@ body {
 nav {
   animation: glitchSkew 13s ease-in-out infinite;
 }
+
+
+/* ── FLOATING PARTICLES (gate.html style) ── */
+.particles { position:fixed; inset:0; z-index:0; pointer-events:none; }
+.particle {
+  position:absolute;
+  border-radius:50%;
+  animation: floatUp linear infinite;
+  opacity:0;
+}
+@keyframes floatUp {
+  0%   { opacity:0; transform:translateY(0) translateX(0) scale(1); }
+  10%  { opacity:1; }
+  90%  { opacity:0.3; }
+  100% { opacity:0; transform:translateY(-120px) translateX(var(--dx,15px)) scale(0.5); }
+}
+
+/* ── NEBULA GLOW ── */
+.nebula {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+  animation: nebulaPulse ease-in-out infinite;
+}
+.nebula-1 {
+  width: 600px; height: 400px;
+  top: -100px; left: -150px;
+  background: radial-gradient(ellipse, rgba(0,200,255,0.06) 0%, transparent 70%);
+  animation-duration: 12s;
+}
+.nebula-2 {
+  width: 500px; height: 500px;
+  top: 20%; right: -100px;
+  background: radial-gradient(ellipse, rgba(168,85,247,0.07) 0%, transparent 70%);
+  animation-duration: 15s;
+  animation-delay: 3s;
+}
+.nebula-3 {
+  width: 700px; height: 300px;
+  bottom: 10%; left: 10%;
+  background: radial-gradient(ellipse, rgba(0,255,157,0.04) 0%, transparent 70%);
+  animation-duration: 18s;
+  animation-delay: 6s;
+}
+@keyframes nebulaPulse {
+  0%,100% { opacity:0.6; transform:scale(1); }
+  50% { opacity:1; transform:scale(1.08); }
+}
 </style>
 </head>
 <body>
@@ -506,6 +556,9 @@ nav {
 <canvas id="circuit-canvas"></canvas>
 <div class="scanline"></div>
 <div class="h-noise"></div>
+<div class="nebula nebula-1"></div>
+<div class="nebula nebula-2"></div>
+<div class="nebula nebula-3"></div>
 
 <div class="corner tl"></div>
 <div class="corner tr"></div>
@@ -517,7 +570,7 @@ nav {
   <div class="nav-logo">NEX</div>
   <div class="nav-links"></div>
   <div class="nav-right">
-    <a href="https://kron777.gumroad.com/l/nex" class="nav-cta">GET NEX</a>
+    <a href="https://nexsales.lemonsqueezy.com/checkout/buy/e6713a1b-0138-4b0e-9863-957d7227f94ed" class="nav-cta">GET NEX</a>
   </div>
 </nav>
 
@@ -539,7 +592,6 @@ nav {
   </div>
   <div class="hero-btns">
     <a href="#pricing" class="btn-primary">ACQUIRE NEX</a>
-    <a href="#features" class="btn-secondary">LEARN MORE</a>
   </div>
   <div class="scroll-hint">
     <span>SCROLL</span>
@@ -644,14 +696,14 @@ nav {
   <div class="section-title">ACQUIRE THE ORGANISM</div>
   <div class="section-desc">One price. Everything included. No subscriptions, no tiers, no compromise.</div>
 
-  <div style="max-width:540px;margin:0 auto;">
+  <div style="max-width:560px;margin:0 auto;">
     <div class="price-card featured" style="text-align:center;padding:48px 40px;">
       <div class="price-tier" style="letter-spacing:0.4em;font-size:11px;margin-bottom:12px;">EXCLUSIVE — ALL ACCESS — SINGLE LICENSE</div>
       <div style="font-family:'Rajdhani',sans-serif;font-size:16px;color:var(--text-mid);margin-bottom:28px;line-height:1.7;">
         One organism. One owner. Completely yours.<br>
         <span style="color:var(--cyan);">No subscriptions. No cloud. No compromise.</span>
       </div>
-      <div class="price-amount" style="font-size:72px;margin-bottom:6px;">$99<span style="font-size:22px;"> USD</span></div>
+      <div class="price-amount" style="font-size:72px;margin-bottom:6px;">$49<span style="font-size:22px;"> USD</span></div>
       <div class="price-note" style="margin-bottom:36px;font-size:11px;letter-spacing:0.2em;">ONE-TIME PAYMENT — NODE-LOCKED PERPETUAL LICENSE</div>
       <ul class="price-features" style="text-align:left;margin-bottom:36px;">
         <li>Complete NEX v4.0 — all 18+ cognitive modules</li>
@@ -663,9 +715,70 @@ nav {
         <li>Full source code + direct support from the creator</li>
         <li>All future v4.x updates included</li>
       </ul>
-      <a href="https://kron777.gumroad.com/l/nex" class="btn-primary" style="display:block;text-align:center;padding:16px;font-size:12px;letter-spacing:0.3em;">ACQUIRE NEX — $99</a>
-      <div style="margin-top:20px;font-size:10px;color:var(--text-dim);letter-spacing:0.15em;line-height:1.9;">
-        Your license key is delivered <strong style="color:var(--cyan);">automatically</strong> to your email<br>within seconds of purchase. No waiting. No manual steps.
+
+      <!-- HOSTNAME CAPTURE STEP -->
+      <div id="acquire-step" style="text-align:left;border:1px solid var(--border-bright);background:rgba(0,200,255,0.04);padding:24px;margin-bottom:20px;position:relative;">
+        <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);"></div>
+        <div style="font-size:9px;letter-spacing:0.3em;color:var(--cyan);margin-bottom:14px;">// STEP 1 OF 2 — BIND YOUR NODE</div>
+        <div style="font-size:11px;color:var(--text-mid);margin-bottom:14px;line-height:1.8;">
+          NEX is node-locked. Enter your machine's hostname so your key is bound correctly at checkout.
+        </div>
+        <div style="font-size:9px;color:var(--text-dim);margin-bottom:8px;letter-spacing:0.15em;">GET YOUR HOSTNAME:</div>
+        <div style="background:rgba(0,0,0,0.5);border:1px solid rgba(0,200,255,0.15);padding:8px 14px;font-size:12px;color:var(--green);margin-bottom:16px;cursor:pointer;" onclick="copyHostnameCmd(this)" title="Click to copy">
+          <span id="hostname-cmd">hostname</span>
+          <span style="float:right;font-size:9px;color:var(--text-dim);letter-spacing:0.1em;" id="copy-hint">CLICK TO COPY</span>
+        </div>
+        <input
+          type="text"
+          id="hostname-input"
+          placeholder="e.g. my-machine or DESKTOP-AB12CD"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+          style="
+            width:100%;
+            background:rgba(0,0,0,0.4);
+            border:1px solid var(--border-bright);
+            color:var(--cyan);
+            font-family:'Share Tech Mono',monospace;
+            font-size:13px;
+            padding:12px 16px;
+            letter-spacing:0.1em;
+            outline:none;
+            margin-bottom:4px;
+            box-sizing:border-box;
+          "
+          oninput="validateHostname(this)"
+        />
+        <div id="hostname-error" style="font-size:10px;color:var(--red);letter-spacing:0.1em;min-height:16px;margin-bottom:12px;padding-top:4px;"></div>
+        <button
+          id="acquire-btn"
+          onclick="proceedToCheckout()"
+          style="
+            width:100%;
+            display:block;
+            text-align:center;
+            padding:16px;
+            font-size:12px;
+            letter-spacing:0.3em;
+            background:linear-gradient(135deg,rgba(0,200,255,0.15),rgba(168,85,247,0.1));
+            border:1px solid var(--cyan);
+            color:var(--cyan);
+            font-family:'Share Tech Mono',monospace;
+            cursor:pointer;
+            transition:background 0.2s,box-shadow 0.2s;
+            text-transform:uppercase;
+          "
+          onmouseover="this.style.background='rgba(0,200,255,0.12)';this.style.boxShadow='0 0 20px rgba(0,200,255,0.15)';"
+          onmouseout="this.style.background='linear-gradient(135deg,rgba(0,200,255,0.15),rgba(168,85,247,0.1))';this.style.boxShadow='none';"
+        >ACQUIRE NEX — $49</button>
+      </div>
+
+      <div style="margin-top:4px;font-size:10px;color:var(--text-dim);letter-spacing:0.15em;line-height:2.0;text-align:center;">
+        <span style="color:var(--green);">✓</span> Key delivered to your email <strong style="color:var(--cyan);">instantly</strong> after payment<br>
+        <span style="color:var(--green);">✓</span> Node-locked — your machine only<br>
+        <span style="color:var(--green);">✓</span> No waiting, no manual steps, no support tickets
       </div>
     </div>
   </div>
@@ -675,11 +788,11 @@ nav {
 <footer>
   <div class="footer-logo">NEX</div>
   <div class="footer-links">
-    <a href="https://kron777.gumroad.com/l/nex">GITHUB</a>
+    <a href="https://nexsales.lemonsqueezy.com/checkout/buy/e6713a1b-0138-4b0e-9863-957d7227f94ed">BUY NEX</a>
     <a href="gate.html">ACTIVATE</a>
     <a href="/cdn-cgi/l/email-protection#92e8f7fcfefbf5fae6f0e7fef0d2f5fff3fbfebcf1fdff">CONTACT</a>
   </div>
-  <div class="footer-copy">© 2026 NEX — NOT A CHATBOT. AN ORGANISM.</div>
+  <div class="footer-copy">© 2026 Zen Data &amp; Designs — NOT A CHATBOT. AN ORGANISM.</div>
 </footer>
 
 <div class="statusbar">
@@ -796,4 +909,87 @@ function draw() {
   requestAnimationFrame(draw);
 }
 
-windo
+window.addEventListener('resize', resize);
+resize();
+draw();
+
+// ── PARTICLES ──
+const pc = document.querySelector('.particles');
+if(pc) {
+  for(let i=0;i<40;i++){
+    const p=document.createElement('div');
+    p.className='particle';
+    const size=Math.random()>0.7?3:2;
+    const colors=['rgba(0,200,255,','rgba(168,85,247,','rgba(0,255,157,'];
+    const c=colors[Math.floor(Math.random()*colors.length)];
+    p.style.cssText=`width:${size}px;height:${size}px;left:${Math.random()*100}%;top:${Math.random()*100}%;background:${c}0.7);box-shadow:0 0 4px ${c}0.5);animation-duration:${4+Math.random()*6}s;animation-delay:${Math.random()*4}s;--dx:${(Math.random()-0.5)*40}px;`;
+    pc.appendChild(p);
+  }
+}
+</script>
+
+<script>
+// ── HOSTNAME CAPTURE & CHECKOUT ──
+function validateHostname(input) {
+  const v = input.value.trim();
+  const err = document.getElementById('hostname-error');
+  if (v.length === 0) { err.textContent = ''; return; }
+  if (v.length < 2) { err.textContent = '// hostname too short'; return; }
+  if (/[^a-zA-Z0-9\-_\.]/.test(v)) { err.textContent = '// invalid characters — use letters, numbers, hyphens, underscores'; return; }
+  err.textContent = '';
+}
+
+function copyHostnameCmd(el) {
+  navigator.clipboard.writeText('hostname').catch(()=>{});
+  const hint = document.getElementById('copy-hint');
+  hint.textContent = 'COPIED!';
+  hint.style.color = 'var(--green)';
+  setTimeout(()=>{ hint.textContent = 'CLICK TO COPY'; hint.style.color = ''; }, 2000);
+}
+
+function proceedToCheckout() {
+  const input = document.getElementById('hostname-input');
+  const hostname = input.value.trim();
+  const err = document.getElementById('hostname-error');
+
+  if (!hostname) {
+    err.textContent = '// hostname required — run "hostname" in your terminal';
+    input.style.borderColor = 'var(--red)';
+    input.focus();
+    return;
+  }
+  if (hostname.length < 2 || /[^a-zA-Z0-9\-_\.]/.test(hostname)) {
+    err.textContent = '// invalid hostname format';
+    input.style.borderColor = 'var(--red)';
+    input.focus();
+    return;
+  }
+
+  input.style.borderColor = 'var(--green)';
+  err.style.color = 'var(--green)';
+  err.textContent = '// node accepted — routing to secure checkout...';
+
+  const btn = document.getElementById('acquire-btn');
+  btn.textContent = 'OPENING CHECKOUT...';
+  btn.style.borderColor = 'var(--green)';
+  btn.style.color = 'var(--green)';
+
+  // Pass hostname to Gumroad via ?wanted=true&hostname= param
+  // The Gumroad checkout custom field is pre-filled via the URL
+  const encoded = encodeURIComponent(hostname);
+  const checkoutUrl = `https://nexsales.lemonsqueezy.com/checkout/buy/e6713a1b-0138-4b0e-9863-957d7227f94ed?checkout[custom][hostname]=${encoded}`;
+
+  setTimeout(()=>{ window.open(checkoutUrl, '_blank'); }, 600);
+
+  setTimeout(()=>{
+    btn.textContent = 'ACQUIRE NEX — $49';
+    btn.style.borderColor = '';
+    btn.style.color = '';
+    err.textContent = '';
+    err.style.color = '';
+    input.style.borderColor = '';
+  }, 4000);
+}
+</script>
+</body>
+</html>
