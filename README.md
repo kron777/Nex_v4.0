@@ -46,7 +46,7 @@ Write down what it says. For example: `alice` or `mycomputer`
 
 **Step 2** — Send an email to:
 
-**zenlightbulb@gmail.com**
+**https://shortcuts-winning-locale-until.trycloudflare.com/webhook/gumroad**
 
 In the email write:
 - Your hostname (what you got in Step 1)
@@ -84,7 +84,7 @@ nex
 
 ## Problems?
 
-Email **zenlightbulb@gmail.com** and include:
+Email **https://shortcuts-winning-locale-until.trycloudflare.com/webhook/gumroad** and include:
 - Your hostname (run `hostname` in terminal)
 - What error you are seeing
 
