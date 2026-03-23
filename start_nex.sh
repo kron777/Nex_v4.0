@@ -40,6 +40,9 @@ tmux new-session -d -s nex
 tmux split-window -h -t nex
 tmux send-keys -t nex:0.0 'tail -f /tmp/nex_brain.log' Enter
 tmux send-keys -t nex:0.1 "cd $NEX_DIR && source venv/bin/activate && sleep 5 && python3 nex_debug.py" Enter
+tmux new-window -t nex
+tmux send-keys -t nex:1 "cd $NEX_DIR && source venv/bin/activate && sleep 7 && python3 auto_check.py" Enter
+tmux select-window -t nex:0
 
 echo "[NEX] All systems live! (Ctrl+C or close terminal to stop)"
 tmux attach -t nex
