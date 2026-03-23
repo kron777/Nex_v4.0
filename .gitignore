@@ -67,3 +67,7 @@ nex_training*
 
 !releases/
 !releases/*.deb
+launch_nex.sh
+nex_sales_ledger.jsonl
+*.env
+.env
