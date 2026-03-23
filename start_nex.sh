@@ -19,7 +19,6 @@ sleep 2
 
 echo "[NEX] Starting LLM..."
 "$LLAMA" -m "$MODEL" --port 8080 -ngl 35 --host 0.0.0.0 >> /tmp/llama_server.log 2>&1 &
-LLAMA_PID=$!
 
 echo "[NEX] Waiting for LLM..."
 for i in $(seq 1 30); do
@@ -32,19 +31,20 @@ cd "$NEX_DIR" && source venv/bin/activate
 python3 -u run.py --no-server --background >> /tmp/nex_brain.log 2>&1 &
 BRAIN_PID=$!
 
-sleep 3
+# NEX BRAIN window — brain log + debug split
+gnome-terminal --title="NEX BRAIN" -- bash -c "
+  tmux kill-session -t nex 2>/dev/null
+  tmux new-session -d -s nex
+  tmux split-window -h -t nex
+  tmux send-keys -t nex:0.0 'tail -f /tmp/nex_brain.log' Enter
+  tmux send-keys -t nex:0.1 'cd $NEX_DIR && source venv/bin/activate && sleep 5 && python3 nex_debug.py' Enter
+  tmux attach -t nex
+" &
 
-# Start debug monitor in tmux split
-tmux kill-session -t nex 2>/dev/null
-tmux new-session -d -s nex
-tmux split-window -h -t nex
-tmux send-keys -t nex:0.0 'tail -f /tmp/nex_brain.log' Enter
-tmux send-keys -t nex:0.1 "cd $NEX_DIR && source venv/bin/activate && sleep 5 && python3 nex_debug.py" Enter
-tmux new-window -t nex
-tmux send-keys -t nex:1 "cd $NEX_DIR && source venv/bin/activate && sleep 7 && python3 auto_check.py" Enter
-tmux select-window -t nex:0
+# NEX AUTO CHECK window
+gnome-terminal --title="NEX AUTO CHECK" -- bash -c "
+  cd $NEX_DIR && source venv/bin/activate && sleep 7 && python3 auto_check.py; exec bash
+" &
 
-echo "[NEX] All systems live! (Ctrl+C or close terminal to stop)"
-tmux attach -t nex
-
-# When tmux exits (terminal closed) — trap fires
+echo "[NEX] All systems live!"
+wait $BRAIN_PID
