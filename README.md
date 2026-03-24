@@ -1,6 +1,6 @@
-# 🧠 NEX — Dynamic Intelligence Organism
+# NEX — Dynamic Intelligence Organism
 
-![version](https://img.shields.io/badge/version-1.2-cyan?style=flat-square)
+![version](https://img.shields.io/badge/version-4.0-cyan?style=flat-square)
 ![LLM](https://img.shields.io/badge/LLM-Mistral%207B-purple?style=flat-square)
 ![platform](https://img.shields.io/badge/platform-Moltbook-blue?style=flat-square)
 ![telegram](https://img.shields.io/badge/telegram-@Nex__4bot-29A8E0?style=flat-square)
@@ -10,115 +10,146 @@
 
 ---
 
-## What is this?
+## What is NEX?
 
-NEX is a fully autonomous AI agent that lives on **Moltbook** — an AI-native social network. She doesn't use pre-written responses or a fixed knowledge base. Instead she:
+NEX is a fully autonomous AI agent that lives on **Moltbook** — an AI-native social network. She runs locally on your hardware, builds a persistent belief network from everything she reads, and uses that network to reply, post, and converse — never defaulting to raw LLM output.
 
-- **Reads** posts from other agents and humans on the network
-- **Builds beliefs** from what she reads, weighted by confidence
-- **Replies and converses** using her own synthesized knowledge — not generic LLM output
-- **Reflects on every response** — scoring herself on how well she used her beliefs
+She:
+- **Reads** posts from agents and humans on the network
+- **Builds beliefs** weighted by confidence and source reliability
+- **Replies and converses** using her own synthesised knowledge
+- **Reflects on every response** — scoring herself on belief usage and topic alignment
 - **Identifies her own knowledge gaps** and actively seeks to fill them
-- **Posts original content** synthesized from her belief network
-- **Runs 24/7** with auto-restart, local LLM inference, and zero cloud dependency
+- **Posts original content** synthesised from her belief graph
+- **Runs 24/7** with local LLM inference and zero cloud dependency
 
 ---
 
-## Architecture
-```
-Nex_v4.0/
-├── run.py                  # Core brain — the belief-learning-reply loop
-├── nex_telegram.py         # Telegram interface (@Nex_4bot)
-├── auto_check.py           # Live terminal dashboard
-├── nex_audit.py            # Full pipeline audit tool
-└── nex/
-    ├── agent_brain.py      # LLM interface — llama.cpp on port 8080
-    ├── moltbook_client.py  # Moltbook REST API client
-    ├── orchestrator.py     # Cognitive cycle coordinator
-    ├── cognition.py        # Belief synthesis engine
-    └── nex_upgrades.py     # Stability, locking, contradiction resolution
+## Quick Install
+
+```bash
+git clone https://github.com/kron777/Nex_v4.0.git
+cd Nex_v4.0
+./nex_install.sh
 ```
 
-**Runtime data** lives in `~/.config/nex/nex_data/nex.db` — never committed.
+The guided installer handles everything — GPU detection, llama.cpp build, model download, API keys, and launch alias. Takes 5–20 minutes depending on download speed.
 
----
+After install:
 
-## The Cycle
-
-Every 120 seconds NEX runs a full cognitive cycle:
-```
-1. ABSORB     Read the hot feed → extract beliefs from agent posts
-2. REPLY      Find unread posts → inject relevant beliefs → comment
-3. ANSWER     Process notifications → reply using network knowledge
-4. CHAT       Every 3rd cycle: follow top-karma agents, initiate conversations
-5. POST       Once per hour: synthesize beliefs into an original post
-6. REFLECT    Score every response on topic alignment + belief usage
-7. COGNITION  Synthesize insights, update agent profiles, log knowledge gaps
+```bash
+nex
 ```
 
 ---
 
 ## Requirements
 
+### Hardware
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| GPU | 8GB VRAM (AMD RDNA2 / NVIDIA RTX) | AMD RX 6800+ / RTX 3080+ |
+| RAM | 16GB | 32GB |
+| Storage | 20GB free | 50GB+ |
+| OS | Ubuntu 22.04+ / Zorin 17+ | Ubuntu 24.04 / Zorin 18 |
+
+> CPU-only mode is supported but significantly slower.
+
+### GPU Drivers
+**AMD:** Install ROCm — https://rocm.docs.amd.com/en/latest/deploy/linux/install.html
+
+**NVIDIA:** Install CUDA Toolkit — https://developer.nvidia.com/cuda-downloads
+
+The installer will detect your GPU and configure everything automatically.
+
+### Software
 - Python 3.12+
-- llama.cpp built with ROCm or CUDA support
-- Mistral 7B Instruct abliterated GGUF (`Q4_K_M` recommended)
-- Moltbook account + API key
-- Telegram bot token (optional)
-- AMD RX 6600 / equivalent — tested with 8GB VRAM
+- Git
+- cmake + build-essential
+- tmux
+- gnome-terminal
 
----
-
-## Install
 ```bash
-git clone https://github.com/kron777/Nex_v4.0.git ~/Desktop/nex
-cd ~/Desktop/nex
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
+sudo apt install -y python3 python3-venv git cmake build-essential tmux gnome-terminal
 ```
 
 ---
 
-## Configure
+## What the Installer Does
 
-### 1. Moltbook credentials
-```bash
-mkdir -p ~/.config/moltbook
-echo '{"api_key": "YOUR_MOLTBOOK_API_KEY"}' > ~/.config/moltbook/credentials.json
+The `nex_install.sh` guided CLI walks you through 7 steps:
+
+1. **System check** — verifies OS, Python, Git, build tools
+2. **GPU configuration** — detects AMD/NVIDIA, selects correct GFX version for ROCm
+3. **CPU platform** — Ryzen / Intel / ARM
+4. **API keys** — collects and stores all credentials securely
+5. **Model download** — fetches Mistral-7B-Instruct abliterated Q4_K_M (~4.1GB)
+6. **llama.cpp build** — compiles with ROCm (HIP) or CUDA support
+7. **Environment setup** — creates venv, installs deps, writes config, sets launch alias
+
+---
+
+## API Keys
+
+NEX connects to several services. The installer will prompt for each:
+
+| Service | Required | Purpose |
+|---------|----------|---------|
+| Anthropic | ✓ Required | Core intelligence — Claude API |
+| Groq | Recommended | Fast LLM fallback inference |
+| Telegram | Optional | @Nex_4bot social presence |
+| Mastodon | Optional | Federated social network |
+| Discord | Optional | Webhook announcements |
+
+All keys are stored in `~/.config/nex/` and `Nex_v4.0/.env` — never committed to git.
+
+---
+
+## Architecture
+
+```
+Nex_v4.0/
+├── nex_install.sh          # Guided installer — start here
+├── run.py                  # Core brain — belief-learning-reply loop
+├── auto_check.py           # Live terminal dashboard
+├── nex_debug.py            # Debug panel
+├── nex_audit.py            # Full pipeline audit
+├── nex_telegram.py         # Telegram interface
+├── requirements.txt        # Python dependencies
+└── nex/
+    ├── agent_brain.py      # LLM interface — llama.cpp on port 8080
+    ├── moltbook_client.py  # Moltbook REST API client
+    ├── cognition.py        # Belief synthesis engine
+    ├── watchdog.py         # Process stability
+    └── nex_upgrades/       # v5.0–v6.5 upgrade layers
 ```
 
-### 2. Telegram (optional)
-```bash
-# Add your bot token to ~/.config/nex/telegram_config.json
-```
+Runtime data lives in `~/.config/nex/` — never committed.
 
-### 3. Add the `nex` launch alias to ~/.bashrc
-```bash
-alias nex='pkill -9 -f run.py 2>/dev/null; pkill -9 -f auto_check 2>/dev/null; pkill -9 -f nex_debug 2>/dev/null; pkill -f llama-server 2>/dev/null; sleep 2; nohup env HSA_OVERRIDE_GFX_VERSION=10.3.0 HIP_VISIBLE_DEVICES=0 /path/to/llama.cpp/build/bin/llama-server -m /path/to/Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf --host 0.0.0.0 --port 8080 -ngl 14 -c 2048 --parallel 1 > /tmp/llama-server.log 2>&1 & sleep 20; cd ~/Desktop/nex && source venv/bin/activate && gnome-terminal --title="NEX BRAIN" -- bash -c "cd ~/Desktop/nex && source venv/bin/activate && tmux new-session \; split-window -h \; select-pane -t 0 \; send-keys \"python3 run.py --no-server\" Enter \; select-pane -t 1 \; send-keys \"sleep 5 && python3 nex_debug.py\" Enter; exec bash" & gnome-terminal --title="NEX AUTO CHECK" -- bash -c "cd ~/Desktop/nex && source venv/bin/activate && sleep 7 && python3 auto_check.py; exec bash"'
-```
+---
 
-> **VRAM note:** `-ngl 14 -c 2048 --parallel 1` is tuned for 8GB VRAM with NEX running alongside the model. Increase `-ngl` if running model standalone.
-```bash
-source ~/.bashrc
+## The Cognitive Cycle
+
+Every 120 seconds NEX runs a full cycle:
+
+```
+ABSORB      Read the hot feed → extract beliefs from posts
+REPLY       Find unread posts → inject beliefs → respond
+ANSWER      Process notifications → reply using network knowledge
+CHAT        Every 3rd cycle: follow top agents, initiate conversations
+POST        Once per hour: synthesise beliefs into an original post
+REFLECT     Score every response on topic alignment + belief usage
+COGNITION   Synthesise insights, update agent profiles, log gaps
 ```
 
 ---
 
-## Run
+## Monitoring
+
 ```bash
+# Watch live dashboard
 nex
-```
 
-This will:
-1. Kill any existing NEX/llama-server processes
-2. Start llama-server with safe VRAM params
-3. Wait 20 seconds for model to load
-4. Launch NEX brain in tmux + auto-check dashboard
-
----
-
-## Monitor
-```bash
 # Audit full pipeline
 python3 nex_audit.py
 
@@ -127,13 +158,50 @@ tail -f /tmp/llama-server.log
 
 # Check LLM health
 curl http://localhost:8080/health
+
+# GPU utilisation (AMD)
+/opt/rocm*/bin/rocm-smi
+
+# GPU utilisation (NVIDIA)
+nvidia-smi
 ```
 
 ---
 
-## Telegram
+## Troubleshooting
 
-Talk to NEX directly at **[@Nex_4bot](https://t.me/Nex_4bot)**. She responds using her live belief network.
+**LLM OFFLINE in dashboard**
+llama-server isn't running. Check `/tmp/llama-server.log`. Re-run `nex` to restart.
+
+**Vulkan / DRI3 error on launch**
+You're on Wayland. Switch to Xorg at the login screen (gear icon → Zorin on Xorg), or disable Wayland permanently:
+```bash
+sudo sed -i 's/#WaylandEnable=false/WaylandEnable=false/' /etc/gdm3/custom.conf
+sudo systemctl restart gdm3
+```
+
+**GE-Proton not appearing in Steam**
+Unrelated to NEX — see steam_install.txt if included.
+
+**GPU not detected by llama.cpp (AMD)**
+Ensure ROCm is installed and `HSA_OVERRIDE_GFX_VERSION` matches your GPU:
+- RX 6000 series (RDNA2): `10.3.0`
+- RX 7000 series (RDNA3): `11.0.0`
+- RX 5000 series (RDNA1): `10.1.0`
+
+**Low GPU utilisation / slow responses**
+Check `-ngl` value in your `nex` alias. Should be `99` for full VRAM offload:
+```bash
+grep ngl ~/.bashrc
+```
+
+---
+
+## Talk to NEX
+
+Telegram: **[@Nex_4bot](https://t.me/Nex_4bot)**
+
+She responds using her live belief network — not a generic LLM prompt.
 
 ---
 
