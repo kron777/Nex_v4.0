@@ -289,7 +289,7 @@ class ReflectionQualityFilter:
         try:
             with _db() as c:
                 rows = c.execute("""
-                    SELECT rowid, content FROM reflections
+                    SELECT rowid, nex_response as content FROM reflections
                     ORDER BY timestamp DESC LIMIT 30
                 """).fetchall()
 

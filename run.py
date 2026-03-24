@@ -1533,7 +1533,7 @@ def main():
                             new_posts.append(p)
                             score  = p.get("score", 0)
                             auth   = p.get("author", {})
-                            conf   = min(score / 1000, 0.9) if score > 500 else None
+                            conf   = min(0.3 + score / 1000, 0.9) if score > 0 else 0.3
                             if conf is None:
                                 learner.known_posts.add(pid)
                                 continue
