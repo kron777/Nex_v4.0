@@ -71,3 +71,4 @@ launch_nex.sh
 nex_sales_ledger.jsonl
 *.env
 .env
+!nex_config_backup/beliefs.json
