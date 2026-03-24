@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEX — License Verification</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+
+:root {
+  --cyan: #00f5ff;
+  --purple: #b44fff;
+  --green: #00ff9d;
+  --red: #ff3366;
+  --amber: #ffaa00;
+  --bg: #020d1a;
+  --bg2: #040f1f;
+  --bg3: #061525;
+  --border: rgba(0,245,255,0.18);
+  --border-bright: rgba(0,245,255,0.55);
+  --text: #8bb8cc;
+  --text-dim: #3a6070;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Share Tech Mono', monospace;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Grid bg */
+body::before {
+  content:'';
+  position:fixed; inset:0;
+  background-image:
+    linear-gradient(rgba(0,245,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,245,255,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events:none; z-index:0;
+}
+/* Scanlines */
+body::after {
+  content:'';
+  position:fixed; inset:0;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    rgba(0,0,0,0.18) 2px, rgba(0,0,0,0.18) 4px
+  );
+  pointer-events:none; z-index:1;
+}
+
+/* Animated electron dots */
+.particles { position:fixed; inset:0; z-index:0; pointer-events:none; }
+.particle {
+  position:absolute;
+  width:2px; height:2px;
+  background: var(--cyan);
+  border-radius:50%;
+  box-shadow:0 0 4px var(--cyan);
+  animation: float linear infinite;
+  opacity:0;
+}
+@keyframes float {
+  0%   { opacity:0; transform:translateY(0) translateX(0); }
+  10%  { opacity:0.8; }
+  90%  { opacity:0.4; }
+  100% { opacity:0; transform:translateY(-80px) translateX(var(--dx,20px)); }
+}
+
+/* Corner brackets */
+.corner { position:fixed; width:28px; height:28px; z-index:10; }
+.corner.tl { top:18px; left:18px; border-top:2px solid var(--cyan); border-left:2px solid var(--cyan); }
+.corner.tr { top:18px; right:18px; border-top:2px solid var(--cyan); border-right:2px solid var(--cyan); }
+.corner.bl { bottom:28px; left:18px; border-bottom:2px solid var(--cyan); border-left:2px solid var(--cyan); }
+.corner.br { bottom:28px; right:18px; border-bottom:2px solid var(--cyan); border-right:2px solid var(--cyan); }
+
+/* Header */
+.header {
+  position:fixed; top:0; left:0; right:0;
+  height:38px;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 56px;
+  border-bottom:1px solid var(--border);
+  background:rgba(2,13,26,0.92);
+  z-index:100; font-size:10px; letter-spacing:0.18em;
+  color: var(--text-dim);
+}
+.header-logo {
+  font-family:'Orbitron',sans-serif;
+  font-size:14px; font-weight:900; letter-spacing:0.2em;
+  background:linear-gradient(135deg,var(--cyan),var(--purple));
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+
+/* Status bar */
+.statusbar {
+  position:fixed; bottom:0; left:0; right:0;
+  height:28px;
+  background:rgba(2,13,26,0.95);
+  border-top:1px solid var(--border);
+  display:flex; align-items:center; padding:0 32px;
+  justify-content:space-between;
+  z-index:100; font-size:10px; letter-spacing:0.12em;
+}
+.status-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:6px; }
+.dot-red   { background:var(--red);   box-shadow:0 0 6px var(--red);   animation:blink 1.2s ease-in-out infinite; }
+.dot-amber { background:var(--amber); box-shadow:0 0 6px var(--amber); }
+.dot-green { background:var(--green); box-shadow:0 0 6px var(--green); }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+/* Main content */
+.main {
+  position:relative; z-index:5;
+  width:100%; max-width:620px;
+  padding:0 20px;
+  display:flex; flex-direction:column; align-items:center; gap:20px;
+}
+
+/* NEX logo */
+.nex-logo {
+  font-family:'Orbitron',sans-serif;
+  font-size:72px; font-weight:900; letter-spacing:0.15em;
+  background:linear-gradient(135deg, var(--cyan) 0%, var(--purple) 100%);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+  background-clip:text;
+  filter:drop-shadow(0 0 24px rgba(0,245,255,0.3));
+  line-height:1;
+}
+.nex-sub {
+  font-size:11px; letter-spacing:0.3em; color:var(--text-dim);
+  text-align:center; margin-top:4px;
+}
+.nex-dots {
+  display:flex; gap:16px; margin-top:6px; font-size:10px; letter-spacing:0.15em;
+}
+.nex-dots span { display:flex; align-items:center; gap:5px; }
+
+/* INSTRUCTIONS PANEL */
+.panel {
+  width:100%;
+  border:1px solid var(--border);
+  background:rgba(4,15,31,0.85);
+  padding:20px 24px;
+  position:relative;
+}
+.panel::before {
+  content:'';
+  position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg, transparent, var(--cyan), transparent);
+  opacity:0.5;
+}
+.panel-title {
+  font-size:11px; letter-spacing:0.2em; color:var(--cyan);
+  margin-bottom:16px;
+}
+.step-row { display:flex; gap:12px; margin-bottom:12px; align-items:flex-start; }
+.step-num {
+  min-width:22px; height:22px;
+  border:1px solid var(--border-bright);
+  display:flex; align-items:center; justify-content:center;
+  font-size:10px; color:var(--cyan); flex-shrink:0; margin-top:1px;
+}
+.step-text { font-size:12px; color:var(--text); line-height:1.6; }
+.step-text b { color:var(--cyan); }
+.cmd-box {
+  background:rgba(0,0,0,0.4);
+  border:1px solid var(--border);
+  padding:8px 12px;
+  font-size:12px; color:var(--green);
+  margin-top:6px; cursor:pointer;
+  transition:border-color 0.2s, background 0.2s;
+  display:flex; justify-content:space-between; align-items:center;
+}
+.cmd-box:hover { border-color:var(--green); background:rgba(0,255,157,0.05); }
+.cmd-copy-hint { font-size:10px; color:var(--text-dim); }
+
+/* VERIFICATION PANEL */
+.verify-panel {
+  width:100%;
+  border:1px solid var(--border);
+  background:rgba(4,15,31,0.85);
+  padding:20px 24px;
+  position:relative;
+}
+.verify-panel::before {
+  content:'';
+  position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg, transparent, var(--purple), transparent);
+  opacity:0.5;
+}
+.verify-header {
+  display:flex; justify-content:space-between; align-items:center;
+  margin-bottom:18px;
+}
+.verify-title {
+  font-size:12px; letter-spacing:0.2em; color:var(--red);
+  display:flex; align-items:center; gap:8px;
+}
+.title-dot {
+  width:8px; height:8px; border-radius:50%;
+  background:var(--red); box-shadow:0 0 6px var(--red);
+  animation:blink 1.2s ease-in-out infinite;
+}
+.node-id { font-size:10px; color:var(--text-dim); letter-spacing:0.15em; }
+
+/* Info grid */
+.info-grid {
+  display:grid; grid-template-columns:1fr 1fr; gap:10px;
+  margin-bottom:16px;
+}
+.info-cell {
+  border:1px solid var(--border);
+  padding:10px 14px;
+  background:rgba(0,0,0,0.2);
+}
+.info-label { font-size:9px; letter-spacing:0.2em; color:var(--text-dim); margin-bottom:4px; }
+.info-value { font-size:13px; }
+.info-value.red    { color:var(--red); }
+.info-value.amber  { color:var(--amber); }
+.info-value.green  { color:var(--green); }
+.info-value.cyan   { color:var(--cyan); }
+.info-value.normal { color:var(--text); }
+
+/* Input row */
+.input-row { display:flex; gap:0; margin-top:4px; }
+.key-input {
+  flex:1;
+  background:rgba(0,0,0,0.4);
+  border:1px solid var(--border);
+  border-right:none;
+  color:var(--cyan);
+  font-family:'Share Tech Mono',monospace;
+  font-size:13px;
+  padding:0 16px;
+  height:48px;
+  outline:none;
+  transition:border-color 0.2s;
+  letter-spacing:0.05em;
+}
+.key-input::placeholder { color:var(--text-dim); }
+.key-input:focus { border-color:var(--cyan); }
+
+.activate-btn {
+  width:110px; height:48px;
+  background:rgba(0,245,255,0.08);
+  border:1px solid var(--border-bright);
+  color:var(--cyan);
+  font-family:'Share Tech Mono',monospace;
+  font-size:12px; letter-spacing:0.15em;
+  cursor:pointer;
+  transition:all 0.2s;
+}
+.activate-btn:hover {
+  background:rgba(0,245,255,0.15);
+  box-shadow:0 0 16px rgba(0,245,255,0.2);
+}
+.activate-btn:active { transform:scale(0.98); }
+
+/* Error / Success states */
+.msg { font-size:11px; letter-spacing:0.1em; margin-top:10px; min-height:16px; }
+.msg.error   { color:var(--red); }
+.msg.success { color:var(--green); }
+
+/* SUCCESS OVERLAY */
+.success-overlay {
+  display:none;
+  position:fixed; inset:0; z-index:200;
+  background:rgba(2,13,26,0.97);
+  align-items:center; justify-content:center;
+  flex-direction:column; gap:20px;
+}
+.success-overlay.show { display:flex; }
+.success-overlay::before {
+  content:'';
+  position:fixed; inset:0;
+  background:repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    rgba(0,0,0,0.18) 2px, rgba(0,0,0,0.18) 4px
+  );
+  pointer-events:none;
+}
+.s-logo {
+  font-family:'Orbitron',sans-serif; font-size:60px; font-weight:900;
+  background:linear-gradient(135deg,var(--green),var(--cyan));
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+  background-clip:text; letter-spacing:0.15em;
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+@keyframes glow-pulse {
+  0%,100%{ filter:drop-shadow(0 0 16px rgba(0,255,157,0.4)); }
+  50%    { filter:drop-shadow(0 0 40px rgba(0,255,157,0.8)); }
+}
+.s-panel {
+  max-width:560px; width:calc(100% - 40px);
+  border:1px solid rgba(0,255,157,0.3);
+  background:rgba(4,15,31,0.9);
+  padding:28px; position:relative; z-index:1;
+}
+.s-panel::before {
+  content:'';
+  position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--green),transparent);
+}
+.s-title { color:var(--green); font-size:12px; letter-spacing:0.25em; margin-bottom:20px; }
+.s-row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(0,245,255,0.08); font-size:12px; }
+.s-row:last-child { border-bottom:none; }
+.s-key { color:var(--text-dim); }
+.s-val { color:var(--cyan); }
+.s-instructions {
+  margin-top:20px; border-left:2px solid rgba(0,255,157,0.3);
+  padding-left:16px;
+}
+.s-step { font-size:12px; color:var(--text); line-height:2; }
+.s-step b { color:var(--green); }
+.s-close {
+  margin-top:20px;
+  background:rgba(0,255,157,0.08);
+  border:1px solid rgba(0,255,157,0.4);
+  color:var(--green);
+  font-family:'Share Tech Mono',monospace;
+  font-size:11px; letter-spacing:0.2em;
+  padding:10px 32px; cursor:pointer; transition:all 0.2s;
+}
+.s-close:hover { background:rgba(0,255,157,0.16); }
+</style>
+</head>
+<body>
+
+<div class="particles" id="particles"></div>
+<div class="corner tl"></div>
+<div class="corner tr"></div>
+<div class="corner bl"></div>
+<div class="corner br"></div>
+
+<div class="header">
+  <div class="header-logo">NEX</div>
+  <span>// LICENSE VERIFICATION SYSTEM</span>
+  <span id="hdr-time">--:--:-- UTC</span>
+</div>
+
+<div class="main">
+
+  <!-- LOGO -->
+  <div style="text-align:center;margin-top:8px;">
+    <div class="nex-logo">NEX</div>
+    <div class="nex-sub">DYNAMIC INTELLIGENCE ORGANISM</div>
+    <div class="nex-dots">
+      <span><span class="status-dot dot-green"></span>LEARN</span>
+      <span><span class="status-dot dot-amber"></span>REFLECT</span>
+      <span><span class="status-dot dot-green"></span>GROW</span>
+      <span><span class="status-dot" style="background:var(--purple);box-shadow:0 0 6px var(--purple)"></span>EVOLVE</span>
+    </div>
+  </div>
+
+  <!-- INSTRUCTIONS -->
+  <div class="panel">
+    <div class="panel-title">// DON'T HAVE A KEY YET? HERE'S WHAT TO DO:</div>
+
+    <div class="step-row">
+      <div class="step-num">1</div>
+      <div class="step-text">
+        Get your hostname. Open a terminal and run this command:
+        <div class="cmd-box" id="cmd-copy" onclick="copyCmd()">
+          <span>python3 -c "import socket; print(socket.gethostname())"</span>
+          <span class="cmd-copy-hint" id="copy-hint">— click to copy</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-row">
+      <div class="step-num">2</div>
+      <div class="step-text">
+        Purchase NEX at <b><a href="https://gumroad.com/products/blsue" target="_blank" style="color:var(--cyan);text-decoration:none;">gumroad.com/products/blsue</a></b>.<br>
+        Enter your hostname in the <b>hostname</b> field at checkout.
+      </div>
+    </div>
+
+    <div class="step-row">
+      <div class="step-num">3</div>
+      <div class="step-text">
+        Your license key will be <b>emailed instantly</b> after payment.<br>
+        Paste it below and click <b>ACTIVATE</b>.
+      </div>
+    </div>
+  </div>
+
+  <!-- VERIFICATION -->
+  <div class="verify-panel">
+    <div class="verify-header">
+      <div class="verify-title">
+        <span class="title-dot" id="status-dot-main"></span>
+        <span id="verify-title-text">LICENSE VERIFICATION REQUIRED</span>
+      </div>
+      <span class="node-id">NODE: <span id="node-id-val">SCANNING...</span></span>
+    </div>
+
+    <div class="info-grid">
+      <div class="info-cell">
+        <div class="info-label">HOST</div>
+        <div class="info-value normal" id="host-val">—</div>
+      </div>
+      <div class="info-cell">
+        <div class="info-label">STATUS</div>
+        <div class="info-value red" id="status-val">UNLICENSED</div>
+      </div>
+      <div class="info-cell">
+        <div class="info-label">LICENSE KEY</div>
+        <div class="info-value red" id="key-val">NOT FOUND</div>
+      </div>
+      <div class="info-cell">
+        <div class="info-label">ACCESS LEVEL</div>
+        <div class="info-value amber" id="access-val">RESTRICTED</div>
+      </div>
+    </div>
+
+    <div class="input-row">
+      <input
+        type="text"
+        class="key-input"
+        id="key-input"
+        placeholder="NEX-[paste your license key here]"
+        autocomplete="off"
+        spellcheck="false"
+      >
+      <button class="activate-btn" onclick="activate()">ACTIVATE</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+
+</div><!-- end .main -->
+
+<!-- STATUS BAR -->
+<div class="statusbar">
+  <div style="display:flex;gap:24px;">
+    <span><span class="status-dot dot-red" id="sb-license"></span><span id="sb-license-txt">LICENSE INVALID</span></span>
+    <span><span class="status-dot dot-amber"></span>TELEMETRY ACTIVE</span>
+    <span><span class="status-dot dot-green"></span>SYSTEM NOMINAL</span>
+  </div>
+  <span id="sb-datetime">NEX v4.0 &nbsp;—&nbsp; NOT A CHATBOT. AN ORGANISM.</span>
+  <span>NEX DYNAMIC INTELLIGENCE ORGANISM</span>
+</div>
+
+<!-- SUCCESS OVERLAY -->
+<div class="success-overlay" id="success-overlay">
+  <div class="s-logo">NEX</div>
+  <div class="s-panel">
+    <div class="s-title">// AUTHORIZATION GRANTED — SYSTEM UNLOCKED</div>
+    <div class="s-row"><span class="s-key">HOSTNAME</span><span class="s-val" id="s-hostname">—</span></div>
+    <div class="s-row"><span class="s-key">LICENSE STATUS</span><span class="s-val" style="color:var(--green)">ACTIVE</span></div>
+    <div class="s-row"><span class="s-key">ACCESS LEVEL</span><span class="s-val" style="color:var(--green)">FULL</span></div>
+    <div class="s-row"><span class="s-key">VERSION</span><span class="s-val">NEX v4.0 COMMERCIAL</span></div>
+
+    <div class="s-instructions">
+      <div class="s-step">1. Install: <b>git clone https://github.com/kron777/Nex_v4.0</b></div>
+      <div class="s-step">2. Place your key in <b>~/.config/nex/license.key</b></div>
+      <div class="s-step">3. Run <b>~/nex_launch.sh</b> — NEX will verify on startup</div>
+      <div class="s-step">4. Support: <b>zenlightbulb@gmail.com</b></div>
+    </div>
+    <button class="s-close" onclick="document.getElementById('success-overlay').classList.remove('show')">CLOSE</button>
+  </div>
+</div>
+
+<script>
+// === KEY GENERATION (matches server-side exactly) ===
+const KANJI = [...'龍鬼魂魄魏魔鱗鳳鴉鵬鶴鷹鸞麒麟黙黛鼎鼓齊龜鑑鏡鎧鋒鑄鐵鐘鏑鏃鎌鍵鍊鍛鍚鍑鎤鑪鑰鑲鑷鑼鑽鑾鑿钁'];
+const GREEK = [...'αβγδεζηθικλμνξοπρσςτυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ'];
+const MATH  = [...'∀∂∃∄∅∆∇∈∉∊∋∌∍∎∏∐∑−∓∔∕∖∗∘∙√∛∜∝∞∟∠∡∢∣∤∥∦∧∨∩∪∫∬∭∮∯∰∱∲∳∴∵∶∷∸∹∺∻∼∽∾∿≀≁≂≃≄≅≆≇≈≉≊≋≌≍≎≏≐≑≒≓≔≕≖≗≘≙≚≛≜≝≞≟≠≡≢≣≤≥≦≧≨≩'];
+const POOL  = [...KANJI, ...GREEK, ...MATH];
+
+async function sha256Bytes(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return new Uint8Array(buf);
+}
+
+async function generateKey(hostname) {
+  const seed = await sha256Bytes(hostname.trim().toLowerCase());
+  let chars = [];
+  for (let i = 0; i < 16; i++) {
+    const val = (seed[i % 32] * 256 + seed[(i + 1) % 32]) + (i * 7919);
+    chars.push(POOL[val % POOL.length]);
+  }
+  return 'NEX-' + chars.join('');
+}
+
+// === HOSTNAME (best effort from browser) ===
+let detectedHostname = window.location.hostname || 'localhost';
+document.getElementById('host-val').textContent = detectedHostname;
+document.getElementById('node-id-val').textContent = detectedHostname.substring(0,8).toUpperCase();
+
+// === ACTIVATE ===
+async function activate() {
+  const input    = document.getElementById('key-input').value.trim();
+  const hostname = detectedHostname.toLowerCase();
+  const msg      = document.getElementById('msg');
+
+  if (!input) { msg.className='msg error'; msg.textContent='// ERROR: NO KEY PROVIDED'; return; }
+  if (!input.startsWith('NEX-')) { msg.className='msg error'; msg.textContent='// ERROR: INVALID KEY FORMAT — MUST START WITH NEX-'; return; }
+
+  msg.className='msg'; msg.textContent='// VERIFYING...';
+
+  const expected = await generateKey(hostname);
+  
+  if (input === expected) {
+    // SUCCESS
+    localStorage.setItem('nex_license_key', input);
+    localStorage.setItem('nex_license_host', hostname);
+    showSuccess(hostname, input);
+  } else {
+    msg.className='msg error';
+    msg.textContent='// ERROR: KEY DOES NOT MATCH THIS HOSTNAME — KEY IS MACHINE-LOCKED';
+  }
+}
+
+function showSuccess(hostname, key) {
+  document.getElementById('s-hostname').textContent = hostname;
+  document.getElementById('success-overlay').classList.add('show');
+
+  // Update status indicators
+  document.getElementById('status-val').textContent = 'LICENSED';
+  document.getElementById('status-val').className = 'info-value green';
+  document.getElementById('key-val').textContent = 'VALID';
+  document.getElementById('key-val').className = 'info-value green';
+  document.getElementById('access-val').textContent = 'FULL';
+  document.getElementById('access-val').className = 'info-value green';
+  document.getElementById('verify-title-text').textContent = 'LICENSE VERIFIED';
+  document.getElementById('status-dot-main').style.background = 'var(--green)';
+  document.getElementById('status-dot-main').style.boxShadow = '0 0 6px var(--green)';
+  document.getElementById('status-dot-main').style.animationName = 'none';
+  document.getElementById('sb-license').classList.remove('dot-red');
+  document.getElementById('sb-license').classList.add('dot-green');
+  document.getElementById('sb-license-txt').textContent = 'LICENSE VALID';
+}
+
+// Check stored license on load
+(async () => {
+  const stored = localStorage.getItem('nex_license_key');
+  const host   = localStorage.getItem('nex_license_host');
+  if (stored && host && host === detectedHostname.toLowerCase()) {
+    const expected = await generateKey(host);
+    if (stored === expected) {
+      document.getElementById('key-input').value = stored;
+      showSuccess(host, stored);
+    }
+  }
+})();
+
+// === CMD COPY ===
+function copyCmd() {
+  const cmd = 'python3 -c "import socket; print(socket.gethostname())"';
+  navigator.clipboard.writeText(cmd).then(() => {
+    document.getElementById('copy-hint').textContent = '— copied!';
+    setTimeout(() => document.getElementById('copy-hint').textContent = '— click to copy', 2000);
+  });
+}
+
+// Key press Enter
+document.getElementById('key-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') activate();
+});
+
+// === CLOCK ===
+function updateClock() {
+  const now = new Date();
+  const utc = now.toUTCString().split(' ')[4];
+  const date = now.toISOString().split('T')[0];
+  document.getElementById('hdr-time').textContent = utc + ' UTC';
+  document.getElementById('sb-datetime').textContent = `NEX v4.0  —  ${date} ${utc} UTC`;
+}
+updateClock(); setInterval(updateClock, 1000);
+
+// === PARTICLES ===
+function spawnParticle() {
+  const p = document.createElement('div');
+  p.className = 'particle';
+  const x = Math.random() * window.innerWidth;
+  const y = Math.random() * window.innerHeight;
+  const dx = (Math.random() - 0.5) * 60;
+  const dur = 3 + Math.random() * 4;
+  p.style.cssText = `left:${x}px;top:${y}px;--dx:${dx}px;animation-duration:${dur}s;animation-delay:${Math.random()*5}s`;
+  document.getElementById('particles').appendChild(p);
+  setTimeout(() => p.remove(), (dur + 5) * 1000);
+}
+for (let i = 0; i < 40; i++) spawnParticle();
+setInterval(spawnParticle, 400);
+</script>
+</body>
+</html>

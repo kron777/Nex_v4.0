@@ -5,7 +5,7 @@ Run: python3 restore_beliefs.py
 import sqlite3
 import os
 
-CURRENT_DB = os.path.expanduser("~/.config/nex/nex_data/nex.db")
+CURRENT_DB = os.path.expanduser("~/.config/nex/nex.db")
 BACKUP_DB  = os.path.expanduser("~/.config/nex/backups/nex_pre_migration_1773008598.db")
 
 print(f"Current DB: {CURRENT_DB}")

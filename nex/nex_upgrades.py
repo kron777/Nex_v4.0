@@ -5,7 +5,7 @@ Drop this in ~/Desktop/nex/nex/ and import from orchestrator or run.py
 import sqlite3, time, logging
 from pathlib import Path
 
-DB_PATH = Path.home() / ".config/nex/nex_data/nex.db"
+DB_PATH = Path.home() / ".config/nex/nex.db"
 log = logging.getLogger("nex.upgrades")
 
 # ── U3: active topic vector ───────────────────────────────────────────────────

@@ -40,7 +40,7 @@ from typing import Optional
 
 # ── Config ───────────────────────────────────────────────────────────────────
 _CONFIG_DIR   = Path.home() / ".config" / "nex"
-_DB_PATH      = _CONFIG_DIR / "nex_data/nex.db"
+_DB_PATH      = _CONFIG_DIR / "nex.db"
 _DREAM_LOG    = _CONFIG_DIR / "dream_log.json"
 _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 

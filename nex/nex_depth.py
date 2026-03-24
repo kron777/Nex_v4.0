@@ -35,7 +35,7 @@ logger = logging.getLogger("nex.depth")
 # ─────────────────────────────────────────────────────────────────────────────
 
 DEPTH_STATE_PATH        = os.path.expanduser("~/.config/nex/belief_depth.json")
-DB_PATH                 = os.path.expanduser("~/.config/nex/nex_data/nex.db")
+DB_PATH                 = os.path.expanduser("~/.config/nex/nex.db")
 LLM_URL                 = "http://localhost:11434/api/generate"
 
 CLUSTER_SIMILARITY_THRESHOLD = 0.35   # word overlap ratio to group beliefs

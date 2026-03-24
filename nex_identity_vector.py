@@ -48,7 +48,7 @@ from typing import Optional
 
 # ── Config ────────────────────────────────────────────────────────────────────
 _CONFIG_DIR    = Path.home() / ".config" / "nex"
-_DB_PATH       = _CONFIG_DIR / "nex_data/nex.db"
+_DB_PATH       = _CONFIG_DIR / "nex.db"
 _IDENTITY_PATH = _CONFIG_DIR / "identity.json"
 _VECTOR_PATH   = _CONFIG_DIR / "identity_vector.json"
 _CONFIG_DIR.mkdir(parents=True, exist_ok=True)

@@ -10,7 +10,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 # ── Config ────────────────────────────────────────────────────
-DB        = Path.home() / '.config/nex/nex_data/nex.db'
+DB        = Path.home() / '.config/nex/nex.db'
 CFG       = Path.home() / '.config/nex'
 LLM_URL   = 'http://localhost:11434/v1/chat/completions'
 LLM_MODEL = 'mistral-nex'

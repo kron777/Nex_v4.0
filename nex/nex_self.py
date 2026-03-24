@@ -73,7 +73,7 @@ SEEDED_VALUES = [
 # ─────────────────────────────────────────────────────────────────────────────
 
 SELF_PATH             = os.path.expanduser("~/.config/nex/nex_self.json")
-DB_PATH               = os.path.expanduser("~/.config/nex/nex_data/nex.db")
+DB_PATH               = os.path.expanduser("~/.config/nex/nex.db")
 LLM_URL               = "http://localhost:8080/completion"
 
 INTENTION_INTERVAL    = 86400       # 24h — one intention per day
@@ -497,7 +497,7 @@ class SelfEngine:
 #
 # 5. REFLECT — weekly value evolution (pass recent position beliefs):
 #       import sqlite3
-#       conn = sqlite3.connect(os.path.expanduser("~/.config/nex/nex_data/nex.db"))
+#       conn = sqlite3.connect(os.path.expanduser("~/.config/nex/nex.db"))
 #       cur = conn.cursor()
 #       cur.execute("SELECT content FROM beliefs WHERE origin IN "
 #                   "('cluster_position','contradiction_resolution') "

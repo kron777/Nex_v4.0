@@ -17,7 +17,7 @@ def _ts() -> str:
     return datetime.utcnow().isoformat()
 
 
-DB_PATH   = Path.home() / ".config/nex/nex_data/nex.db"
+DB_PATH   = Path.home() / ".config/nex/nex.db"
 V65_LOG   = Path("/tmp/nex_v65.log")
 
 def _db():

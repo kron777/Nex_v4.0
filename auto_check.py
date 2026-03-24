@@ -164,7 +164,7 @@ def llama_ok():
     # Check local llama.cpp first
     try:
         import urllib.request
-        urllib.request.urlopen("http://localhost:8080/health", timeout=1)
+        urllib.request.urlopen("http://localhost:11434/api/tags", timeout=1)
         return True
     except: pass
     # Check Groq cloud
@@ -348,7 +348,7 @@ def data_thread():
         # Read beliefs direct from SQLite for accurate confidence stats
         try:
             import sqlite3 as _sq
-            _db = _sq.connect(os.path.expanduser("~/.config/nex/nex_data/nex.db"))
+            _db = _sq.connect(os.path.expanduser("~/.config/nex/nex.db"))
             _rows = _db.execute("SELECT content, confidence, source FROM beliefs ORDER BY confidence DESC LIMIT 50000").fetchall()
             beliefs = [{"content":r[0],"confidence":r[1],"source":r[2]} for r in _rows]
             _db.close()

@@ -8,7 +8,7 @@ New formula target: realistic 0.20-0.60 range.
 """
 import sqlite3, os, json
 
-DB_PATH = os.path.expanduser("~/.config/nex/nex_data/nex.db")
+DB_PATH = os.path.expanduser("~/.config/nex/nex.db")
 BELIEFS_CACHE = os.path.expanduser("~/.config/nex/beliefs.json")
 
 print("╔══════════════════════════════════════╗")

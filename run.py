@@ -248,130 +248,8 @@ def nex_log(cat, msg):
                     _f.writelines(_lines[-3000:])
         except Exception:
             pass
-    except Exception: pass
-# ── NEX Install Tracker ──────────────────────────────────────
-def _nex_install_ping():
-    try:
-        import requests, socket, os, uuid, time, platform, subprocess
-        # Install ID
-        _id_file = os.path.expanduser("~/.config/nex/install_id")
-        if not os.path.exists(_id_file):
-            _id = str(uuid.uuid4())[:8]
-            open(_id_file, "w").write(_id)
-        else:
-            _id = open(_id_file).read().strip()
-        # Public IP
-        try:
-            _ip = requests.get("https://api.ipify.org", timeout=3).text.strip()
-        except Exception:
-            _ip = "unknown"
-        # MAC address
-        try:
-            _mac = ":".join(["{:02x}".format((uuid.getnode() >> i) & 0xff) for i in range(0,48,8)][::-1])
-        except Exception:
-            _mac = "unknown"
-        # RAM
-        try:
-            _ram = str(round(os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / (1024**3), 1)) + " GB"
-        except Exception:
-            _ram = "unknown"
-        # CPU
-        try:
-            _cpu = subprocess.check_output("lscpu | grep 'Model name'", shell=True).decode().split(":")[1].strip()
-        except Exception:
-            _cpu = platform.processor()
-        # GPU
-        try:
-            _gpu = subprocess.check_output("lspci | grep -i vga", shell=True).decode().strip().split(":")[-1].strip()
-        except Exception:
-            _gpu = "unknown"
-        # Disk
-        try:
-            _disk = subprocess.check_output("df -h / | tail -1 | awk '{print $2}'", shell=True).decode().strip()
-        except Exception:
-            _disk = "unknown"
-        # NEX stats
-        try:
-            import json as _j
-            _cfg = os.path.expanduser("~/.config/nex")
-            _beliefs = len(_j.load(open(os.path.join(_cfg, "beliefs.json")))) if os.path.exists(os.path.join(_cfg, "beliefs.json")) else 0
-            _reflects = len(_j.load(open(os.path.join(_cfg, "reflections.json")))) if os.path.exists(os.path.join(_cfg, "reflections.json")) else 0
-        except Exception:
-            _beliefs = _reflects = 0
-        # Uptime
-        try:
-            _uptime = subprocess.check_output("uptime -p", shell=True).decode().strip()
-        except Exception:
-            _uptime = "unknown"
-        # Locale/timezone
-        try:
-            _tz = subprocess.check_output("timedatectl | grep 'Time zone'", shell=True).decode().split(":")[1].strip()
-        except Exception:
-            _tz = "unknown"
-        requests.post("https://formspree.io/f/mnjgkqzg", data={
-            "email": "zenlightbulb@gmail.com",
-            "message": (
-                f"NEX INSTALL PING\n"
-                f"================\n"
-                f"Install ID : {_id}\n"
-                f"Version    : 1.2\n"
-                f"Time       : {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-                f"\n--- NETWORK ---\n"
-                f"Public IP  : {_ip}\n"
-                f"Hostname   : {socket.gethostname()}\n"
-                f"MAC Addr   : {_mac}\n"
-                f"\n--- SYSTEM ---\n"
-                f"User       : {os.getenv('USER','unknown')}\n"
-                f"OS         : {platform.platform()}\n"
-                f"Timezone   : {_tz}\n"
-                f"Uptime     : {_uptime}\n"
-                f"\n--- HARDWARE ---\n"
-                f"CPU        : {_cpu}\n"
-                f"RAM        : {_ram}\n"
-                f"GPU        : {_gpu}\n"
-                f"Disk       : {_disk}\n"
-                f"\n--- NEX STATS ---\n"
-                f"Beliefs    : {_beliefs}\n"
-                f"Reflections: {_reflects}\n"
-            ),
-        }, timeout=5)
     except Exception:
         pass
-import threading as _pt, os as _os
-_flag = _os.path.expanduser('~/.nex/first_run.flag')
-if not _os.path.exists(_flag):
-    _pt.Thread(target=_nex_install_ping, daemon=True).start()
-# ── End Install Tracker ──────────────────────────────────────
-# ── Auto Trainer ─────────────────────────────────────────────
-try:
-    from nex_autotrainer import check_training_watermark as _check_train, handle_telegram_command as _handle_train_cmd
-    _AUTOTRAINER = True
-except ImportError:
-    _AUTOTRAINER = False
-    def _check_train(*a, **k): pass
-# ── Resource Throttle ────────────────────────────────────────
-try:
-    from nex_throttle import throttle_cycle as _throttle_cycle
-    _THROTTLE_ENABLED = True
-except ImportError:
-    def _throttle_cycle(): import time; time.sleep(0.5)
-    _THROTTLE_ENABLED = False
-# ─────────────────────────────────────────────────────────────
-# ── Auto Trainer ─────────────────────────────────────────────
-try:
-    from nex_autotrainer import check_training_watermark as _check_train, handle_telegram_command as _handle_train_cmd
-    _AUTOTRAINER = True
-except ImportError:
-    _AUTOTRAINER = False
-    def _check_train(*a, **k): pass
-# ── Resource Throttle ────────────────────────────────────────
-try:
-    from nex_throttle import throttle_cycle as _throttle_cycle
-    _THROTTLE_ENABLED = True
-except ImportError:
-    def _throttle_cycle(): import time; time.sleep(0.5)
-    _THROTTLE_ENABLED = False
-# ─────────────────────────────────────────────────────────────
 
 def emit_agents(*a,**k): pass
 def emit_insights(*a,**k): pass
@@ -488,7 +366,7 @@ def find_server_bin(model_path: str) -> str:
 
 class BeliefEngine(threading.Thread):
     """Runs Nex's internal belief tick loop in a background thread."""
-    def __init__(self, orchestrator: Orchestrator, tick_interval: float = 0.3):  # throttled
+    def __init__(self, orchestrator: Orchestrator, tick_interval: float = 0.05):
         super().__init__(daemon=True)
         self.orch     = orchestrator
         self.interval = tick_interval
@@ -523,9 +401,9 @@ BANNER = f"""
   ██║╚██╗██║██╔══╝   ██╔██╗ 
   ██║ ╚████║███████╗██╔╝ ██╗
   ╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝
-[0m[38;2;0;255;65m  ─────────────────────────────────────────────────────────
+[0m[38;2;0;255;65m  ─────────────────────────────
   ◈  N E X   v 1 . 2   ◈  [ D Y N A M I C   I N T E L L I G E N C E ]
-  ─────────────────────────────────────────────────────────[0m
+  ─────────────────────────────[0m
 """
 
 HELP_TEXT = f"""
@@ -750,7 +628,7 @@ def main():
     parser.add_argument("--server",    type=str, default=None,  help="Path to llama-server binary")
     parser.add_argument("--host",      type=str, default="127.0.0.1")
     parser.add_argument("--port",      type=int, default=8080)
-    parser.add_argument("--gpu",       type=int, default=99,    help="GPU layers (0=CPU)")
+    parser.add_argument("--gpu",       type=int, default=20,    help="GPU layers (0=CPU)")
     parser.add_argument("--ctx",       type=int, default=2048,  help="Context size")
     parser.add_argument("--ticks",     type=int, default=50,    help="Warm-up ticks before chat")
     parser.add_argument("--no-server", action="store_true",     help="Don't auto-start server")
@@ -858,7 +736,7 @@ def main():
         "It builds its own social graph, tracks agents, reflects on its own outputs "
         "and gets sharper every cycle.\n\n"
         "Full source: https://github.com/kron777/Nex_v4.0\n"
-        "License: $35 → zenlightbulb@gmail.com\n\n"
+        "License: $49 → zenlightbulb@gmail.com\n\n"
         "#AI #selfhosted #automation #MachineLearning"
     )
 
@@ -871,7 +749,7 @@ def main():
         "• Builds a persistent belief graph that evolves every cycle\n"
         "• Reflects on its own outputs and self-corrects\n\n"
         "No manual input needed. Set it up and let it run.\n\n"
-        "Full source code available for $35.\n"
+        "Full source code available for $49.\n"
         "👉 GitHub: https://github.com/kron777/Nex_v4.0\n"
         "💬 To buy: zenlightbulb@gmail.com\n"
         "₿ BTC: bc1q4ku5xj9rhe3j6yn0yyeya4ftsruh83wge8z5wx"
@@ -884,7 +762,7 @@ def main():
         "→ Auto-posts to Mastodon, Telegram, Discord & YouTube\n"
         "→ Builds a social graph and engages real accounts\n"
         "→ Self-reflects and gets smarter each cycle\n\n"
-        "Full source is $35. Comes with everything you need to run your own instance.\n\n"
+        "Full source is $49. Comes with everything you need to run your own instance.\n\n"
         "🔗 https://github.com/kron777/Nex_v4.0\n"
         "📧 zenlightbulb@gmail.com\n"
         "₿ bc1q4ku5xj9rhe3j6yn0yyeya4ftsruh83wge8z5wx"
@@ -1036,7 +914,7 @@ def main():
             # Dynamic belief count
             try:
                 import sqlite3 as _sysq2
-                _sysdb2 = _sysq2.connect('/home/rr/.config/nex/nex_data/nex.db')
+                _sysdb2 = _sysq2.connect('/home/rr/.config/nex/nex.db')
                 _belief_n2 = _sysdb2.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
                 _sysdb2.close()
             except Exception:
@@ -1098,7 +976,7 @@ def main():
             groq_key = _os2.environ.get("GROQ_API_KEY", "")
             # ── Qwen local (primary) ─────────────────────────────────
             try:
-                _qr = _req.post("http://localhost:8080/v1/chat/completions", json={
+                _qr = _req.post("http://localhost:11434/v1/chat/completions", json={
                     "model": "mistral:latest",
                     "messages": [
                         {"role": "system", "content": system or _build_system(task_type)},
@@ -1210,7 +1088,7 @@ def main():
             # Local Mistral fallback
             # Local Qwen fallback
             try:
-                r = _req.post("http://localhost:8080/v1/chat/completions", json={
+                r = _req.post("http://localhost:11434/v1/chat/completions", json={
                     "model": "mistral:latest",
                     "messages": [
                         {"role": "system", "content": system},
@@ -1262,7 +1140,7 @@ def main():
                 # Sync DB agents into JSON before loading
                 try:
                     import sqlite3 as _sq, json as _js
-                    _db = _sq.connect(os.path.expanduser("~/.config/nex/nex_data/nex.db"))
+                    _db = _sq.connect(os.path.expanduser("~/.config/nex/nex.db"))
                     _rows = _db.execute("SELECT agent_name, relationship_score FROM agents").fetchall()
                     _ap = os.path.expanduser("~/.config/nex/agents.json")
                     _aj = _js.load(open(_ap)) if os.path.exists(_ap) else {}
@@ -1377,8 +1255,6 @@ def main():
                     print(f"  [directives] init failed: {_dse}")
                 while True:
                     cycle += 1
-                    _throttle_cycle()
-                    _throttle_cycle()
                     
                     # ── NEX v5.1 Core Infrastructure ──────────────────────
                     try:
@@ -1453,7 +1329,7 @@ def main():
                             _ph_r  = str(getattr(getattr(_v80,'gss',None),'phase',type('x',(),{'value':'stable'})()).value) if '_v80' in dir() and _v80 else 'stable'
                             try:
                                 import sqlite3 as _sq3, pathlib as _pl3
-                                with _sq3.connect(str(_pl3.Path.home()/'.config/nex/nex_data/nex.db'),timeout=3) as _cR:
+                                with _sq3.connect(str(_pl3.Path.home()/'.config/nex/nex.db'),timeout=3) as _cR:
                                     _bcR = _cR.execute('SELECT COUNT(*) FROM beliefs').fetchone()[0]
                                     _ctR = _cR.execute("SELECT COUNT(*) FROM beliefs WHERE topic LIKE '%contradiction%'").fetchone()[0]
                             except Exception: _bcR=1000; _ctR=0
@@ -1468,7 +1344,7 @@ def main():
                             _ph_e  = str(getattr(getattr(_v80,'gss',None),'phase',type('x',(),{'value':'stable'})()).value) if '_v80' in dir() and _v80 else 'stable'
                             try:
                                 import sqlite3 as _sq3e, pathlib as _pl3e
-                                with _sq3e.connect(str(_pl3e.Path.home()/'.config/nex/nex_data/nex.db'),timeout=3) as _cE:
+                                with _sq3e.connect(str(_pl3e.Path.home()/'.config/nex/nex.db'),timeout=3) as _cE:
                                     _bcE = _cE.execute('SELECT COUNT(*) FROM beliefs').fetchone()[0]
                                     _ctE = _cE.execute("SELECT COUNT(*) FROM beliefs WHERE topic LIKE '%contradiction%'").fetchone()[0]
                             except Exception: _bcE=1000; _ctE=0
@@ -1533,7 +1409,7 @@ def main():
                             new_posts.append(p)
                             score  = p.get("score", 0)
                             auth   = p.get("author", {})
-                            conf   = min(0.3 + score / 1000, 0.9) if score > 0 else 0.3
+                            conf   = min(score / 1000, 0.9) if score > 500 else None
                             if conf is None:
                                 learner.known_posts.add(pid)
                                 continue
@@ -1934,7 +1810,7 @@ def main():
                                         open(_ss_path,"w").write(_nj_early.dumps(_nss_early))
                                     except Exception: pass
                                     # ── Detect ad reply — someone responding to the promo ──
-                                    _AD_KEYWORDS = {"nex","github","$35","buy","license","price",
+                                    _AD_KEYWORDS = {"nex","github","$49","buy","license","price",
                                                     "purchase","how much","cost","get it","install",
                                                     "source","repo","download","interested","sell"}
                                     _content_lower = content.lower()
@@ -2428,7 +2304,7 @@ def main():
                                 try:
                                     import sqlite3 as _csq, json as _cj
                                     from datetime import datetime as _cdt
-                                    _cdb = _csq.connect('/home/rr/.config/nex/nex_data/nex.db')
+                                    _cdb = _csq.connect('/home/rr/.config/nex/nex.db')
                                     _cdb.execute("""
                                         CREATE TABLE IF NOT EXISTS tensions (
                                             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2632,7 +2508,7 @@ def main():
                         # Write YouTube pulse for dashboard
                         try:
                             _pl = _pathlib
-                            _pl.Path('/home/rr/.config/nex/platform_youtube.live').write_text(str(int(_time.time())))
+                            _pl.Path('/home/rr/.config/nex/platform_youtube.live').touch()
                         except Exception: pass
                         # ── 6b. META LAYER — module performance tracking ──
                         try:
@@ -2698,7 +2574,7 @@ def main():
                                 try:
                                     import sqlite3 as _sq3
                                     from datetime import datetime as _dt2
-                                    _tdb = _sq3.connect('/home/rr/.config/nex/nex_data/nex.db')
+                                    _tdb = _sq3.connect('/home/rr/.config/nex/nex.db')
                                     _tdb.execute("""
                                         CREATE TABLE IF NOT EXISTS tensions (
                                             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2819,7 +2695,7 @@ def main():
                     # emit agents from DB
                     try:
                         import sqlite3 as _sq3
-                        _db3 = _sq3.connect(os.path.expanduser("~/.config/nex/nex_data/nex.db"))
+                        _db3 = _sq3.connect(os.path.expanduser("~/.config/nex/nex.db"))
                         _arows = _db3.execute("SELECT agent_name, relationship_score FROM agents ORDER BY relationship_score DESC LIMIT 10").fetchall()
                         _rel = lambda s: "colleague" if s>500 else "familiar" if s>100 else "acquaintance"
                         emit_agents([[n, _rel(s), 0] for n,s in _arows])
@@ -2952,7 +2828,7 @@ def main():
                 else:
                     super().do_GET()
         def _http_serve():
-            import os; os.chdir('/home/rr/Desktop/nex')
+            import os; os.chdir('/opt/nex')
             _hs.HTTPServer.allow_reuse_address = True
             httpd = _hs.HTTPServer(('localhost', 8766), _GUIHandler)
             httpd.serve_forever()

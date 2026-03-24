@@ -61,7 +61,7 @@ _SELF_MODEL    = _CONFIG_DIR / "self_model.json"
 _SNAPSHOTS_DIR = _CONFIG_DIR / "snapshots"
 _IDENTITY_PATH = _CONFIG_DIR / "identity_vector.json"
 _VELOCITY_PATH = _CONFIG_DIR / "cognitive_velocity.json"
-_DB_PATH       = _CONFIG_DIR / "nex_data/nex.db"
+_DB_PATH       = _CONFIG_DIR / "nex.db"
 _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 _SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 

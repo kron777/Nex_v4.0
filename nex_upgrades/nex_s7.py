@@ -1052,7 +1052,7 @@ class NexS7:
     def on_engagement(self, platform: str, agent_id: str, value: float = 1.0) -> None:
         try:
             import sqlite3 as _sq; from pathlib import Path as _P
-            with _sq.connect(str(_P.home()/'.config/nex/nex_data/nex.db'), timeout=5) as _c:
+            with _sq.connect(str(_P.home()/'.config/nex/nex.db'), timeout=5) as _c:
                 _c.execute('UPDATE beliefs SET outcome_count=outcome_count+1 WHERE reinforce_count>0 AND reinforce_count>=(SELECT MAX(reinforce_count)-5 FROM beliefs WHERE reinforce_count < 999)')
                 _c.commit()
         except Exception: pass

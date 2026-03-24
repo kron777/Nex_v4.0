@@ -14,7 +14,7 @@ import os
 import re
 from datetime import datetime
 
-DB_PATH = os.path.expanduser("~/.config/nex/nex_data/nex.db")
+DB_PATH = os.path.expanduser("~/.config/nex/nex.db")
 
 # ── Topics that need relabelling ──────────────────────────────────────────────
 NOISY_TOPICS = {

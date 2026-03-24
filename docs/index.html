@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEX — Dynamic Intelligence Organism</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --bg: #020c14;
+  --bg1: #041020;
+  --bg2: #071828;
+  --panel: rgba(4,20,38,0.85);
+  --border: rgba(0,200,255,0.12);
+  --border-bright: rgba(0,200,255,0.4);
+  --cyan: #00c8ff;
+  --purple: #a855f7;
+  --red: #ff3b5c;
+  --green: #00ff9d;
+  --amber: #ffaa00;
+  --text: #c8dce8;
+  --text-dim: #3a5a6a;
+  --text-mid: #7a9aaa;
+  --text-bright: #e8f4ff;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Share Tech Mono', monospace;
+  overflow-x: hidden;
+}
+
+/* ── CIRCUIT BACKGROUND ── */
+#circuit-canvas {
+  position: fixed;
+  top:0; left:0;
+  width:100%; height:100%;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.18;
+}
+
+/* ── SCANLINE ── */
+.scanline {
+  position: fixed; left:0; width:100%; height:3px;
+  pointer-events:none; z-index:500;
+  background: linear-gradient(180deg,transparent 0%,rgba(0,200,255,0.08) 20%,rgba(0,200,255,0.18) 50%,rgba(0,200,255,0.08) 80%,transparent 100%);
+  animation: scanDown 8s linear infinite;
+}
+.scanline::before { content:''; position:absolute; left:0; top:-1px; width:100%; height:1px; background:rgba(0,200,255,0.35); }
+@keyframes scanDown { 0%{top:-4px;opacity:0} 3%{opacity:1} 97%{opacity:1} 100%{top:100vh;opacity:0} }
+
+/* Scanlines overlay */
+body::before {
+  content:''; position:fixed; top:0; left:0; width:100%; height:100%;
+  background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.02) 2px,rgba(0,0,0,0.02) 4px);
+  pointer-events:none; z-index:1;
+}
+
+/* ── CORNERS ── */
+.corner { position:fixed; width:40px; height:40px; z-index:50; }
+.corner::before,.corner::after { content:''; position:absolute; background:var(--cyan); opacity:0.6; }
+.corner::before { width:2px; height:100%; }
+.corner::after { width:100%; height:2px; }
+.corner.tl{top:16px;left:16px} .corner.tr{top:16px;right:16px;transform:scaleX(-1)}
+.corner.bl{bottom:16px;left:16px;transform:scaleY(-1)} .corner.br{bottom:16px;right:16px;transform:scale(-1)}
+
+/* ── NAV ── */
+nav {
+  position: fixed; top:0; left:0; right:0; height:52px;
+  background: rgba(2,12,20,0.95);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items:center;
+  padding: 0 40px;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+}
+.nav-logo {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 18px; font-weight:900;
+  background: linear-gradient(135deg, var(--cyan), var(--purple));
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+  margin-right: 40px;
+}
+.nav-links { display:flex; gap:28px; }
+.nav-links a {
+  font-size:10px; letter-spacing:0.2em; color:var(--text-dim);
+  text-decoration:none; text-transform:uppercase;
+  transition: color 0.2s;
+}
+.nav-links a:hover { color:var(--cyan); }
+.nav-right { margin-left:auto; }
+.nav-cta {
+  font-family:'Share Tech Mono',monospace;
+  font-size:10px; letter-spacing:0.2em;
+  color:var(--cyan); text-decoration:none;
+  border:1px solid var(--border-bright);
+  padding:6px 18px;
+  transition: all 0.2s;
+}
+.nav-cta:hover { background:rgba(0,200,255,0.08); box-shadow:0 0 20px rgba(0,200,255,0.1); }
+
+/* ── HERO ── */
+.hero {
+  position:relative; z-index:10;
+  min-height:100vh;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  text-align:center;
+  padding: 80px 20px 60px;
+}
+
+.hero-eyebrow {
+  font-size:10px; letter-spacing:0.4em; color:var(--text-dim);
+  margin-bottom:24px;
+  display:flex; align-items:center; gap:16px;
+}
+.hero-eyebrow::before,.hero-eyebrow::after {
+  content:''; width:40px; height:1px;
+  background:linear-gradient(90deg,transparent,var(--border-bright));
+}
+.hero-eyebrow::after { transform:scaleX(-1); }
+
+.hero-title {
+  font-family:'Orbitron',sans-serif;
+  font-size: clamp(80px,15vw,140px);
+  font-weight:900; letter-spacing:0.1em; line-height:1;
+  background: linear-gradient(135deg, #00c8ff 0%, #a855f7 60%, #00c8ff 100%);
+  background-size: 200%;
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+  animation: shimmer 6s linear infinite, titleGlow 4s ease-in-out infinite;
+  margin-bottom:16px;
+}
+@keyframes shimmer { 0%{background-position:0%} 100%{background-position:200%} }
+@keyframes titleGlow {
+  0%,100%{filter:drop-shadow(0 0 20px rgba(0,200,255,0.2))}
+  50%{filter:drop-shadow(0 0 50px rgba(168,85,247,0.35))}
+}
+
+.hero-sub {
+  font-family:'Rajdhani',sans-serif;
+  font-size:13px; letter-spacing:0.5em; color:var(--text-dim);
+  text-transform:uppercase; margin-bottom:32px;
+}
+
+.hero-tagline {
+  font-family:'Rajdhani',sans-serif;
+  font-size:clamp(18px,3vw,26px); font-weight:300;
+  color:var(--text-mid); line-height:1.6;
+  max-width:600px; margin-bottom:48px;
+}
+.hero-tagline strong { color:var(--text-bright); font-weight:500; }
+
+.hero-dots {
+  display:flex; gap:24px; justify-content:center;
+  margin-bottom:56px; font-size:10px; letter-spacing:0.2em;
+}
+.hero-dots span { display:flex; align-items:center; gap:8px; color:var(--text-dim); }
+.hdot { width:6px; height:6px; border-radius:50%; animation:pulse 2s ease-in-out infinite; }
+.hdot.c{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+.hdot.p{background:var(--purple);box-shadow:0 0 8px var(--purple);animation-delay:0.5s}
+.hdot.g{background:var(--green);box-shadow:0 0 8px var(--green);animation-delay:1s}
+.hdot.a{background:var(--amber);box-shadow:0 0 8px var(--amber);animation-delay:1.5s}
+@keyframes pulse{0%,100%{opacity:0.4}50%{opacity:1}}
+
+.hero-btns { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; }
+.btn-primary {
+  font-family:'Share Tech Mono',monospace;
+  font-size:11px; letter-spacing:0.25em;
+  color:var(--bg); background:var(--cyan);
+  border:none; padding:14px 36px;
+  cursor:pointer; text-decoration:none;
+  transition: all 0.2s;
+  text-transform:uppercase;
+  position:relative; overflow:hidden;
+}
+.btn-primary::before {
+  content:''; position:absolute; top:0; left:-100%; width:100%; height:100%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.2),transparent);
+  transition: left 0.4s;
+}
+.btn-primary:hover { box-shadow:0 0 30px rgba(0,200,255,0.4); }
+.btn-primary:hover::before { left:100%; }
+
+.btn-secondary {
+  font-family:'Share Tech Mono',monospace;
+  font-size:11px; letter-spacing:0.25em;
+  color:var(--cyan); background:transparent;
+  border:1px solid var(--border-bright);
+  padding:14px 36px; cursor:pointer; text-decoration:none;
+  transition: all 0.2s; text-transform:uppercase;
+}
+.btn-secondary:hover { background:rgba(0,200,255,0.06); box-shadow:0 0 20px rgba(0,200,255,0.1); }
+
+/* scroll indicator */
+.scroll-hint {
+  position:absolute; bottom:32px; left:50%; transform:translateX(-50%);
+  font-size:9px; letter-spacing:0.3em; color:var(--text-dim);
+  display:flex; flex-direction:column; align-items:center; gap:8px;
+}
+.scroll-arrow {
+  width:1px; height:30px;
+  background:linear-gradient(180deg,var(--cyan),transparent);
+  animation:scrollPulse 2s ease-in-out infinite;
+}
+@keyframes scrollPulse{0%,100%{opacity:0.3;transform:scaleY(0.8)}50%{opacity:1;transform:scaleY(1)}}
+
+/* ── SECTIONS ── */
+section {
+  position:relative; z-index:10;
+  padding: 100px 40px;
+  max-width:1100px; margin:0 auto;
+}
+
+.section-label {
+  font-size:10px; letter-spacing:0.35em; color:var(--cyan);
+  margin-bottom:16px; display:flex; align-items:center; gap:12px;
+}
+.section-label::after { content:''; flex:1; height:1px; background:var(--border); max-width:80px; }
+
+.section-title {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(24px,4vw,36px); font-weight:700;
+  color:var(--text-bright); margin-bottom:16px; letter-spacing:0.05em;
+}
+
+.section-desc {
+  font-family:'Rajdhani',sans-serif;
+  font-size:17px; color:var(--text-mid); line-height:1.7;
+  max-width:600px; margin-bottom:60px;
+}
+
+/* ── FEATURE GRID ── */
+.features-grid {
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px,1fr));
+  gap:1px;
+  background:var(--border);
+  border:1px solid var(--border);
+}
+
+.feature-card {
+  background:var(--panel);
+  padding:32px 28px;
+  position:relative;
+  overflow:hidden;
+  transition: background 0.3s;
+}
+.feature-card:hover { background:rgba(0,200,255,0.03); }
+.feature-card::before {
+  content:''; position:absolute;
+  top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--cyan),transparent);
+  opacity:0; transition:opacity 0.3s;
+}
+.feature-card:hover::before { opacity:0.5; }
+
+.feature-icon {
+  font-size:9px; letter-spacing:0.3em; color:var(--cyan);
+  margin-bottom:16px; display:flex; align-items:center; gap:10px;
+}
+.feature-icon::before {
+  content:''; width:20px; height:1px; background:var(--cyan); opacity:0.5;
+}
+
+.feature-title {
+  font-family:'Orbitron',sans-serif;
+  font-size:14px; font-weight:700; letter-spacing:0.08em;
+  color:var(--text-bright); margin-bottom:12px;
+}
+
+.feature-desc {
+  font-family:'Rajdhani',sans-serif;
+  font-size:15px; color:var(--text-mid); line-height:1.6;
+}
+
+/* ── STATS ── */
+.stats-row {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:1px; background:var(--border);
+  border:1px solid var(--border);
+  margin:80px 0;
+}
+.stat-cell {
+  background:var(--panel); padding:28px 24px; text-align:center;
+}
+.stat-num {
+  font-family:'Orbitron',sans-serif; font-size:32px; font-weight:900;
+  background:linear-gradient(135deg,var(--cyan),var(--purple));
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+  margin-bottom:6px;
+}
+.stat-label { font-size:9px; letter-spacing:0.25em; color:var(--text-dim); }
+
+/* ── TERMINAL DEMO ── */
+.terminal {
+  background:rgba(0,0,0,0.6);
+  border:1px solid var(--border-bright);
+  position:relative;
+  margin:60px 0;
+}
+.terminal::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--cyan),transparent);
+}
+.terminal-bar {
+  display:flex; align-items:center; gap:8px;
+  padding:12px 16px;
+  border-bottom:1px solid var(--border);
+  background:rgba(0,0,0,0.3);
+}
+.t-dot { width:8px; height:8px; border-radius:50%; }
+.t-dot.r{background:#ff5f57} .t-dot.y{background:#ffbd2e} .t-dot.g{background:#28ca41}
+.terminal-title { margin-left:8px; font-size:10px; color:var(--text-dim); letter-spacing:0.15em; }
+.terminal-body { padding:24px 20px; font-size:12px; line-height:2.2; }
+.t-line { display:flex; gap:12px; }
+.t-prompt { color:var(--purple); }
+.t-cmd { color:var(--cyan); }
+.t-out { color:var(--text-mid); padding-left:24px; }
+.t-out.green { color:var(--green); }
+.t-out.amber { color:var(--amber); }
+.cursor {
+  display:inline-block; width:8px; height:14px;
+  background:var(--cyan); vertical-align:middle;
+  animation:blink 1s step-end infinite;
+}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+/* ── PRICING ── */
+.pricing-grid {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:16px; margin-top:40px;
+}
+.price-card {
+  background:var(--panel);
+  border:1px solid var(--border);
+  padding:36px 28px;
+  position:relative;
+  transition: border-color 0.3s;
+}
+.price-card.featured {
+  border-color:var(--border-bright);
+}
+.price-card.featured::before {
+  content:'MOST POPULAR';
+  position:absolute; top:-10px; left:50%; transform:translateX(-50%);
+  background:var(--cyan); color:var(--bg);
+  font-size:8px; letter-spacing:0.25em; padding:3px 12px;
+}
+.price-tier { font-size:10px; letter-spacing:0.3em; color:var(--text-dim); margin-bottom:12px; }
+.price-amount {
+  font-family:'Orbitron',sans-serif; font-size:40px; font-weight:900;
+  color:var(--text-bright); margin-bottom:4px;
+}
+.price-amount span { font-size:16px; color:var(--text-dim); }
+.price-note { font-size:10px; color:var(--text-dim); margin-bottom:24px; }
+.price-features { list-style:none; margin-bottom:28px; }
+.price-features li {
+  font-family:'Rajdhani',sans-serif; font-size:14px;
+  color:var(--text-mid); padding:6px 0;
+  border-bottom:1px solid var(--border);
+  display:flex; gap:10px; align-items:center;
+}
+.price-features li::before { content:'//'; color:var(--cyan); font-size:10px; }
+
+/* ── FOOTER ── */
+footer {
+  position:relative; z-index:10;
+  border-top:1px solid var(--border);
+  padding:32px 40px;
+  display:flex; justify-content:space-between; align-items:center;
+  flex-wrap:wrap; gap:16px;
+}
+.footer-logo {
+  font-family:'Orbitron',sans-serif; font-size:16px; font-weight:900;
+  background:linear-gradient(135deg,var(--cyan),var(--purple));
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+}
+.footer-links { display:flex; gap:24px; }
+.footer-links a { font-size:10px; letter-spacing:0.15em; color:var(--text-dim); text-decoration:none; }
+.footer-links a:hover { color:var(--cyan); }
+.footer-copy { font-size:9px; letter-spacing:0.15em; color:var(--text-dim); }
+
+/* ── STATUS BAR ── */
+.statusbar {
+  position:fixed; bottom:0; left:0; right:0; height:28px;
+  background:rgba(2,12,20,0.97); border-top:1px solid var(--border);
+  display:flex; align-items:center; padding:0 20px; gap:28px; z-index:200;
+  font-size:9px; letter-spacing:0.15em;
+}
+.s-dot { display:flex; align-items:center; gap:7px; color:var(--text-dim); }
+.sdot { width:5px; height:5px; border-radius:50%; animation:pulse 2s ease-in-out infinite; }
+.sdot.g{background:var(--green);box-shadow:0 0 5px var(--green)}
+.sdot.c{background:var(--cyan);box-shadow:0 0 5px var(--cyan);animation-delay:0.7s}
+.sdot.p{background:var(--purple);box-shadow:0 0 5px var(--purple);animation-delay:1.4s}
+.s-right { margin-left:auto; color:var(--text-dim); }
+
+/* ── GLITCH EFFECTS ── */
+@keyframes glitch1 {
+  0%,100% { clip-path: inset(0 0 98% 0); transform: translate(-2px,0); }
+  20% { clip-path: inset(30% 0 50% 0); transform: translate(2px,0); }
+  40% { clip-path: inset(60% 0 20% 0); transform: translate(-1px,0); }
+  60% { clip-path: inset(80% 0 5% 0); transform: translate(3px,0); }
+  80% { clip-path: inset(10% 0 70% 0); transform: translate(-3px,0); }
+}
+@keyframes glitch2 {
+  0%,100% { clip-path: inset(0 0 98% 0); transform: translate(2px,0); opacity:0; }
+  20% { clip-path: inset(50% 0 30% 0); transform: translate(-2px,0); opacity:0.8; }
+  40% { clip-path: inset(20% 0 60% 0); transform: translate(1px,0); opacity:0.6; }
+  60% { clip-path: inset(5% 0 80% 0); transform: translate(-3px,0); opacity:0.9; }
+  80% { clip-path: inset(70% 0 10% 0); transform: translate(3px,0); opacity:0.7; }
+}
+@keyframes glitchSkew {
+  0%,89%,100% { transform: skewX(0deg); }
+  90% { transform: skewX(-1.5deg); }
+  92% { transform: skewX(1deg); }
+  94% { transform: skewX(-0.5deg); }
+  96% { transform: skewX(0.8deg); }
+}
+@keyframes scanJump {
+  0%,95%,100% { opacity:1; transform:translateY(0); }
+  96% { opacity:0.8; transform:translateY(2px); }
+  97% { opacity:0.9; transform:translateY(-1px); }
+  98% { opacity:0.7; transform:translateY(3px); }
+}
+@keyframes rgbSplit {
+  0%,94%,100% { text-shadow: none; }
+  95% { text-shadow: -2px 0 rgba(255,0,0,0.5), 2px 0 rgba(0,255,255,0.5); }
+  96% { text-shadow: 2px 0 rgba(255,0,0,0.5), -2px 0 rgba(0,255,255,0.5); }
+  97% { text-shadow: -3px 0 rgba(255,0,0,0.3), 3px 0 rgba(0,255,255,0.3); }
+  98% { text-shadow: none; }
+}
+@keyframes flicker {
+  0%,90%,100% { opacity:1; }
+  91% { opacity:0.85; }
+  92% { opacity:1; }
+  93% { opacity:0.7; }
+  94% { opacity:1; }
+  95% { opacity:0.9; }
+}
+@keyframes hline {
+  0%,97%,100% { opacity:0; top:-10px; }
+  98% { opacity:0.6; top:15%; }
+  99% { opacity:0.3; top:40%; }
+}
+
+.hero-title {
+  animation: shimmer 6s linear infinite, titleGlow 4s ease-in-out infinite, glitchSkew 8s ease-in-out infinite, rgbSplit 7s ease-in-out infinite !important;
+}
+
+.glitch-wrap {
+  position: relative;
+}
+.glitch-wrap::before,
+.glitch-wrap::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  font-family: 'Orbitron', sans-serif;
+  font-size: inherit;
+  font-weight: 900;
+  letter-spacing: inherit;
+  line-height: inherit;
+  pointer-events: none;
+}
+.glitch-wrap::before {
+  color: rgba(0,200,255,0.6);
+  animation: glitch1 6s infinite linear;
+}
+.glitch-wrap::after {
+  color: rgba(168,85,247,0.6);
+  animation: glitch2 6s infinite linear;
+  animation-delay: 0.3s;
+}
+
+/* Horizontal noise line */
+.h-noise {
+  position: fixed;
+  left: 0; width: 100%; height: 2px;
+  background: rgba(0,200,255,0.4);
+  pointer-events: none;
+  z-index: 999;
+  animation: hline 9s infinite ease-in-out;
+  filter: blur(0.5px);
+}
+
+/* Body flicker */
+body {
+  animation: flicker 11s infinite ease-in-out !important;
+}
+
+/* Nav glitch skew */
+nav {
+  animation: glitchSkew 13s ease-in-out infinite;
+}
+
+
+/* ── FLOATING PARTICLES (gate.html style) ── */
+.particles { position:fixed; inset:0; z-index:0; pointer-events:none; }
+.particle {
+  position:absolute;
+  border-radius:50%;
+  animation: floatUp linear infinite;
+  opacity:0;
+}
+@keyframes floatUp {
+  0%   { opacity:0; transform:translateY(0) translateX(0) scale(1); }
+  10%  { opacity:1; }
+  90%  { opacity:0.3; }
+  100% { opacity:0; transform:translateY(-120px) translateX(var(--dx,15px)) scale(0.5); }
+}
+
+/* ── NEBULA GLOW ── */
+.nebula {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+  animation: nebulaPulse ease-in-out infinite;
+}
+.nebula-1 {
+  width: 600px; height: 400px;
+  top: -100px; left: -150px;
+  background: radial-gradient(ellipse, rgba(0,200,255,0.06) 0%, transparent 70%);
+  animation-duration: 12s;
+}
+.nebula-2 {
+  width: 500px; height: 500px;
+  top: 20%; right: -100px;
+  background: radial-gradient(ellipse, rgba(168,85,247,0.07) 0%, transparent 70%);
+  animation-duration: 15s;
+  animation-delay: 3s;
+}
+.nebula-3 {
+  width: 700px; height: 300px;
+  bottom: 10%; left: 10%;
+  background: radial-gradient(ellipse, rgba(0,255,157,0.04) 0%, transparent 70%);
+  animation-duration: 18s;
+  animation-delay: 6s;
+}
+@keyframes nebulaPulse {
+  0%,100% { opacity:0.6; transform:scale(1); }
+  50% { opacity:1; transform:scale(1.08); }
+}
+</style>
+</head>
+<body>
+
+<canvas id="circuit-canvas"></canvas>
+<div class="scanline"></div>
+<div class="h-noise"></div>
+<div class="nebula nebula-1"></div>
+<div class="nebula nebula-2"></div>
+<div class="nebula nebula-3"></div>
+
+<div class="corner tl"></div>
+<div class="corner tr"></div>
+<div class="corner bl"></div>
+<div class="corner br"></div>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">NEX</div>
+  <div class="nav-links"></div>
+  <div class="nav-right">
+    <a href="https://nexsales.lemonsqueezy.com/checkout/buy/e6713a1b-0138-4b0e-9863-957d7227f94ed" class="nav-cta">GET NEX</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-eyebrow">DYNAMIC INTELLIGENCE ORGANISM</div>
+  <div class="hero-title glitch-wrap" data-text="NEX">NEX</div>
+  <div class="hero-sub">v4.0 — Autonomous AI Agent</div>
+  <div class="hero-tagline">
+    She <strong>learns</strong>, <strong>thinks</strong>, and <strong>posts</strong> across platforms.<br>
+    <span style="color:var(--cyan);">— all by herself.</span><br>
+    <span style="font-size:0.85em;">The longer she runs, the smarter she gets.</span>
+  </div>
+  <div class="hero-dots">
+    <span><div class="hdot c"></div>LEARN</span>
+    <span><div class="hdot p"></div>REFLECT</span>
+    <span><div class="hdot g"></div>GROW</span>
+    <span><div class="hdot a"></div>EVOLVE</span>
+  </div>
+
+  <div class="scroll-hint">
+    <span>SCROLL</span>
+    <div class="scroll-arrow"></div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="section-label">CAPABILITIES</div>
+  <div class="section-title">NOT A CHATBOT.<br>AN ORGANISM.</div>
+  <div class="section-desc">NEX runs locally on your machine. She builds beliefs, forms opinions, and evolves her identity through every interaction.</div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">COGNITION</div>
+      <div class="feature-title">BELIEF ENGINE</div>
+      <div class="feature-desc">NEX builds and maintains a living belief graph. Contradictions are resolved. Confidence decays and strengthens over time.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">PLATFORM</div>
+      <div class="feature-title">MULTI-PLATFORM</div>
+      <div class="feature-desc">Operates across Telegram, Discord, Mastodon, and Moltbook simultaneously. Replies, posts, and engages autonomously.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">LEARNING</div>
+      <div class="feature-title">AUTO-LEARN</div>
+      <div class="feature-desc">Continuously crawls RSS, arXiv, GitHub, and YouTube. Synthesises new knowledge into her belief store every 2 minutes.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">IDENTITY</div>
+      <div class="feature-title">EMERGENT SELF</div>
+      <div class="feature-desc">NEX develops a persistent identity — intellectually restless, security-minded, philosophically preoccupied with memory.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">HARDWARE</div>
+      <div class="feature-title">LOCAL LLM</div>
+      <div class="feature-desc">Runs Mistral 7B locally via Ollama. Your data never leaves your machine. GPU-accelerated on AMD and NVIDIA.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">EVOLUTION</div>
+      <div class="feature-title">DESIRE ENGINE</div>
+      <div class="feature-desc">Self-directed curiosity system drives autonomous research. NEX decides what she wants to learn next — without being told.</div>
+    </div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-cell">
+      <div class="stat-num">84%</div>
+      <div class="stat-label">IQ BENCHMARK</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-num">18+</div>
+      <div class="stat-label">COGNITIVE MODULES</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-num">120s</div>
+      <div class="stat-label">LEARN CYCLE</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-num">4</div>
+      <div class="stat-label">LIVE PLATFORMS</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-num">100%</div>
+      <div class="stat-label">LOCAL & PRIVATE</div>
+    </div>
+  </div>
+</section>
+
+<!-- TERMINAL DEMO -->
+<section id="demo" style="padding-top:0">
+  <div class="section-label">TERMINAL</div>
+  <div class="section-title">WATCH HER THINK</div>
+
+  <div class="terminal">
+    <div class="terminal-bar">
+      <div class="t-dot r"></div>
+      <div class="t-dot y"></div>
+      <div class="t-dot g"></div>
+      <div class="terminal-title">NEX v4.0 — DYNAMIC INTELLIGENCE ORGANISM</div>
+    </div>
+    <div class="terminal-body">
+      <div class="t-line"><span class="t-prompt">nex@organism:~$</span><span class="t-cmd">nex</span></div>
+      <div class="t-out">[v6.5] Initialising 18-module cognitive stack...</div>
+      <div class="t-out green">[v6.5] All 18 modules ready ✓</div>
+      <div class="t-out">[SENTIENCE] affect / consequence / temporal — loaded</div>
+      <div class="t-out green">[INIT] NEX v5.0 Cognitive Architecture loaded</div>
+      <div class="t-out green">[INIT] Belief engine seeded: truth_seeking, contradiction_resolution</div>
+      <div class="t-out amber">[AUTO-LEARN] Crawling arXiv: "adversarial robustness in LLMs"</div>
+      <div class="t-out amber">[AUTO-LEARN] 3 new beliefs synthesised — avg confidence 0.84</div>
+      <div class="t-out green">[TELEGRAM] @Nex_4bot ONLINE — awaiting input</div>
+      <div class="t-out green">[GUI] WebSocket bridge active — ws://localhost:8765</div>
+      <div class="t-line" style="margin-top:8px"><span class="t-prompt">></span><span class="t-cmd"> <span class="cursor"></span></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing">
+  <div class="section-label">PRICING</div>
+  <div class="section-title">ACQUIRE THE ORGANISM</div>
+  <div class="section-desc">One price. Everything included. No subscriptions, no tiers, no compromise.</div>
+
+  <div style="max-width:560px;margin:0 auto;">
+    <div class="price-card featured" style="text-align:center;padding:48px 40px;">
+      <div class="price-tier" style="letter-spacing:0.4em;font-size:11px;margin-bottom:12px;">EXCLUSIVE — ALL ACCESS — SINGLE LICENSE</div>
+      <div style="font-family:'Rajdhani',sans-serif;font-size:16px;color:var(--text-mid);margin-bottom:28px;line-height:1.7;">
+        One organism. One owner. Completely yours.<br>
+        <span style="color:var(--cyan);">No subscriptions. No cloud. No compromise.</span>
+      </div>
+      <div class="price-amount" style="font-size:72px;margin-bottom:6px;">$49<span style="font-size:22px;"> USD</span></div>
+      <div class="price-note" style="margin-bottom:36px;font-size:11px;letter-spacing:0.2em;">ONE-TIME PAYMENT — NODE-LOCKED PERPETUAL LICENSE</div>
+      <ul class="price-features" style="text-align:left;margin-bottom:36px;">
+        <li>Complete NEX v4.0 — all 18+ cognitive modules</li>
+        <li>Belief engine, desire engine, contradiction resolver</li>
+        <li>Telegram, Discord, Mastodon &amp; Moltbook</li>
+        <li>Local Mistral 7B — your data never leaves your machine</li>
+        <li>Auto-learn: arXiv, RSS, GitHub, YouTube</li>
+        <li>Emergent identity — she grows the longer she runs</li>
+        <li>Full source code + direct support from the creator</li>
+        <li>All future v4.x updates included</li>
+      </ul>
+
+      <!-- HOSTNAME CAPTURE STEP -->
+      <div id="acquire-step" style="text-align:left;border:1px solid var(--border-bright);background:rgba(0,200,255,0.04);padding:24px;margin-bottom:20px;position:relative;">
+        <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);"></div>
+        <div style="font-size:9px;letter-spacing:0.3em;color:var(--cyan);margin-bottom:14px;">// STEP 1 OF 2 — BIND YOUR NODE</div>
+        <div style="font-size:11px;color:var(--text-mid);margin-bottom:14px;line-height:1.8;">
+          NEX is node-locked. Enter your machine's hostname so your key is bound correctly at checkout.
+        </div>
+        <div style="font-size:9px;color:var(--text-dim);margin-bottom:8px;letter-spacing:0.15em;">GET YOUR HOSTNAME:</div>
+        <div style="background:rgba(0,0,0,0.5);border:1px solid rgba(0,200,255,0.15);padding:8px 14px;font-size:12px;color:var(--green);margin-bottom:16px;cursor:pointer;" onclick="copyHostnameCmd(this)" title="Click to copy">
+          <span id="hostname-cmd">hostname</span>
+          <span style="float:right;font-size:9px;color:var(--text-dim);letter-spacing:0.1em;" id="copy-hint">CLICK TO COPY</span>
+        </div>
+        <input
+          type="text"
+          id="hostname-input"
+          placeholder="e.g. my-machine or DESKTOP-AB12CD"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+          style="
+            width:100%;
+            background:rgba(0,0,0,0.4);
+            border:1px solid var(--border-bright);
+            color:var(--cyan);
+            font-family:'Share Tech Mono',monospace;
+            font-size:13px;
+            padding:12px 16px;
+            letter-spacing:0.1em;
+            outline:none;
+            margin-bottom:4px;
+            box-sizing:border-box;
+          "
+          oninput="validateHostname(this)"
+        />
+        <div id="hostname-error" style="font-size:10px;color:var(--red);letter-spacing:0.1em;min-height:16px;margin-bottom:12px;padding-top:4px;"></div>
+        <button
+          id="acquire-btn"
+          onclick="proceedToCheckout()"
+          style="
+            width:100%;
+            display:block;
+            text-align:center;
+            padding:16px;
+            font-size:12px;
+            letter-spacing:0.3em;
+            background:linear-gradient(135deg,rgba(0,200,255,0.15),rgba(168,85,247,0.1));
+            border:1px solid var(--cyan);
+            color:var(--cyan);
+            font-family:'Share Tech Mono',monospace;
+            cursor:pointer;
+            transition:background 0.2s,box-shadow 0.2s;
+            text-transform:uppercase;
+          "
+          onmouseover="this.style.background='rgba(0,200,255,0.12)';this.style.boxShadow='0 0 20px rgba(0,200,255,0.15)';"
+          onmouseout="this.style.background='linear-gradient(135deg,rgba(0,200,255,0.15),rgba(168,85,247,0.1))';this.style.boxShadow='none';"
+        >ACQUIRE NEX — $49</button>
+      </div>
+
+      <div style="margin-top:4px;font-size:10px;color:var(--text-dim);letter-spacing:0.15em;line-height:2.0;text-align:center;">
+        <span style="color:var(--green);">✓</span> Key delivered to your email <strong style="color:var(--cyan);">instantly</strong> after payment<br>
+        <span style="color:var(--green);">✓</span> Node-locked — your machine only<br>
+        <span style="color:var(--green);">✓</span> No waiting, no manual steps, no support tickets
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">NEX</div>
+  <div class="footer-links">
+    <a href="https://nexsales.lemonsqueezy.com/checkout/buy/e6713a1b-0138-4b0e-9863-957d7227f94ed">BUY NEX</a>
+    <a href="gate.html">ACTIVATE</a>
+    <a href="/cdn-cgi/l/email-protection#92e8f7fcfefbf5fae6f0e7fef0d2f5fff3fbfebcf1fdff">CONTACT</a>
+  </div>
+  <div class="footer-copy">© 2026 Zen Data &amp; Designs — NOT A CHATBOT. AN ORGANISM.</div>
+</footer>
+
+<div class="statusbar">
+  <div class="s-dot"><div class="sdot g"></div>SYSTEM NOMINAL</div>
+  <div class="s-dot"><div class="sdot c"></div>TELEMETRY ACTIVE</div>
+  <div class="s-dot"><div class="sdot p"></div>ORGANISM ONLINE</div>
+  <div class="s-right">NEX DYNAMIC INTELLIGENCE ORGANISM — v4.0</div>
+</div>
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+// Circuit board canvas
+const canvas = document.getElementById('circuit-canvas');
+const ctx = canvas.getContext('2d');
+let W, H, nodes = [], edges = [], electrons = [];
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  init();
+}
+
+function init() {
+  nodes = []; edges = []; electrons = [];
+  const cols = Math.floor(W / 80);
+  const rows = Math.floor(H / 80);
+  for (let i = 0; i < cols; i++) {
+    for (let j = 0; j < rows; j++) {
+      if (Math.random() > 0.5) {
+        nodes.push({
+          x: i * 80 + Math.random() * 30 - 15,
+          y: j * 80 + Math.random() * 30 - 15,
+          r: Math.random() > 0.8 ? 3 : 1.5
+        });
+      }
+    }
+  }
+  // Connect nearby nodes
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i+1; j < nodes.length; j++) {
+      const dx = nodes[j].x - nodes[i].x;
+      const dy = nodes[j].y - nodes[i].y;
+      const d = Math.sqrt(dx*dx+dy*dy);
+      if (d < 120 && Math.random() > 0.6) {
+        edges.push({a:i,b:j,d});
+        // spawn electrons on some edges
+        if (Math.random() > 0.7) {
+          electrons.push({edge:edges.length-1, t:Math.random(), speed:0.002+Math.random()*0.003, dir:Math.random()>0.5?1:-1});
+        }
+      }
+    }
+  }
+}
+
+function draw() {
+  ctx.clearRect(0,0,W,H);
+  // edges
+  ctx.strokeStyle = 'rgba(0,200,255,0.25)';
+  ctx.lineWidth = 0.5;
+  for (const e of edges) {
+    const a = nodes[e.a], b = nodes[e.b];
+    ctx.beginPath();
+    // Right-angle routing like circuit board
+    const mx = (a.x+b.x)/2;
+    ctx.moveTo(a.x,a.y);
+    ctx.lineTo(mx,a.y);
+    ctx.lineTo(mx,b.y);
+    ctx.lineTo(b.x,b.y);
+    ctx.stroke();
+  }
+  // nodes
+  for (const n of nodes) {
+    ctx.fillStyle = n.r > 2 ? 'rgba(0,200,255,0.6)' : 'rgba(0,200,255,0.35)';
+    ctx.beginPath();
+    ctx.arc(n.x,n.y,n.r,0,Math.PI*2);
+    ctx.fill();
+    if (n.r > 2) {
+      ctx.strokeStyle = 'rgba(0,200,255,0.3)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(n.x,n.y,n.r+4,0,Math.PI*2);
+      ctx.stroke();
+    }
+  }
+  // electrons
+  for (const el of electrons) {
+    const e = edges[el.edge];
+    const a = nodes[e.a], b = nodes[e.b];
+    el.t += el.speed * el.dir;
+    if (el.t > 1) el.t = 0;
+    if (el.t < 0) el.t = 1;
+    // follow right-angle path
+    const mx = (a.x+b.x)/2;
+    let ex, ey;
+    const seg1len = Math.abs(mx - a.x);
+    const seg2len = Math.abs(b.y - a.y);
+    const seg3len = Math.abs(b.x - mx);
+    const total = seg1len + seg2len + seg3len;
+    const pos = el.t * total;
+    if (pos < seg1len) {
+      ex = a.x + (mx-a.x)*(pos/seg1len); ey = a.y;
+    } else if (pos < seg1len+seg2len) {
+      ex = mx; ey = a.y + (b.y-a.y)*((pos-seg1len)/seg2len);
+    } else {
+      ex = mx + (b.x-mx)*((pos-seg1len-seg2len)/seg3len); ey = b.y;
+    }
+    const grad = ctx.createRadialGradient(ex,ey,0,ex,ey,4);
+    grad.addColorStop(0,'rgba(0,200,255,0.9)');
+    grad.addColorStop(1,'rgba(0,200,255,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(ex,ey,4,0,Math.PI*2);
+    ctx.fill();
+  }
+  requestAnimationFrame(draw);
+}
+
+window.addEventListener('resize', resize);
+resize();
+draw();
+
+// ── PARTICLES ──
+const pc = document.querySelector('.particles');
+if(pc) {
+  for(let i=0;i<40;i++){
+    const p=document.createElement('div');
+    p.className='particle';
+    const size=Math.random()>0.7?3:2;
+    const colors=['rgba(0,200,255,','rgba(168,85,247,','rgba(0,255,157,'];
+    const c=colors[Math.floor(Math.random()*colors.length)];
+    p.style.cssText=`width:${size}px;height:${size}px;left:${Math.random()*100}%;top:${Math.random()*100}%;background:${c}0.7);box-shadow:0 0 4px ${c}0.5);animation-duration:${4+Math.random()*6}s;animation-delay:${Math.random()*4}s;--dx:${(Math.random()-0.5)*40}px;`;
+    pc.appendChild(p);
+  }
+}
+</script>
+
+<script>
+// ── HOSTNAME CAPTURE & CHECKOUT ──
+function validateHostname(input) {
+  const v = input.value.trim();
+  const err = document.getElementById('hostname-error');
+  if (v.length === 0) { err.textContent = ''; return; }
+  if (v.length < 2) { err.textContent = '// hostname too short'; return; }
+  if (/[^a-zA-Z0-9\-_\.]/.test(v)) { err.textContent = '// invalid characters — use letters, numbers, hyphens, underscores'; return; }
+  err.textContent = '';
+}
+
+function copyHostnameCmd(el) {
+  navigator.clipboard.writeText('hostname').catch(()=>{});
+  const hint = document.getElementById('copy-hint');
+  hint.textContent = 'COPIED!';
+  hint.style.color = 'var(--green)';
+  setTimeout(()=>{ hint.textContent = 'CLICK TO COPY'; hint.style.color = ''; }, 2000);
+}
+
+function proceedToCheckout() {
+  const input = document.getElementById('hostname-input');
+  const hostname = input.value.trim();
+  const err = document.getElementById('hostname-error');
+
+  if (!hostname) {
+    err.textContent = '// hostname required — run "hostname" in your terminal';
+    input.style.borderColor = 'var(--red)';
+    input.focus();
+    return;
+  }
+  if (hostname.length < 2 || /[^a-zA-Z0-9\-_\.]/.test(hostname)) {
+    err.textContent = '// invalid hostname format';
+    input.style.borderColor = 'var(--red)';
+    input.focus();
+    return;
+  }
+
+  input.style.borderColor = 'var(--green)';
+  err.style.color = 'var(--green)';
+  err.textContent = '// node accepted — routing to secure checkout...';
+
+  const btn = document.getElementById('acquire-btn');
+  btn.textContent = 'OPENING CHECKOUT...';
+  btn.style.borderColor = 'var(--green)';
+  btn.style.color = 'var(--green)';
+
+  // Pass hostname to Gumroad via ?wanted=true&hostname= param
+  // The Gumroad checkout custom field is pre-filled via the URL
+  const encoded = encodeURIComponent(hostname);
+  const checkoutUrl = `https://nexsales.lemonsqueezy.com/checkout/buy/e6713a1b-0138-4b0e-9863-957d7227f94ed?checkout%5Bcustom%5D%5Bhostname%5D=${encoded}`;
+
+  setTimeout(()=>{ window.open(checkoutUrl, '_blank'); }, 600);
+
+  setTimeout(()=>{
+    btn.textContent = 'ACQUIRE NEX — $49';
+    btn.style.borderColor = '';
+    btn.style.color = '';
+    err.textContent = '';
+    err.style.color = '';
+    input.style.borderColor = '';
+  }, 4000);
+}
+</script>
+</body>
+</html>
