@@ -750,7 +750,7 @@ def main():
     parser.add_argument("--server",    type=str, default=None,  help="Path to llama-server binary")
     parser.add_argument("--host",      type=str, default="127.0.0.1")
     parser.add_argument("--port",      type=int, default=8080)
-    parser.add_argument("--gpu",       type=int, default=20,    help="GPU layers (0=CPU)")
+    parser.add_argument("--gpu",       type=int, default=99,    help="GPU layers (0=CPU)")
     parser.add_argument("--ctx",       type=int, default=2048,  help="Context size")
     parser.add_argument("--ticks",     type=int, default=50,    help="Warm-up ticks before chat")
     parser.add_argument("--no-server", action="store_true",     help="Don't auto-start server")
