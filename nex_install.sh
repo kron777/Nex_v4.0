@@ -151,6 +151,21 @@ else
   sudo apt install -y cmake build-essential
 fi
 
+step "Installing system dependencies"
+MISSING=()
+command -v tmux           &>/dev/null || MISSING+=("tmux")
+command -v gnome-terminal &>/dev/null || MISSING+=("gnome-terminal")
+command -v wget           &>/dev/null || MISSING+=("wget")
+command -v curl           &>/dev/null || MISSING+=("curl")
+
+if [[ ${#MISSING[@]} -gt 0 ]]; then
+  warn "Missing: ${MISSING[*]} — installing..."
+  sudo apt install -y "${MISSING[@]}"
+  ok "System dependencies installed"
+else
+  ok "All system dependencies present"
+fi
+
 pause
 
 # ═══════════════════════════════════════════════════════════════
