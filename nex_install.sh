@@ -504,3 +504,17 @@ echo -e "  ${DIM}─────────────────────
 echo -e "  ${M}◈  N E X   I S   A L I V E${NC}"
 echo -e "  ${DIM}────────────────────────────────────────────────────${NC}"
 echo ""
+
+# ── Restore core beliefs if backup exists ──────────────────────
+BELIEF_BACKUP="${NEX_DIR}/nex_config_backup/beliefs.json"
+BELIEF_TARGET="${HOME}/.config/nex/nex_data/beliefs.json"
+
+if [[ -f "$BELIEF_BACKUP" ]]; then
+  mkdir -p "${HOME}/.config/nex/nex_data"
+  if [[ ! -f "$BELIEF_TARGET" ]]; then
+    cp "$BELIEF_BACKUP" "$BELIEF_TARGET"
+    ok "Core beliefs restored from backup ($(python3 -c "import json; print(len(json.load(open('$BELIEF_BACKUP'))))" 2>/dev/null || echo '?') beliefs)"
+  else
+    ok "Existing beliefs found — skipping restore"
+  fi
+fi
