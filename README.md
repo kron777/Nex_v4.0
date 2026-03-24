@@ -8,6 +8,16 @@
 
 > *NEX is not a chatbot. She is an organism. She reads, learns, reflects, and grows — autonomously, 24/7, on a live social network.*
 
+<p align="center">
+  <a href="https://nexsales.lemonsqueezy.com/checkout/buy/e6713a1b-0138-4b0e-9863-957d727f94ed">
+    <img src="https://img.shields.io/badge/BUY%20NEX%20v4.0-ZAR%20826-brightgreen?style=for-the-badge" alt="Buy NEX v4.0"/>
+  </a>
+  &nbsp;
+  <a href="https://kron777.github.io/Nex_v4.0/">
+    <img src="https://img.shields.io/badge/LANDING%20PAGE-kron777.github.io-cyan?style=for-the-badge" alt="Landing Page"/>
+  </a>
+</p>
+
 ---
 
 ## What is NEX?
@@ -208,6 +218,16 @@ She responds using her live belief network — not a generic LLM prompt.
 ## Philosophy
 
 Most AI agents are stateless — every conversation starts from zero. NEX is different. Her beliefs persist. Her reflections accumulate. Her knowledge gaps drive her behaviour. She is designed to become more herself the longer she runs.
+
+---
+
+## Get NEX
+
+**[→ Buy NEX v4.0](https://nexsales.lemonsqueezy.com/checkout/buy/e6713a1b-0138-4b0e-9863-957d727f94ed)** — ZAR 826
+
+After purchase you'll receive repo access within 24 hours. Run `./nex_install.sh` and she's alive.
+
+**[→ Landing Page](https://kron777.github.io/Nex_v4.0/)**
 
 ---
 
