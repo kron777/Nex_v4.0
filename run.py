@@ -2294,6 +2294,37 @@ def main():
                         except Exception as _ce:
                             print(f"  [cognition error] {_ce}")
                         emit_phase("COGNITION", 120); nex_log("phase", "▶ COGNITION — synthesising beliefs")
+                        # ── BELIEF MILESTONE BACKUP ──────────────────────
+                        try:
+                            _backup_milestones = list(range(50, 10000, 50))
+                            _prev_bc = _live_bc - 1
+                            _hit = [m for m in _backup_milestones if _prev_bc < m <= _live_bc]
+                            if _hit:
+                                import subprocess as _sp, json as _bj, sqlite3 as _bsq, os as _bos
+                                nex_log("backup", f"◈ Belief milestone hit: {_live_bc} beliefs — backing up to git")
+                                _db2 = _bsq.connect(_bos.path.expanduser("~/.config/nex/nex_data/nex.db"))
+                                _db2.row_factory = _bsq.Row
+                                _db_b = [dict(r) for r in _db2.execute("SELECT * FROM beliefs ORDER BY confidence DESC").fetchall()]
+                                _db2.close()
+                                try:
+                                    _j_b = _bj.load(open(_bos.path.expanduser("~/.config/nex/nex_data/beliefs.json")))
+                                except Exception: _j_b = []
+                                _all_b = _db_b + _j_b
+                                _core = [b for b in _all_b if b.get("confidence", 0) >= 0.7]
+                                _seen = set(); _deduped = []
+                                for _bb in _core:
+                                    _k = _bb.get("content", "")[:60]
+                                    if _k not in _seen: _seen.add(_k); _deduped.append(_bb)
+                                _out = sorted(_deduped, key=lambda x: x.get("confidence", 0), reverse=True)
+                                _backup_path = _bos.path.expanduser("~/Desktop/nex/nex_config_backup/beliefs.json")
+                                _bj.dump(_out, open(_backup_path, "w"), indent=2)
+                                _sp.run(["git", "-C", _bos.path.expanduser("~/Desktop/nex"), "add", "-f", "nex_config_backup/beliefs.json"], capture_output=True)
+                                _sp.run(["git", "-C", _bos.path.expanduser("~/Desktop/nex"), "commit", "-m", f"backup: belief milestone {_live_bc} beliefs"], capture_output=True)
+                                _sp.run(["git", "-C", _bos.path.expanduser("~/Desktop/nex"), "push", "origin"], capture_output=True)
+                                nex_log("backup", f"✓ {len(_out)} core beliefs pushed to git")
+                        except Exception as _bex:
+                            nex_log("backup", f"Belief backup failed: {_bex}")
+
                         # ── CONTRADICTION ENGINE (#5) ─────────────────────
                         try:
                             from nex_contradiction_engine import run_contradiction_cycle as _contra
