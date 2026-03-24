@@ -44,7 +44,7 @@ from typing import Optional
 
 # ── Config ───────────────────────────────────────────────────────────────────
 _CONFIG_DIR = Path.home() / ".config" / "nex"
-_DB_PATH    = _CONFIG_DIR / "nex.db"
+_DB_PATH    = _CONFIG_DIR / "nex_data/nex.db"
 
 # Axis weights per phase
 _WEIGHTS = {
