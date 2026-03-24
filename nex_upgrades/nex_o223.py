@@ -10,7 +10,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
 
-DB_PATH  = Path.home() / ".config/nex/nex.db"
+DB_PATH  = Path.home() / ".config/nex/nex_data/nex.db"
 LOG      = Path("/tmp/nex_o223.log")
 OBS_F    = Path.home() / ".config/nex/observation.json"
 POLICY_F = Path.home() / ".config/nex/policy.json"

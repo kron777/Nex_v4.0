@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict, deque
 
 _LOG   = '/tmp/nex_s620.log'
-_DB    = str(pathlib.Path.home() / '.config/nex/nex.db')
+_DB    = str(pathlib.Path.home() / '.config/nex/nex_data/nex.db')
 _CFG   = pathlib.Path.home() / '.config/nex'
 
 def _log(msg):

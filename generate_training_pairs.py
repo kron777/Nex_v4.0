@@ -15,7 +15,7 @@ import json, sqlite3, random, re
 from pathlib import Path
 from datetime import datetime
 
-DB_PATH = Path.home() / ".config/nex/nex.db"
+DB_PATH = Path.home() / ".config/nex/nex_data/nex.db"
 OUT     = Path.home() / "Desktop/nex/nex_training_pairs.json"
 
 IDENTITY_PATH = Path.home() / ".config/nex/identity.json"

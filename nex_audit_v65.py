@@ -12,7 +12,7 @@ from datetime import datetime
 sys.path.insert(0, str(Path.home() / "Desktop/nex"))
 os.chdir(str(Path.home() / "Desktop/nex"))
 
-DB   = Path.home() / ".config/nex/nex.db"
+DB   = Path.home() / ".config/nex/nex_data/nex.db"
 OUT  = Path("/tmp/nex_audit_v65.txt")
 NOW  = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 

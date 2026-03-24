@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
-DB_PATH = Path.home() / ".config/nex/nex.db"
+DB_PATH = Path.home() / ".config/nex/nex_data/nex.db"
 LOG     = Path("/tmp/nex_v80.log")
 CAUSAL  = Path("/tmp/nex_causal.jsonl")
 NET_LOG = Path("/tmp/nex_net_failures.txt")

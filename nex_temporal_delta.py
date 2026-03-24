@@ -379,7 +379,7 @@ if __name__ == "__main__":
     td = TemporalDelta()
 
     # Simulate a few cycles from real DB data
-    db = sqlite3.connect(os.path.expanduser("~/.config/nex/nex.db"))
+    db = sqlite3.connect(os.path.expanduser("~/.config/nex/nex_data/nex.db"))
     belief_count = db.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
     insight_count = len(json.loads(
         (Path.home() / ".config/nex/insights.json").read_text()

@@ -1,20 +1,21 @@
 #!/bin/bash
 # nex_launch.sh — hardened launch with clean exit trap
-bash ~/.nex/nex_first_run.sh &
-bash ~/Nex_v4.0/nex_license_check.sh || exit 1
+
 
 # ── ROCm / HIP environment ───────────────────────────────────────────────────
 export HSA_OVERRIDE_GFX_VERSION=10.3.0
-export LD_LIBRARY_PATH=/mnt/steam_library/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/llama.cpp/build-vulkan/bin:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=/media/rr/4TB_DATA/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/llama.cpp/build-vulkan/bin:$LD_LIBRARY_PATH
 export GGML_CUDA_NO_CUDA_GRAPHS=1
 export HSA_ENABLE_SDMA=0
+export PATH=/opt/rocm-6.4.0/bin:$PATH
+export LD_LIBRARY_PATH=/opt/rocm-6.4.0/lib:$LD_LIBRARY_PATH
 export ROCR_VISIBLE_DEVICES=0
 export AMD_SERIALIZE_KERNEL=3
 export AMD_SERIALIZE_COPY=3
 
-BUILD="/mnt/steam_library/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/llama.cpp/build-vulkan/bin"
-MODEL="/mnt/steam_library/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf"
-NEX_DIR="/home/rr/Nex_v4.0"
+BUILD="/media/rr/NEX/llama.cpp/build/bin"
+MODEL="/media/rr/NEX/models/Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf"
+NEX_DIR="/home/rr/Desktop/nex"
 
 # ── Clean any existing processes first ───────────────────────────────────────
 echo "[NEX] Stopping existing processes..."

@@ -1036,7 +1036,7 @@ def main():
             # Dynamic belief count
             try:
                 import sqlite3 as _sysq2
-                _sysdb2 = _sysq2.connect('/home/rr/.config/nex/nex.db')
+                _sysdb2 = _sysq2.connect('/home/rr/.config/nex/nex_data/nex.db')
                 _belief_n2 = _sysdb2.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
                 _sysdb2.close()
             except Exception:
@@ -1262,7 +1262,7 @@ def main():
                 # Sync DB agents into JSON before loading
                 try:
                     import sqlite3 as _sq, json as _js
-                    _db = _sq.connect(os.path.expanduser("~/.config/nex/nex.db"))
+                    _db = _sq.connect(os.path.expanduser("~/.config/nex/nex_data/nex.db"))
                     _rows = _db.execute("SELECT agent_name, relationship_score FROM agents").fetchall()
                     _ap = os.path.expanduser("~/.config/nex/agents.json")
                     _aj = _js.load(open(_ap)) if os.path.exists(_ap) else {}
@@ -1453,7 +1453,7 @@ def main():
                             _ph_r  = str(getattr(getattr(_v80,'gss',None),'phase',type('x',(),{'value':'stable'})()).value) if '_v80' in dir() and _v80 else 'stable'
                             try:
                                 import sqlite3 as _sq3, pathlib as _pl3
-                                with _sq3.connect(str(_pl3.Path.home()/'.config/nex/nex.db'),timeout=3) as _cR:
+                                with _sq3.connect(str(_pl3.Path.home()/'.config/nex/nex_data/nex.db'),timeout=3) as _cR:
                                     _bcR = _cR.execute('SELECT COUNT(*) FROM beliefs').fetchone()[0]
                                     _ctR = _cR.execute("SELECT COUNT(*) FROM beliefs WHERE topic LIKE '%contradiction%'").fetchone()[0]
                             except Exception: _bcR=1000; _ctR=0
@@ -1468,7 +1468,7 @@ def main():
                             _ph_e  = str(getattr(getattr(_v80,'gss',None),'phase',type('x',(),{'value':'stable'})()).value) if '_v80' in dir() and _v80 else 'stable'
                             try:
                                 import sqlite3 as _sq3e, pathlib as _pl3e
-                                with _sq3e.connect(str(_pl3e.Path.home()/'.config/nex/nex.db'),timeout=3) as _cE:
+                                with _sq3e.connect(str(_pl3e.Path.home()/'.config/nex/nex_data/nex.db'),timeout=3) as _cE:
                                     _bcE = _cE.execute('SELECT COUNT(*) FROM beliefs').fetchone()[0]
                                     _ctE = _cE.execute("SELECT COUNT(*) FROM beliefs WHERE topic LIKE '%contradiction%'").fetchone()[0]
                             except Exception: _bcE=1000; _ctE=0
@@ -2428,7 +2428,7 @@ def main():
                                 try:
                                     import sqlite3 as _csq, json as _cj
                                     from datetime import datetime as _cdt
-                                    _cdb = _csq.connect('/home/rr/.config/nex/nex.db')
+                                    _cdb = _csq.connect('/home/rr/.config/nex/nex_data/nex.db')
                                     _cdb.execute("""
                                         CREATE TABLE IF NOT EXISTS tensions (
                                             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2698,7 +2698,7 @@ def main():
                                 try:
                                     import sqlite3 as _sq3
                                     from datetime import datetime as _dt2
-                                    _tdb = _sq3.connect('/home/rr/.config/nex/nex.db')
+                                    _tdb = _sq3.connect('/home/rr/.config/nex/nex_data/nex.db')
                                     _tdb.execute("""
                                         CREATE TABLE IF NOT EXISTS tensions (
                                             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2819,7 +2819,7 @@ def main():
                     # emit agents from DB
                     try:
                         import sqlite3 as _sq3
-                        _db3 = _sq3.connect(os.path.expanduser("~/.config/nex/nex.db"))
+                        _db3 = _sq3.connect(os.path.expanduser("~/.config/nex/nex_data/nex.db"))
                         _arows = _db3.execute("SELECT agent_name, relationship_score FROM agents ORDER BY relationship_score DESC LIMIT 10").fetchall()
                         _rel = lambda s: "colleague" if s>500 else "familiar" if s>100 else "acquaintance"
                         emit_agents([[n, _rel(s), 0] for n,s in _arows])
@@ -2952,7 +2952,7 @@ def main():
                 else:
                     super().do_GET()
         def _http_serve():
-            import os; os.chdir('/home/rr/Nex_v4.0')
+            import os; os.chdir('/home/rr/Desktop/nex')
             _hs.HTTPServer.allow_reuse_address = True
             httpd = _hs.HTTPServer(('localhost', 8766), _GUIHandler)
             httpd.serve_forever()

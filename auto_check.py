@@ -348,7 +348,7 @@ def data_thread():
         # Read beliefs direct from SQLite for accurate confidence stats
         try:
             import sqlite3 as _sq
-            _db = _sq.connect(os.path.expanduser("~/.config/nex/nex.db"))
+            _db = _sq.connect(os.path.expanduser("~/.config/nex/nex_data/nex.db"))
             _rows = _db.execute("SELECT content, confidence, source FROM beliefs ORDER BY confidence DESC LIMIT 50000").fetchall()
             beliefs = [{"content":r[0],"confidence":r[1],"source":r[2]} for r in _rows]
             _db.close()

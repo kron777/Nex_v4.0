@@ -39,7 +39,7 @@ def _log(level, msg):
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
-DB_PATH = Path.home() / ".config/nex/nex.db"
+DB_PATH = Path.home() / ".config/nex/nex_data/nex.db"
 
 # D6
 BELIEF_CAP            = 1500

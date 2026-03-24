@@ -197,7 +197,7 @@ class GapDetector:
         try:
             # Works with Nex's SQLite belief store
             import sqlite3
-            db_path = os.path.expanduser("~/.config/nex/nex.db")
+            db_path = os.path.expanduser("~/.config/nex/nex_data/nex.db")
             if not os.path.exists(db_path):
                 return 0
 
@@ -349,7 +349,7 @@ class DesireEngine:
         """Get her most-believed topics — what she actually thinks about most."""
         try:
             import sqlite3
-            db_path = os.path.expanduser("~/.config/nex/nex.db")
+            db_path = os.path.expanduser("~/.config/nex/nex_data/nex.db")
             conn = sqlite3.connect(db_path)
             rows = conn.execute("""
                 SELECT topic, COUNT(*) as c, AVG(confidence) as conf

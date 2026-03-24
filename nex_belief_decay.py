@@ -30,7 +30,7 @@ CATEGORY_TTL = {
     "eternal":   None,
 }
 
-DB_PATH    = Path("~/.config/nex/nex.db").expanduser()
+DB_PATH    = Path("~/.config/nex/nex_data/nex.db").expanduser()
 CFG_PATH   = Path("~/.config/nex").expanduser()
 GROQ_URL   = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "llama-3.3-70b-versatile"

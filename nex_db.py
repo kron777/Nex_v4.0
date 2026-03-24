@@ -35,7 +35,7 @@ from typing import Optional
 
 logger = logging.getLogger("nex.db")
 
-DB_PATH      = os.path.expanduser("~/.config/nex/nex.db")
+DB_PATH      = os.path.expanduser("~/.config/nex/nex_data/nex.db")
 BACKUP_DIR   = os.path.expanduser("~/.config/nex/backups/")
 
 # Legacy JSON paths — only needed for migration
