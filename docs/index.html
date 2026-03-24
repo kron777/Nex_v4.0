@@ -688,6 +688,114 @@ nav {
   </div>
 </section>
 
+<!-- SESSION LOG -->
+<section id="session">
+  <div class="section-label">SESSION LOG</div>
+  <div class="section-title">24 MARCH 2026</div>
+  <div class="section-desc">What happened under the hood today — GPU fixes, installer, monetization, belief stability.</div>
+
+  <!-- STAT ROW -->
+  <div class="stats-row" style="margin:0 0 48px;">
+    <div class="stat-cell">
+      <div class="stat-num">~40</div>
+      <div class="stat-label">TOKENS / SEC</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-num">33/33</div>
+      <div class="stat-label">GPU LAYERS</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-num">9</div>
+      <div class="stat-label">GIT COMMITS</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-num">17</div>
+      <div class="stat-label">BELIEFS BACKED UP</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-num">50</div>
+      <div class="stat-label">MILESTONE INTERVAL</div>
+    </div>
+  </div>
+
+  <!-- SESSION CARDS -->
+  <div class="features-grid">
+
+    <div class="feature-card">
+      <div class="feature-icon" style="color:var(--green);">GPU · PERFORMANCE</div>
+      <div class="feature-title">FULL GPU OFFLOAD</div>
+      <div class="feature-desc" style="font-family:'Rajdhani',sans-serif;">
+        <code style="color:var(--cyan);font-family:'Share Tech Mono',monospace;font-size:11px;">-ngl 16</code> → <code style="color:var(--green);font-family:'Share Tech Mono',monospace;font-size:11px;">-ngl 99</code><br><br>
+        All 33 Mistral-7B layers now in VRAM. Fixed in <code style="font-size:11px;color:var(--text-mid);">run.py</code>, <code style="font-size:11px;color:var(--text-mid);">.bashrc</code>, and all three NEX repo copies. Power went from 4W → full load. ~40 tok/s achieved.
+      </div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon" style="color:var(--amber);">GAMING · XORG</div>
+      <div class="feature-title">MTGA + CALL TO ARMS</div>
+      <div class="feature-desc" style="font-family:'Rajdhani',sans-serif;">
+        Wayland lacks DRI3/Vulkan — both games crashed at launch. Switched to Xorg. MTGA confirmed on Proton Experimental. Call to Arms confirmed on GE-Proton10-3. Documented in <code style="font-size:11px;color:var(--text-mid);">steam_install.txt</code>.
+      </div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon" style="color:var(--cyan);">INSTALLER · CUSTOMER</div>
+      <div class="feature-title">nex_install.sh</div>
+      <div class="feature-desc" style="font-family:'Rajdhani',sans-serif;">
+        7-step guided CLI installer with NEX ASCII banner. Detects GPU (AMD ROCm / NVIDIA CUDA), collects API keys, builds llama.cpp, creates venv, writes config and alias. Customer install: <code style="font-size:11px;color:var(--cyan);">git clone → ./nex_install.sh → nex</code>
+      </div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon" style="color:var(--purple);">MONETIZATION · LIVE</div>
+      <div class="feature-title">STORE + LANDING</div>
+      <div class="feature-desc" style="font-family:'Rajdhani',sans-serif;">
+        Repo made private. LemonSqueezy store live at ZAR 826.11 — pending account approval. Landing page restored to <code style="font-size:11px;color:var(--cyan);">kron777.github.io/nex-landing/</code> in separate public repo. README rewritten for v4.0 with buy button.
+      </div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon" style="color:var(--green);">BELIEFS · STABILITY</div>
+      <div class="feature-title">AUTO-BACKUP SYSTEM</div>
+      <div class="feature-desc" style="font-family:'Rajdhani',sans-serif;">
+        Core beliefs (confidence ≥ 0.7) committed to repo. Installer restores beliefs on fresh install — no blank slate. Every 50-belief milestone triggers automatic git commit + push. Decay protection confirmed for karma &gt; 500 or confidence &gt; 0.7.
+      </div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon" style="color:var(--amber);">PENDING · NEXT</div>
+      <div class="feature-title">STILL IN PROGRESS</div>
+      <div class="feature-desc" style="font-family:'Rajdhani',sans-serif;">
+        LemonSqueezy approval (~24hr). "Generic response — no network knowledge applied" failures — <code style="font-size:11px;color:var(--text-mid);">graph_retrieve</code> exception silently wiping belief context (found, not fixed). NEX IQ at 51–54% AWARE — belief usage 8%.
+      </div>
+    </div>
+
+  </div>
+
+  <!-- COMMIT TABLE -->
+  <div class="terminal" style="margin-top:40px;">
+    <div class="terminal-bar">
+      <div class="t-dot r"></div>
+      <div class="t-dot y"></div>
+      <div class="t-dot g"></div>
+      <div class="terminal-title">git log --oneline — kron777/Nex_v4.0</div>
+    </div>
+    <div class="terminal-body" style="padding:16px 20px;">
+      <div class="t-line"><span style="color:var(--cyan);min-width:80px;display:inline-block;">2acbed1</span><span style="color:var(--text-mid);font-family:'Rajdhani',sans-serif;font-size:14px;">feat: auto-backup beliefs at every 50-belief milestone</span></div>
+      <div class="t-line"><span style="color:var(--cyan);min-width:80px;display:inline-block;">4d67e72</span><span style="color:var(--text-mid);font-family:'Rajdhani',sans-serif;font-size:14px;">feat: restore core beliefs on install</span></div>
+      <div class="t-line"><span style="color:var(--cyan);min-width:80px;display:inline-block;">a58910f</span><span style="color:var(--text-mid);font-family:'Rajdhani',sans-serif;font-size:14px;">backup: core beliefs + gitignore exception</span></div>
+      <div class="t-line"><span style="color:var(--cyan);min-width:80px;display:inline-block;">673a8b2</span><span style="color:var(--text-mid);font-family:'Rajdhani',sans-serif;font-size:14px;">docs: update landing page URL to nex-landing repo</span></div>
+      <div class="t-line"><span style="color:var(--cyan);min-width:80px;display:inline-block;">85278df</span><span style="color:var(--text-mid);font-family:'Rajdhani',sans-serif;font-size:14px;">docs: add LemonSqueezy buy button + landing page</span></div>
+      <div class="t-line"><span style="color:var(--cyan);min-width:80px;display:inline-block;">c2c94a8</span><span style="color:var(--text-mid);font-family:'Rajdhani',sans-serif;font-size:14px;">fix: auto-install tmux, gnome-terminal, wget, curl</span></div>
+      <div class="t-line"><span style="color:var(--cyan);min-width:80px;display:inline-block;">11fc58b</span><span style="color:var(--text-mid);font-family:'Rajdhani',sans-serif;font-size:14px;">docs: rewrite README for v4.0 customer install</span></div>
+      <div class="t-line"><span style="color:var(--cyan);min-width:80px;display:inline-block;">1aeb9f1</span><span style="color:var(--text-mid);font-family:'Rajdhani',sans-serif;font-size:14px;">feat: guided CLI installer (nex_install.sh)</span></div>
+      <div class="t-line"><span style="color:var(--cyan);min-width:80px;display:inline-block;">d44708f</span><span style="color:var(--text-mid);font-family:'Rajdhani',sans-serif;font-size:14px;">fix: ngl 99 full GPU offload — Desktop run.py</span></div>
+    </div>
+  </div>
+
+</section>
+
+
 <!-- PRICING -->
 <section id="pricing">
   <div class="section-label">PRICING</div>
