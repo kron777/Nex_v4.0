@@ -1,6 +1,8 @@
 from pathlib import Path
 """
 NEX :: COGNITION ENGI
+# [FIX_PATCH_COG_APPLIED] — 2026-03-25 19:14
+
 # [FINAL_PATCH_COGNITION_APPLIED] — 2026-03-25 19:08
 NE v1.0
 Level 1: Belief Synthesis — compress raw beliefs into distilled insights
@@ -325,9 +327,17 @@ def run_synthesis(min_beliefs=15, llm_fn=None, drive_weights=None):
 
     existing_insights = load_json(INSIGHTS_PATH, [])
 
-    # Drive weights — topics NEX is currently driven to understand get priority
-    _drive_topic_weights = drive_weights or {}
-    # Also pull live drives file if no weights passed in
+    # Drive weights — check hint attr first (injected from run.py), then param, then file
+    _drive_topic_weights = (
+        getattr(run_synthesis, '_drive_weights_hint', None)
+        or drive_weights
+        or {}
+    )
+    # Clear hint after consuming it
+    try:
+        run_synthesis._drive_weights_hint = {}
+    except Exception:
+        pass
     if not _drive_topic_weights:
         try:
             import json as _dwj
@@ -367,9 +377,12 @@ def run_synthesis(min_beliefs=15, llm_fn=None, drive_weights=None):
     # resolve → more synthesis to resolve contradictions
     # explore → normal
     # optimize → fewer calls, focus on quality
-    _LLM_CAP = {"resolve": 80, "explore": 60, "optimize": 40}.get(
-        getattr(run_synthesis, '_cog_mode_hint', 'explore'), 60
-    )
+    _active_cog_mode = getattr(run_synthesis, '_cog_mode_hint', 'explore')
+    _LLM_CAP = {"resolve": 80, "explore": 60, "optimize": 40}.get(_active_cog_mode, 60)
+    try:
+        run_synthesis._cog_mode_hint = 'explore'  # reset after consuming
+    except Exception:
+        pass
     for name, cluster in _sorted_clusters:
         cluster_size = len(cluster["beliefs"])
         # Re-synthesize if belief count grew by >10% since last insight

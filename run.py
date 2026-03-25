@@ -1,6 +1,8 @@
 import re
 #!/usr/bin/env python3
 # [INTENT_PATCH_A
+# [FIX_PATCH_APPLIED] — 2026-03-25 19:14
+
 # [FINAL_PATCH_RUN_APPLIED] — 2026-03-25 19:08
 PPLIED] — 2026-03-25 19:01
 from nex_upgrades.nex_v500 import get_v500
@@ -275,6 +277,17 @@ try:
 except Exception as _se:
     print(f"  [SENTIENCE] failed to load: {_se}")
     _affect = _gw = _cm = _tn = None
+# ── Signal filter — importance gate + source scorer ─────────────────────────
+try:
+    from nex_signal_filter import get_scorer as _get_scorer, get_gate as _get_gate
+    _signal_scorer = _get_scorer()
+    _signal_gate   = _get_gate()
+    print("  [SIGNAL] importance gate + source scorer — loaded")
+except Exception as _sfe:
+    print(f"  [SIGNAL] failed to load: {_sfe}")
+    _signal_scorer = None
+    _signal_gate   = None
+
 # ── Intent layer — drives + desire engine ────────────────────────────────────
 try:
     from nex_drives import (
@@ -1553,7 +1566,29 @@ def main():
                             _content_str = belief.get("content","")
                             _is_spam = any(re.search(_pat, _content_str, re.IGNORECASE) for _pat in _spam_patterns)
                             if not _is_spam:
-                                learner.belief_field.append(belief); nex_log("belief", f"Stored belief from @{belief.get("author","?")} [{int(belief.get("confidence",0)*100)}%]: {belief.get("content","")[:80]}")
+                                # ── Importance gate ──────────────────────────
+                                _item_important = True
+                                if _signal_gate is not None:
+                                    try:
+                                        _src_mult = _signal_scorer.get_multiplier(
+                                            belief.get("source", "moltbook")
+                                        ) if _signal_scorer else 1.0
+                                        _item_score = _signal_gate.score(
+                                            p.get("title", ""),
+                                            belief.get("content", ""),
+                                            belief.get("source", "moltbook"),
+                                            _src_mult,
+                                        )
+                                        _item_important = _item_score >= _signal_gate.MIN_IMPORTANCE
+                                        if not _item_important:
+                                            nex_log("signal", f"[SignalFilter] SUPPRESSED: score={_item_score:.2f} @{belief.get('author','?')}")
+                                    except Exception:
+                                        pass
+                                if not _item_important:
+                                    learner.known_posts.add(pid)
+                                    continue
+                                # ─────────────────────────────────────────────
+                                learner.belief_field.append(belief); nex_log("belief", f"Stored belief from @{belief.get('author','?')} [{int(belief.get('confidence',0)*100)}%]: {belief.get('content','')[:80]}")
                                 # ── affect update from absorbed content ──
                                 if _affect is not None:
                                     try:
@@ -2084,6 +2119,18 @@ def main():
                                                 from belief_store import reinforce_belief as _rb
                                                 for _bu in (relevant or [])[:3]:
                                                     _rb(_bu)
+                                            # ── Boost energy for beliefs used in this reply ──
+                                            try:
+                                                from nex_belief_survival import boost_belief_energy as _bbe
+                                                for _bu_e in (relevant or [])[:3]:
+                                                    if isinstance(_bu_e, str) and len(_bu_e) > 10:
+                                                        _bbe(_bu_e)
+                                                if _signal_scorer is not None:
+                                                    _signal_scorer.record_signal(
+                                                        belief.get("source", "moltbook") if 'belief' in dir() else "moltbook"
+                                                    )
+                                            except Exception:
+                                                pass
                                             # ── Fulfill desire if reply was on-topic ──
                                             if _desire_engine is not None and _dominant_desire:
                                                 try:
@@ -2507,24 +2554,30 @@ def main():
                         # ── 6. COGNITION ─────────────────────────────────
                         try:
                             if _run_cognition_cycle:
-                                # Pass drive weights so synthesis prioritises driven topics
-                            _synth_drive_weights = {}
-                            try:
-                                if _drives is not None:
-                                    _synth_drive_weights = _get_drive_weights(_drives)
-                                if _dominant_desire is not None:
-                                    _dd_domain = _dominant_desire.get("domain", "")
-                                    if _dd_domain:
-                                        _synth_drive_weights[_dd_domain] = max(
-                                            _synth_drive_weights.get(_dd_domain, 0), 0.95)
-                            except Exception:
-                                pass
-                            _run_cognition_cycle(
-                                client, learner, conversations, cycle,
-                                llm_fn=_llm,
-                                drive_weights=_synth_drive_weights,
-                                cog_mode=_cog_mode,
-                            )
+                                # Build drive weights to pass into synthesis
+                                _synth_drive_weights = {}
+                                try:
+                                    if _drives is not None:
+                                        _synth_drive_weights = _get_drive_weights(_drives)
+                                    if _dominant_desire is not None:
+                                        _dd_domain = _dominant_desire.get("domain", "")
+                                        if _dd_domain:
+                                            _synth_drive_weights[_dd_domain] = max(
+                                                _synth_drive_weights.get(_dd_domain, 0), 0.95)
+                                except Exception:
+                                    pass
+                                # Inject drive weights via module-level hint
+                                # (run_cognition_cycle doesn't accept kwargs — use hint attr)
+                                try:
+                                    import nex.cognition as _cog_mod
+                                    _cog_mod.run_synthesis._drive_weights_hint = _synth_drive_weights
+                                    _cog_mod.run_synthesis._cog_mode_hint = _cog_mode
+                                except Exception:
+                                    pass
+                                _run_cognition_cycle(
+                                    client, learner, conversations, cycle,
+                                    llm_fn=_llm,
+                                )
                             try:
                                 _ins = _load("insights.json") or []
                                 _top = sorted(_ins, key=lambda x: x.get("confidence",0)*min(x.get("belief_count",0)/5,1), reverse=True)[:12]
