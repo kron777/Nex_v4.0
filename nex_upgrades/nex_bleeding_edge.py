@@ -384,7 +384,7 @@ SELF_DEBUG_PLAYBOOK = {
     "reflection_stagnation": [
         "Reset cognition throttle (U4) — reduce max_reflections",
         "Inject curiosity drive signal",
-        "Check LLM endpoint: curl localhost:11434/v1/chat/completions",
+        "Check LLM endpoint: curl localhost:8080/v1/chat/completions",
     ],
     "over_posting": [
         "Increase GovernanceLayer max_risk threshold",

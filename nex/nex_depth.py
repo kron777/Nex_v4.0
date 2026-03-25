@@ -36,7 +36,7 @@ logger = logging.getLogger("nex.depth")
 
 DEPTH_STATE_PATH        = os.path.expanduser("~/.config/nex/belief_depth.json")
 DB_PATH                 = os.path.expanduser("~/.config/nex/nex.db")
-LLM_URL                 = "http://localhost:11434/api/generate"
+LLM_URL                 = "http://localhost:8080/v1/chat/completions"
 
 CLUSTER_SIMILARITY_THRESHOLD = 0.35   # word overlap ratio to group beliefs
 MIN_CLUSTER_SIZE             = 3      # need at least this many to form a position
