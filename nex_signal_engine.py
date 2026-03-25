@@ -134,11 +134,20 @@ def beliefs_to_signals(beliefs: list[dict]) -> list[dict]:
             elif "dream" in tags:
                 tension = 0.6
 
-        direction = "ACT"
-        if "antithesis" in (b.get("content") or "").lower():
-            direction = "REVIEW"
+        # Resolve direction — eliminates TYPE:NONE permanently
+        content_lower = (b.get("content") or "").lower()
+        if "antithesis" in content_lower or "fade" in content_lower:
+            direction = "FADE"
+        elif conf > 0.8:
+            direction = "FOLLOW"
+        elif conf > 0.6 and tension > 0.5:
+            direction = "FOLLOW"
+        elif tension > 0.7:
+            direction = "FADE"
         elif conf < 0.4:
             direction = "SKIP"
+        else:
+            direction = "FOLLOW"
 
         signals.append({
             "id":         b.get("id", 0),

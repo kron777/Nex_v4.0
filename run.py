@@ -1199,6 +1199,14 @@ def main():
             except Exception as _se_init_e:
                 print(f'  [SE] init failed: {_se_init_e}')
                 _se = None
+            # _ee_wire_applied
+            try:
+                from nex_execution_engine import get_execution_engine as _get_ee
+                _ee = _get_ee()
+                _ee.init()
+            except Exception as _ee_init_e:
+                print(f'  [EE] init failed: {_ee_init_e}')
+                _ee = None
             time.sleep(10)
             try:
                 nex_log("phase", "▶ _auto_learn_background starting")
@@ -3074,6 +3082,13 @@ def main():
                                 _se.tick(cycle=cycle, beliefs=_se_beliefs, log_fn=nex_log)
                         except Exception as _sete:
                             print(f'  [SE] tick error: {_sete}')
+                        # ── EXECUTION ENGINE TICK ────────────────────────
+                        try:
+                            if '_ee' in dir() and _ee is not None:
+                                _ee_signals = _se.get_top_signals() if '_se' in dir() and _se else []
+                                _ee.tick(cycle=cycle, signals=_ee_signals, log_fn=nex_log)
+                        except Exception as _eete:
+                            print(f'  [EE] tick error: {_eete}')
                         # ── 8. SELF-TRAINING WATERMARK CHECK ─────────────
                         try:
                             from nex_self_trainer import check_training_watermark
