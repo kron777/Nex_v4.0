@@ -99,7 +99,6 @@ def run_energy_cycle(verbose=False):
             WHERE {kill_condition}
             LIMIT 50
         """, (ENERGY_KILL_THRESHOLD,)).fetchall()
-MIN_BELIEF_FLOOR      = 500    # never kill beliefs if total below this
 
         if dying:
             ids = [r["id"] for r in dying]
@@ -177,7 +176,6 @@ def get_energy_stats():
                 SUM(CASE WHEN energy >= ? THEN 1 ELSE 0 END) as thriving
             FROM beliefs
         """, (ENERGY_KILL_THRESHOLD * 2, ENERGY_AMPLIFY_THRESHOLD)).fetchone()
-MIN_BELIEF_FLOOR      = 500    # never kill beliefs if total below this
         return dict(row) if row else {}
     finally:
         conn.close()

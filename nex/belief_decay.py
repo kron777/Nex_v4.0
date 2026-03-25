@@ -1588,7 +1588,16 @@ def generate_cognitive_context(query=None):
     synthesized insights and reflections. Drop-in replacement
     for belief_bridge.generate_belief_context.
     """
-    beliefs = load_json(BELIEFS_PATH, [])
+    # PATCH 2: load from SQLite DB (has full 9k+ belief set), JSON as fallback
+    try:
+        import sys as _sys2, os as _os2
+        _nd = _os2.path.join(_os2.path.dirname(__file__), "..")
+        if _nd not in _sys2.path:
+            _sys2.path.insert(0, _nd)
+        from nex.belief_store import query_beliefs as _qb
+        beliefs = _qb(min_confidence=0.0, limit=500) or load_json(BELIEFS_PATH, [])
+    except Exception:
+        beliefs = load_json(BELIEFS_PATH, [])
     insights = load_json(INSIGHTS_PATH, [])
     reflections = load_json(REFLECTIONS_PATH, [])
     agents = load_json(AGENTS_PATH, {})
@@ -1808,3 +1817,52 @@ def run_meta_reflection(cycle: int, llm_fn) -> str:
 
     print(f"  [META-REFLECT] cycle {cycle}: {diagnosis[:120]}...")
     return diagnosis
+
+
+# ═══════════════════════════════════════════════════════════════
+#  BELIEF DECAY RUNNER  [PATCH 1]
+# ═══════════════════════════════════════════════════════════════
+
+def run_belief_decay(cycle_num, interval=10):
+    """
+    Called every `interval` cycles from run_cognition_cycle().
+    1. decay_stale_beliefs() — weakens unreferenced beliefs
+    2. run_energy_cycle()    — amplifies survivors, kills dying beliefs
+    Returns list of log tuples for the cognition log display.
+    """
+    if cycle_num % interval != 0:
+        return []
+    logs = []
+    try:
+        import sys as _sys, os as _os
+        _nex_dir = _os.path.join(_os.path.dirname(__file__), "..")
+        if _nex_dir not in _sys.path:
+            _sys.path.insert(0, _nex_dir)
+        from nex.belief_store import decay_stale_beliefs
+        decayed = decay_stale_beliefs(
+            days_inactive=14, decay_amount=0.04, min_conf=0.10
+        )
+        if decayed and decayed > 0:
+            logs.append(("decay", f"Decayed {decayed} stale beliefs (>14d inactive)"))
+            _dbg("decay", f"cycle {cycle_num}: {decayed} beliefs decayed")
+    except Exception as _e:
+        logs.append(("warn", f"Belief decay error: {_e}"))
+        _dbg("decay", f"cycle {cycle_num}: decay error — {_e}")
+
+    # Wire in energy survival system — amplifies used beliefs, kills dying ones
+    try:
+        import sys as _sys2, os as _os2
+        _nex_root = _os2.path.expanduser("~/Desktop/nex")
+        if _nex_root not in _sys2.path:
+            _sys2.path.insert(0, _nex_root)
+        from nex_belief_survival import run_energy_cycle
+        energy_result = run_energy_cycle(verbose=False)
+        killed   = energy_result.get("killed", 0)
+        amplified = energy_result.get("amplified", 0)
+        if killed > 0:
+            logs.append(("decay", f"Energy: {amplified} amplified, {killed} killed"))
+            _dbg("energy", f"cycle {cycle_num}: amplified={amplified} killed={killed}")
+    except Exception as _ee:
+        _dbg("energy", f"cycle {cycle_num}: energy cycle error — {_ee}")
+
+    return logs

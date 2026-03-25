@@ -164,7 +164,7 @@ def llama_ok():
     # Check local llama.cpp first
     try:
         import urllib.request
-        urllib.request.urlopen("http://localhost:11434/api/tags", timeout=1)
+        urllib.request.urlopen("http://localhost:8080/health", timeout=1)
         return True
     except: pass
     # Check Groq cloud

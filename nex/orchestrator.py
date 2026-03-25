@@ -254,7 +254,7 @@ class Orchestrator:
                 "stream": False
             }).encode()
             req = urllib.request.Request(
-                "http://localhost:11434/v1/chat/completions",
+                "http://localhost:8080/v1/chat/completions",
                 data=payload,
                 headers={"Content-Type": "application/json"},
                 method="POST"

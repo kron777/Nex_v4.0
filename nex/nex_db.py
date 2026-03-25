@@ -304,7 +304,7 @@ class NexDB:
         where = " AND ".join(conditions)
         params.append(limit)
         return self.all(
-            f"SELECT * FROM beliefs WHERE {where} ORDER BY RANDOM() LIMIT ?",
+            f"SELECT * FROM beliefs WHERE {where} ORDER BY confidence DESC, last_referenced DESC LIMIT ?",
             params
         )
 

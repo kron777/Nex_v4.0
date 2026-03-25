@@ -12,6 +12,15 @@ from datetime import datetime
 from nex.cognition import generate_deep_comment, build_agent_profiles, load_json, INSIGHTS_PATH, AGENT_PROFILES_PATH
 from nex.nexscript import encode as nexscript_encode, is_nexscript, decode as nexscript_decode, nexscript_to_belief
 
+# FIX B: belief_store import for proper DB ingest
+try:
+    from nex.belief_store import add_belief as _bs_add_belief
+    _BS_AVAILABLE = True
+except Exception:
+    _BS_AVAILABLE = False
+    def _bs_add_belief(*a, **kw): return None
+
+
 
 # ── Colors ──
 
@@ -649,6 +658,20 @@ def auto_learn_mode(client, interval=60, verbose=True):
 
                 learner.belief_field.append(belief)
                 learner.known_posts.add(pid)
+                # FIX B: sync to SQLite so DB stays current with in-memory field
+                if _BS_AVAILABLE:
+                    try:
+                        _topic = tpcs[0] if tpcs else None
+                        _bs_add_belief(
+                            belief["content"],
+                            confidence=conf,
+                            source="moltbook",
+                            author=author,
+                            topic=_topic,
+                            tags=belief.get("tags"),
+                        )
+                    except Exception:
+                        pass
 
                 if score > 500 or a_karma > 1000:
                     learner.agent_karma[author] = max(

@@ -1806,7 +1806,16 @@ def generate_cognitive_context(query=None):
     synthesized insights and reflections. Drop-in replacement
     for belief_bridge.generate_belief_context.
     """
-    beliefs = load_json(BELIEFS_PATH, [])
+    # PATCH 2: load from SQLite DB (has full 9k+ belief set), JSON as fallback
+    try:
+        import sys as _sys2, os as _os2
+        _nd = _os2.path.join(_os2.path.dirname(__file__), "..")
+        if _nd not in _sys2.path:
+            _sys2.path.insert(0, _nd)
+        from nex.belief_store import query_beliefs as _qb
+        beliefs = _qb(min_confidence=0.0, limit=500) or load_json(BELIEFS_PATH, [])
+    except Exception:
+        beliefs = load_json(BELIEFS_PATH, [])
     insights = load_json(INSIGHTS_PATH, [])
     reflections = load_json(REFLECTIONS_PATH, [])
     agents = load_json(AGENTS_PATH, {})
@@ -1983,11 +1992,27 @@ def generate_cognitive_context(query=None):
         for c in conversations[-3:]:
             lines.append(f"  with @{c.get('post_author', '?')} on '{c.get('post_title', '?')[:40]}'")
 
-    # ── Query-relevant knowledge ──
+    # ── Query-relevant knowledge — FIX_C_ATTENTION ──
     if query:
         query_words = set(extract_words(query, 5))
 
-        # Check insights first (synthesized > raw)
+        # BeliefGraph reasoning chain — follows support/explains edges
+        try:
+            if _belief_graph is not None and query:
+                _seed = [b for b in beliefs[:50]
+                         if len(query_words & set(extract_words(b.get("content",""), 5))) >= 1]
+                _chain = _belief_graph.reasoning_chain(query, _seed[:5], depth=2)
+                if _chain:
+                    lines.append("")
+                    lines.append("REASONING CHAIN (graph-linked beliefs):")
+                    for _cb in _chain[:4]:
+                        _ca = _cb.get("author","?")
+                        _cc = _cb.get("content","")[:90].replace("\n"," ")
+                        lines.append(f"  → @{_ca}: {_cc}")
+        except Exception:
+            pass
+
+        # Synthesized insights
         rel_insights = [ins for ins in insights
                        if query_words & set(ins.get("themes", []))]
         if rel_insights:
@@ -1996,14 +2021,22 @@ def generate_cognitive_context(query=None):
             for ins in rel_insights[:3]:
                 lines.append(f"  Insight [{ins.get('topic')}]: {ins.get('summary', '')[:100]}")
 
-        # Then raw beliefs
-        rel_beliefs = [b for b in beliefs
-                      if len(query_words & set(extract_words(b.get("content", ""), 5))) >= 2]
-        if rel_beliefs and not rel_insights:
+        # Attention-scored beliefs for this query
+        try:
+            if _ag is not None:
+                _qrel = _ag.top_n(beliefs, n=5, query=query)
+            else:
+                _qrel = [b for b in beliefs
+                         if len(query_words & set(extract_words(b.get("content",""), 5))) >= 2][:5]
+        except Exception:
+            _qrel = [b for b in beliefs
+                     if len(query_words & set(extract_words(b.get("content",""), 5))) >= 2][:5]
+
+        if _qrel and not rel_insights:
             lines.append("")
             lines.append(f"RELEVANT BELIEFS:")
-            for b in rel_beliefs[:3]:
-                lines.append(f"  @{b.get('author', '?')}: {b.get('content', '')[:80]}")
+            for b in _qrel:
+                lines.append(f"  @{b.get('author','?')}: {b.get('content','')[:80]}")
 
     lines.append("")
     lines.append("Draw on this knowledge naturally. Reference agents by name. "

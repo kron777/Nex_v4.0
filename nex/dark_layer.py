@@ -79,7 +79,7 @@ def _dark_llm(prompt):
     try:
         import requests
         r = requests.post(
-            "http://localhost:11434/v1/chat/completions",
+            "http://localhost:8080/v1/chat/completions",
             json={
                 "model": "mistral-abliterated",
                 "messages": [{"role": "user", "content": prompt}],
