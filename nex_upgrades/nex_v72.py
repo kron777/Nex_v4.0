@@ -142,7 +142,7 @@ class ForcedTensionResolution:
                 # Force resolution
                 with _db() as c:
                     beliefs = c.execute(
-                        "SELECT id, confidence FROM beliefs WHERE topic=? ORDER BY confidence",
+                        "SELECT id, confidence FROM beliefs WHERE topic=? AND human_validated=0 ORDER BY confidence",
                         (topic,)
                     ).fetchall()
                 if len(beliefs) < 2:
@@ -204,9 +204,10 @@ class DynamicBeliefCap:
                 c.execute("""
                     DELETE FROM beliefs WHERE id IN (
                         SELECT id FROM beliefs
-                        WHERE locked=0 AND topic NOT IN
+                        WHERE human_validated=0 AND topic NOT IN
                             ('truth_seeking','contradiction_resolution','uncertainty_honesty')
-                        ORDER BY (confidence*0.6 + reinforce_count*0.01) ASC
+                          AND (origin NOT IN ('identity_core','dream_inversion') OR origin IS NULL)
+                        ORDER BY confidence ASC
                         LIMIT ?
                     )
                 """, (excess,))
@@ -243,27 +244,24 @@ class ClusterLevelPruning:
             with _db() as c:
                 rows = c.execute("""
                     SELECT topic, COUNT(*) n,
-                           AVG(confidence) ac,
-                           AVG(reinforce_count) arc,
-                           AVG(last_used_cycle) alc
+                           AVG(confidence) ac
                     FROM beliefs
-                    WHERE locked=0
+                    WHERE human_validated = 0
                       AND topic NOT IN
                         ('truth_seeking','contradiction_resolution','uncertainty_honesty')
                     GROUP BY topic
-                    HAVING n >= ? AND ac < ? AND arc < ?
+                    HAVING n >= ? AND ac < ?
                     ORDER BY ac ASC LIMIT 5
-                """, (self.MIN_CLUSTER, self.MIN_AVG_CONF, self.MIN_AVG_RC)).fetchall()
+                """, (self.MIN_CLUSTER, self.MIN_AVG_CONF)).fetchall()
 
             for r in rows:
                 with _db() as c:
-                    c.execute("DELETE FROM beliefs WHERE topic=? AND locked=0",
+                    c.execute("DELETE FROM beliefs WHERE topic=? AND human_validated=0",
                               (r["topic"],))
-                    # commit handled by _db() context manager
                 self.clusters_pruned += 1
                 self.beliefs_pruned  += r["n"]
                 _log(f"[CLP] Pruned cluster '{r['topic']}' "
-                     f"n={r['n']} ac={r['ac']:.2f} arc={r['arc']:.1f}")
+                     f"n={r['n']} ac={r['ac']:.2f}")
         except Exception as e:
             _log(f"[CLP] error: {e}")
 
@@ -293,6 +291,7 @@ class MultiPassValidation:
                 rows = c.execute("""
                     SELECT id, topic, content, confidence
                     FROM beliefs WHERE confidence BETWEEN 0.20 AND 0.80
+                      AND human_validated = 0
                     ORDER BY RANDOM() LIMIT 20
                 """).fetchall()
 
@@ -340,15 +339,14 @@ class BeliefEntropyReduction:
         self.last_run = time.time()
         try:
             with _db() as c:
-                # Isolated: no edges, low conf, low reinforce, never used
+                # Isolated: no edges, low conf, never referenced
                 rows = c.execute("""
                     SELECT b.id FROM beliefs b
-                    LEFT JOIN belief_edges e ON b.id=e.source_id OR b.id=e.target_id
-                    WHERE e.source_id IS NULL
+                    LEFT JOIN belief_links e ON b.id=e.parent_id OR b.id=e.child_id
+                    WHERE e.parent_id IS NULL
                       AND b.confidence < 0.30
-                      AND b.reinforce_count < 2
-                      AND b.last_used_cycle = 0
-                      AND b.locked = 0
+                      AND b.human_validated = 0
+                      AND (b.origin NOT IN ('identity_core','dream_inversion') OR b.origin IS NULL)
                       AND b.topic NOT IN
                         ('truth_seeking','contradiction_resolution','uncertainty_honesty')
                     LIMIT ?
@@ -436,7 +434,7 @@ class ReflectionActionBinding:
 
                 # Get the newest reflections
                 rows = c.execute("""
-                    SELECT content FROM reflections
+                    SELECT nex_response as content FROM reflections
                     ORDER BY timestamp DESC LIMIT ?
                 """, (min(new, 10),)).fetchall()
 
@@ -494,13 +492,28 @@ class TemporalIntelligenceV2:
         try:
             with _db() as c:
                 rows = c.execute("""
-                    SELECT id, confidence, reinforce_count, outcome_count, last_used_cycle
-                    FROM beliefs WHERE locked=0 LIMIT 200
+                    SELECT id, confidence, decay_score,
+                           timestamp, last_referenced
+                    FROM beliefs WHERE human_validated=0 LIMIT 200
                 """).fetchall()
 
             for r in rows:
-                cls  = self._classify(r["reinforce_count"], r["outcome_count"],
-                                       r["last_used_cycle"])
+                # Approximate classification from decay_score + age
+                try:
+                    age_d = 0
+                    ref = r["last_referenced"] or r["timestamp"]
+                    if ref:
+                        from datetime import datetime as _dtt
+                        age_d = (datetime.now() - _dtt.fromisoformat(ref.replace("Z",""))).days
+                except Exception:
+                    age_d = 0
+                ds = r["decay_score"] or 0
+                if ds >= 5 and age_d < 7:
+                    cls = "persistent"
+                elif ds >= 3 and age_d > 30:
+                    cls = "short_lived"
+                else:
+                    cls = "cyclical"
                 self._classified[r["id"]] = cls
                 decay = self.DECAY[cls]
                 with _db() as c:
@@ -508,7 +521,6 @@ class TemporalIntelligenceV2:
                         "UPDATE beliefs SET confidence=MAX(0.05,confidence-?) WHERE id=?",
                         (decay, r["id"])
                     )
-                    # commit handled by _db() context manager
                 self.classified += 1
         except Exception as e:
             _log(f"[TIv2] error: {e}")
@@ -544,7 +556,7 @@ class IdentityGravity:
         try:
             with _db() as c:
                 rows = c.execute(
-                    "SELECT id, content, confidence FROM beliefs WHERE locked=0 LIMIT 300"
+                    "SELECT id, content, confidence FROM beliefs WHERE human_validated=0 LIMIT 300"
                 ).fetchall()
 
             for r in rows:
@@ -688,13 +700,16 @@ class MemoryCompressionV2:
             with _db() as c:
                 rows = c.execute("""
                     SELECT topic, COUNT(*) n, AVG(confidence) ac,
-                           MAX(last_used_cycle) mlc,
+                           MAX(last_referenced) mlr,
                            GROUP_CONCAT(content, ' | ') summary
                     FROM beliefs
-                    WHERE last_used_cycle <= ? AND locked=0
+                    WHERE human_validated=0
+                      AND (last_referenced IS NULL OR
+                           last_referenced < datetime('now', '-30 days'))
+                      AND (origin NOT IN ('identity_core','dream_inversion') OR origin IS NULL)
                     GROUP BY topic HAVING n >= ?
-                    ORDER BY mlc ASC LIMIT 5
-                """, (self.COLD_CYCLE, self.MIN_CLUSTER)).fetchall()
+                    ORDER BY mlr ASC NULLS FIRST LIMIT 5
+                """, (self.MIN_CLUSTER,)).fetchall()
 
             for r in rows:
                 summary = (r["summary"] or "")[:400]

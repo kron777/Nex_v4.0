@@ -29,6 +29,8 @@ ESCALATE_AFTER = 20   # cycles before tension gets dream priority
 PARADOX_AFTER  = 50   # cycles before tension is marked as paradox
 SPLIT_AFTER    = 80   # cycles before tension is split into two beliefs
 MAX_DREAM_QUEUE = 25  # max items in dream priority queue
+MAX_NEW_TENSIONS_PER_CYCLE = 5   # max new tension inserts per cycle
+
 
 
 def _ensure_tension_schema():
@@ -98,6 +100,23 @@ def run_pressure_cycle(verbose=False):
     split_actions = []
 
     try:
+        # Cap: auto-resolve excess tensions above hard limit before incrementing
+        _q_now = conn.execute(
+            "SELECT COUNT(*) FROM tensions WHERE resolved_at IS NULL"
+        ).fetchone()[0]
+        if _q_now > 60:
+            _excess = _q_now - 60
+            conn.execute("""
+                UPDATE tensions SET resolved_at = datetime('now')
+                WHERE id IN (
+                    SELECT id FROM tensions
+                    WHERE resolved_at IS NULL AND escalation_level = 0
+                    ORDER BY weight ASC, rowid ASC
+                    LIMIT ?
+                )
+            """, (_excess,))
+            if verbose:
+                print(f"  [TensionPressure] auto-trimmed {_excess} excess tensions")
         # Increment cycle_count for all unresolved tensions
         conn.execute("""
             UPDATE tensions
