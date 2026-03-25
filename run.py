@@ -1647,7 +1647,7 @@ def main():
                                     emit_reflection(tags=["reply",author[:12]], text=comment_text[:120], sub=f"post: {title[:50]}", align=0.5)
                                     try:
                                         if _reflect_on_convo:
-                                            _reflect_on_convo(title + " " + body, comment_text, beliefs_used=relevant[:3])
+                                            _reflect_on_convo(title + " " + body, comment_text, beliefs_used=relevant[:3] if relevant else [])
                                     except Exception as _se: print(f"  [score error] {_se}")
                                     # Reinforce beliefs that were actually used
                                     try:
