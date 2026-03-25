@@ -72,3 +72,4 @@ nex_sales_ledger.jsonl
 *.env
 .env
 !nex_config_backup/beliefs.json
+.patch_backup_*/
