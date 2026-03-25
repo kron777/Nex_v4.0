@@ -1183,6 +1183,27 @@ def run_cognition_cycle(client, learner, conversations, cycle_num, llm_fn=None):
     _dbg("cognition", f"cycle {cycle_num} — beliefs={len(beliefs)} insights={len(insights)}")
     if cycle_num % 2 == 0:
         insights, new_count = run_synthesis(min_beliefs=10, llm_fn=llm_fn)  # lowered from 15
+
+    # ── Prune stale insights every 20 cycles — keep top 300 by quality ──────
+    if cycle_num % 20 == 0:
+        try:
+            import sqlite3 as _sq3
+            _idb = _sq3.connect(DB_PATH, timeout=10)
+            _idb.execute("PRAGMA journal_mode=WAL")
+            _prune_sql = (
+                "DELETE FROM insights WHERE id NOT IN ("
+                "SELECT id FROM insights "
+                "ORDER BY (confidence * MAX(COALESCE(belief_count,1),1)) DESC "
+                "LIMIT 300)"
+            )
+            _idb.execute(_prune_sql)
+            _pruned = _idb.execute("SELECT changes()").fetchone()[0]
+            _idb.commit()
+            _idb.close()
+            if _pruned:
+                logs.append(("synth", f"Pruned {_pruned} stale insights — kept top 300"))
+        except Exception as _pe:
+            pass
         if new_count > 0:
             logs.append(("synth", f"Synthesized {new_count} new insights from {len(beliefs)} beliefs"))
             for ins in insights[-new_count:]:
