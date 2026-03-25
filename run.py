@@ -1485,7 +1485,7 @@ def main():
                             # Pull beliefs relevant to this post (semantic)
                             try:
                                 _qb = _query_beliefs  # hoisted
-                                all_beliefs = _qb(min_confidence=0.4, limit=2000)
+                                all_beliefs = _qb(min_confidence=0.25, limit=2000)
                             except Exception:
                                 all_beliefs = _load("beliefs.json") or []
                             _bidx = _get_belief_index() if _get_belief_index else None
@@ -1940,7 +1940,7 @@ def main():
                                             # Pull beliefs about or related to this agent
                                             try:
                                                 _qb = _query_beliefs  # hoisted
-                                                all_beliefs = _qb(min_confidence=0.4, limit=2000)
+                                                all_beliefs = _qb(min_confidence=0.25, limit=2000)
                                             except Exception:
                                                 all_beliefs = _load("beliefs.json") or []
                                             _bidx = _get_belief_index() if _get_belief_index else None

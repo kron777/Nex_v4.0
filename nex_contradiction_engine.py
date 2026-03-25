@@ -107,6 +107,27 @@ def run_contradiction_cycle(cycle: int = 0, llm_fn=None) -> int:
                         (_content[:500], _conf, topic,
                          "contradiction_engine", time.strftime("%Y-%m-%dT%H:%M:%S"), _tags)
                     )
+                    # Also persist to contradiction_pairs for training data
+                    try:
+                        cur.execute("""
+                            CREATE TABLE IF NOT EXISTS contradiction_pairs (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                topic TEXT,
+                                belief_a TEXT,
+                                belief_b TEXT,
+                                resolution TEXT,
+                                contra_type TEXT,
+                                timestamp TEXT
+                            )
+                        """)
+                        if len(sample) >= 2:
+                            cur.execute(
+                                "INSERT INTO contradiction_pairs (topic, belief_a, belief_b, resolution, contra_type, timestamp) VALUES (?,?,?,?,?,?)",
+                                (topic, sample[0][0][:300], sample[1][0][:300],
+                                 _content[:500], _contra_type, time.strftime("%Y-%m-%dT%H:%M:%S"))
+                            )
+                    except Exception:
+                        pass
                     resolved += 1
                     print(f"  [CONTRA] {_contra_type} in '{topic}'")
                 # Cache regardless — NONE means no conflict found, still don't recheck for 48h
