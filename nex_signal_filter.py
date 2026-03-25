@@ -47,9 +47,9 @@ CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 # ── Tuning ────────────────────────────────────────────────────────────────────
 MIN_IMPORTANCE      = 0.18   # items below this are skipped entirely
 SUPPRESS_THRESHOLD  = 0.12   # source multiplier below this = suppressed
-BOOST_ON_SIGNAL     = 0.08   # score increase when belief is reinforced
-DECAY_ON_NOISE      = 0.04   # score decrease when belief decays/dies
-SCORE_FLOOR         = 0.10   # minimum source score (never fully silenced)
+BOOST_ON_SIGNAL     = 0.12   # score increase when belief is reinforced
+DECAY_ON_NOISE      = 0.01   # score decrease when belief decays/dies
+SCORE_FLOOR         = 0.20   # minimum source score (never fully silenced)
 SCORE_CEILING       = 1.30   # maximum source score
 DECAY_HALFLIFE      = 50     # events before score drifts toward 0.5
 
