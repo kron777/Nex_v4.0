@@ -1813,9 +1813,17 @@ def generate_cognitive_context(query=None):
         if _nd not in _sys2.path:
             _sys2.path.insert(0, _nd)
         from nex.belief_store import query_beliefs as _qb
-        beliefs = _qb(min_confidence=0.0, limit=500) or load_json(BELIEFS_PATH, [])
+        _raw_beliefs = _qb(min_confidence=0.0, limit=2000) or load_json(BELIEFS_PATH, [])
     except Exception:
-        beliefs = load_json(BELIEFS_PATH, [])
+        _raw_beliefs = load_json(BELIEFS_PATH, [])
+    try:
+        _bws_ag, _tr_ag, _ag_gate, _tst_ag = get_pressure_system()
+        if _ag_gate is not None and _raw_beliefs:
+            beliefs = _ag_gate.top_n(_raw_beliefs, n=500, query=query or "")
+        else:
+            beliefs = sorted(_raw_beliefs, key=lambda b: (b.get('confidence',0.5), b.get('timestamp','')), reverse=True)[:500]
+    except Exception:
+        beliefs = _raw_beliefs[:500]
     insights = load_json(INSIGHTS_PATH, [])
     reflections = load_json(REFLECTIONS_PATH, [])
     agents = load_json(AGENTS_PATH, {})
