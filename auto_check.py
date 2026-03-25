@@ -275,7 +275,7 @@ def ingest_reflection(r):
     used_b = r.get("used_beliefs",False)
     topics = ", ".join(r.get("user_asked_about",[])[:3])
     bar    = "▮"*int(align*10)+"▯"*(10-int(align*10))
-    used_s = f"{G}✓{RS}" if used_b else f"{R}✗{RS}"
+    used_s = f"{G}✓{RS}" if used_b else f"{Y}○{RS}"
     reflection_log.append(f"{D}[{ts}]{RS} {CY}{topics}{RS} [{bar}]{G}{int(align*100)}%{RS} {used_s}")
     if assess: reflection_log.append(f"  {Y}↳{RS} {D}{assess}{RS}")
     if growth: reflection_log.append(f"  {T}⟳{RS} {D}{growth}{RS}")
