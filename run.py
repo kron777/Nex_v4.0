@@ -1136,6 +1136,7 @@ def main():
 
         def _auto_learn_background():
             global emit_feed, emit_stats, emit_phase, emit_agents, emit_insights, emit_reflection, emit_self_assessment
+            global _drives, _desire_engine, _dominant_desire, _drive_weights, _cog_mode, _cog_mode_reason, _meta_layer, _signal_scorer, _signal_gate
             import os as _os, json as _json
             import traceback as _tb
             import random as _rnd
