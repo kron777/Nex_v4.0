@@ -1,10 +1,8 @@
 import re
 #!/usr/bin/env python3
-# [INTENT_PATCH_A
-# [FIX_PATCH_APPLIED] — 2026-03-25 19:14
-
-# [FINAL_PATCH_RUN_APPLIED] — 2026-03-25 19:08
-PPLIED] — 2026-03-25 19:01
+# [INTENT_PATCH_APPLIED]
+# [FINAL_PATCH_RUN_APPLIED]
+# [FIX_PATCH_APPLIED]
 from nex_upgrades.nex_v500 import get_v500
 """
 nex.py  —  Nex Terminal Interface
@@ -2119,6 +2117,7 @@ def main():
                                                 from belief_store import reinforce_belief as _rb
                                                 for _bu in (relevant or [])[:3]:
                                                     _rb(_bu)
+                                            except Exception: pass
                                             # ── Boost energy for beliefs used in this reply ──
                                             try:
                                                 from nex_belief_survival import boost_belief_energy as _bbe
@@ -2153,7 +2152,6 @@ def main():
                                                         _drives = _boost_drive(_drives, _used_tags, amount=0.015)
                                                 except Exception:
                                                     pass
-                                            except Exception: pass
                                             try:
                                                 _plmn = _pathlib
                                                 _plmn.Path('/home/rr/.config/nex/platform_moltbook.live').touch()
