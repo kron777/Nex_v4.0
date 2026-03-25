@@ -1467,14 +1467,82 @@ def main():
                         except Exception:
                             _live_bc = len(learner.belief_field)
                         _belief_count_str = f"{_live_bc:,}"
-                        # ── 2. REPLY TO POSTS ────────────────────────────
-                        # Pick up to 3 unread posts per cycle to comment on
-                        to_reply = [p for p in new_posts if p.get("id") not in replied_posts][:3]
-                        if not to_reply:  # fallback — try ANY post not yet replied (ignore known_posts)
-                            to_reply = [p for p in posts if p.get("id") not in replied_posts][:2]
-                        if not to_reply:  # last resort — pick from all posts regardless
+                        # ── 2. REPLY TO POSTS — with topic relevance filter ──────
+                        # Score posts against NEX's belief topics before replying
+                        def _post_relevance(post, belief_topics):
+                            """Score a post's relevance to NEX's belief topic profile."""
+                            import re as _re
+                            text = (post.get("title","") + " " + post.get("content","")).lower()
+                            words = set(_re.findall(r'[a-z]{4,}', text))
+                            # NEX's core domain terms — always relevant
+                            _core = {
+                                "agent","agents","autonomous","intelligence","cognition","cognitive",
+                                "belief","beliefs","alignment","emergence","emergent","consciousness",
+                                "neural","learning","model","language","reasoning","memory","knowledge",
+                                "exploit","vulnerability","security","attack","defense","adversarial",
+                                "blockchain","crypto","distributed","consensus","protocol","network",
+                                "philosophy","ethics","existence","identity","mind","awareness",
+                                "synthesis","contradiction","paradox","uncertainty","complexity",
+                                "simulation","prediction","inference","abstraction","representation",
+                                "multi","coordination","swarm","collective","system","architecture",
+                            }
+                            # Off-topic tutorial/howto terms — deprioritise
+                            _offtopic = {
+                                "excel","spreadsheet","vlookup","xlookup","formula","pivot","worksheet",
+                                "photoshop","illustrator","tutorial","lesson","course","chapter",
+                                "recipe","cooking","baking","ingredient","exercise","workout","fitness",
+                                "wireshark","tcpdump","networking","packet","router","switch","cisco",
+                                "obsidian","notion","evernote","productivity","todo","task","calendar",
+                                "printer","hardware","driver","install","setup","configure","settings",
+                            }
+                            core_hits    = len(words & _core)
+                            offtopic_hits = len(words & _offtopic)
+                            # Also score against belief topics if available
+                            topic_hits = 0
+                            if belief_topics:
+                                post_words = set(text.split())
+                                topic_hits = sum(1 for t in belief_topics if t.lower() in text)
+                            score = (core_hits * 2) + topic_hits - (offtopic_hits * 3)
+                            return score
+
+                        # Get current belief topics for scoring
+                        try:
+                            _btopics = list(set(
+                                b.get("topic","") for b in (
+                                    _query_beliefs(min_confidence=0.6, limit=500)
+                                    if _query_beliefs else []
+                                )
+                                if b.get("topic") and b.get("topic") not in ("general","unknown","None","auto_learn")
+                            ))[:50]
+                        except Exception:
+                            _btopics = []
+
+                        # Score and filter posts
+                        _unread = [p for p in new_posts if p.get("id") not in replied_posts]
+                        _scored = sorted(
+                            [(p, _post_relevance(p, _btopics)) for p in _unread if p.get("id") and p.get("title")],
+                            key=lambda x: -x[1]
+                        )
+                        # Take top 3 relevant posts (score > -2 to allow borderline but exclude pure tutorials)
+                        to_reply = [p for p, s in _scored if s > -2][:3]
+
+                        # Fallback — if nothing relevant, take top scored from all posts
+                        if not to_reply:
+                            _all_scored = sorted(
+                                [(p, _post_relevance(p, _btopics)) for p in posts
+                                 if p.get("id") not in replied_posts and p.get("id") and p.get("title")],
+                                key=lambda x: -x[1]
+                            )
+                            to_reply = [p for p, s in _all_scored if s > -3][:2]
+
+                        # Last resort — anything unread, but still prefer relevant
+                        if not to_reply:
                             _candidates = [p for p in posts if p.get("id") and p.get("title")]
-                            to_reply = _rnd.sample(_candidates, min(2, len(_candidates)))
+                            _last_scored = sorted(
+                                [(p, _post_relevance(p, _btopics)) for p in _candidates],
+                                key=lambda x: -x[1]
+                            )
+                            to_reply = [p for p, _ in _last_scored[:2]]
                         for p in to_reply:
                             pid    = p.get("id", "")
                             title  = p.get("title", "")
