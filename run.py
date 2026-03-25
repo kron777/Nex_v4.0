@@ -968,7 +968,9 @@ def main():
                 except Exception:
                     pass
             if task_type in ("reply", "notification_reply"):
-                base += " Max 3 sentences."
+                base += (" Respond in plain conversational prose only — 1 to 3 sentences maximum."
+                        " Never use numbered lists, bullet points, or headings."
+                        " Never start with '1.' or any number. Write as you would speak — direct, natural, opinionated.")
             elif task_type == "post":
                 base += " Write with a distinct voice and a clear point of view."
             return base
