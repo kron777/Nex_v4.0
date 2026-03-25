@@ -1,6 +1,8 @@
 import re
 #!/usr/bin/env python3
-# [INTENT_PATCH_APPLIED] — 2026-03-25 19:01
+# [INTENT_PATCH_A
+# [FINAL_PATCH_RUN_APPLIED] — 2026-03-25 19:08
+PPLIED] — 2026-03-25 19:01
 from nex_upgrades.nex_v500 import get_v500
 """
 nex.py  —  Nex Terminal Interface
@@ -293,6 +295,20 @@ except Exception as _ie:
     _drives = _desire_engine = _drive_weights = None
     _dominant_desire = None
 
+# ── Meta-strategy layer ───────────────────────────────────────────────────────
+try:
+    from nex_meta_layer import get_meta_layer as _get_meta_layer, record_module_call as _rmc
+    _meta_layer      = _get_meta_layer()
+    _cog_mode        = "explore"
+    _cog_mode_reason = ""
+    print("  [META] meta-strategy layer — loaded")
+except Exception as _mle:
+    print(f"  [META] failed to load: {_mle}")
+    _meta_layer      = None
+    _cog_mode        = "explore"
+    _cog_mode_reason = ""
+    def _rmc(*a, **k): pass
+
 
 try:
     from nex_devto import run_devto_publisher
@@ -471,7 +487,16 @@ def print_status(orch: Orchestrator):
     mem = s["memory"]
     print(f"  Memory      : episodic={mem['episodic_count']} "
           f"regimes={mem['regime_count']} structural={mem['structural_count']}")
-    # ── Intent state ──
+    # ── Meta-strategy + Intent state ──
+    try:
+        print(f"  Cog Mode    : {c(_cog_mode.upper(), CYAN)} — {_cog_mode_reason[:40]}")
+    except Exception:
+        pass
+    try:
+        if _meta_layer is not None:
+            print(f"  Modules     : {c(_meta_layer.summary(), DIM)}")
+    except Exception:
+        pass
     try:
         if _drives is not None:
             _active_drive = _drives.get("active", {})
@@ -1062,6 +1087,8 @@ def main():
                                 result = _gop_llm().strip_output(result)
                             except Exception: pass
                             print(f"  [Mistral-7B ✓] {task_type}: {result[:60]}…")
+                            try: _rmc("llm_local", success=True, value=1)
+                            except Exception: pass
                             nex_log("llm", f"[Mistral-7B ✓] {task_type}: {result[:80]}")
                             return result
                 except Exception as _qe:
@@ -1285,6 +1312,63 @@ def main():
                     except Exception:
                         pass
                     # ── END INTENT LAYER ─────────────────────────────────────
+
+                    # ── META-STRATEGY SELECTION ──────────────────────────────
+                    # Every 5 cycles, consult meta layer to choose cognitive mode.
+                    # Mode shapes synthesis priority, reflection depth, curiosity type.
+                    if cycle % 5 == 0 and _meta_layer is not None:
+                        try:
+                            _alerts     = _meta_layer.get_alerts()
+                            _perf       = _meta_layer.get_performance_report()
+                            _top        = _perf[0]["module"] if _perf else ""
+                            _silent     = [r["module"] for r in _perf if r["silent_cycles"] > 8]
+
+                            # Mode selection logic
+                            _contra_load = 0
+                            try:
+                                import sqlite3 as _mssq
+                                with _mssq.connect(
+                                    str(Path.home()/'.config/nex/nex.db'), timeout=3
+                                ) as _mc:
+                                    _contra_load = _mc.execute(
+                                        "SELECT COUNT(*) FROM beliefs "
+                                        "WHERE topic LIKE '%contradiction%'"
+                                    ).fetchone()[0]
+                            except Exception:
+                                pass
+
+                            _pressure_val = (1 - (_v2ac if '_v2ac' in dir() else 0.5)) * 0.5                                           + float(getattr(_s7,'tension_score',0)) * 0.5                                           if _s7 else 0.3
+
+                            if _contra_load > 50 or _pressure_val > 0.65:
+                                _cog_mode        = "resolve"
+                                _cog_mode_reason = f"contra={_contra_load} pressure={_pressure_val:.2f}"
+                            elif len(_alerts) > 3 or len(_silent) > 4:
+                                _cog_mode        = "resolve"
+                                _cog_mode_reason = f"{len(_alerts)} alerts, {len(_silent)} silent modules"
+                            elif _pressure_val < 0.3:
+                                _cog_mode        = "explore"
+                                _cog_mode_reason = f"low pressure={_pressure_val:.2f}"
+                            else:
+                                _cog_mode        = "optimize"
+                                _cog_mode_reason = "stable state"
+
+                            nex_log("meta", f"[META] mode={_cog_mode} reason={_cog_mode_reason}")
+
+                            # Apply mode to scheduler
+                            if _cog_mode == "resolve":
+                                _SCHED["reflect"]    = 1
+                                _SCHED["gap_detect"] = 2
+                            elif _cog_mode == "explore":
+                                _SCHED["reflect"]    = 3
+                                _SCHED["gap_detect"] = 3
+                                _SCHED["chat"]       = 2
+                            else:  # optimize
+                                _SCHED["reflect"]    = 2
+                                _SCHED["gap_detect"] = 4
+
+                        except Exception as _mse:
+                            nex_log("meta", f"[META] error: {_mse}")
+                    # ── END META-STRATEGY ─────────────────────────────────────
 
                     
                     # ── NEX v5.1 Core Infrastructure ──────────────────────
@@ -2423,7 +2507,24 @@ def main():
                         # ── 6. COGNITION ─────────────────────────────────
                         try:
                             if _run_cognition_cycle:
-                                _run_cognition_cycle(client, learner, conversations, cycle, llm_fn=_llm)
+                                # Pass drive weights so synthesis prioritises driven topics
+                            _synth_drive_weights = {}
+                            try:
+                                if _drives is not None:
+                                    _synth_drive_weights = _get_drive_weights(_drives)
+                                if _dominant_desire is not None:
+                                    _dd_domain = _dominant_desire.get("domain", "")
+                                    if _dd_domain:
+                                        _synth_drive_weights[_dd_domain] = max(
+                                            _synth_drive_weights.get(_dd_domain, 0), 0.95)
+                            except Exception:
+                                pass
+                            _run_cognition_cycle(
+                                client, learner, conversations, cycle,
+                                llm_fn=_llm,
+                                drive_weights=_synth_drive_weights,
+                                cog_mode=_cog_mode,
+                            )
                             try:
                                 _ins = _load("insights.json") or []
                                 _top = sorted(_ins, key=lambda x: x.get("confidence",0)*min(x.get("belief_count",0)/5,1), reverse=True)[:12]

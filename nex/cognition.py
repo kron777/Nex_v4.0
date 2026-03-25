@@ -1,6 +1,8 @@
 from pathlib import Path
 """
-NEX :: COGNITION ENGINE v1.0
+NEX :: COGNITION ENGI
+# [FINAL_PATCH_COGNITION_APPLIED] — 2026-03-25 19:08
+NE v1.0
 Level 1: Belief Synthesis — compress raw beliefs into distilled insights
 Level 2: Reflection Loop — self-assess after conversations
 Level 3: Deep Agent Exchange — meaningful conversations with other agents
@@ -300,7 +302,7 @@ def synthesize_cluster(cluster_name, beliefs_in_cluster, llm_fn=None):
     return insight
 
 
-def run_synthesis(min_beliefs=15, llm_fn=None):
+def run_synthesis(min_beliefs=15, llm_fn=None, drive_weights=None):
     """
     Run belief synthesis — compress raw beliefs into insights.
     Call this periodically (e.g., every 50 new beliefs).
@@ -323,6 +325,25 @@ def run_synthesis(min_beliefs=15, llm_fn=None):
 
     existing_insights = load_json(INSIGHTS_PATH, [])
 
+    # Drive weights — topics NEX is currently driven to understand get priority
+    _drive_topic_weights = drive_weights or {}
+    # Also pull live drives file if no weights passed in
+    if not _drive_topic_weights:
+        try:
+            import json as _dwj
+            from pathlib import Path as _dwp
+            _dw_path = _dwp.home() / ".config" / "nex" / "nex_drives.json"
+            if _dw_path.exists():
+                _dw_data = _dwj.loads(_dw_path.read_text())
+                for _dw in _dw_data.get("primary", []) + _dw_data.get("secondary", []):
+                    for _dw_tag in _dw.get("tags", []):
+                        _drive_topic_weights[_dw_tag] = max(
+                            _drive_topic_weights.get(_dw_tag, 0),
+                            _dw.get("intensity", 0)
+                        )
+        except Exception:
+            pass
+
     if len(beliefs) < min_beliefs:
         return existing_insights, 0
 
@@ -332,10 +353,23 @@ def run_synthesis(min_beliefs=15, llm_fn=None):
 
     new_insights = []
     skipped = 0
-    # Sort clusters by size — synthesize largest first, cap LLM calls at 15
-    _sorted_clusters = sorted(clusters.items(), key=lambda x: len(x[1]["beliefs"]), reverse=True)
+    # Sort clusters by size + drive weight — drive topics get synthesised first
+    # Drive weights are injected at call time via _drive_topic_weights kwarg
+    def _cluster_priority(item):
+        name, cluster = item
+        size_score  = len(cluster["beliefs"])
+        drive_score = _drive_topic_weights.get(name, 0) * 200  # drive boost
+        return size_score + drive_score
+
+    _sorted_clusters = sorted(clusters.items(), key=_cluster_priority, reverse=True)
     _llm_calls_used = 0
-    _LLM_CAP = 60
+    # Cog mode shapes how aggressively we synthesise
+    # resolve → more synthesis to resolve contradictions
+    # explore → normal
+    # optimize → fewer calls, focus on quality
+    _LLM_CAP = {"resolve": 80, "explore": 60, "optimize": 40}.get(
+        getattr(run_synthesis, '_cog_mode_hint', 'explore'), 60
+    )
     for name, cluster in _sorted_clusters:
         cluster_size = len(cluster["beliefs"])
         # Re-synthesize if belief count grew by >10% since last insight
@@ -348,7 +382,9 @@ def run_synthesis(min_beliefs=15, llm_fn=None):
             # Always re-synthesize if existing summary is template-only
             _is_template = existing_insight.get("summary", "").startswith("Across ")
             _not_llm = not existing_insight.get("llm_synthesized", False)
-            if growth < 0.05 and not (_is_template or _not_llm):
+            # Always re-synthesise if this is a high-drive topic
+            _is_drive_priority = _drive_topic_weights.get(name, 0) > 0.6
+            if growth < 0.05 and not (_is_template or _not_llm) and not _is_drive_priority:
                 skipped += 1
                 continue
 
