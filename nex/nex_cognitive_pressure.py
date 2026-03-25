@@ -31,10 +31,10 @@ CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── Thresholds ────────────────────────────────────────────────────────────────
 PRESSURE_LOW       = 0.3
-PRESSURE_HIGH      = 0.7
-STALL_CYCLES       = 5     # cycles with no change before mutation burst
-MUTATION_BURST_N   = 8     # beliefs to randomly perturb during burst
-OVERLOAD_QUEUE_MAX = 25    # auto-collapse tensions if queue exceeds this
+PRESSURE_HIGH      = 0.85
+STALL_CYCLES       = 8     # cycles with no change before mutation burst
+MUTATION_BURST_N   = 5     # beliefs to randomly perturb during burst
+OVERLOAD_QUEUE_MAX = 80    # auto-collapse tensions if queue exceeds this
 
 
 def _load_state():

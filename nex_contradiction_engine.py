@@ -7,7 +7,7 @@ from datetime import datetime
 DB_PATH = Path.home() / ".config" / "nex" / "nex.db"
 
 def run_contradiction_cycle(cycle: int = 0, llm_fn=None) -> int:
-    if cycle % 5 != 0:
+    if cycle % 3 != 0:
         return 0
     if not llm_fn:
         return 0
@@ -27,7 +27,7 @@ def run_contradiction_cycle(cycle: int = 0, llm_fn=None) -> int:
 
         # Load resolved cache — skip topics settled within 48h with no new beliefs
         _now = time.time()
-        _48h = 48 * 3600
+        _48h = 24 * 3600
         cur.execute("SELECT topic, resolved_at, belief_count FROM contra_resolved")
         _resolved_cache = {
             row[0]: {"ts": row[1], "count": row[2]}
@@ -36,7 +36,7 @@ def run_contradiction_cycle(cycle: int = 0, llm_fn=None) -> int:
 
         cur.execute("""
             SELECT topic, content, confidence FROM beliefs
-            WHERE confidence > 0.3
+            WHERE confidence > 0.25
             ORDER BY topic, confidence DESC
         """)
         rows = cur.fetchall()
@@ -60,13 +60,13 @@ def run_contradiction_cycle(cycle: int = 0, llm_fn=None) -> int:
             if _cache:
                 try:
                     _age  = _now - datetime.fromisoformat(_cache["ts"]).timestamp()
-                    _grew = len(beliefs) > _cache["count"] * 1.10
+                    _grew = len(beliefs) > _cache["count"] * 1.05
                     if _age < _48h and not _grew:
                         continue
                 except Exception:
                     pass
 
-            sample = [(c, cf) for c, cf in beliefs[:6] if c and len(c.strip()) > 5]
+            sample = [(c, cf) for c, cf in beliefs[:10] if c and len(c.strip()) > 5]
             if len(sample) < 2:
                 continue
 
