@@ -2272,6 +2272,12 @@ def main():
                                 _drep = _d_enforcer.cycle_report()
                                 nex_log("directives", f"[DIR] beliefs={_drep['total']}/{_drep['cap']} avg_conf={_drep['avg_conf']:.3f} loops={_drep['loops']} near_death={_drep['near_death']}")
                                 print(f"  [DIR] cycle={cycle} beliefs={_drep['total']} avg_conf={_drep['avg_conf']:.3f}")
+                                try:
+                                    import builtins as _bi2
+                                    _bi2._session_cycle   = cycle
+                                    _bi2._session_beliefs = _drep['total']
+                                except Exception:
+                                    pass
                             except Exception as _dire:
                                 print(f"  [DIR ERROR] {_dire}")
                         # ── KNOWLEDGE GAP DETECTOR (#6) ──────────────────
