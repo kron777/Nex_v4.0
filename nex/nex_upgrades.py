@@ -58,22 +58,33 @@ def u3_drift_check(db_path=None, current_cycle: int = 0) -> bool:
 # ── U1: belief locking ────────────────────────────────────────────────────────
 def u1_lock_top_beliefs(n: int = 30, db_path=None):
     """Lock top N beliefs by composite score. Run every 50 cycles."""
+    import time as _t
     path = db_path or DB_PATH
-    conn = sqlite3.connect(str(path), timeout=10)
-    try:
-        conn.execute("UPDATE beliefs SET locked = 0 WHERE locked = 1")
-        conn.execute("""
-            UPDATE beliefs SET locked = 1
-            WHERE id IN (
-                SELECT id FROM beliefs
-                ORDER BY (confidence * (successful_uses + 1)) DESC
-                LIMIT ?
-            )
-        """, (n,))
-        conn.commit()
-        log.info(f"[U1] Locked top {n} beliefs")
-    finally:
-        conn.close()
+    for _attempt in range(5):
+        try:
+            conn = sqlite3.connect(str(path), timeout=30)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA busy_timeout=10000")
+            conn.execute("""
+                UPDATE beliefs SET locked = CASE
+                    WHEN id IN (
+                        SELECT id FROM beliefs
+                        ORDER BY (confidence * (successful_uses + 1)) DESC
+                        LIMIT ?
+                    ) THEN 1 ELSE 0 END
+            """, (n,))
+            conn.commit()
+            conn.close()
+            log.info(f"[U1] Locked top {n} beliefs")
+            return
+        except sqlite3.OperationalError as _e:
+            if "locked" in str(_e) and _attempt < 4:
+                _t.sleep(1 + _attempt)
+            else:
+                log.warning(f"[U1] lock_top_beliefs failed after {_attempt+1} attempts: {_e}")
+                try: conn.close()
+                except: pass
+                return
 
 def u1_is_locked(belief_id: int, db_path=None) -> bool:
     path = db_path or DB_PATH
