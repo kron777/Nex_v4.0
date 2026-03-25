@@ -553,7 +553,7 @@ def reinforce_belief(content, boost=0.03, max_conf=0.95):
         pass
 
 
-def decay_stale_beliefs(days_inactive=14, decay_amount=0.04, min_conf=0.10):
+def decay_stale_beliefs(days_inactive=30, decay_amount=0.02, min_conf=0.08):
     """Weaken beliefs that haven't been referenced in `days_inactive` days."""
     import time as _t
     cutoff = datetime.fromtimestamp(_t.time() - days_inactive * 86400).isoformat()

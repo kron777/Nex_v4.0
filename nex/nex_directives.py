@@ -42,17 +42,17 @@ def _log(level, msg):
 DB_PATH = Path.home() / ".config/nex/nex.db"
 
 # D6
-BELIEF_CAP            = 1500
-BELIEF_FLOOR          = 500
+BELIEF_CAP            = 5000
+BELIEF_FLOOR          = 1000
 STRONG_EVIDENCE_CONF  = 0.72
-EVICTION_HEADROOM     = 50
+EVICTION_HEADROOM     = 200
 
 # D7
-DECAY_RATE            = 0.008
-DECAY_FLOOR           = 0.10
-DECAY_DEATH_THRESHOLD = 0.08
-DECAY_GRACE_CYCLES    = 3
-DECAY_SUCCESS_SHIELD  = 3
+DECAY_RATE            = 0.003
+DECAY_FLOOR           = 0.08
+DECAY_DEATH_THRESHOLD = 0.05
+DECAY_GRACE_CYCLES    = 8
+DECAY_SUCCESS_SHIELD  = 5
 
 # D12
 D12_MAX_REINFORCEMENTS = 8
@@ -74,7 +74,7 @@ D17_SUCCESS_RESERVE   = 100
 D17_SUCCESS_THRESHOLD = 5
 
 # D20
-D20_CONF_DROP_THRESHOLD = 0.25  # fix11: raised from 0.12 — less hair-trigger
+D20_CONF_DROP_THRESHOLD = 0.15  # fix11: raised from 0.12 — less hair-trigger
 D20_NEAR_DEATH_SPIKE    = 30
 D20_FREEZE_CYCLES       = 3
 

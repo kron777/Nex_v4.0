@@ -58,8 +58,8 @@ _GOALS_PATH   = _CONFIG_DIR / "goal_system.json"
 
 _MAX_EDGES_PER_BELIEF = 5
 _MAX_EPISODES         = 1000
-_SIMILARITY_SUPPORT   = 0.72   # cosine threshold → supports edge
-_SIMILARITY_EXPLAINS  = 0.55   # lower threshold → explains edge
+_SIMILARITY_SUPPORT   = 0.65   # cosine threshold → supports edge
+_SIMILARITY_EXPLAINS  = 0.45   # lower threshold → explains edge
 _CONTRADICTION_THRESH = 0.78   # high similarity + opposing sentiment → contradicts
 
 
@@ -129,7 +129,7 @@ class BeliefGraph:
     def __init__(self):
         self._graph: dict[str, dict] = _load(_GRAPH_PATH, {})
         self._last_build = 0
-        self._build_interval = 15   # rebuild every N cycles
+        self._build_interval = 8   # rebuild every N cycles
 
     def _belief_id(self, belief: dict) -> str:
         """Stable ID from content hash."""
@@ -213,7 +213,7 @@ class BeliefGraph:
             sorted_nodes = sorted(self._graph.items(),
                                   key=lambda x: x[1].get("attention", 0),
                                   reverse=True)
-            self._graph = dict(sorted_nodes[:2500])
+            self._graph = dict(sorted_nodes[:5000])
 
         _save(_GRAPH_PATH, self._graph)
         print(f"  [BeliefGraph] {len(self._graph)} nodes, built at cycle {cycle_num}")

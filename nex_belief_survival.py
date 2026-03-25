@@ -25,11 +25,11 @@ DB_PATH    = os.path.join(CONFIG_DIR, "nex.db")
 
 # ── Tunable constants ─────────────────────────────────────────────────────────
 ENERGY_START        = 100.0   # energy given to a new belief
-ENERGY_DECAY_PER_CYCLE = 0.5  # lost each cycle if not used
-ENERGY_USE_BOOST    = 15.0    # gained when belief is referenced in output
-ENERGY_KILL_THRESHOLD = 2.0  # safety: see MIN_BELIEF_FLOOR  # below this → belief is deleted
-MIN_BELIEF_FLOOR      = 500    # never kill beliefs if total below this
-ENERGY_AMPLIFY_THRESHOLD = 80.0  # above this → confidence boosted
+ENERGY_DECAY_PER_CYCLE = 0.15  # lost each cycle if not used
+ENERGY_USE_BOOST    = 20.0    # gained when belief is referenced in output
+ENERGY_KILL_THRESHOLD = 0.5  # safety: see MIN_BELIEF_FLOOR  # below this → belief is deleted
+MIN_BELIEF_FLOOR      = 1000    # never kill beliefs if total below this
+ENERGY_AMPLIFY_THRESHOLD = 70.0  # above this → confidence boosted
 ENERGY_AMPLIFY_BOOST = 0.02   # confidence boost per cycle at high energy
 ENERGY_MAX          = 120.0   # cap
 HUMAN_VALIDATED_EXEMPT = True  # never kill human-validated beliefs
