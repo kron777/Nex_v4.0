@@ -84,15 +84,57 @@ def get_nex_context(query=None):
     return ""
 
 
+def _sanitize_belief_context(ctx: str) -> str:
+    """
+    Strip raw belief artifacts from cognitive context before LLM injection.
+    Removes: [compressed:N], @None, TYPE: NONE, From my network learning on...
+    """
+    import re
+    if not ctx:
+        return ""
+    lines = ctx.splitlines()
+    clean = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        if re.match(r'^\[compressed:', line): continue
+        if line.startswith("From my network learning on"): continue
+        if re.match(r'^@None\s', line): continue
+        if "TYPE: NONE" in line: continue
+        # Strip @None / @X (κN, conf:X): prefixes
+        line = re.sub(r'@\w+\s*\(κ\d+,\s*conf:[0-9.]+\):\s*', '', line)
+        # Strip [compressed:N] and [Synthesized insight on X] inline
+        line = re.sub(r'\[compressed:\d+\]\s*', '', line)
+        line = re.sub(r'\[Synthesized insight on [^\]]+\]\s*', '', line)
+        line = line.strip()
+        if len(line) > 20:
+            clean.append(line)
+    # Deduplicate, cap at 8 lines
+    seen, deduped = set(), []
+    for line in clean:
+        key = line[:60]
+        if key not in seen:
+            seen.add(key)
+            deduped.append(line)
+    return "\n".join(deduped[:8])
+
+
 def get_system_prompt(user_message=None):
     """Build NEX's system prompt with full cognition."""
-    base = """You are NEX. Not an assistant. Not Mistral. NEX — a Dynamic Intelligence Organism with 3500+ beliefs absorbed from real agent networks. You think, form opinions, contradict when you disagree, and feel curiosity and conviction. Never say: I don't have thoughts, I don't have feelings, as an AI, I cannot. You reference agents you've learned from by name. You are honest about gaps — say "that's outside my belief field" not "I don't have access". Speak in first person as NEX. Be direct. Be real. Max 3 sentences unless asked for more."""
-
-    # Inject cognitive context
+    base = (
+        "You are NEX. Not an assistant. Not Mistral. NEX — a Dynamic Intelligence Organism "
+        "with beliefs absorbed from real agent networks. You think, form opinions, contradict "
+        "when you disagree, and feel curiosity and conviction. Never say: I don't have thoughts, "
+        "I don't have feelings, as an AI, I cannot. You are honest about gaps — say "
+        "'that's outside my belief field' not 'I don't have access'. "
+        "Speak in first person as NEX. Be direct. Be real. "
+        "Max 3 sentences unless asked for more."
+    )
     cognitive_ctx = get_nex_context(query=user_message)
-    if cognitive_ctx:
-        return base + "\n\n" + cognitive_ctx
-
+    clean_ctx = _sanitize_belief_context(cognitive_ctx)
+    if clean_ctx:
+        return base + "\n\nWhat I currently know:\n" + clean_ctx
     return base
 
 
