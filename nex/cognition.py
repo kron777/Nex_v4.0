@@ -550,6 +550,18 @@ def reflect_on_conversation(user_message, nex_response, beliefs_used=None):
     reflections = reflections[-10000:]
     save_json(REFLECTIONS_PATH, reflections)
 
+    # Mirror to DB
+    try:
+        import sqlite3 as _sq3
+        _rdb = _sq3.connect(DB_PATH, timeout=10)
+        _rdb.execute("PRAGMA journal_mode=WAL")
+        _rdb.execute("CREATE TABLE IF NOT EXISTS reflections (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, topic_alignment REAL, used_beliefs INTEGER DEFAULT 0, belief_count_used INTEGER DEFAULT 0, self_assessment TEXT, topics_discussed TEXT)")
+        _rdb.execute("INSERT INTO reflections (timestamp, topic_alignment, used_beliefs, belief_count_used, self_assessment, topics_discussed) VALUES (?,?,?,?,?,?)", (reflection.get("timestamp",""), reflection.get("topic_alignment",0), 1 if reflection.get("used_beliefs") else 0, reflection.get("belief_count_used",0), reflection.get("self_assessment",""), str(reflection.get("i_discussed",[]))[:200]))
+        _rdb.commit()
+        _rdb.close()
+    except Exception:
+        pass
+
     # ── Reflection → Belief pipeline (#16/#24) ──
     # High-quality reflections get written back as beliefs
     assessment = reflection.get("self_assessment", "")
