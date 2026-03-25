@@ -1207,6 +1207,15 @@ def main():
             except Exception as _ee_init_e:
                 print(f'  [EE] init failed: {_ee_init_e}')
                 _ee = None
+            # _power_save_applied
+            try:
+                from nex_power_save import should_call_llm as _should_llm, set_cycle as _ps_set_cycle, power_save_status as _ps_status, symbolic_synthesis as _sym_synth
+                _power_save = True
+            except Exception as _ps_e:
+                print(f'  [PS] init failed: {_ps_e}')
+                _power_save = False
+                def _should_llm(*a, **k): return True
+                def _ps_set_cycle(*a, **k): pass
             time.sleep(10)
             try:
                 nex_log("phase", "▶ _auto_learn_background starting")
@@ -2555,7 +2564,7 @@ def main():
                                 except Exception:
                                     pass
                                 _rprompt = "Review these beliefs for: 1.Correctness 2.Knowledge gaps 3.Novelty 4.Contradictions -- " + _rtexts + _desire_ctx + " -- Respond in 2 sentences: what is solid, what needs deeper investigation."
-                                _rresult = _llm(_rprompt, task_type="synthesis")
+                                _rresult = _llm(_rprompt, task_type="synthesis") if _should_llm('reflection', tension=0.5) else None
                                 if _rresult and len(_rresult) > 20:
                                     nex_log("reflection", f"V2: {_rresult[:200]}")
                                     print(f"  [REFLECT V2] {_rresult[:100]}")
@@ -2648,7 +2657,7 @@ def main():
                                     _topics[_t] = _topics.get(_t,0) + 1
                                 _top20 = dict(list(sorted(_topics.items(),key=lambda x:-x[1])[:20]))
                                 _gap_prompt = "Knowledge topics and counts: " + str(_top20) + " -- What 3 important topics are missing or underrepresented for an AI agent? Reply as: gap1, gap2, gap3"
-                                _gap_result = _llm(_gap_prompt, task_type="synthesis")
+                                _gap_result = _llm(_gap_prompt, task_type="synthesis") if _should_llm('gap') else None
                                 if _gap_result and len(_gap_result) > 10:
                                     print(f"  [GAP DETECTOR] {_gap_result[:100]}")
                                     nex_log("gaps", f"Detected: {_gap_result[:200]}")
@@ -2722,6 +2731,10 @@ def main():
                         except Exception as _bex:
                             nex_log("backup", f"Belief backup failed: {_bex}")
 
+                        # ── POWER SAVE — set cycle counter ───────────────
+                        try:
+                            _ps_set_cycle(cycle)
+                        except Exception: pass
                         # ── LOW-VALUE SIGNAL FILTER ──────────────────────
                         try:
                             if '_se' in dir() and _se is not None and '_avg_conf_real' in dir():
@@ -2735,7 +2748,7 @@ def main():
                         # ── CONTRADICTION ENGINE (#5) ─────────────────────
                         try:
                             from nex_contradiction_engine import run_contradiction_cycle as _contra
-                            _contra_resolved = _contra(cycle=cycle, llm_fn=_llm)
+                            _contra_resolved = _contra(cycle=cycle, llm_fn=(_llm if _should_llm('synthesis', tension=0.6) else None))
                             if _contra_resolved > 0:
                                 nex_log("cognition", f"Resolved {_contra_resolved} contradictions")
                                 # Write unresolved true conflicts to tensions DB
@@ -3218,6 +3231,12 @@ def main():
                             "last_post_time": last_post_time,
                         }
                         with open(_ss_path, "w") as _css_f: _css.dump(_css_data, _css_f)
+                    except Exception: pass
+                    try:
+                        if '_power_save' in dir() and _power_save:
+                            _ps = _ps_status()
+                            if cycle % 5 == 0:
+                                print(f"  [PS] calls={_ps['calls_this_cycle']} avg={_ps['avg_calls_per_cycle']} saved={_ps['total_saved']}")
                     except Exception: pass
                     time.sleep(120)
 
