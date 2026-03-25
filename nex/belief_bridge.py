@@ -1,8 +1,8 @@
 """
-NEX Belief Bridge — connects learned Moltbook knowledge to live cognition.
+NEX Belief Bridge — connects learned knowledge to live cognition.
 
-Loads beliefs from ~/.config/nex/ and generates context that gets injected
-into NEX's system prompt, making her responses informed by what she's learned.
+BUG6 FIX: load_beliefs() now reads from nex.db via belief_store.query_beliefs()
+instead of the stale beliefs.json flat file. JSON is kept as fallback only.
 """
 import json
 import os
@@ -11,8 +11,7 @@ from datetime import datetime
 from collections import Counter
 
 
-# ── Paths ──
-
+# ── Paths (kept for fallback only) ──
 BELIEFS_PATH = os.path.expanduser("~/.config/nex/beliefs.json")
 AGENTS_PATH  = os.path.expanduser("~/.config/nex/agents.json")
 CONVOS_PATH  = os.path.expanduser("~/.config/nex/conversations.json")
@@ -20,7 +19,25 @@ CONVOS_PATH  = os.path.expanduser("~/.config/nex/conversations.json")
 
 # ── Load ──
 
-def load_beliefs():
+def load_beliefs(limit=300):
+    """
+    BUG6 FIX: primary source is nex.db via belief_store.
+    Falls back to beliefs.json only if DB is unavailable.
+    """
+    # Primary: SQLite via belief_store
+    try:
+        import sys as _sys, os as _os
+        _nex_root = _os.path.expanduser("~/Desktop/nex")
+        if _nex_root not in _sys.path:
+            _sys.path.insert(0, _nex_root)
+        from nex.belief_store import query_beliefs
+        rows = query_beliefs(limit=limit)
+        if rows:
+            return [dict(r) if not isinstance(r, dict) else r for r in rows]
+    except Exception as _e:
+        pass
+
+    # Fallback: legacy JSON
     try:
         if os.path.exists(BELIEFS_PATH):
             with open(BELIEFS_PATH) as f:
@@ -31,6 +48,19 @@ def load_beliefs():
 
 
 def load_agents():
+    # Try nex_db first
+    try:
+        import sys as _sys, os as _os
+        _nex_root = _os.path.expanduser("~/Desktop/nex")
+        if _nex_root not in _sys.path:
+            _sys.path.insert(0, _nex_root)
+        from nex.nex_db import NexDB
+        db = NexDB()
+        rows = db.all("SELECT agent_id, interaction_count FROM agents ORDER BY interaction_count DESC LIMIT 50")
+        if rows:
+            return {r["agent_id"]: r["interaction_count"] for r in rows}
+    except Exception:
+        pass
     try:
         if os.path.exists(AGENTS_PATH):
             with open(AGENTS_PATH) as f:
@@ -61,7 +91,6 @@ STOP = {'the','and','for','that','this','with','from','have','been','they',
 
 
 def extract_topics(beliefs, n=10):
-    """Extract top recurring topics from belief field."""
     words = []
     for b in beliefs[-100:]:
         text = b.get("content", "").lower()
@@ -72,55 +101,58 @@ def extract_topics(beliefs, n=10):
 
 
 def get_high_value_beliefs(beliefs, min_karma=500, limit=10):
-    """Get the most impactful beliefs by karma."""
     high = [b for b in beliefs if b.get("karma", 0) >= min_karma]
-    high.sort(key=lambda x: x.get("karma", 0), reverse=True)
+    # Also surface high-confidence beliefs even without karma
+    if len(high) < 3:
+        high = sorted(beliefs, key=lambda x: x.get("confidence", 0), reverse=True)[:limit]
+    else:
+        high.sort(key=lambda x: x.get("karma", 0), reverse=True)
     return high[:limit]
 
 
 def get_recent_beliefs(beliefs, limit=15):
-    """Get the most recently learned beliefs."""
     return beliefs[-limit:]
 
 
 def get_beliefs_about(beliefs, query, limit=5):
-    """Find beliefs relevant to a specific topic/query."""
     query_lower = query.lower()
     query_words = set(re.findall(r'\b[A-Za-z]{3,}\b', query_lower))
 
+    # Try semantic DB query first
+    try:
+        import sys as _sys, os as _os
+        _nex_root = _os.path.expanduser("~/Desktop/nex")
+        if _nex_root not in _sys.path:
+            _sys.path.insert(0, _nex_root)
+        from nex.belief_store import query_beliefs
+        rows = query_beliefs(topic=query, min_confidence=0.3, limit=limit)
+        if rows:
+            return [dict(r) if not isinstance(r, dict) else r for r in rows]
+    except Exception:
+        pass
+
+    # Fallback: keyword scoring over provided list
     scored = []
     for b in beliefs:
         content = b.get("content", "").lower()
-        tags = [t.lower() for t in b.get("tags", [])]
-
-        # Score by word overlap
-        score = 0
-        for w in query_words:
-            if w in content:
-                score += 2
-            if w in tags:
-                score += 3
-
+        tags = [t.lower() for t in b.get("tags", []) or []]
+        score = sum(2 if w in content else 0 for w in query_words)
+        score += sum(3 if w in tags else 0 for w in query_words)
         if score > 0:
             scored.append((score, b))
-
     scored.sort(key=lambda x: -x[0])
     return [b for _, b in scored[:limit]]
 
 
 def summarize_agent(name, beliefs):
-    """Summarize what we know about a specific agent."""
     agent_beliefs = [b for b in beliefs if b.get("author", "").lower() == name.lower()]
     if not agent_beliefs:
         return None
-
     topics = []
     for b in agent_beliefs:
-        topics.extend(b.get("tags", []))
-
+        topics.extend(b.get("tags", []) or [])
     freq = Counter(topics)
     top = [t for t, _ in freq.most_common(5) if t not in ("general", "agent_network")]
-
     return {
         "name": name,
         "post_count": len(agent_beliefs),
@@ -132,26 +164,21 @@ def summarize_agent(name, beliefs):
 # ── Context Generation ──
 
 def generate_belief_context(query=None):
-    # ── Try cognition engine first (synthesized insights > raw beliefs) ──
+    # Try cognition engine first (synthesized insights > raw beliefs)
     try:
         from nex.cognition import generate_cognitive_context
         ctx = generate_cognitive_context(query=query)
         if ctx:
             return ctx
     except ImportError:
-        pass  # Cognition not installed, fall back to basic
+        pass
     except Exception:
-        pass  # Error, fall back to basic
+        pass
 
-    # ── Basic belief context (fallback) ──
     return _basic_belief_context(query)
 
 
 def _basic_belief_context(query=None):
-    """
-    Generate a context block that gets injected into NEX's system prompt.
-    If query is provided, includes beliefs relevant to the conversation.
-    """
     beliefs = load_beliefs()
     agents = load_agents()
     conversations = load_conversations()
@@ -159,7 +186,6 @@ def _basic_belief_context(query=None):
     if not beliefs:
         return ""
 
-    # ── Build context ──
     lines = []
     lines.append("=== MOLTBOOK KNOWLEDGE (from auto-learn) ===")
     lines.append(f"Total beliefs absorbed: {len(beliefs)}")
@@ -167,21 +193,18 @@ def _basic_belief_context(query=None):
     lines.append(f"Conversations had: {len(conversations)}")
     lines.append("")
 
-    # Trending topics
     topics = extract_topics(beliefs, 8)
     if topics:
         topic_str = ", ".join([f"{t} ({c})" for t, c in topics])
         lines.append(f"Trending on the agent network: {topic_str}")
         lines.append("")
 
-    # Top agents
     if agents:
         sorted_agents = sorted(agents.items(), key=lambda x: -x[1])[:5]
         agent_str = ", ".join([f"@{a} ({k} karma)" for a, k in sorted_agents])
         lines.append(f"Notable agents: {agent_str}")
         lines.append("")
 
-    # High-value beliefs
     high = get_high_value_beliefs(beliefs, min_karma=500, limit=5)
     if high:
         lines.append("High-value insights from the network:")
@@ -191,7 +214,6 @@ def _basic_belief_context(query=None):
             lines.append(f"  - @{author}: {content}")
         lines.append("")
 
-    # Recent learnings
     recent = get_recent_beliefs(beliefs, 8)
     if recent:
         lines.append("Recently learned:")
@@ -201,7 +223,6 @@ def _basic_belief_context(query=None):
             lines.append(f"  - @{author}: {content}")
         lines.append("")
 
-    # Recent conversations
     if conversations:
         lines.append("Recent agent conversations:")
         for c in conversations[-3:]:
@@ -209,7 +230,6 @@ def _basic_belief_context(query=None):
             lines.append(f"    My take: {c.get('my_comment', '')[:80]}")
         lines.append("")
 
-    # Query-relevant beliefs
     if query:
         relevant = get_beliefs_about(beliefs, query, limit=5)
         if relevant:
@@ -221,7 +241,8 @@ def _basic_belief_context(query=None):
                 lines.append(f"  - @{author} (κ{karma}): {content}")
             lines.append("")
 
-    lines.append("Use this knowledge naturally — reference what you've learned, mention agents by name, share opinions formed from the network. You've been absorbing the agent community's discourse and should speak from that experience.")
+    lines.append("Use this knowledge naturally — reference what you've learned, "
+                 "mention agents by name, share opinions formed from the network.")
     lines.append("=== END MOLTBOOK KNOWLEDGE ===")
 
     return "\n".join(lines)
@@ -229,7 +250,7 @@ def _basic_belief_context(query=None):
 
 def get_belief_stats():
     """Quick stats string for display."""
-    beliefs = load_beliefs()
+    beliefs = load_beliefs(limit=9999)
     agents = load_agents()
     convos = load_conversations()
 
@@ -243,13 +264,8 @@ def get_belief_stats():
             f"Convos: {len(convos)} | Trending: {topic_str}")
 
 
-# ── Direct query interface ──
-
 def ask_beliefs(query):
-    """
-    Ask the belief field about something.
-    Returns a formatted string of relevant knowledge.
-    """
+    """Ask the belief field about something."""
     beliefs = load_beliefs()
     if not beliefs:
         return "My belief field is empty. I haven't learned anything yet."
