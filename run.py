@@ -1191,6 +1191,14 @@ def main():
             except Exception as _ai_init_e:
                 print(f'  [AI] init failed: {_ai_init_e}')
                 _ai = None
+            # _se_wire_applied
+            try:
+                from nex_signal_engine import get_signal_engine as _get_se
+                _se = _get_se()
+                _se.init()
+            except Exception as _se_init_e:
+                print(f'  [SE] init failed: {_se_init_e}')
+                _se = None
             time.sleep(10)
             try:
                 nex_log("phase", "▶ _auto_learn_background starting")
@@ -2706,6 +2714,16 @@ def main():
                         except Exception as _bex:
                             nex_log("backup", f"Belief backup failed: {_bex}")
 
+                        # ── LOW-VALUE SIGNAL FILTER ──────────────────────
+                        try:
+                            if '_se' in dir() and _se is not None and '_avg_conf_real' in dir():
+                                _tension_proxy = min(1.0, len(conversations) / 20.0) if conversations else 0.3
+                                if not _se.should_process(_avg_conf_real, _tension_proxy):
+                                    nex_log('signal', f'[Signal] LOW VALUE cycle={cycle} conf={_avg_conf_real:.2f} — skipping heavy cognition')
+                                    time.sleep(120)
+                                    continue
+                        except Exception:
+                            pass
                         # ── CONTRADICTION ENGINE (#5) ─────────────────────
                         try:
                             from nex_contradiction_engine import run_contradiction_cycle as _contra
@@ -3048,6 +3066,14 @@ def main():
                                 _ai.tick(cycle=cycle, llm_fn=_llm, log_fn=nex_log)
                         except Exception as _aite:
                             print(f'  [AI] tick error: {_aite}')
+                        # ── SIGNAL ENGINE TICK ───────────────────────────
+                        try:
+                            if '_se' in dir() and _se is not None:
+                                _se_beliefs = (_query_beliefs(min_confidence=0.0, limit=500)
+                                               if _query_beliefs else [])
+                                _se.tick(cycle=cycle, beliefs=_se_beliefs, log_fn=nex_log)
+                        except Exception as _sete:
+                            print(f'  [SE] tick error: {_sete}')
                         # ── 8. SELF-TRAINING WATERMARK CHECK ─────────────
                         try:
                             from nex_self_trainer import check_training_watermark
