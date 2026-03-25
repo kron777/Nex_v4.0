@@ -117,6 +117,30 @@ def _handle_ws(mtype, data):
     elif mtype == "phase":
         platform_pulse["moltbook"] = time.time()
 
+# ── Training readiness check ─────────────────────────────────────────────────
+_train_ready    = False
+_train_check_t  = 0
+_TRAIN_INTERVAL = 60   # re-check DB every 60 seconds
+
+def _check_training_ready() -> bool:
+    """Returns True when NEX meets the training threshold."""
+    global _train_ready, _train_check_t
+    now = time.time()
+    if now - _train_check_t < _TRAIN_INTERVAL:
+        return _train_ready
+    _train_check_t = now
+    try:
+        import sqlite3
+        db   = sqlite3.connect(str(CFG / "nex.db"), timeout=2)
+        total    = db.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+        high     = db.execute("SELECT COUNT(*) FROM beliefs WHERE confidence > 0.7").fetchone()[0]
+        avg_conf = db.execute("SELECT AVG(confidence) FROM beliefs").fetchone()[0] or 0
+        db.close()
+        _train_ready = (total >= 1000 and high >= 300 and avg_conf >= 0.65)
+    except Exception:
+        _train_ready = False
+    return _train_ready
+
 def _ws_client_thread():
     """Background thread: connect to nex_ws and ingest live events."""
     async def _run():
@@ -640,7 +664,18 @@ def main():
             pulse=[f"{G}●{RS}",f"{Y}○{RS}",f"{CY}◉{RS}"][tick%3]
             fl=f"  {pulse} {D}{kanji}{RS}  {D}NEX ACTIVE{RS}  {CY}{now_s}{RS}"
             fr_=f"  {CY}↓{rx_kb:.1f}  ↑{tx_kb:.1f} kb/s{RS}  "
-            at(FR+1,1); wr(fl+" "*max(0,W-vlen(fl)-vlen(fr_))+fr_)
+
+            # ── Training readiness notification ──────────────────────────────
+            if _check_training_ready():
+                _flash  = tick % 2 == 0   # flash every other render tick
+                _bulb   = f"\033[91m💡\033[0m" if _flash else f"\033[31m💡\033[0m"
+                _msg    = f"\033[1m\033[91m ATTENTION : TRAINING \033[0m"
+                _notif  = f"  {_bulb}{_msg}{_bulb}  "
+                _nlen   = 22  # visual width of notification text
+                _gap    = max(0, (W - vlen(fl) - vlen(fr_) - _nlen)) // 2
+                at(FR+1,1); wr(fl + " "*_gap + _notif + " "*max(0,W-vlen(fl)-_gap-_nlen-vlen(fr_)) + fr_)
+            else:
+                at(FR+1,1); wr(fl+" "*max(0,W-vlen(fl)-vlen(fr_))+fr_)
 
             commit()
             time.sleep(RENDER_HZ)
