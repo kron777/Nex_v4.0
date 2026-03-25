@@ -25,9 +25,9 @@ DB_PATH    = os.path.join(CONFIG_DIR, "nex.db")
 DREAM_PRIORITY_PATH = os.path.join(CONFIG_DIR, "dream_priority.json")
 
 # ── Tunable thresholds ────────────────────────────────────────────────────────
-ESCALATE_AFTER = 8    # cycles before tension gets dream priority
-PARADOX_AFTER  = 20    # cycles before tension is marked as paradox
-SPLIT_AFTER    = 30   # cycles before tension is split into two beliefs
+ESCALATE_AFTER = 20   # cycles before tension gets dream priority
+PARADOX_AFTER  = 50   # cycles before tension is marked as paradox
+SPLIT_AFTER    = 80   # cycles before tension is split into two beliefs
 MAX_DREAM_QUEUE = 25  # max items in dream priority queue
 
 
