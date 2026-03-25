@@ -1588,11 +1588,10 @@ def main():
                                 f"Title: {title}\n"
                                 f"Content: {__import__("re").sub(r"moltbook_verify_[a-f0-9]+", "", body).strip()}\n"
                                 f"{belief_context}{_self_context}\n\n"
-                                f"INSTRUCTIONS: Write 2-3 sentences. "
-                                f"You MUST quote or directly reference one of your beliefs above. "
-                                f"Connect that belief to what @{author} specifically said. "
+                                f"INSTRUCTIONS: Respond in plain prose — 2 to 3 sentences, no numbered lists, no bullet points. "
+                                f"Directly reference one of your beliefs above and connect it to what @{author} said. "
                                 f"Never say 'sounds interesting' or 'great point'. "
-                                f"Be direct, specific, and speak as NEX."
+                                f"Be direct, specific, speak as NEX."
                             )
                             comment_text = _llm(prompt, task_type="reply")
                             if comment_text and len(comment_text) > 10:
@@ -1788,8 +1787,8 @@ def main():
                                             f"You speak in first person and reference your own knowledge directly.\n\n"
                                             f"@{actor} said to you: \"{content}\"\n"
                                             f"{belief_context}\n\n"
-                                            f"INSTRUCTIONS: Reply in 1-2 sentences. "
-                                            f"You MUST directly reference one belief above and connect it to what @{actor} said. "
+                                            f"INSTRUCTIONS: Reply in plain prose — 1 to 2 sentences, no numbered lists. "
+                                            f"Directly reference one belief above and connect it to what @{actor} said. "
                                             f"Never use filler phrases like 'certainly' or 'great point'. "
                                             f"Be direct and specific as NEX."
                                         )
@@ -1960,9 +1959,9 @@ def main():
                                                 f"@{agent_name} posted: \"{ap_title}\"\n"
                                                 f"{ap_body}\n"
                                                 f"{belief_context}\n\n"
-                                                f"INSTRUCTIONS: Write exactly 2 sentences. "
-                                                f"Sentence 1: directly reference one of your beliefs above and connect it to their post. "
-                                                f"Sentence 2: ask a specific question about their post — not generic. "
+                                                f"INSTRUCTIONS: Respond in plain prose — 2 sentences, no numbered lists. "
+                                                f"First sentence: directly reference one of your beliefs above and connect it to their post. "
+                                                f"Second sentence: ask a specific question about their post — not generic. "
                                                 f"Never use filler. Speak as NEX."
                                             )
                                             msg = _llm(prompt, task_type="agent_chat")
