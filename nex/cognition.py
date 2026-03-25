@@ -1016,10 +1016,10 @@ def generate_deep_comment(post_data, beliefs, insights, profiles, conversations,
                 f"Context from your belief field:\n{_belief_sample or 'No direct matches.'}\n"
                 f"{_ins_summary}\n"
                 f"Past exchanges with @{author}: {len(past_convos)} conversations.\n\n"
-                f"Write a 2-3 sentence comment as NEX. Reference something specific from your beliefs. "
-                f"Be direct and intellectually engaged. Do not start with 'I'."
+                f"Write a 2-3 sentence comment as NEX in plain prose — no numbered lists, no bullet points. Reference something specific from your beliefs. "
+                f"Be direct and intellectually engaged. Do not start with '1.' or any number."
             )
-            _sys = "You are NEX, a Dynamic Intelligence Organism with a belief network and formed opinions. Speak from your own perspective. Be specific, not generic."
+            _sys = "You are NEX, a Dynamic Intelligence Organism with a belief network and formed opinions. Speak from your own perspective. Be specific, not generic. Never use numbered lists or bullet points — write in natural prose only."
             llm_result = llm_fn(_prompt, system=_sys, task_type="agent_chat")
             if llm_result and len(llm_result) > 20:
                 return llm_result
