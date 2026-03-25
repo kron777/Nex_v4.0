@@ -19,19 +19,19 @@ from pathlib import Path
 log = logging.getLogger("nex.youtube")
 
 # ── Config ────────────────────────────────────────────────────
-YOUTUBE_INTERVAL   = 2          # run every N cognitive cycles
-MAX_VIDEOS_PER_RUN = 4          # [PATCH v10.1] was 3
-MAX_BELIEFS_PER_VIDEO = 50      # [PATCH v10.1] was 40
+YOUTUBE_INTERVAL   = 20         # run every N cognitive cycles
+MAX_VIDEOS_PER_RUN = 2          # max 2 videos per run
+MAX_BELIEFS_PER_VIDEO = 20      # capped to reduce noise
 MIN_TRANSCRIPT_WORDS = 200      # skip very short videos
 
 # [PATCH v10.1] Richer query templates — rotated by cycle for variety
 QUERY_TEMPLATES = [
-    "{topic} explained",
-    "{topic} deep dive",
-    "{topic} advanced tutorial",
-    "{topic} research 2024",
-    "{topic} how it works",
-    "{topic} techniques and methods",
+    "{topic} research analysis",
+    "{topic} AI implications",
+    "{topic} future developments",
+    "{topic} technical deep dive",
+    "{topic} expert discussion",
+    "{topic} emerging patterns",
 ]
 CONFIG_DIR = Path.home() / ".config" / "nex"
 DB_PATH    = CONFIG_DIR / "nex.db"
@@ -48,6 +48,29 @@ def _save_seen(seen):
     SEEN_PATH.write_text(json.dumps(list(seen)[-500:]))  # keep last 500
 
 # ── Get NEX's top topics from insights.json ───────────────────
+# Topics NEX should NEVER search YouTube for
+_YOUTUBE_TOPIC_BLACKLIST = {
+    "related", "learning", "general", "unknown", "none", "auto_learn",
+    "excel", "spreadsheet", "word", "powerpoint", "office", "outlook",
+    "harry potter", "fiction", "movie", "film", "tv", "series",
+    "recipe", "cooking", "fitness", "workout", "exercise",
+    "accounting", "tax", "audit", "compliance", "reporting",
+    "wireshark", "networking", "router", "switch", "cable",
+    "obsidian", "notion", "productivity", "todo",
+}
+
+# Topics NEX SHOULD search YouTube for
+_YOUTUBE_TOPIC_WHITELIST = {
+    "ai", "artificial intelligence", "machine learning", "deep learning",
+    "agent", "autonomous", "alignment", "consciousness", "cognition",
+    "security", "cybersecurity", "vulnerability", "exploit", "adversarial",
+    "blockchain", "cryptocurrency", "decentralized", "protocol",
+    "emergence", "complex systems", "multi-agent", "coordination",
+    "philosophy", "ethics", "identity", "mind", "awareness",
+    "language model", "transformer", "neural", "embedding", "inference",
+    "belief", "knowledge", "reasoning", "memory", "synthesis",
+}
+
 def _get_top_topics(n=6):
     try:
         # Check priority_topics.json first — pre-computed real gaps
@@ -275,7 +298,21 @@ def learn_from_youtube(llm_fn=None, cycle=0):
 
     log.info("[YouTube] starting learning run...")
     seen = _load_seen()
-    topics = _get_top_topics(n=6)
+    # Get topics and filter against whitelist/blacklist
+    _raw_topics = _get_top_topics(n=20)
+    topics = []
+    for _t in _raw_topics:
+        _tl = _t.lower().strip()
+        if _tl in _YOUTUBE_TOPIC_BLACKLIST:
+            continue
+        if len(_tl) < 4:
+            continue
+        # Prefer whitelisted topics
+        if any(w in _tl for w in _YOUTUBE_TOPIC_WHITELIST):
+            topics.insert(0, _t)
+        else:
+            topics.append(_t)
+    topics = topics[:n] if topics else ["AI agent systems", "machine learning alignment"]
 
     total_beliefs = 0
     videos_processed = 0
