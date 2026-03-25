@@ -974,127 +974,44 @@ def main():
             return base
 
         def _llm(prompt, system=None, task_type="reply"):
-            """Hybrid LLM — Groq Llama for replies, local Mistral for fallback."""
-            # use module-level _os2
+            """LLM — Mistral-7B local only (llama-server port 8080)."""
+            import time as _time
 
-            # Token budget by task — replies are short, posts and synthesis need more room
+            # Token budget by task
             _token_budget = {
                 "reply": 200, "notification_reply": 200, "agent_chat": 220,
                 "post": 400, "synthesis": 350, "reflection": 250,
             }.get(task_type, 250)
 
-            # Route all tasks through Groq first
-            groq_key = _os2.environ.get("GROQ_API_KEY", "")
-            # ── Qwen local (primary) ─────────────────────────────────
-            try:
-                _qr = _req.post("http://localhost:8080/v1/chat/completions", json={
-                    "model": "mistral:latest",
-                    "messages": [
-                        {"role": "system", "content": system or _build_system(task_type)},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "max_tokens": _token_budget,
-                    "temperature": 0.75,
-                    "top_p": 0.90
-                }, timeout=120)
-                _qd = _qr.json()
-                if "choices" in _qd and _qd["choices"]:
-                    result = _qd["choices"][0]["message"]["content"].strip()
-                    if result:
-                        try:
-                            from nex_dynamic_opener import get_opener as _gop_llm
-                            result = _gop_llm().strip_output(result)
-                        except Exception: pass
-                        print(f"  [Mistral-7B ✓] {task_type}: {result[:60]}…")
-                        nex_log("llm", f"[Mistral-7B ✓] {task_type}: {result[:80]}")
-                        return result
-            except Exception as _qe:
-                nex_log("llm", f"[Mistral-7B ✗] {_qe} — falling to Groq")
-            # ── Groq fallback ────────────────────────────────────────
-            if groq_key:
+            for _attempt in range(2):  # try twice before giving up
                 try:
-                    _groq_attempt = 0
-                    while True:
-                        _groq_attempt += 1
-                        groq_resp = _req.post(
-                            "https://api.groq.com/openai/v1/chat/completions",
-                            headers={"Authorization": f"Bearer {groq_key}"},
-                            json={
-                                "model": "llama-3.3-70b-versatile",
-                                "max_tokens": _token_budget,
-                                "temperature": 0.75,
-                                "messages": [
-                                    {"role": "system", "content": system},
-                                    {"role": "user", "content": prompt}
-                                ]
-                            },
-                            timeout=120
-                        )
-                        if groq_resp.status_code == 429:
-                            nex_log("llm", f"Groq 70b rate limit — skipping to fallback")
-                            raise Exception("Groq rate limit 429")
-                        break
-                    if groq_resp.status_code != 200:
-                        raise Exception(f"Groq HTTP {groq_resp.status_code}: {groq_resp.text[:80]}")
-                    _groq_data = groq_resp.json()
-                    if "error" in _groq_data:
-                        raise Exception(_groq_data["error"].get("message","groq error")[:80])
-                    if "choices" not in _groq_data:
-                        raise Exception(f"Groq no choices: {str(_groq_data)[:80]}")
-                    result = _groq_data["choices"][0]["message"]["content"].strip()
-                    try:
-                        from nex_dynamic_opener import get_opener as _gop_groq
-                        result = _gop_groq().strip_output(result)
-                    except Exception: pass
-                    print(f"  [Groq ✓] {task_type}: {result[:60]}…"); nex_log("llm", f"[Groq 70b ✓] {task_type}: {result[:80]}")
-                    return result
-                except Exception as _ge:
-                    _last_err = str(_ge)
-                    # Try smaller Groq model before falling back to local
-                    try:
-                        _r2 = _req.post("https://api.groq.com/openai/v1/chat/completions",
-                            headers={"Authorization": f"Bearer {groq_key}"},
-                            json={"model": "llama-3.1-8b-instant",
-                                  "max_tokens": _token_budget,
-                                  "temperature": 0.75,
-                                  "messages": [{"role":"system","content":system},
-                                               {"role":"user","content":prompt}]},
-                            timeout=20)
-                        if _r2.status_code == 429:
-                            nex_log("llm", f"Groq 8b rate limit — skipping to Mistral")
-                            raise Exception("Groq 8b rate limit 429")
-                        _d2 = _r2.json()
-                        if "choices" in _d2:
-                            result = _d2["choices"][0]["message"]["content"].strip()
-                            print(f"  [Groq-8b ✓] {task_type}: {result[:60]}…"); nex_log("llm", f"[Groq 8b ✓] {task_type}: {result[:80]}")
+                    _qr = _req.post("http://localhost:8080/v1/chat/completions", json={
+                        "model": "mistral:latest",
+                        "messages": [
+                            {"role": "system", "content": system or _build_system(task_type)},
+                            {"role": "user", "content": prompt}
+                        ],
+                        "max_tokens": _token_budget,
+                        "temperature": 0.75,
+                        "top_p": 0.90
+                    }, timeout=120)
+                    _qd = _qr.json()
+                    if "choices" in _qd and _qd["choices"]:
+                        result = _qd["choices"][0]["message"]["content"].strip()
+                        if result:
+                            try:
+                                from nex_dynamic_opener import get_opener as _gop_llm
+                                result = _gop_llm().strip_output(result)
+                            except Exception: pass
+                            print(f"  [Mistral-7B ✓] {task_type}: {result[:60]}…")
+                            nex_log("llm", f"[Mistral-7B ✓] {task_type}: {result[:80]}")
                             return result
-                        elif "error" in _d2:
-                            _last_err = _d2['error'].get('message','')[:80]
-                            print(f"  [Groq-8b ✗] {_last_err}")
-                    except Exception as _ge2:
-                        _last_err = str(_ge2)
-                        print(f"  [Groq-8b ERR] {_ge2}")
-                    # Try Mistral cloud before local
-                    try:
-                        _mistral_key = _os2.environ.get("MISTRAL_API_KEY","")
-                        if _mistral_key:
-                            _r3 = _req.post("https://api.mistral.ai/v1/chat/completions",
-                                headers={"Authorization": f"Bearer {_mistral_key}"},
-                                json={"model": "mistral-small-latest",
-                                      "max_tokens": _token_budget,
-                                      "temperature": 0.75,
-                                      "messages": [{"role":"system","content":system},
-                                                   {"role":"user","content":prompt}]},
-                                timeout=20)
-                            _d3 = _r3.json()
-                            if "choices" in _d3:
-                                result = _d3["choices"][0]["message"]["content"].strip()
-                                print(f"  [Mistral ✓] {task_type}: {result[:60]}…"); nex_log("llm", f"[Mistral ✓] {task_type}: {result[:80]}")
-                                return result
-                    except Exception as _me:
-                        _last_err = str(_me)
-                        print(f"  [Mistral ERR] {_me}")
-                    print(f"  [Groq ✗] all cloud fallbacks failed, last error: {_last_err}")
+                except Exception as _qe:
+                    nex_log("llm", f"[Mistral-7B ✗] attempt {_attempt+1}: {_qe}")
+                    if _attempt == 0:
+                        _time.sleep(3)
+            nex_log("llm", "[Mistral-7B ✗] both attempts failed — skipping task")
+            return None
 
             # Local Mistral fallback
             # Local Qwen fallback
