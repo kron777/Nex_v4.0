@@ -300,7 +300,7 @@ def synthesize_cluster(cluster_name, beliefs_in_cluster, llm_fn=None):
     return insight
 
 
-def run_synthesis(min_beliefs=30, llm_fn=None):
+def run_synthesis(min_beliefs=15, llm_fn=None):
     """
     Run belief synthesis — compress raw beliefs into insights.
     Call this periodically (e.g., every 50 new beliefs).
@@ -335,7 +335,7 @@ def run_synthesis(min_beliefs=30, llm_fn=None):
     # Sort clusters by size — synthesize largest first, cap LLM calls at 15
     _sorted_clusters = sorted(clusters.items(), key=lambda x: len(x[1]["beliefs"]), reverse=True)
     _llm_calls_used = 0
-    _LLM_CAP = 30
+    _LLM_CAP = 60
     for name, cluster in _sorted_clusters:
         cluster_size = len(cluster["beliefs"])
         # Re-synthesize if belief count grew by >10% since last insight
@@ -348,7 +348,7 @@ def run_synthesis(min_beliefs=30, llm_fn=None):
             # Always re-synthesize if existing summary is template-only
             _is_template = existing_insight.get("summary", "").startswith("Across ")
             _not_llm = not existing_insight.get("llm_synthesized", False)
-            if growth < 0.10 and not (_is_template or _not_llm):
+            if growth < 0.05 and not (_is_template or _not_llm):
                 skipped += 1
                 continue
 
@@ -378,7 +378,7 @@ def run_synthesis(min_beliefs=30, llm_fn=None):
     return final, len(new_insights)
 
 
-def promote_insights_to_beliefs(insights, min_confidence=0.75, min_beliefs=50):
+def promote_insights_to_beliefs(insights, min_confidence=0.65, min_beliefs=20):
     """
     #24 — Insight Promotion: strong insights become permanent beliefs.
     Writes synthesized insight summaries back into the belief store
@@ -1181,7 +1181,7 @@ def run_cognition_cycle(client, learner, conversations, cycle_num, llm_fn=None):
 
     # ── Synthesis: every 3 cycles — [PATCH v10.1] was every 5
     _dbg("cognition", f"cycle {cycle_num} — beliefs={len(beliefs)} insights={len(insights)}")
-    if cycle_num % 3 == 0:
+    if cycle_num % 2 == 0:
         insights, new_count = run_synthesis(min_beliefs=10, llm_fn=llm_fn)  # lowered from 15
         if new_count > 0:
             logs.append(("synth", f"Synthesized {new_count} new insights from {len(beliefs)} beliefs"))
