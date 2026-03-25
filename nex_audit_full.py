@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 # ── Config ────────────────────────────────────────────────────
 DB        = Path.home() / '.config/nex/nex.db'
 CFG       = Path.home() / '.config/nex'
-LLM_URL   = 'http://localhost:11434/v1/chat/completions'
+LLM_URL   = 'http://localhost:8080/v1/chat/completions'
 LLM_MODEL = 'mistral-nex'
 
 GREEN  = '\033[92m'
@@ -115,7 +115,7 @@ except Exception as e:
     fail("Ollama", str(e))
 
 try:
-    r = requests.get('http://localhost:11434/api/tags', timeout=5)
+    r = requests.get('http://localhost:8080/health', timeout=5)
     if r.status_code == 200:
         models = [m['name'] for m in r.json().get('models', [])]
         if any('mistral-nex' in m for m in models):

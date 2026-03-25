@@ -53,7 +53,7 @@ def _groq(messages: list, max_tokens: int = 300, temperature: float = 0.7) -> st
             pass
     # ── Fallback: local Ollama ────────────────────────────────────────────────
     try:
-        r = requests.post("http://localhost:11434/v1/chat/completions",
+        r = requests.post("http://localhost:8080/v1/chat/completions",
             json={"model": "mistral-nex", "messages": messages,
                   "max_tokens": max_tokens, "temperature": temperature},
             timeout=60)
