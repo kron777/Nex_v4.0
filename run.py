@@ -537,6 +537,17 @@ def run_claude_bridge(brain, orch, engine, stream, args):
 
 def _nex_shutdown(signum, frame):
     """Graceful shutdown: flush beliefs, log exit, release GPU."""
+    try:
+        import nex_session as _ns
+        _ns.save(
+            cycle=globals().get("_session_cycle", 0),
+            iq=globals().get("_session_iq", 0),
+            beliefs=globals().get("_session_beliefs", 0),
+            insights=globals().get("_session_insights", 0),
+        )
+        print(f"  [session] state saved — {_ns.summary()}")
+    except Exception as _se:
+        print(f"  [session] save error: {_se}")
     import sys as _sys
     print("\n[NEX] SIGTERM received — flushing and exiting cleanly...")
     try:
