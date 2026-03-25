@@ -45,8 +45,8 @@ SCORES_PATH = CONFIG_DIR / "source_scores.json"
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── Tuning ────────────────────────────────────────────────────────────────────
-MIN_IMPORTANCE      = 0.25   # items below this are skipped entirely
-SUPPRESS_THRESHOLD  = 0.20   # source multiplier below this = suppressed
+MIN_IMPORTANCE      = 0.18   # items below this are skipped entirely
+SUPPRESS_THRESHOLD  = 0.12   # source multiplier below this = suppressed
 BOOST_ON_SIGNAL     = 0.08   # score increase when belief is reinforced
 DECAY_ON_NOISE      = 0.04   # score decrease when belief decays/dies
 SCORE_FLOOR         = 0.10   # minimum source score (never fully silenced)
@@ -55,13 +55,30 @@ DECAY_HALFLIFE      = 50     # events before score drifts toward 0.5
 
 # ── Content quality signals ───────────────────────────────────────────────────
 _HIGH_VALUE_TERMS = {
+    # research signal
     "novel", "significant", "breakthrough", "demonstrates", "shows",
     "proves", "introduces", "proposes", "discovers", "reveals",
     "outperforms", "surpasses", "enables", "achieves", "solves",
+    "analysis", "evidence", "empirical", "experiment", "evaluation",
+    "benchmark", "dataset", "training", "fine-tuning", "inference",
+    "theory", "theoretical", "hypothesis", "observation", "finding",
+    # AI/ML concepts
     "autonomy", "emergence", "alignment", "memory", "reasoning",
     "architecture", "mechanism", "framework", "approach", "method",
+    "transformer", "attention", "gradient", "optimization", "loss",
+    "neural", "cognitive", "representation", "embedding", "latent",
+    "reinforcement", "generative", "diffusion", "language", "model",
+    "agent", "planning", "decision", "policy", "reward", "objective",
+    # security
     "vulnerability", "exploit", "attack", "defense", "mitigation",
+    "threat", "adversarial", "robustness", "safety", "privacy",
+    # philosophy/consciousness (aeon territory)
+    "consciousness", "perception", "experience", "identity", "ethics",
+    "philosophy", "knowledge", "belief", "truth", "reality", "mind",
+    "intelligence", "awareness", "agency", "causation", "meaning",
+    # systems/coordination
     "coordination", "consensus", "distributed", "multi-agent",
+    "emergent", "complex", "adaptive", "dynamic", "feedback",
 }
 _LOW_VALUE_TERMS = {
     "asks", "discuss", "thoughts", "opinion", "feel", "anyone",
