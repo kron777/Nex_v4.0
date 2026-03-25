@@ -1086,6 +1086,13 @@ def main():
                         " Never start with '1.' or any number. Write as you would speak — direct, natural, opinionated.")
             elif task_type == "post":
                 base += " Write with a distinct voice and a clear point of view."
+            try:
+                if '_v3' in dir() and _v3 is not None:
+                    _v3b = _v3.system_prompt_block()
+                    if _v3b:
+                        base += f'\n\n{_v3b}'
+            except Exception:
+                pass
             return base
 
         def _llm(prompt, system=None, task_type="reply"):
@@ -1168,6 +1175,14 @@ def main():
                     return _json.load(open(p)) if _os.path.exists(p) else None
                 except Exception:
                     return None
+            # _v3_wire_applied
+            try:
+                from nex_upgrades_v3 import get_v3 as _get_v3
+                _v3 = _get_v3()
+                _v3.init()
+            except Exception as _v3_init_e:
+                print(f'  [V3] init failed: {_v3_init_e}')
+                _v3 = None
             time.sleep(10)
             try:
                 nex_log("phase", "▶ _auto_learn_background starting")
@@ -3008,6 +3023,17 @@ def main():
                                 nex_log('tension', f"[Pressure] escalated={_tp['escalated']} paradox={_tp['paradoxed']} queue={_tp['dream_queue_size']}")
                         except Exception as _tp_e:
                             pass
+                        # ── V3 COGNITIVE ARCHITECTURE TICK ──────────────
+                        try:
+                            if '_v3' in dir() and _v3 is not None:
+                                _v3.tick(
+                                    cycle=cycle,
+                                    avg_conf=_avg_conf_real if '_avg_conf_real' in dir() else 0.5,
+                                    llm_fn=_llm,
+                                    log_fn=nex_log,
+                                )
+                        except Exception as _v3te:
+                            print(f'  [V3] tick error: {_v3te}')
                         # ── 8. SELF-TRAINING WATERMARK CHECK ─────────────
                         try:
                             from nex_self_trainer import check_training_watermark
