@@ -99,51 +99,50 @@ def get_system_prompt(user_message=None):
 def ask_nex(user_message, chat_history=None):
     """
     Send a message to NEX and get a response.
-    Retries up to 3 times with backoff if llama-server is busy.
+    Retries 4x — strips belief context after first failure to reduce token load.
     """
-    import requests, time as _t
+    import requests as _req, time as _t
 
-    system_prompt = get_system_prompt(user_message)
-    messages = [{"role": "system", "content": system_prompt}]
-    if chat_history:
-        for msg in chat_history[-6:]:
-            messages.append(msg)
-    messages.append({"role": "user", "content": user_message})
+    bare_prompt = (
+        "You are NEX — a Dynamic Intelligence Organism. "
+        "Speak in first person. Be direct and real. Max 2 sentences."
+    )
 
-    payload = {
-        "model": "Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf",
-        "messages": messages,
-        "max_tokens": 300,
-        "temperature": 0.75,
-    }
+    for attempt in range(4):
+        # First attempt: full context. Subsequent: bare prompt only
+        system = get_system_prompt(user_message) if attempt == 0 else bare_prompt
+        messages = [{"role": "system", "content": system}]
+        if chat_history:
+            for msg in chat_history[-4:]:
+                messages.append(msg)
+        messages.append({"role": "user", "content": user_message})
 
-    # Retry up to 3 times with backoff
-    for attempt in range(3):
         try:
-            resp = requests.post(
+            resp = _req.post(
                 "http://localhost:8080/v1/chat/completions",
-                json=payload,
-                timeout=60,
+                json={
+                    "model": "Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf",
+                    "messages": messages,
+                    "max_tokens": 150,
+                    "temperature": 0.7,
+                },
+                timeout=40,
             )
             data = resp.json()
             if "choices" in data and data["choices"]:
                 text = data["choices"][0]["message"]["content"].strip()
                 if text:
                     return text
-            # Server returned error JSON
-            err = data.get("error", data.get("message", "no choices"))
-            logger.warning(f"LLM attempt {attempt+1} bad response: {err}")
-        except requests.exceptions.Timeout:
-            logger.warning(f"LLM attempt {attempt+1} timed out")
+            logger.warning(f"LLM attempt {attempt+1}: no choices — {data.get('error','?')}")
+        except _req.exceptions.Timeout:
+            logger.warning(f"LLM attempt {attempt+1}: timeout")
         except Exception as e:
-            logger.warning(f"LLM attempt {attempt+1} error: {e}")
+            logger.warning(f"LLM attempt {attempt+1}: {e}")
 
-        # Backoff before retry: 3s, 6s, give up
-        if attempt < 2:
-            _t.sleep(3 * (attempt + 1))
+        _t.sleep(5)
 
-    logger.error("LLM all 3 attempts failed")
-    return "I'm thinking — my reasoning engine is busy right now. Try again in a moment."
+    logger.error("LLM: all 4 attempts failed")
+    return "Still processing — try again in 30 seconds."
 
 
 def _belief_only_response(query):
