@@ -1183,6 +1183,14 @@ def main():
             except Exception as _v3_init_e:
                 print(f'  [V3] init failed: {_v3_init_e}')
                 _v3 = None
+            # _ai_wire_applied
+            try:
+                from nex_adaptive_intelligence import get_adaptive_intelligence as _get_ai
+                _ai = _get_ai()
+                _ai.init()
+            except Exception as _ai_init_e:
+                print(f'  [AI] init failed: {_ai_init_e}')
+                _ai = None
             time.sleep(10)
             try:
                 nex_log("phase", "▶ _auto_learn_background starting")
@@ -3034,6 +3042,12 @@ def main():
                                 )
                         except Exception as _v3te:
                             print(f'  [V3] tick error: {_v3te}')
+                        # ── ADAPTIVE INTELLIGENCE TICK ───────────────────
+                        try:
+                            if '_ai' in dir() and _ai is not None:
+                                _ai.tick(cycle=cycle, llm_fn=_llm, log_fn=nex_log)
+                        except Exception as _aite:
+                            print(f'  [AI] tick error: {_aite}')
                         # ── 8. SELF-TRAINING WATERMARK CHECK ─────────────
                         try:
                             from nex_self_trainer import check_training_watermark
