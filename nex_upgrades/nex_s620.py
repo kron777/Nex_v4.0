@@ -401,12 +401,13 @@ class AnomalyDetector:
         if tension >= self.TENSION_SPIKE:
             alerts.append(f'TENSION_SPIKE:{tension:.2f}')
 
-        # Response repetition
-        h = self._hash(response)
-        repeat_count = sum(1 for x in self._response_hashes if x == h)
-        self._response_hashes.append(h)
-        if repeat_count >= self.REPEAT_LIMIT:
-            alerts.append(f'REPEAT_LOOP:{repeat_count}x')
+        # Response repetition — only check non-empty responses
+        if response:
+            h = self._hash(response)
+            repeat_count = sum(1 for x in self._response_hashes if x == h)
+            self._response_hashes.append(h)
+            if repeat_count >= self.REPEAT_LIMIT:
+                alerts.append(f'REPEAT_LOOP:{repeat_count}x')
 
         # Belief change spike
         if belief_delta > self.BELIEF_SPIKE:
