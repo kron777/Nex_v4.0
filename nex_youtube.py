@@ -50,7 +50,7 @@ def _save_seen(seen):
 # ── Get NEX's top topics from insights.json ───────────────────
 # Topics NEX should NEVER search YouTube for
 _YOUTUBE_TOPIC_BLACKLIST = {
-    "related", "learning", "general", "contradiction", "bible", "religion", "spiritual", "unknown", "none", "auto_learn",
+    "related", "learning", "general", "contradiction", "bible", "religion", "spiritual", "gospel", "scripture", "contradiction", "bible", "religion", "spiritual", "unknown", "none", "auto_learn",
     "excel", "spreadsheet", "word", "powerpoint", "office", "outlook",
     "harry potter", "fiction", "movie", "film", "tv", "series",
     "recipe", "cooking", "fitness", "workout", "exercise",
