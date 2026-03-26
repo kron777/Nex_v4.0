@@ -1947,9 +1947,11 @@ def main():
                             from nex.nex_crawler import NexCrawler as _NCR
                             from nex.belief_store import get_db as _bsget2
                             _nce = _NCE(_NCR(_bsget2))
-                            _gaps_queued = _nce.check_beliefs(None)
-                            if _gaps_queued > 0:
-                                print(f"  [CuriosityGap] {_gaps_queued} low-confidence topics queued")
+                            # Gap scan every 5 cycles only — prevents re-queuing same topics
+                            if cycle % 5 == 0:
+                                _gaps_queued = _nce.check_beliefs(None)
+                                if _gaps_queued > 0:
+                                    print(f"  [CuriosityGap] {_gaps_queued} low-confidence topics queued")
                             _desires_queued = _nce.generate_desires(cycle)
                             if _desires_queued > 0:
                                 print(f"  [CuriosityDesire] {_desires_queued} self-directed topics queued")
