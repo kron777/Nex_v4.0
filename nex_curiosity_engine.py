@@ -1,5 +1,4 @@
 from nex_groq import _groq
-from nex_groq import _groq
 #!/usr/bin/env python3
 """
 nex_curiosity_engine.py — Layer 3: Active Curiosity Engine
@@ -40,25 +39,7 @@ def _groq_rate_ok() -> bool:
     return True
 
 
-#def _groq(messages: list, max_tokens: int = 300, temperature: float = 0.7) -> str | None:
-    if not _groq_rate_ok():
-        return None
-    key = os.environ.get("GROQ_API_KEY", "")
-    if not key:
-        return None
-    try:
-        r = requests.post(GROQ_URL,
-            headers={"Authorization": f"Bearer {key}"},
-            json={
-                "model":       GROQ_MODEL,
-                "max_tokens":  max_tokens,
-                "temperature": temperature,
-                "messages":    messages,
-            }, timeout=20)
-        return r.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        print(f"  [curiosity] Groq error: {e}")
-        return None
+# _groq imported from nex_groq above
 
 
 def _load_beliefs(limit: int = 500) -> list:
@@ -148,6 +129,10 @@ class CuriosityEngine:
         """Ask: What is X? where X is NEX's lowest-confidence topic."""
         topic = self._pick_low_confidence_topic()
         if not topic:
+            return None
+        # LoadShare: only call LLM if it's a true gap
+        if not is_true_gap(topic):
+            print(f"  [curiosity] TYPE A — '{topic}' not a true gap, skipping LLM")
             return None
         print(f"  [curiosity] TYPE A — gap fill: {topic}")
         answer = _groq([
@@ -380,6 +365,31 @@ class CuriosityEngine:
         except Exception as e:
             print(f"  [desire] {e}")
             return 0
+
+
+def is_true_gap(topic: str) -> bool:
+    """
+    LoadShare_Doctrine: graph-based gap check — no LLM needed.
+    Returns True only if topic is genuinely underrepresented in belief field.
+    """
+    try:
+        import sqlite3
+        from pathlib import Path as _P
+        db_path = _P.home() / '.config' / 'nex' / 'nex.db'
+        if not db_path.exists():
+            return True
+        db = sqlite3.connect(str(db_path))
+        row = db.execute(
+            'SELECT COUNT(*), MAX(confidence) FROM beliefs WHERE topic=? OR content LIKE ?',
+            (topic, f'%{topic}%')
+        ).fetchone()
+        db.close()
+        count    = row[0] if row else 0
+        max_conf = row[1] if row and row[1] else 0.0
+        # True gap: fewer than 2 related beliefs OR max confidence below 0.40
+        return count < 2 or max_conf < 0.40
+    except Exception:
+        return True  # assume gap on error
 
 
 # Module-level singleton

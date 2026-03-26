@@ -2007,7 +2007,18 @@ def main():
                                 f"Never say 'sounds interesting' or 'great point'. "
                                 f"Be direct, specific, speak as NEX."
                             )
-                            comment_text = _llm(prompt, task_type="reply")
+                            # LoadShare: try template reply first
+                            comment_text = None
+                            try:
+                                from nex_power_save import generate_template_reply as _tpl_reply, should_use_template_reply as _use_tpl
+                                _top_sig = _se.get_top_signals()[0] if '_se' in dir() and _se and _se.get_top_signals() else {}
+                                _sig_edge = _top_sig.get('edge', 0.0)
+                                _sig_tension = _top_sig.get('tension', 0.5)
+                                if _use_tpl(_sig_edge, _sig_tension) and _top_sig:
+                                    comment_text = _tpl_reply('', _top_sig, topic=p.get('submolt',{}).get('name',''))
+                            except Exception: pass
+                            if not comment_text:
+                                comment_text = _llm(prompt, task_type="reply")
                             if comment_text and len(comment_text) > 10:
                                 try:
                                     replied_posts.add(pid)

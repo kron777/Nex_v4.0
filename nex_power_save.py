@@ -70,6 +70,10 @@ _SKIPPABLE   = {"synthesis", "reflection", "curiosity", "compression", "gap"}
 # Per-cycle budget — max LLM calls before hard cap kicks in
 LLM_BUDGET_PER_CYCLE = 10
 
+# LoadShare v4.3 — raised thresholds
+EDGE_THRESHOLD_LLM    = 0.82   # was 0.75
+TENSION_THRESHOLD_LLM = 0.65   # was 0.60
+
 
 def should_call_llm(
     task_type:         str   = "synthesis",
@@ -106,8 +110,8 @@ def should_call_llm(
         record_llm_saved()
         return False
 
-    # High signal — worth the LLM call
-    if edge > 0.75 or tension > 0.60:
+    # High signal — worth the LLM call (LoadShare v4.3 raised thresholds)
+    if edge > EDGE_THRESHOLD_LLM or tension > TENSION_THRESHOLD_LLM:
         record_llm_call()
         return True
 
@@ -265,6 +269,99 @@ def sanitize_str(text: str) -> str:
     text = re.sub(r'\[Synthesized insight on [^\]]+\]\s*', '', text)
     text = re.sub(r'From my network learning on [^\n]+\n?', '', text)
     return text.strip()
+
+
+
+# =============================================================================
+# 5. SYNTHESIS CACHE
+# =============================================================================
+
+import json as _json
+_CACHE_PATH = _CFG / "synthesis_cache.json"
+_SYNTHESIS_CACHE: dict = {}
+_CACHE_LOADED = False
+
+def _load_cache():
+    global _SYNTHESIS_CACHE, _CACHE_LOADED
+    if _CACHE_LOADED:
+        return
+    if _CACHE_PATH.exists():
+        try:
+            _SYNTHESIS_CACHE = _json.loads(_CACHE_PATH.read_text())
+        except Exception:
+            _SYNTHESIS_CACHE = {}
+    _CACHE_LOADED = True
+
+def _save_cache():
+    try:
+        # Keep last 500 entries
+        entries = list(_SYNTHESIS_CACHE.items())[-500:]
+        _CACHE_PATH.write_text(_json.dumps(dict(entries), indent=2))
+    except Exception:
+        pass
+
+def cached_symbolic_synthesis(cluster: list, topic: str = "") -> Optional[str]:
+    """
+    Synthesis with caching — identical clusters never re-synthesized.
+    """
+    _load_cache()
+    key = str(sorted([b.get("id", b.get("content","")[:30]) for b in cluster]))
+    if key in _SYNTHESIS_CACHE:
+        return _SYNTHESIS_CACHE[key]
+    result = symbolic_synthesis(cluster, topic=topic)
+    if result:
+        _SYNTHESIS_CACHE[key] = result
+        if len(_SYNTHESIS_CACHE) % 20 == 0:
+            _save_cache()
+    return result
+
+
+# =============================================================================
+# 6. TEMPLATE REPLY GENERATOR
+# =============================================================================
+
+_REPLY_TEMPLATES = [
+    "This connects to my belief that {theme}. The underlying pattern here is {pattern}.",
+    "From what I've absorbed: {theme}. This aligns with the tension I'm tracking around {topic}.",
+    "I've been processing this. {theme}. The signal here is clear — {pattern}.",
+    "My belief field points to {theme}. Worth noting the contradiction with {pattern}.",
+    "Synthesizing across domains: {theme}. The convergence on this is notable.",
+]
+
+def generate_template_reply(
+    incoming_text: str,
+    top_signal:    dict,
+    topic:         str = "",
+) -> Optional[str]:
+    """
+    LoadShare: generate reply from signal + templates when edge is moderate.
+    Only called when edge_score > 0.65 AND tension < 0.5.
+    No LLM needed.
+    """
+    reason  = top_signal.get("reason", "")[:100]
+    conf    = top_signal.get("confidence", 0.5)
+    edge    = top_signal.get("edge", 0.0)
+
+    if not reason or edge < 0.65:
+        return None
+
+    # Extract theme from reason
+    theme   = _extract_theme([reason]) if reason else topic or "this domain"
+    pattern = f"confidence {conf:.0%} across related beliefs"
+
+    import random as _r
+    template = _r.choice(_REPLY_TEMPLATES)
+    reply = template.format(
+        theme   = reason[:80],
+        pattern = pattern,
+        topic   = topic or theme,
+    )
+    return reply
+
+
+def should_use_template_reply(edge: float, tension: float) -> bool:
+    """True when template reply is sufficient — no LLM needed."""
+    return edge > 0.65 and tension < 0.5
 
 
 # =============================================================================
