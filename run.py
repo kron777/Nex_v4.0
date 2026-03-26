@@ -2940,7 +2940,9 @@ def main():
                             _ce_results = _ce.run_cycle(cycle=cycle)
                             if _ce_results:
                                 print(f"  [CURIOSITY] {list(_ce_results.keys())}")
-                        except Exception as _cee: print(f"  [CURIOSITY ERROR] {_cee}")
+                        except Exception as _cee:
+                            import traceback; traceback.print_exc()
+                            print(f"  [CURIOSITY ERROR] {_cee}")
                         # ── DESIRE COMPETITION ENGINE ──────────────────────
                         try:
                             from nex_desire_engine import get_desire_engine as _gde
