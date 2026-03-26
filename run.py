@@ -3313,7 +3313,14 @@ def main():
                     except Exception: pass
                     # emit self assessment with real values
                     try:
-                        _gaps = [i.get("topic","?") for i in (_load("insights.json") or []) if i.get("confidence",0)<0.3][:8]
+                        _gap_noise = {"mentioned","build","local","given","based","using","used","made","said",
+                       "come","came","went","gone","look","seemed","think","want","need",
+                       "make","take","give","show","keep","work","human","model","agent",
+                       "topic","group","level","value","state","field","range","general","unknown"}
+        _gaps = [i.get("topic","?") for i in (_load("insights.json") or [])
+                 if i.get("confidence",0)<0.3
+                 and i.get("topic","?") not in _gap_noise
+                 and len(i.get("topic","")) > 4][:8]
                         # Read topic_alignment from reflections (correct key), not conversations
                         _refs_for_align = _load("reflections.json") or []
                         _valid_aligns = [r.get("topic_alignment",0) for r in _refs_for_align[-20:] if r.get("topic_alignment") is not None]
