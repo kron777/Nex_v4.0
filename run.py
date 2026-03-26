@@ -1833,7 +1833,7 @@ def main():
                                         import sqlite3 as _crdbl, time as _crtime
                                         _crdb = _crdbl.connect(str(_cqcfg/'nex.db'))
                                         _crdata2 = _cqj.loads(_cqp.read_text()) if _cqp.exists() else {"crawled":{}}
-                                        for _topic in _crdata2.get("crawled", {}).keys():
+                                        for _topic in _crdata2.get("crawled_topics", {}).keys():
                                             _crdb.execute("INSERT OR REPLACE INTO curiosity_crawled (topic, crawled_at) VALUES (?,?)", (_topic.lower(), _crtime.time()))
                                             _crdb.execute("DELETE FROM curiosity_queue WHERE topic=?", (_topic.lower(),))
                                         _crdb.commit(); _crdb.close()
