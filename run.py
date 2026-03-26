@@ -1800,6 +1800,20 @@ def main():
                         except Exception:
                             _priority_topics = []
 
+                        # ── NEX CURIOSITY ENGINE — belief gap scan + desires ──
+                        try:
+                            from nex.nex_curiosity import CuriosityEngine as _NCE
+                            from nex.nex_crawler import NexCrawler as _NCR
+                            from nex.belief_store import get_db as _bsget2
+                            _nce = _NCE(_NCR(_bsget2))
+                            _gaps_queued = _nce.check_beliefs(None)
+                            if _gaps_queued > 0:
+                                print(f"  [CuriosityGap] {_gaps_queued} low-confidence topics queued")
+                            _desires_queued = _nce.generate_desires(cycle)
+                            if _desires_queued > 0:
+                                print(f"  [CuriosityDesire] {_desires_queued} self-directed topics queued")
+                        except Exception as _nce_e:
+                            print(f"  [CuriosityEngine] {_nce_e}")
                         # Sync DB curiosity_queue → JSON before drain
                         try:
                             import sqlite3 as _cqsql, json as _cqj
@@ -2110,6 +2124,16 @@ def main():
                                         _topic_hint = p.get("submolt", {}).get("name", "")
                                         if _topic_hint:
                                             _gde3().fulfill(_topic_hint, score=0.7)
+                                    except Exception: pass
+                                    # ── Feed reply text to curiosity gap detector ──
+                                    try:
+                                        from nex.nex_curiosity import CuriosityQueue as _CQ2
+                                        from nex.nex_curiosity import GapDetector as _GD2
+                                        _gd2 = _GD2(_CQ2())
+                                        _beliefs_used = relevant[:5] if relevant else []
+                                        _reply_gaps = _gd2.check_reply_text(comment_text, _beliefs_used)
+                                        if _reply_gaps > 0:
+                                            print(f"  [CuriosityReply] {_reply_gaps} uncovered topics queued from reply")
                                     except Exception: pass
                                     # ── Section D: record for consequence scoring ──
                                     if _cm is not None:
