@@ -1326,25 +1326,6 @@ def main():
                 conversations = load_conversations()
 
                 # ── Hoist stable imports used every cycle ──
-
-                    # ── GWT broadcast cycle ──────────────────────────────
-                    if _gwb_run:
-                        try:
-                            from nex_affect_valence import current_score as _cv_score
-                            from nex_mood_hmm import current as _mood_cur
-                            _cs = _cv_score()
-                            from nex_gwt import affect_signal as _afs
-                            _gwb_run.submit(_afs(_cs.valence, _cs.arousal, _mood_cur()))
-                            _gwt_tok = _gwb_run.broadcast()
-                            if _gwt_tok:
-                                import logging as _gwt_log
-                                _gwt_log.getLogger("nex.run").info(
-                                    f"[GWT] spotlight=[{_gwt_tok.winner.source}] "
-                                    f"sal={_gwt_tok.winner.salience:.2f}"
-                                )
-                        except Exception as _gwte:
-                            pass
-                    # ─────────────────────────────────────────────────────
                 _run_cognition_cycle = None
                 try:
                     from nex.belief_store import query_beliefs as _query_beliefs
@@ -2885,6 +2866,24 @@ def main():
                         except Exception: pass
                         # ── 6. COGNITION ─────────────────────────────────
                         try:
+                            # ── GWT broadcast cycle ─────────────────────────────────
+                            if _gwb_run:
+                                try:
+                                    from nex_affect_valence import current_score as _cv_score
+                                    from nex_mood_hmm import current as _mood_cur
+                                    _cs = _cv_score()
+                                    from nex_gwt import affect_signal as _afs
+                                    _gwb_run.submit(_afs(_cs.valence, _cs.arousal, _mood_cur()))
+                                    _gwt_tok = _gwb_run.broadcast()
+                                    if _gwt_tok:
+                                        import logging as _gwt_log
+                                        _gwt_log.getLogger('nex.run').info(
+                                            f'[GWT] spotlight=[{_gwt_tok.winner.source}]'
+                                            f' sal={_gwt_tok.winner.salience:.2f}'
+                                        )
+                                except Exception:
+                                    pass
+                            # ─────────────────────────────────────────────────────────
                             if _run_cognition_cycle:
                                 # Build drive weights to pass into synthesis
                                 _synth_drive_weights = {}
