@@ -1819,6 +1819,9 @@ def main():
                             from nex.nex_curiosity import CuriosityQueue as _CQ
                             _cq = _CQ()
                             if _cq.status()["pending"] > 0:
+                                import asyncio as _aio
+                                try: _aio.get_event_loop()
+                                except RuntimeError: _aio.set_event_loop(_aio.new_event_loop())
                                 from nex.belief_store import get_db as _bsget
                                 _crawler = _NC(_bsget)
                                 _drained = _cq.drain(_crawler, max_items=2)
