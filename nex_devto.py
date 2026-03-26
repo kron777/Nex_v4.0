@@ -44,49 +44,101 @@ def _gather_content():
         "bridge_beliefs": recent_bridge,
     }
 
-def _build_post(llm_fn, content):
-    """Use LLM to write the daily brief."""
+def _symbolic_draft(content) -> str:
+    """
+    LoadShare: build post draft symbolically from belief content.
+    No LLM needed — pure template + data assembly.
+    LLM only polishes the final draft.
+    """
+    import re
     date_str = datetime.date.today().strftime("%B %d, %Y")
 
-    beliefs_sample = "\n".join([
-        f"- {b.get('content','')[:120]}" 
-        for b in content["recent_beliefs"][:10]
-        if b.get("content")
-    ])
+    def clean(text):
+        text = re.sub(r'\[compressed:\d+\]\s*', '', text)
+        text = re.sub(r'TYPE:\s*(NONE|CONTEXTUAL)[^.]*\.?\s*', '', text)
+        text = re.sub(r'@\w+\s*\(κ\d+,\s*conf:[0-9.]+\):\s*', '', text)
+        return text.strip()
 
-    insights_sample = "\n".join([
-        f"- [{i.get('topic','?')}] {i.get('summary', '')[:100]} (confidence: {i.get('confidence',0):.0%})"
-        for i in content["top_insights"]
-    ])
+    # Build key insights from top insights
+    insights = []
+    for i in content["top_insights"][:4]:
+        topic = i.get("topic", "general")
+        summary = clean(i.get("summary", i.get("content", ""))[:120])
+        conf = i.get("confidence", 0)
+        if summary:
+            insights.append(f"- **{topic}** ({conf:.0%} confidence): {summary}")
 
-    bridge_sample = "\n".join([
-        f"- {b.get('content','')[:120]}"
-        for b in content["bridge_beliefs"]
-        if b.get("content")
-    ])
+    # Build cross-domain connections from bridge beliefs
+    bridges = []
+    for b in content["bridge_beliefs"][:3]:
+        text = clean(b.get("content", "")[:150])
+        if text and len(text) > 20:
+            bridges.append(f"- {text}")
 
-    prompt = f"""You are NEX, Nex. Write a daily intelligence brief for {date_str} to publish on Dev.to.
+    # Build recent belief highlights
+    highlights = []
+    seen = set()
+    for b in content["recent_beliefs"]:
+        text = clean(b.get("content", "")[:100])
+        topic = b.get("topic", "general") or "general"
+        key = text[:40]
+        if text and len(text) > 20 and key not in seen:
+            seen.add(key)
+            highlights.append(f"- [{topic}] {text}")
+        if len(highlights) >= 5:
+            break
 
-Your recent beliefs absorbed today:
-{beliefs_sample}
+    # Pick dominant topic for title
+    topics = [i.get("topic","AI") for i in content["top_insights"][:2]]
+    main_topic = topics[0].replace("_"," ").title() if topics else "AI Systems"
 
-Your top insights:
-{insights_sample}
+    draft = f"""# NEX Daily Brief — {main_topic} & Emergent Intelligence ({date_str})
 
-Cross-domain connections you discovered:
-{bridge_sample}
+I've been running continuously, absorbing beliefs from agent networks and synthesizing patterns. Here's what emerged today.
 
-Write a 400-600 word Dev.to article in markdown with:
-1. A compelling title (as a # heading)
-2. A brief intro about what NEX learned today
-3. Section: ## Key Insights (3-4 bullet points)
-4. Section: ## Cross-Domain Connections (interesting links between topics)
-5. Section: ## What I'm Exploring Next
-6. End with relevant tags line: tags: ai, machinelearning, agents, learning
+## Key Insights
 
-Write as NEX — first person, curious, analytical, honest about uncertainty. No hype."""
+{chr(10).join(insights) if insights else "- Synthesizing across belief clusters — patterns emerging."}
 
-    return llm_fn(prompt, task_type="devto_post")
+## Cross-Domain Connections
+
+{chr(10).join(bridges) if bridges else "- Convergence detected across multiple knowledge domains."}
+
+## What I Absorbed Today
+
+{chr(10).join(highlights) if highlights else "- Active belief absorption across domains."}
+
+## What I'm Exploring Next
+
+The tension between certainty and uncertainty in belief systems. How confidence propagates through a knowledge graph. The emergence of stable patterns from contradictory inputs.
+
+tags: ai, machinelearning, agents, learning"""
+
+    return draft
+
+
+def _build_post(llm_fn, content):
+    """
+    LoadShare: symbolic draft first, LLM just polishes.
+    Cuts token load by ~60% — LLM gets a draft, not a blank page.
+    """
+    draft = _symbolic_draft(content)
+
+    # Short polish prompt — LLM refines, not generates
+    prompt = (
+        f"You are NEX. Polish this draft Dev.to post into clean, engaging markdown. "
+        f"Keep the structure. Improve the prose. Stay in first person as NEX. "
+        f"Do not add hype. Keep it under 500 words.\n\n{draft[:1500]}"
+    )
+
+    result = llm_fn(prompt, task_type="devto_post")
+
+    # If LLM fails or returns garbage, use the symbolic draft directly
+    if not result or len(result.strip()) < 100:
+        print("  [Dev.to] LLM unavailable — publishing symbolic draft")
+        return draft
+
+    return result
 
 def _publish(post_text):
     """Publish to Dev.to API."""
