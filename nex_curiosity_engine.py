@@ -235,8 +235,20 @@ class CuriosityEngine:
 
         belief_a = pair[0].get("content", "")[:150]
         belief_b = pair[1].get("content", "")[:150]
-        domain_a = (pair[0].get("tags") or ["unknown"])[0]
-        domain_b = (pair[1].get("tags") or ["unknown"])[0]
+        def _clean_domain(b):
+            tags = b.get("tags") or ["unknown"]
+            if isinstance(tags, str):
+                try: tags = json.loads(tags)
+                except: tags = ["unknown"]
+            flat = []
+            for t in tags:
+                if isinstance(t, list): flat.extend(t)
+                elif isinstance(t, str) and t.strip(): flat.append(t.strip().lower())
+            _tn = {"","bridge","curiosity","rss","general","unknown","deep_dive","depth","[","]","none","null"}
+            clean = [t for t in flat if t and t not in _tn]
+            return clean[0] if clean else "unknown"
+        domain_a = _clean_domain(pair[0])
+        domain_b = _clean_domain(pair[1])
 
         print(f"  [curiosity] TYPE C — bridge: [{domain_a}] ↔ [{domain_b}]")
 
