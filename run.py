@@ -2941,7 +2941,7 @@ def main():
                             if _ce_results:
                                 print(f"  [CURIOSITY] {list(_ce_results.keys())}")
                         except Exception as _cee:
-                            import traceback; traceback.print_exc()
+                            import traceback as _tb2; open("/tmp/curiosity_error.log","a").write(_tb2.format_exc())
                             print(f"  [CURIOSITY ERROR] {_cee}")
                         # ── DESIRE COMPETITION ENGINE ──────────────────────
                         try:
