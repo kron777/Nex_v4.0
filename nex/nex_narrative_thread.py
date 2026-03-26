@@ -45,6 +45,19 @@ def _save_narrative(text: str):
         path = os.path.abspath(_NARRATIVE_PATH)
         with open(path, "w") as f:
             json.dump(record, f, indent=2)
+        # ── narrative_history: append-only log of past selves ──
+        hist_path = os.path.join(os.path.dirname(path), "..", "nex_narrative_history.json")
+        hist_path = os.path.abspath(hist_path)
+        try:
+            history = json.load(open(hist_path)) if os.path.exists(hist_path) else []
+            history.append(record)
+            # Keep last 500 narrative snapshots
+            if len(history) > 500:
+                history = history[-500:]
+            with open(hist_path, "w") as hf:
+                json.dump(history, hf, indent=2)
+        except Exception as _he:
+            log.debug(f"Could not save narrative history: {_he}")
     except Exception as e:
         log.warning(f"Could not save narrative: {e}")
 

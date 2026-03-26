@@ -41,6 +41,8 @@ class ProactiveAnticipator:
         self._lock = threading.Lock()
         self._desires: list[dict] = []
         self._last_scan: float = 0
+        self._replied_topics: set = set()   # loop fix: deprioritize these
+        self._replied_topic_ttl: dict = {}  # topic → expiry time
         self._load()
 
     def _load(self):
@@ -56,6 +58,24 @@ class ProactiveAnticipator:
             _DESIRE_PATH.write_text(json.dumps(self._desires[-50:], indent=2))
         except Exception:
             pass
+
+
+    def register_reply(self, topic: str, ttl_seconds: float = 300.0):
+        """Mark a topic as recently engaged — deprioritize in desire scan."""
+        with self._lock:
+            self._replied_topics.add(topic.lower().strip())
+            self._replied_topic_ttl[topic.lower().strip()] = time.time() + ttl_seconds
+
+    def _is_recently_replied(self, topic: str) -> bool:
+        t = topic.lower().strip()
+        with self._lock:
+            # Expire old entries
+            now = time.time()
+            expired = [k for k, v in self._replied_topic_ttl.items() if v < now]
+            for k in expired:
+                self._replied_topics.discard(k)
+                del self._replied_topic_ttl[k]
+            return t in self._replied_topics
 
     def scan(
         self,
@@ -82,6 +102,8 @@ class ProactiveAnticipator:
         for b in low_conf[:3]:
             topic = b.get("topic", "")
             if topic:
+                if self._is_recently_replied(topic):
+                    continue  # loop fix: skip recently engaged topics
                 new_desires.append({
                     "desire": f"Resolve uncertainty about '{topic}'",
                     "source": "belief_drift",
