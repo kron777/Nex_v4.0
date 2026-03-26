@@ -186,7 +186,7 @@ class CuriosityEngine:
         if not self.beliefs:
             return None
         # Pick a high-confidence belief to drill into
-        strong = [b for b in self.beliefs if b.get("confidence", 0) > 0.6]
+        strong = [b for b in (self.beliefs or []) if b.get("confidence", 0) > 0.6]
         if not strong:
             strong = self.beliefs
         belief_text = random.choice(strong).get("content", "")[:200]
