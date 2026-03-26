@@ -2759,7 +2759,7 @@ def main():
                         # ── CONTRADICTION ENGINE (#5) ─────────────────────
                         try:
                             from nex_contradiction_engine import run_contradiction_cycle as _contra
-                            _contra_llm = _llm if _should_llm('synthesis', tension=0.6) else None
+                            _contra_llm = _llm if should_call_llm('synthesis', tension=0.6) else None
                             _contra_resolved = _contra(cycle=cycle, llm_fn=_contra_llm)
                             if _contra_resolved > 0:
                                 nex_log("cognition", f"Resolved {_contra_resolved} contradictions")
