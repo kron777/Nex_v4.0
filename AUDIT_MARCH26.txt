@@ -139,3 +139,9 @@ KNOWN REMAINING ISSUES
 - Discord config missing
 - run.py alias imports — cosmetic debt for future refactor
 - DB not primary belief source — cognition reads beliefs.json
+
+SESSION 2 — March 26 continued
+================================
+Additional ~14,400 lines removed across 31+ dead files.
+Cognitive pressure wired. DB→JSON sync automated.
+NexV2 stub cleaned. /v2status live. Tension loop fully capped.
