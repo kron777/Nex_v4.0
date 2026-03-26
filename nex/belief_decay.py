@@ -400,8 +400,9 @@ def reflect_to_belief(reflection_text, topic="general", confidence=0.65):
     if not reflection_text or len(reflection_text) < 50:
         return False
     # Quality gate: must contain substantive content
-    _filler = {"solid", "used beliefs", "drifted", "need more", "may have"}
-    if any(f in reflection_text.lower() for f in _filler) and len(reflection_text) < 100:
+    # Block only the old generic 4-string outputs — specific sentences pass
+    _filler = {"generic response", "no network knowledge applied", "possible topic drift"}
+    if any(f in reflection_text.lower() for f in _filler):
         return False
     try:
         import sys as _sys, os as _os
