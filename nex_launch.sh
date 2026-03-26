@@ -1,7 +1,6 @@
 #!/bin/bash
 # nex_launch.sh — hardened launch with clean exit trap
-bash ~/.nex/nex_first_run.sh &
-bash ~/Nex_v4.0/nex_license_check.sh || exit 1
+# license check removed — file no longer exists
 
 # ── ROCm / HIP environment ───────────────────────────────────────────────────
 export HSA_OVERRIDE_GFX_VERSION=10.3.0
@@ -14,7 +13,7 @@ export AMD_SERIALIZE_COPY=3
 
 BUILD="/mnt/steam_library/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/llama.cpp/build-vulkan/bin"
 MODEL="/mnt/steam_library/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf"
-NEX_DIR="/home/rr/Nex_v4.0"
+NEX_DIR="/home/rr/Desktop/nex"
 
 # ── Clean any existing processes first ───────────────────────────────────────
 echo "[NEX] Stopping existing processes..."
