@@ -549,7 +549,7 @@ class AggressiveCompression:
     SIM_THRESH  = 0.65
     MID_LOW     = 0.38
     MID_HIGH    = 0.62
-    MIN_CLUSTER = 4
+    MIN_CLUSTER = 20
 
     def __init__(self):
         self.last_run = 0.0
