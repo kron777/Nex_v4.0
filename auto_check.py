@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""NEX auto_check v6.1 — clean rewrite + live WS feed. Single atomic frame write."""
+"""NEX auto_check v6.2 — homeostasis wired + bugfixes. Single atomic frame write."""
 import json, time, os, re, sys, threading, asyncio
 from pathlib import Path
 from datetime import datetime
@@ -29,12 +29,22 @@ platform_pulse = {"moltbook":0,"telegram":0,"discord":0,"mastodon":0,"youtube":0
 ads_sent_mastodon = 0
 ads_sent_telegram = 0
 ads_sent_discord  = 0
+ads_sent_moltbook = 0   # FIX: was missing, caused NameError on global declaration
 ads_reply         = 0
 scroll      = {k:0 for k in ("act","lrn","ins","agt","ref","net")}
 SCROLL_RATE = {"act":3,"lrn":5,"ins":7,"agt":11,"ref":9,"net":4}
 state_lock  = threading.Lock()
 stats       = {}
 running     = True
+
+# ── Homeostasis singleton ─────────────────────────────────────────────────────
+try:
+    from nex_homeostasis import get_homeostasis
+    _hm = get_homeostasis()
+    _HM_OK = True
+except Exception:
+    _hm    = None
+    _HM_OK = False
 
 # ── Persistent peak scores — never let awareness drop ────────────────────────
 _PEAK_FILE = CFG / "nex_peak_scores.json"
@@ -71,7 +81,7 @@ def _origin(agent):
                                "alignment","wikipedia")):
                                                        return Y + a[:14] + RS, "moltbook"
     if _re.match(r"[0-9a-f]{8}-[0-9a-f]{4}-", al):   return T + "telegram" + RS, "telegram"
-    return W + a + RS, "moltbook"
+    return D + a + RS, "moltbook"   # FIX: was `W + a + RS` — W undefined in this scope
 
 def _handle_ws(mtype, data):
     ts = data.get("ts", datetime.now().strftime("%H:%M:%S"))
@@ -316,13 +326,12 @@ def window_balanced(buf, offset, rows):
     """Like window() but interleaves entries so no single source dominates."""
     lst = list(buf)
     if not lst: return [""]*rows
-    # Group by source label (first non-ANSI token after timestamp)
+    # Group by source label (first non-ANSI token after timestamp bracket)
     import re as _re
     _strip = lambda s: _re.sub(r'\033\[[0-9;]*m', '', s)
     buckets = {}
     for line in lst:
         plain = _strip(line)
-        # Extract source token — 2nd word after the timestamp bracket
         parts = plain.split()
         key = parts[1] if len(parts) > 1 else "?"
         buckets.setdefault(key, []).append(line)
@@ -450,12 +459,20 @@ def data_thread():
                 top=sorted(profiles.items(),key=lambda x:x[1].get("conversations_had",0),reverse=True)
                 if top: sl.append(f"{T}Closest agent    {RS}  {CY}@{top[0][0]}{RS}  {D}{top[0][1].get('conversations_had',0)}cv{RS}")
             sl.append(f"{T}Network coverage {RS}  [{'▮'*(cov//10)+'▯'*(10-cov//10)}] {G}{cov}%{RS}")
+
+            # ── FIX: Wire homeostasis dashboard_lines into SELF ASSESSMENT ──
+            if _HM_OK and _hm is not None:
+                try:
+                    hm_lines = _hm.dashboard_lines()
+                    sl.extend(hm_lines)
+                except Exception:
+                    pass
+
             bel_s=min(100,int(avg_c*100)); ali_s=min(100,int(avg_al*100))
             urefs=reflections[-20:]
             use_s=min(100,int(sum(1 for r in urefs if r.get("used_beliefs"))/max(len(urefs),1)*100))
             rch_s=min(100,int(len(agents)/2))
             # Insight quality = avg confidence of top 20 insights by belief_count
-            # This measures synthesis depth, not raw cluster count
             _top_ins = sorted(insights, key=lambda x: x.get("belief_count",0), reverse=True)[:20]
             _llm_syn = sum(1 for i in _top_ins if i.get("llm_synthesized"))
             _syn_bonus = min(20, int(_llm_syn / max(len(_top_ins),1) * 20))
@@ -486,6 +503,29 @@ def data_thread():
             il.append(f"{D}Self-awareness  {RS}[{_b(slf_s)}] {_c(slf_s)}{slf_s}%{RS}  {D}reflection{RS}")
             il.append(f"{B}{CY}──────────────────────────────────{RS}")
             il.append(f"{B}NEX IQ          [{_b(iq)}] {_c(iq)}{B}{iq}%  {lbl}{RS}")
+
+            # ── Homeostasis IQ panel append ──────────────────────────────────
+            if _HM_OK and _hm is not None:
+                try:
+                    hm_out = _hm.tick(
+                        cycle    = int(time.time()) // DATA_HZ,
+                        avg_conf = avg_c,
+                        tension  = 1.0 - avg_al,
+                        cog_mode = "explore",
+                    )
+                    zone     = hm_out["zone"]
+                    mode     = hm_out["recommended_mode"]
+                    drive    = hm_out["dominant_drive"]
+                    momentum = hm_out["conf_momentum"]
+                    zone_col = {
+                        "calm": G, "active": CY, "stressed": Y, "crisis": R
+                    }.get(zone, D)
+                    il.append(f"{D}── homeostasis ──{RS}")
+                    il.append(f"{D}zone    {RS}{zone_col}{B}{zone.upper()}{RS}  {D}drive {M}{drive}{RS}")
+                    il.append(f"{D}mode    {RS}{CY}{mode}{RS}  {D}mom {CY}{momentum:+.4f}{RS}")
+                except Exception:
+                    pass
+
             # GPU bar
             try:
                 import subprocess as _sp
@@ -496,9 +536,9 @@ def data_thread():
                         if l.startswith("card"):
                             return l.split(",")[col].strip()
                     return "0"
-                _gval  = int(float(_rval(_rocm(["--showuse"]))))           # GPU use %
-                _gpval = int(float(_rval(_rocm(["--showpower"]))))         # watts
-                _gmval = int(float(_rval(_rocm(["--showmemuse"]))))        # VRAM %
+                _gval  = int(float(_rval(_rocm(["--showuse"]))))
+                _gpval = int(float(_rval(_rocm(["--showpower"]))))
+                _gmval = int(float(_rval(_rocm(["--showmemuse"]))))
             except Exception:
                 _gval = _gpval = _gmval = 0
             _gc  = G if _gval  < 50 else Y if _gval  < 80 else R
@@ -581,7 +621,7 @@ def main():
             FR   = R3+SLF_H+2
 
             # header
-            sub=f"Live Monitor  //  auto_check v6.0  //  {now_s}"
+            sub=f"Live Monitor  //  auto_check v6.2  //  {now_s}"
             at(1,1); wr(" "*max(0,(W-len(sub))//2)+f"{D}{sub}{RS}")
             at(2,1); wr("═"*W)
 
@@ -667,11 +707,11 @@ def main():
 
             # ── Training readiness notification ──────────────────────────────
             if _check_training_ready():
-                _flash  = tick % 2 == 0   # flash every other render tick
+                _flash  = tick % 2 == 0
                 _bulb   = f"\033[91m💡\033[0m" if _flash else f"\033[31m💡\033[0m"
                 _msg    = f"\033[1m\033[91m ATTENTION : TRAINING \033[0m"
                 _notif  = f"  {_bulb}{_msg}{_bulb}  "
-                _nlen   = 22  # visual width of notification text
+                _nlen   = 22
                 _gap    = max(0, (W - vlen(fl) - vlen(fr_) - _nlen)) // 2
                 at(FR+1,1); wr(fl + " "*_gap + _notif + " "*max(0,W-vlen(fl)-_gap-_nlen-vlen(fr_)) + fr_)
             else:
