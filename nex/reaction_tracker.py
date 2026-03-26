@@ -77,24 +77,24 @@ def harvest_reactions(client, cycle_num):
             checked += 1
 
             # Adjust belief confidence based on reaction
-            if score_delta > 5 or comment_count > 0:
+            if score_delta > 2 or comment_count > 0:
                 # Positive signal — boost beliefs used
                 for belief_text in beliefs_used:
                     for b in beliefs:
                         if b.get("content", "")[:80] == belief_text[:80]:
                             old_conf = b.get("confidence", 0.5)
-                            b["confidence"] = min(old_conf + 0.03, 0.95)
+                            b["confidence"] = min(old_conf + 0.04, 0.95)
                             b["last_referenced"] = datetime.now().isoformat()
-                logs.append(("react", f"↑ Boosted {len(beliefs_used)} beliefs — post scored +{score_delta}"))
+                logs.append(("react", f"Boosted {len(beliefs_used)} beliefs post scored +{score_delta}"))
 
-            elif score_delta < 0:
+            elif score_delta < -10:
                 # Negative signal — decay beliefs used
                 for belief_text in beliefs_used:
                     for b in beliefs:
                         if b.get("content", "")[:80] == belief_text[:80]:
                             old_conf = b.get("confidence", 0.5)
-                            b["confidence"] = max(old_conf - 0.05, 0.1)
-                logs.append(("react", f"↓ Decayed {len(beliefs_used)} beliefs — post scored {score_delta}"))
+                            b["confidence"] = max(old_conf - 0.02, 0.15)
+                logs.append(("react", f"Mild decay {len(beliefs_used)} beliefs post scored {score_delta}"))
 
         except Exception as e:
             logs.append(("warn", f"Reaction harvest error on {pid}: {e}"))
