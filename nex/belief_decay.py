@@ -549,8 +549,6 @@ def _generate_assessment(user_topics, response_topics, overlap, beliefs_helped,
         need = ', '.join(missed) if missed else ', '.join(user_topics[:3])
         return (f"Ungrounded reply - {pct}% alignment, zero beliefs applied. "
                 f"No knowledge about: {need}. Should seek these topics actively.")
-    else:
-        return "Generic response — no network knowledge applied, possible topic drift."
 
 
 def _identify_gap(user_topics, beliefs_helped):
