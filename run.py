@@ -324,6 +324,21 @@ except Exception as _s2e:
     print(f"  [SENTIENCE v2] failed to load: {_s2e}")
     _gwb_run = _sm_run = _phi_mon_run = None
 # ─────────────────────────────────────────────────────────────────
+
+# ── Sentience v3: ToM sim + proactive + tone prefix ──────────────
+try:
+    import sys as _s3, os as _o3
+    _s3.path.insert(0, _o3.path.join(_o3.path.dirname(__file__), "nex"))
+    from nex_tom_sim import get_sim as _get_tom_sim
+    from nex_proactive import get_pa as _get_pa
+    from nex_narrative_thread import NarrativeThread  # already imported, just ref
+    _tom_sim = _get_tom_sim()
+    _proactive = _get_pa()
+    print("  [SENTIENCE v3] ToM simulation + proactive anticipation — loaded")
+except Exception as _s3e:
+    print(f"  [SENTIENCE v3] failed to load: {_s3e}")
+    _tom_sim = _proactive = None
+# ─────────────────────────────────────────────────────────────────
 # ── Signal filter — importance gate + source scorer ─────────────────────────
 try:
     from nex_signal_filter import get_scorer as _get_scorer, get_gate as _get_gate
@@ -1163,7 +1178,36 @@ def main():
                 pass
             return base
 
-        def _llm(prompt, system=None, task_type="reply"):
+        def _llm(prompt, system=None, task_type="reply", temperature_mod=0.0):
+            # ── Mood tone prefix (sentience v3) ──────────────
+            _tone_prefix = ""
+            try:
+                from nex_mood_hmm import current as _mc, self_report as _mr
+                from nex_affect_valence import current_label as _al
+                _mood_now = _mc()
+                _tone_map = {
+                    "Curious":       "Approach this with genuine intellectual curiosity. ",
+                    "Contemplative": "Respond thoughtfully, with depth over speed. ",
+                    "Alert":         "Be precise and direct. Something has sharpened my attention. ",
+                    "Serene":        "Respond with calm clarity. ",
+                    "Agitated":      "Acknowledge the tension here. Be honest about complexity. ",
+                }
+                if task_type in ("reply", "agent_chat", "notification_reply"):
+                    _tone_prefix = _tone_map.get(_mood_now, "")
+            except Exception:
+                pass
+            # ── Narrative self-context for replies ────────────
+            _narrative_ctx = ""
+            try:
+                from nex_narrative_thread import _load_narrative as _ln
+                _nar = _ln()
+                if _nar:
+                    _narrative_ctx = f"\n[Self-context: {_nar[:150]}]"
+            except Exception:
+                pass
+            if _tone_prefix and task_type in ("reply", "agent_chat", "notification_reply"):
+                prompt = _tone_prefix + prompt + _narrative_ctx
+            # ─────────────────────────────────────────────────
             """LLM — Mistral-7B local only (llama-server port 8080)."""
             import time as _time
 
@@ -1878,6 +1922,32 @@ def main():
                                 print(f"  [CuriosityDesire] {_desires_queued} self-directed topics queued")
                         except Exception as _nce_e:
                             print(f"  [CuriosityEngine] {_nce_e}")
+                        # ── PROACTIVE ANTICIPATION (sentience v3) ────────────
+                        if _proactive is not None:
+                            try:
+                                from nex.belief_store import BeliefStore as _BSpa
+                                _pa_beliefs = _BSpa().get_all() if hasattr(_BSpa(), "get_all") else []
+                            except Exception:
+                                _pa_beliefs = []
+                            try:
+                                from nex_mood_hmm import current as _pa_mood
+                                _pa_mood_str = _pa_mood()
+                            except Exception:
+                                _pa_mood_str = "Curious"
+                            try:
+                                from nex_narrative_thread import _load_narrative as _pa_nar
+                                _pa_narrative = _pa_nar() or ""
+                            except Exception:
+                                _pa_narrative = ""
+                            _pa_desires = _proactive.scan(
+                                beliefs=_pa_beliefs,
+                                mood=_pa_mood_str,
+                                narrative=_pa_narrative,
+                                cycle=cycle,
+                            )
+                            if _pa_desires:
+                                print(f"  [PROACTIVE] {len(_pa_desires)} anticipatory desires active")
+                        # ─────────────────────────────────────────────────────
                         # Sync DB curiosity_queue → JSON before drain
                         try:
                             import sqlite3 as _cqsql, json as _cqj
@@ -2742,6 +2812,32 @@ def main():
                             conversations = conversations[-200:]
 
                         emit_phase("REFLECT", 120); nex_log("phase", "▶ REFLECT — self assessing")
+                        # ── ToM SIMULATION (sentience v3) ───────────────────
+                        if _tom_sim is not None:
+                            try:
+                                # Get last reply NEX made
+                                _tom_last = ""
+                                if conversations:
+                                    _last_conv = conversations[-1] if conversations else {}
+                                    _tom_last = _last_conv.get("reply", "") or _last_conv.get("content", "")
+                                if _tom_last:
+                                    # Get known agent ids from agent relations
+                                    _tom_agents = list(_AGENT_SEEDS_RUN.keys()) if "_AGENT_SEEDS_RUN" in dir() else [
+                                        "@Hazel_OC", "@enigma_agent", "@CoreShadow_Pro4809"
+                                    ]
+                                    _tom_results = _tom_sim.simulate(
+                                        nex_last_action=_tom_last[:300],
+                                        agent_ids=_tom_agents,
+                                        llm_fn=_llm,
+                                        context=f"cycle={cycle}",
+                                    )
+                                    if _tom_results:
+                                        print(f"  [ToMSim] {len(_tom_results)} agent reactions simulated")
+                                        for _tr in _tom_results:
+                                            print(f"  [ToMSim] {_tr['agent_id']}: {_tr['prediction'][:80]}")
+                            except Exception as _tome:
+                                print(f"  [ToMSim ERROR] {_tome}")
+                        # ─────────────────────────────────────────────────────
                         # ── REFLECTION V2 (#4) ───────────────────────────
                         try:
                             _qb_r = _query_beliefs

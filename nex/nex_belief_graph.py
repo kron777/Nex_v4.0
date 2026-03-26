@@ -223,19 +223,21 @@ class BeliefGraph:
                                   reverse=True)
             self._graph = dict(sorted_nodes[:5000])
 
-        # ── Recurrent causal edges (IIT v2) ──────────────────
+        # ── Recurrent causal edges (IIT v2, damped_recurrent) ──────
         # For every A→B support edge, add a weak B→A back-edge
-        # This creates recurrence depth that Phi proxy can detect
+        # Damped: max 2 recurrent back-edges per node to prevent flooding
+        _MAX_BACK_EDGES = 2
         _added = 0
         for bid, node in list(self._graph.items()):
             for supported_id in node.get("supports", []):
                 if supported_id in self._graph:
                     back_node = self._graph[supported_id]
-                    if bid not in back_node.get("explains", []):
+                    _existing_back = back_node.get("explains", [])
+                    # Skip if already present or at back-edge cap
+                    if bid not in _existing_back and len(_existing_back) < _MAX_BACK_EDGES:
                         back_node.setdefault("explains", [])
-                        if len(back_node["explains"]) < _MAX_EDGES_PER_BELIEF:
-                            back_node["explains"].append(bid)
-                            _added += 1
+                        back_node["explains"].append(bid)
+                        _added += 1
         if _added:
             import logging as _log
             _log.getLogger("nex.belief_graph").info(
