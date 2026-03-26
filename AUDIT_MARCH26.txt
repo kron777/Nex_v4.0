@@ -1,0 +1,141 @@
+NEX AUDIT SESSION — March 26, 2026
+===================================
+
+FIXES & IMPROVEMENTS
+---------------------
+
+1.  devto_post task_type not in _ALWAYS_LLM gate
+    → Added "devto_post" to _ALWAYS_LLM in nex_power_save.py
+    → Dev.to publishing restored
+
+2.  Topic-anchored reply retrieval
+    → Belief retrieval now filters by incoming post topic first
+    → Broad fallback capped at 500 (was 2000)
+    → Topic alignment: 20% → 32%+
+
+3.  LLM gate repositioned before [cog] label
+    → Eliminated "both attempts failed" log spam
+    → Confirmed zero occurrences in all logs post-fix
+
+4.  Input sanitization on ingestion
+    → Strips control characters from post body and notification content
+    → Prevents truncation artifacts corrupting belief store
+
+5.  JSON → DB sync script (nex_json_db_sync.py)
+    → Discovers and imports reflections.json and agents.json into nex.db
+    → Idempotent via content-hash deduplication
+    → Imported: 903 reflections, 148 agents
+
+6.  _generate_assessment replaced (belief_decay.py + cognition.py)
+    → Was: 4 hardcoded strings
+    → Now: specific actionable sentence per interaction
+    → Reflect→belief pipeline now has real training signal
+
+7.  Reflect→belief filler gate updated
+    → Old gate blocked new specific assessments
+    → New gate only blocks literal old generic strings
+
+8.  Stale backup files and dirs removed
+    → 6 .patch_backup_* directories deleted
+    → 11 stale .pre_*, .bak, *_preview files removed
+    → nex_upgrades_v3.py, nex_v72.py root duplicate removed
+    → 23 files total, 677 lines of dead patch scripts removed
+
+9.  Duplicate nex_homeostasis.py removed
+    → nex/ copy removed, root copy is canonical
+
+10. Tensions trimmed + QPR limits raised
+    → Tensions: 1278 → 30
+    → QPR SOFT_LIMIT: 20 → 40, HARD_LIMIT: 35 → 60
+    → NEX was in permanent HARD OVERLOAD every cycle
+    → Intake rate restored from 0.3 → 1.0
+
+11. outcome_signals table dropped
+    → 6281 orphan rows, zero code references
+
+12. [compressed:N] debug label stripped from belief content
+    → SelectiveCompressor now stores clean prose, label is logging-only
+
+13. Curiosity engine wired to DB
+    → _save_bridge_belief() now writes to DB as primary
+    → 200 stranded bridge beliefs imported from JSON into DB
+
+14. Tag parsing bug fixed in curiosity domain picker
+    → Tags stored as JSON strings now parsed before domain selection
+
+15. beliefs.json merged with DB
+    → 209 DB beliefs merged into JSON
+    → Total beliefs available to synthesis: 85 → 294
+
+16. Gap extractor stop words + frequency cap
+    → Stop word list added to _extract_gaps
+    → Per-term frequency capped at 500
+    → gaps.json cleaned: 37 → 22 meaningful entries
+
+17. Reaction feedback thresholds rebalanced
+    → Boost threshold: >5 → >2
+    → Decay threshold: <0 → <-10
+    → Stopped belief confidence death spiral
+
+18. Corrupted belief_graph.json cleared
+    → 1.3MB of {id: 7} junk deleted
+    → Graph rebuilt clean (700+ edges, 1103 nodes)
+
+19. Tension per-topic cap — three INSERT points fixed
+    → add_tension(), run.py x2 all check for existing unresolved tension
+    → Paradox loop on same topics eliminated
+
+20. Orphaned belief_links cleaned
+    → 14 links pointing to deleted belief IDs removed
+
+21. Tension paradox dedup
+    → Kept 1 tension per topic, resolved duplicates
+    → Tensions: 1328 → 9
+
+22. Duplicate get_v500 imports removed from run.py
+    → 2 of 3 duplicate imports removed
+
+23. _should_llm → should_call_llm reference fixed
+    → Undefined reference fixed, import added from nex_power_save
+
+24. Curiosity engine empty tags guard
+    → NoneType error on empty tag list after JSON parse fixed
+
+
+METRICS: START → END OF SESSION
+---------------------------------
+Beliefs (JSON):          85  → 294
+Beliefs (DB):            65  → 250+
+Reflections (DB):         0  → 903
+Agents (DB):              0  → 148
+Tensions (unresolved): 1278  → <10
+Topic alignment:         20% → 32%
+[QPR] HARD OVERLOAD:  every cycle → none
+CONTRA ERROR:         every cycle → none
+CURIOSITY ERROR:      every cycle → none
+belief_graph:         corrupted   → clean (1103 nodes)
+Repo dead files:         ~30      → removed
+Bridge beliefs stranded: 200      → imported to DB
+
+
+FILES MODIFIED
+--------------
+nex_power_save.py
+run.py
+nex/belief_decay.py
+nex/cognition.py
+nex_adaptive_intelligence.py
+nex_curiosity_engine.py
+nex/curiosity_engine.py
+nex/reaction_tracker.py
+nex_tension_pressure.py
+nex_json_db_sync.py (new)
+
+
+KNOWN REMAINING ISSUES
+-----------------------
+- Topic alignment at 23-32%, goal is 40%+
+- Mastodon 401 — token needs refresh
+- Discord config missing
+- run.py alias imports — cosmetic debt for future refactor
+- DB not primary belief source — cognition reads beliefs.json
