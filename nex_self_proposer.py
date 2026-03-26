@@ -83,12 +83,20 @@ def _collect_gap_topics() -> list[str]:
     # Filter out noise words
     noise = {"that","this","with","from","have","been","they","their",
              "will","would","could","should","about","which","remain",
-             "tracked","after","before","within","because","these"}
+             "tracked","after","before","within","because","these",
+             "waited","anything","between","topics","mentioned","something",
+             "nothing","everything","someone","anyone","everyone","always",
+             "never","often","usually","sometimes","already","still","just",
+             "really","actually","probably","perhaps","maybe","indeed",
+             "however","therefore","although","whereas","whether","another",
+             "other","every","each","most","many","much","more","some",
+             "related","believe","things","people","world","point","place"}
     topics = [
         g.get("term","") for g in gaps
         if g.get("term","") not in noise
-        and len(g.get("term","")) > 3
+        and len(g.get("term","")) > 4
         and not g.get("resolved_at")
+        and g.get("priority", 0) > 1000
     ]
     return topics[:10]
 
