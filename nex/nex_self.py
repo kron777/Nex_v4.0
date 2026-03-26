@@ -600,26 +600,12 @@ if __name__ == "__main__":
 
             if llm_fn:
                 prompt = (
-                prompt = (
                     "You are NEX's identity evolution engine.\n"
                     f"Current core values: {chr(44).join(current_values)}\n"
                     f"Dominant belief domains this week: {topic_str}\n"
-                    f"Narrative history:\n{self.compare_to_history(3)}\n\n"
                     "Write 1 new identity statement (first person, max 20 words) "
                     "that reflects how these domains have shaped NEX's sense of self. "
                     "Must feel earned, not imposed. No preamble."
-                )
-                    f"Current core values: {', '.join(current_values)}
-"
-                    f"Dominant belief domains this week: {topic_str}
-"
-                    f"Narrative history comparison:
-{self.compare_to_history(3)}
-
-"
-                    f"Write 1 new identity statement (first person, max 20 words) "
-                    f"that reflects how these domains have shaped NEX's sense of self. "
-                    f"Must feel earned, not imposed. No preamble."
                 )
                 result = llm_fn(prompt, task_type="synthesis")
                 if result and len(result) > 10:
