@@ -500,9 +500,9 @@ class SelectiveCompressionEngine:
 
             if sim >= self.SIMILARITY_THRESHOLD and var <= self.VARIANCE_THRESHOLD:
                 # Safe to compress — high similarity, low variance = redundant
-                summary = f"[compressed:{row['n']}] " + " | ".join(
-                    c[:80] for c in contents[:3]
-                )
+                # Label for logging only — not stored in belief content
+                _compress_label = f"[compressed:{row['n']}]"
+                summary = " | ".join(c[:80] for c in contents[:3])
                 try:
                     db = _db()
                     db.execute(
