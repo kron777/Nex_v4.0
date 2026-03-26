@@ -3053,16 +3053,11 @@ def main():
                                     """)
                                     for _tn_node in _tm.hot_topics(n=10):
                                         if _tn_node.tension_score > 0.2:
-                                        if _tn_node.tension_score > 0.2:
                                             _ex2 = _tdb.execute("SELECT id FROM tensions WHERE topic=? AND resolved_at IS NULL", (_tn_node.topic,)).fetchone()
                                             if _ex2:
                                                 _tdb.execute("UPDATE tensions SET weight=MAX(weight,?), cycle_count=cycle_count+1 WHERE id=?", (_tn_node.tension_score, _ex2[0]))
                                             else:
                                                 _tdb.execute("INSERT INTO tensions (topic, description, weight, created_at) VALUES (?, ?, ?, ?)", (_tn_node.topic, f"{_tn_node.tension_type} tension score={_tn_node.tension_score:.2f}", _tn_node.tension_score, _dt2.now().isoformat()))
-                                            _tdb.execute("""
-                                                UPDATE tensions SET weight = ?
-                                                WHERE topic = ? AND resolved_at IS NULL
-                                            """, (_tn_node.tension_score, _tn_node.topic))
                                     _tdb.commit()
                                     _tdb.close()
                                 except Exception as _tsync_e:
