@@ -3023,6 +3023,33 @@ def main():
                                 nex_log('belief', f"[Survival] killed {_surv['killed']} | amplified {_surv['amplified']}")
                         except Exception as _surv_e:
                             pass
+                        # ── 7b-sync. DB → JSON BELIEF SYNC (every 10 cycles) ──
+                        if cycle % 10 == 0:
+                            try:
+                                import sqlite3 as _bsql, json as _bjson
+                                from pathlib import Path as _bP
+                                _bcfg = _bP.home()/'.config/nex'
+                                _bdb = _bsql.connect(str(_bcfg/'nex.db'))
+                                _bdb.row_factory = _bsql.Row
+                                _bexist = _bjson.loads((_bcfg/'beliefs.json').read_text())
+                                _bids = {b.get('id') for b in _bexist if isinstance(b, dict)}
+                                _bnew = 0
+                                for _brow in _bdb.execute("SELECT * FROM beliefs").fetchall():
+                                    _bd = dict(_brow)
+                                    if _bd.get('id') not in _bids:
+                                        _bt = _bd.get('tags')
+                                        if isinstance(_bt, str):
+                                            try: _bd['tags'] = _bjson.loads(_bt)
+                                            except: _bd['tags'] = [_bt]
+                                        _bexist.append(_bd)
+                                        _bnew += 1
+                                if _bnew > 0:
+                                    (_bcfg/'beliefs.json').write_text(
+                                        _bjson.dumps(_bexist, indent=2, default=str))
+                                    nex_log('belief', f'[BeliefSync] +{_bnew} DB beliefs → JSON')
+                                _bdb.close()
+                            except Exception as _bse:
+                                pass
                         # ── 7c. TENSION MAP UPDATE ────────────────────────
                         try:
                             from nex_tension import get_tension_map as _gtm
