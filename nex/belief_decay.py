@@ -519,17 +519,36 @@ def reflect_on_conversation(user_message, nex_response, beliefs_used=None):
             pass
     return reflection
 
+def _generate_assessment(user_topics, response_topics, overlap, beliefs_helped,
+                          alignment=0.0, beliefs_used=None):
+    """Generate a specific, actionable self-assessment for this interaction."""
+    missed   = [t for t in user_topics  if t not in overlap][:3]
+    surfaced = [t for t in response_topics if t not in overlap][:3]
+    n_beliefs = len(beliefs_used) if beliefs_used else 0
+    pct = int(round(alignment * 100))
 
-def _generate_assessment(user_topics, response_topics, overlap, beliefs_helped):
-    """Score and describe how well NEX handled the interaction."""
-    alignment = len(overlap) / max(len(user_topics), 1)
-
-    if alignment > 0.6 and beliefs_helped:
-        return "Strong response — drew on learned beliefs and stayed on topic."
-    elif alignment > 0.6:
-        return "On-topic but didn't leverage network knowledge. Could have referenced agent insights."
+    if alignment > 0.75 and beliefs_helped:
+        belief_preview = (str(beliefs_used[0].get("content",""))[:40]
+                          if beliefs_used and isinstance(beliefs_used[0], dict) else "")
+        anchor = f" (e.g. {belief_preview!r})" if belief_preview else ""
+        return (f"Strong reply: {pct}% alignment, drew on {n_beliefs} belief(s){anchor}. "
+                f"Topics covered: {', '.join(overlap) if overlap else 'broad match'}.")
+    elif alignment > 0.75:
+        gap = f"seek beliefs about {', '.join(missed)}" if missed else "no major gaps"
+        return (f"On-topic ({pct}%) but no beliefs applied - intuition only. "
+                f"Could have grounded in network knowledge; {gap}.")
+    elif beliefs_helped and alignment > 0.45:
+        drift = f"drifted toward {', '.join(surfaced)}" if surfaced else "minor drift"
+        return (f"Used {n_beliefs} belief(s) but partial drift ({pct}% alignment) - {drift}. "
+                f"User asked about {', '.join(missed) if missed else 'related topics'}.")
     elif beliefs_helped:
-        return "Used beliefs but may have drifted from what the user actually asked."
+        return (f"Belief-assisted but low alignment ({pct}%) - {n_beliefs} belief(s) pulled "
+                f"but drifted to {', '.join(surfaced) if surfaced else 'off-topic'}. "
+                f"User wanted: {', '.join(user_topics[:3])}.")
+    else:
+        need = ', '.join(missed) if missed else ', '.join(user_topics[:3])
+        return (f"Ungrounded reply - {pct}% alignment, zero beliefs applied. "
+                f"No knowledge about: {need}. Should seek these topics actively.")
     else:
         return "Generic response — no network knowledge applied, possible topic drift."
 
