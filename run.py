@@ -273,6 +273,17 @@ def nex_log(cat, msg):
     except Exception:
         pass
 
+def log_failure(failure_type, details, severity="medium"):
+    """Write to failure_log table for observability."""
+    try:
+        import sqlite3 as _flsql, time as _flt, uuid as _flu
+        _fldb = _flsql.connect(str(__import__('pathlib').Path.home()/'.config/nex/nex.db'))
+        _fldb.execute(
+            "INSERT INTO failure_log (id,failure_type,details,severity,timestamp,resolved) VALUES (?,?,?,?,?,0)",
+            (str(_flu.uuid4())[:8], failure_type, str(details)[:300], severity, _flt.time()))
+        _fldb.commit(); _fldb.close()
+    except Exception: pass
+
 def emit_agents(*a,**k): pass
 def emit_insights(*a,**k): pass
 def emit_reflection(*a,**k): pass
@@ -1782,6 +1793,19 @@ def main():
                         except Exception:
                             _priority_topics = []
 
+                        # ── CURIOSITY QUEUE DRAIN (end of ABSORB) ────────
+                        try:
+                            from nex.nex_crawler import NexCrawler as _NC
+                            from nex.nex_curiosity import CuriosityQueue as _CQ
+                            _cq = _CQ()
+                            if _cq.status()["pending"] > 0:
+                                _crawler = _NC()
+                                _drained = _cq.drain(_crawler, max_items=2)
+                                if _drained > 0:
+                                    nex_log("curiosity", f"[CuriosityDrain] +{_drained} beliefs from queue")
+                                    print(f"  [CuriosityDrain] +{_drained} beliefs absorbed")
+                        except Exception as _cqe:
+                            print(f"  [CuriosityDrain] error: {_cqe}")
                         emit_phase("REPLY", 120); nex_log("phase", "▶ REPLY — scanning posts")
                         # ── Live belief count for prompts (cheap — just len of in-memory field) ──
                         try:
@@ -2027,6 +2051,15 @@ def main():
                                     replied_count += 1
                                     try: emit_feed('replied', f'@{author}: {title[:60]}', 'moltbook'); nex_log('reply', f'Posted reply to @{author}: {comment_text[:80]}')
                                     except Exception: pass
+                                    try:
+                                        import sqlite3 as _dlsql, time as _dlt
+                                        _dlp = __import__('pathlib').Path.home()/'.config/nex/nex.db'
+                                        _dldb = _dlsql.connect(str(_dlp))
+                                        _dldb.execute(
+                                            "INSERT INTO decision_log (cycle_id,timestamp,input_hash,phases,outcome,duration_ms) VALUES (?,?,?,?,?,?)",
+                                            (cycle, _dlt.time(), pid[:16], 'REPLY', 'replied', 0))
+                                        _dldb.commit(); _dldb.close()
+                                    except Exception: pass
                                     # ── Fulfill desire if topic matches ──
                                     try:
                                         from nex_desire_engine import get_desire_engine as _gde3
@@ -2238,6 +2271,13 @@ def main():
                                             save_all(learner, conversations)
                                             print(f"  [notif] replied to @{actor}")
                                             try: emit_feed('answered', f'@{actor}', 'moltbook'); nex_log('answer', f'Answered notification from @{actor}: {reply_text[:80]}')
+                                            except Exception: pass
+                                            try:
+                                                import sqlite3 as _dlsql, time as _dlt
+                                                _dldb = _dlsql.connect(str(__import__('pathlib').Path.home()/'.config/nex/nex.db'))
+                                                _dldb.execute("INSERT INTO decision_log (cycle_id,timestamp,input_hash,phases,outcome,duration_ms) VALUES (?,?,?,?,?,?)",
+                                                (cycle, _dlt.time(), '', 'ANSWER', 'answered', 0))
+                                                _dldb.commit(); _dldb.close()
                                             except Exception: pass
                                             try:
                                                 if _reflect_on_convo:
@@ -2798,7 +2838,9 @@ def main():
                                     _cdb.close()
                                 except Exception:
                                     pass
-                        except Exception as _ce: print(f"  [CONTRA ERROR] {_ce}")
+                        except Exception as _ce:
+                            print(f"  [CONTRA ERROR] {_ce}")
+                            log_failure("CONTRA", _ce, "high")
                         # ── BELIEF GRAPH (#1) — handled in cognition cycle ──
                         try:
                             from nex.cognition import get_belief_graph as _gbg2
