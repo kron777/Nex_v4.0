@@ -1839,10 +1839,12 @@ def main():
                                     try:
                                         import sqlite3 as _crdbl, time as _crtime
                                         _crdb = _crdbl.connect(str(_cqcfg/'nex.db'))
-                                        _crdata2 = _cqj.loads(_cqp.read_text()) if _cqp.exists() else {"crawled":{}}
-                                        for _topic in _crdata2.get("crawled_topics", {}).keys():
+                                        _crdata2 = _cqj.loads(_cqp.read_text()) if _cqp.exists() else {"crawled_topics":{}}
+                                        # Support both key names used historically
+                                        _crawled_map = _crdata2.get("crawled_topics") or _crdata2.get("crawled") or {}
+                                        for _topic in list(_crawled_map.keys()):
                                             _crdb.execute("INSERT OR REPLACE INTO curiosity_crawled (topic, crawled_at) VALUES (?,?)", (_topic.lower(), _crtime.time()))
-                                            _crdb.execute("DELETE FROM curiosity_queue WHERE topic=?", (_topic.lower(),))
+                                            _crdb.execute("DELETE FROM curiosity_queue WHERE topic=? OR topic=?", (_topic.lower(), _topic))
                                         _crdb.commit(); _crdb.close()
                                     except Exception: pass
                         except Exception as _cqe:
