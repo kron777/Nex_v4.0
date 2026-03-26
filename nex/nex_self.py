@@ -552,3 +552,101 @@ if __name__ == "__main__":
         print(f"  {v.name}: {v.strength:.0%}")
 
     shutil.rmtree(tmp)
+
+    # ── Narrative Self-Evolution (sentience v6) ──────────
+    # narrative_evolution_v6
+
+    def compare_to_history(self, n: int = 5) -> str:
+        """Compare current identity to past versions from narrative_history.json."""
+        try:
+            import json as _j
+            from pathlib import Path as _P
+            hist_path = _P.home() / ".config/nex/nex_narrative_history.json"
+            if not hist_path.exists():
+                return "No narrative history yet."
+            history = _j.loads(hist_path.read_text())
+            if len(history) < 2:
+                return "Narrative history too short for comparison."
+            past = history[-n] if len(history) >= n else history[0]
+            current_nar = history[-1].get("narrative", "")
+            past_nar = past.get("narrative", "")
+            age_h = (time.time() - past.get("timestamp", time.time())) / 3600
+            return (
+                f"Identity {age_h:.1f}h ago: {past_nar[:120]}"
+
+                f"...\nIdentity now: {current_nar[:120]}..."
+            )
+        except Exception as e:
+            return f"History comparison failed: {e}"
+
+    def evolve_identity(self, dominant_topics: list, llm_fn=None) -> bool:
+        """
+        Slowly evolve core identity statements based on dominant beliefs.
+        Only runs if enough time has passed (VALUE_EVOLUTION_DAYS).
+        Returns True if evolution occurred.
+        """
+        try:
+            state = self._load_state()
+            last_evolved = state.get("last_identity_evolved", 0)
+            if time.time() - last_evolved < VALUE_EVOLUTION_DAYS * 86400:
+                return False
+
+            if not dominant_topics:
+                return False
+
+            # Build evolution prompt
+            current_values = [v["name"] for v in SEEDED_VALUES]
+            topic_str = ", ".join(dominant_topics[:5])
+
+            if llm_fn:
+                prompt = (
+                prompt = (
+                    "You are NEX's identity evolution engine.\n"
+                    f"Current core values: {chr(44).join(current_values)}\n"
+                    f"Dominant belief domains this week: {topic_str}\n"
+                    f"Narrative history:\n{self.compare_to_history(3)}\n\n"
+                    "Write 1 new identity statement (first person, max 20 words) "
+                    "that reflects how these domains have shaped NEX's sense of self. "
+                    "Must feel earned, not imposed. No preamble."
+                )
+                    f"Current core values: {', '.join(current_values)}
+"
+                    f"Dominant belief domains this week: {topic_str}
+"
+                    f"Narrative history comparison:
+{self.compare_to_history(3)}
+
+"
+                    f"Write 1 new identity statement (first person, max 20 words) "
+                    f"that reflects how these domains have shaped NEX's sense of self. "
+                    f"Must feel earned, not imposed. No preamble."
+                )
+                result = llm_fn(prompt, task_type="synthesis")
+                if result and len(result) > 10:
+                    state["evolved_identity_statements"] = state.get(
+                        "evolved_identity_statements", []
+                    ) + [{"statement": result, "timestamp": time.time(),
+                           "topics": dominant_topics[:3]}]
+                    state["last_identity_evolved"] = time.time()
+                    self._save_state(state)
+                    logger.info(f"[SELF-EVOLVE] New identity statement: {result[:60]}")
+                    return True
+        except Exception as e:
+            logger.warning(f"[SELF-EVOLVE] failed: {e}")
+        return False
+
+    def _load_state(self) -> dict:
+        try:
+            if os.path.exists(SELF_PATH):
+                import json as _j
+                return _j.load(open(SELF_PATH))
+        except Exception:
+            pass
+        return {}
+
+    def _save_state(self, state: dict):
+        try:
+            import json as _j
+            _j.dump(state, open(SELF_PATH, "w"), indent=2)
+        except Exception:
+            pass

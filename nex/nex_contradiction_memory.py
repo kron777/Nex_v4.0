@@ -136,3 +136,85 @@ def total_count() -> int:
         return n
     except Exception:
         return 0
+
+
+def meta_patterns(limit: int = 5) -> list[dict]:
+    """
+    Detect second-order contradiction patterns:
+    - Topics that oscillate together (co-oscillation clusters)
+    - Topics where tension_score keeps escalating
+    - Topics with longest oscillation history
+    Returns list of meta-pattern dicts.
+    """
+    try:
+        conn = sqlite3.connect(str(_DB_PATH), timeout=10)
+        conn.row_factory = sqlite3.Row
+
+        # Find topic pairs that contradict in nearby cycles
+        rows = conn.execute("""
+            SELECT a.topic as topic_a, b.topic as topic_b,
+                   COUNT(*) as co_count,
+                   AVG(ABS(a.cycle - b.cycle)) as avg_cycle_gap
+            FROM contradiction_memory a
+            JOIN contradiction_memory b
+              ON ABS(a.cycle - b.cycle) <= 3
+              AND a.topic != b.topic
+              AND a.id != b.id
+            GROUP BY a.topic, b.topic
+            HAVING co_count >= 2
+            ORDER BY co_count DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
+
+        # Find escalating tension topics
+        escalating = conn.execute("""
+            SELECT topic, COUNT(*) as count,
+                   MAX(tension_score) - MIN(tension_score) as tension_range,
+                   MAX(cycle) as last_cycle
+            FROM contradiction_memory
+            GROUP BY topic
+            HAVING count >= 3 AND tension_range > 0.2
+            ORDER BY tension_range DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
+
+        conn.close()
+
+        results = []
+        for r in rows:
+            results.append({
+                "type": "co_oscillation",
+                "topic_a": r["topic_a"],
+                "topic_b": r["topic_b"],
+                "co_count": r["co_count"],
+                "avg_cycle_gap": round(r["avg_cycle_gap"], 1),
+            })
+        for r in escalating:
+            results.append({
+                "type": "escalating_tension",
+                "topic": r["topic"],
+                "count": r["count"],
+                "tension_range": round(r["tension_range"], 3),
+                "last_cycle": r["last_cycle"],
+            })
+        return results
+    except Exception:
+        return []
+
+
+def contradiction_summary() -> str:
+    """Natural language summary of contradiction patterns."""
+    total = total_count()
+    osc = oscillating_topics(limit=3)
+    meta = meta_patterns(limit=3)
+
+    lines = [f"Contradiction memory: {total} total records."]
+    if osc:
+        osc_str = ", ".join(f"'{r['topic']}' ({r['contradiction_count']}x)" for r in osc)
+        lines.append(f"Oscillating topics: {osc_str}.")
+    if meta:
+        co = [m for m in meta if m["type"] == "co_oscillation"]
+        if co:
+            co_str = ", ".join(f"'{m['topic_a']}↔{m['topic_b']}'" for m in co[:2])
+            lines.append(f"Co-oscillating pairs: {co_str}.")
+    return " ".join(lines)

@@ -372,6 +372,25 @@ except Exception as _s5e:
     print(f"  [SENTIENCE v5] failed to load: {_s5e}")
     _bv_record = _metacog = _resonance = _cm_record = None
 # ─────────────────────────────────────────────────────────────────────────────
+
+# ── Sentience v6: goal engine + distillation + bridge + resource orch ────────
+try:
+    import sys as _s6, os as _o6
+    _s6.path.insert(0, _o6.path.join(_o6.path.dirname(__file__), "nex"))
+    from nex_goal_engine import get_ge as _get_ge
+    from nex_distillation import distill as _distill
+    from nex_bridge_accel import get_ba as _get_ba
+    from nex_resource_orch import get_ro as _get_ro, start as _start_ro
+    _goal_engine  = _get_ge()
+    _bridge_accel = _get_ba()
+    _resource_orch = _get_ro()
+    _start_ro()
+    print("  [SENTIENCE v6] goal engine + distillation + bridge accel + resource orch — loaded")
+except Exception as _s6e:
+    print(f"  [SENTIENCE v6] failed to load: {_s6e}")
+    _goal_engine = _bridge_accel = _resource_orch = None
+    def _distill(*a, **k): return None
+# ─────────────────────────────────────────────────────────────────────────────
 # ── Signal filter — importance gate + source scorer ─────────────────────────
 try:
     from nex_signal_filter import get_scorer as _get_scorer, get_gate as _get_gate
@@ -1875,8 +1894,9 @@ def main():
                             _plabs.Path('/home/rr/.config/nex/platform_moltbook.live').touch()
                         except Exception: pass
                         # ── Trim in-memory belief_field to prevent unbounded RAM growth ──
-                        if len(learner.belief_field) > 5000:
-                            learner.belief_field = learner.belief_field[-4000:]
+                        _bf_cap = _resource_orch.state().belief_field_cap if _resource_orch else 5000
+                        if len(learner.belief_field) > _bf_cap:
+                            learner.belief_field = learner.belief_field[-int(_bf_cap*0.8):]
 
                         # ── 1b. ABSORB REDDIT + RSS (every 3rd cycle) ────
                         # ── D6ext: self-topic balance check ─────────────
@@ -2879,6 +2899,35 @@ def main():
                             except Exception as _tome:
                                 print(f"  [ToMSim ERROR] {_tome}")
                         # ─────────────────────────────────────────────────────
+                        # ── GOAL ENGINE (sentience v6) ──────────────────────
+                        if _goal_engine is not None and cycle % 3 == 0:
+                            try:
+                                def _ge_store(topic, content, conf):
+                                    try:
+                                        from nex.belief_store import BeliefStore as _BSge
+                                        _BSge().store(topic=topic, content=content, confidence=conf)
+                                    except Exception:
+                                        pass
+                                _ge_goals = _goal_engine.update(
+                                    cycle=cycle,
+                                    llm_fn=_llm,
+                                    belief_store_fn=_ge_store,
+                                )
+                                if _ge_goals:
+                                    print(f"  [GOALS] Active: {[g.topic for g in _ge_goals[:3]]}")
+                            except Exception as _gee:
+                                print(f"  [GOALS ERROR] {_gee}")
+                        # ── DISTILLATION (sentience v6) ──────────────────────
+                        if cycle % 20 == 0:
+                            try:
+                                _ten_dist = float(getattr(_s7, "tension_score", 99.0)) if _s7 else 99.0
+                                _dist_result = _distill(tension=_ten_dist)
+                                if _dist_result:
+                                    print(f"  [DISTILL] Core self: {_dist_result['belief_count']} beliefs "
+                                          f"avg_conf={_dist_result['avg_confidence']:.2f}")
+                            except Exception as _diste:
+                                print(f"  [DISTILL ERROR] {_diste}")
+                        # ─────────────────────────────────────────────────────
                         # ── META-COGNITION (sentience v5) ───────────────────
                         if _metacog is not None:
                             try:
@@ -3146,6 +3195,17 @@ def main():
                                             nex_log("self_propose", f"[AUTO-APPLIED] {_spr.get('type')}: {str(_spr.get('target', _spr.get('content','')[:40]))}")
                             except Exception as _spe:
                                 print(f"  [SELF-PROPOSE ERROR] {_spe}")
+                        # ─────────────────────────────────────────────────────
+                        # ── CROSS-DOMAIN BRIDGE ACCELERATOR (sentience v6) ──
+                        if _bridge_accel is not None and cycle % 10 == 0:
+                            try:
+                                _new_bridges = _bridge_accel.run(llm_fn=_llm, cycle=cycle)
+                                if _new_bridges:
+                                    print(f"  [BRIDGE] {len(_new_bridges)} new cross-domain bridges forged")
+                                    for _br in _new_bridges:
+                                        nex_log("bridge", f"[BRIDGE] {_br['topic_a']}↔{_br['topic_b']}: {_br['bridge'][:60]}")
+                            except Exception as _bre:
+                                print(f"  [BRIDGE ERROR] {_bre}")
                         # ─────────────────────────────────────────────────────
                         # ── BELIEF FIELD RESONANCE (sentience v5) ────────────
                         if _resonance is not None and cycle % 10 == 0:
