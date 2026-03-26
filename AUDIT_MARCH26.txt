@@ -145,3 +145,41 @@ SESSION 2 — March 26 continued
 Additional ~14,400 lines removed across 31+ dead files.
 Cognitive pressure wired. DB→JSON sync automated.
 NexV2 stub cleaned. /v2status live. Tension loop fully capped.
+
+SESSION 2 CONTINUED — Remaining issues closed
+===============================================
+
+25. curiosity queue drain wired into ABSORB phase
+    → CuriosityQueue.drain() now called each ABSORB cycle
+    → 7 queued topics will now fetch via DuckDuckGo → beliefs
+
+26. decision_log now written on reply + notification reply success
+    → Cycle, timestamp, post_id, phase, outcome recorded
+
+27. failure_log writer added (log_failure helper in run.py)
+    → CONTRA and CURIOSITY errors now logged to DB
+
+28. NexV2 subsystem stub cleaned, /v2status returns live DB data
+
+29. Cognitive pressure + stall detection wired into cycle
+    → Fires mutation burst if belief/insight counts stall
+
+30. DB→JSON belief sync automated every 10 cycles
+
+31. 197,736 lines of backup files removed from git history
+
+32. 31 dead/orphan modules removed (14,400+ lines total)
+
+33. backups/ directory removed (8.8MB)
+
+34. nex_s8, INTEGRATION_PATCH, root duplicates removed
+
+FINAL STATE:
+  run.py: compiles clean
+  All core imports: OK
+  beliefs.json: 98
+  DB beliefs: 72 (syncing every 10 cycles)
+  decision_log: wired (0 → will populate on next replies)
+  failure_log: wired (0 → will populate on errors)
+  curiosity_queue: 7 topics queued, drain active
+  Codebase: 62,248 lines across 139 files
