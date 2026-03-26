@@ -3089,6 +3089,17 @@ def main():
                                 _ai.tick(cycle=cycle, llm_fn=_llm, log_fn=nex_log)
                         except Exception as _aite:
                             print(f'  [AI] tick error: {_aite}')
+                        # ── COGNITIVE PRESSURE + STALL DETECTION ─────────
+                        try:
+                            from nex.nex_cognitive_pressure import run_pressure_metric as _run_cp
+                            _cp = _run_cp(cycle=cycle, llm_fn=_llm, verbose=False)
+                            if _cp.get("mutation_burst", 0) > 0:
+                                nex_log("cognition", f"[CogPressure] burst={_cp['mutation_burst']} state={_cp.get('pressure_state','?')}")
+                                print(f"  [CogPressure] {_cp.get('pressure_state','?')} burst={_cp['mutation_burst']}")
+                            elif cycle % 20 == 0 and _cp:
+                                print(f"  [CogPressure] {_cp.get('pressure_state','?')} stall={_cp.get('stall_count',0)}")
+                        except Exception as _cpe:
+                            print(f"  [CogPressure] error: {_cpe}")
                         # ── SELF PROPOSER (every 50 cycles) ─────────────
                         try:
                             if cycle % 50 == 0:
