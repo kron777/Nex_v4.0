@@ -1135,6 +1135,12 @@ def main():
                                 from nex_dynamic_opener import get_opener as _gop_llm
                                 result = _gop_llm().strip_output(result)
                             except Exception: pass
+                            # Strip TYPE: NONE / TYPE: CONTEXTUAL artifacts before log/return
+                            import re as _re_llm
+                            result = _re_llm.sub(r'TYPE:\s*(NONE|CONTEXTUAL)[^.]*\.?\s*', '', result).strip()
+                            if not result:
+                                nex_log("llm", f"[Mistral-7B] {task_type}: stripped to empty, skipping")
+                                break
                             print(f"  [Mistral-7B ✓] {task_type}: {result[:60]}…")
                             try: _rmc("llm_local", success=True, value=1)
                             except Exception: pass
