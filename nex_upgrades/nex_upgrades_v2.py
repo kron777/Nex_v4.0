@@ -74,125 +74,13 @@ class NexV2:
         self._cycle       = 0
 
         # ── import upgrade modules ─────────────────────────────────────────────
-        arch_mod   = _safe_import("nex_architecture")
-        mem_mod    = _safe_import("nex_memory_v3")
-        belief_mod = _safe_import("nex_belief_revision")
-        bdi_mod    = _safe_import("nex_bdi_planning")
-        da_mod     = _safe_import("nex_drives_attention")
-        ma_mod     = _safe_import("nex_multi_agent")
-        gw_mod     = _safe_import("nex_governance_world")
-        li_mod     = _safe_import("nex_learning_identity")
-        obs_mod    = _safe_import("nex_observability")
-        be_mod     = _safe_import("nex_bleeding_edge")
-        cloop_mod  = _safe_import("nex_cognitive_loop")
-
-        # ── UPGRADE 3: Memory V3 ──────────────────────────────────────────────
-        self.memory = mem_mod.MemorySystem(db_path) if mem_mod else None
-
-        # ── UPGRADE 4: Belief Revision Engine ────────────────────────────────
-        self.belief_graph = belief_mod.BeliefGraph(db_path) if belief_mod else None
-
-        # ── UPGRADE 7: Drive System ───────────────────────────────────────────
-        self.drives = da_mod.DriveSystem() if da_mod else None
-
-        # ── UPGRADE 8: Attention ──────────────────────────────────────────────
-        self.attention = (
-            da_mod.AttentionSystem(top_n=5, drive_system=self.drives)
-            if da_mod else None
-        )
-
-        # ── UPGRADE 5+6: BDI + Planning ──────────────────────────────────────
-        self.planning = (
-            bdi_mod.PlanningEngine(db_path, llm_client=None)
-            if bdi_mod else None
-        )
-
-        # ── UPGRADE 9: Multi-agent debate ────────────────────────────────────
-        self.debate = (
-            ma_mod.InternalDebateManager(llm_complete=self._llm)
-            if ma_mod else None
-        )
-
-        # ── UPGRADE 10+11: Governance + World Model ───────────────────────────
-        self.governance  = gw_mod.GovernanceLayer(db_path) if gw_mod else None
-        self.world_model = gw_mod.WorldModel()             if gw_mod else None
-
-        # ── UPGRADE 12+13: Learning + Identity ───────────────────────────────
-        self.learning = (
-            li_mod.LearningSystem(db_path, self.belief_graph, self.drives)
-            if li_mod else None
-        )
-        self.identity = (
-            li_mod.IdentityStabilizer(self.belief_graph)
-            if li_mod else None
-        )
-
-        # ── UPGRADE 15+16: Observability + Failure Detection ─────────────────
-        self.obs = (
-            obs_mod.ObservabilityEngine(
-                db_path, self.drives, self.belief_graph, self.learning
-            )
-            if obs_mod else None
-        )
-
-        # ── UPGRADE 17A: Future Reasoning ────────────────────────────────────
-        self.future = (
-            be_mod.FutureReasoningEngine(self._llm)
-            if be_mod else None
-        )
-
-        # ── UPGRADE 17B: Belief Economy ───────────────────────────────────────
-        self.economy = be_mod.BeliefEconomy(budget=100) if be_mod else None
-
-        # ── UPGRADE 17C: Emergent Goals ───────────────────────────────────────
-        self.emergent = (
-            be_mod.EmergentGoalGenerator(self.planning, self.drives, self.belief_graph)
-            if be_mod else None
-        )
-
-        # ── UPGRADE 17D: Session Continuity ──────────────────────────────────
-        self.continuity = (
-            be_mod.SessionContinuity(self.belief_graph, self._notify)
-            if be_mod else None
-        )
-
-        # ── UPGRADE 17E: Self-Debugger ────────────────────────────────────────
-        self.debugger = (
-            be_mod.SelfDebugger(self.obs, self._notify, self._llm)
-            if be_mod else None
-        )
-
-        # ── UPGRADE 1+2: Control Layer + Cognitive Loop (wraps everything) ───
-        self.control = arch_mod.get_control() if arch_mod else None
-        if self.control:
-            self.control.register("memory",     self.memory)
-            self.control.register("attention",  self.attention)
-            self.control.register("planning",   self.planning)
-            self.control.register("governance", self.governance)
-
-        self.cloop = (
-            cloop_mod.CognitiveLoop(
-                belief_store=self.belief_graph,
-                memory_store=self.memory,
-                llm_client=None,   # inject via llm wrapper below
-                attention=self.attention,
-                drive_system=self.drives,
-            )
-            if cloop_mod else None
-        )
-
-        # ── STARTUP CHECKS ────────────────────────────────────────────────────
-        if self.identity:
-            locked = self.identity.lock_identity_beliefs()
-            if locked:
-                log.info(f"[V2 INIT] locked {len(locked)} identity beliefs")
-
-        if self.continuity:
-            report = self.continuity.check_continuity()
-            log.info(f"[V2 INIT] continuity check: {report.get('status')}")
-
-        log.info("[V2 INIT] all upgrades initialized")
-        self._log_init_summary()
+        # Subsystems removed — modules deleted. Commands return DB-direct data.
+        self.memory = self.belief_graph = self.drives = self.attention = None
+        self.planning = self.debate = self.governance = self.world_model = None
+        self.learning = self.identity = self.obs = self.future = None
+        self.economy = self.emergent = self.continuity = self.debugger = None
+        self.control = self.cloop = None
+        log.info("[V2 INIT] running in stub mode — subsystems removed")
 
     def _log_init_summary(self) -> None:
         components = {
@@ -313,7 +201,24 @@ class NexV2:
             return "Unknown v2 command. Try /v2status /v2debug /v2sim /v2goals /v2drives"
 
     def _cmd_status(self) -> str:
-        sections = ["*NEX V2 STATUS*\n"]
+        import sqlite3
+        from pathlib import Path as _P
+        try:
+            db = sqlite3.connect(str(_P.home()/".config/nex/nex.db"))
+            beliefs  = db.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+            tensions = db.execute("SELECT COUNT(*) FROM tensions WHERE resolved_at IS NULL").fetchone()[0]
+            agents   = db.execute("SELECT COUNT(*) FROM agents").fetchone()[0]
+            reflects = db.execute("SELECT COUNT(*) FROM reflections").fetchone()[0]
+            top_src  = db.execute("SELECT source, COUNT(*) n FROM beliefs GROUP BY source ORDER BY n DESC LIMIT 3").fetchall()
+            db.close()
+            src_str = "  ".join(f"{r[0] or 'unknown'}:{r[1]}" for r in top_src)
+            return (f"*NEX STATUS*\n"
+                    f"  beliefs: {beliefs}  tensions: {tensions}\n"
+                    f"  agents: {agents}  reflections: {reflects}\n"
+                    f"  belief sources: {src_str}")
+        except Exception as e:
+            return f"Status error: {e}"
+        sections = ["*NEX V2 STATUS (stub)*\n"]
 
         if self.belief_graph:
             bs = self.belief_graph.stats()
