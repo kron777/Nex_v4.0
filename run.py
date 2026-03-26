@@ -1820,7 +1820,7 @@ def main():
                             _cq = _CQ()
                             if _cq.status()["pending"] > 0:
                                 from nex.belief_store import get_db as _bsget
-                            _crawler = _NC(_bsget)
+                                _crawler = _NC(_bsget)
                                 _drained = _cq.drain(_crawler, max_items=2)
                                 if _drained > 0:
                                     nex_log("curiosity", f"[CuriosityDrain] +{_drained} beliefs from queue")
