@@ -113,55 +113,77 @@ def bootstrap_tables(db: sqlite3.Connection):
     db.execute(REFLECTIONS_DDL)
     db.execute(AGENTS_DDL)
     db.commit()
+    ensure_sync_hash_column(db, "reflections")
+    ensure_sync_hash_column(db, "agents")
+    db.commit()
+    # Ensure sync_hash column exists on pre-existing tables
+    ensure_sync_hash_column(db, "reflections")
+    ensure_sync_hash_column(db, "agents")
+    db.commit()
 
 # ── Reflection normaliser ─────────────────────────────────────────────────────
 
 def normalise_reflection(raw) -> dict | None:
     """
-    Accepts many JSON shapes NEX might produce:
-      - string                        → {content: str}
-      - {"content": ..., ...}
-      - {"text": ..., ...}
-      - {"reflection": ..., ...}
-      - {"thought": ..., ...}
-      - {"message": ..., ...}
-    Returns None if we can't extract meaningful text.
+    Handles NEX's actual reflection shape:
+      {
+        "timestamp": "...",
+        "user_asked_about": [...],
+        "i_discussed": [...],
+        "topic_alignment": 0.76,
+        "alignment_method": "embedding",
+        "used_beliefs": false,
+        "belief_count_used": 0,
+        "self_assessment": "...",
+        "growth_note": "..."
+      }
+    Also handles plain strings and generic content/text/reflection keys as fallback.
     """
     if isinstance(raw, str):
         text = raw.strip()
-    elif isinstance(raw, dict):
-        text = (
-            raw.get("content")
-            or raw.get("text")
-            or raw.get("reflection")
-            or raw.get("thought")
-            or raw.get("message")
-            or ""
-        )
-        text = str(text).strip()
-    else:
+        if len(text) < 5:
+            return None
+        return {"content": text, "source": "json_import", "score": 0.0, "created_at": now_iso()}
+
+    if not isinstance(raw, dict):
         return None
+
+    # NEX native shape — combine self_assessment + growth_note into content
+    self_assessment = str(raw.get("self_assessment") or "").strip()
+    growth_note     = str(raw.get("growth_note") or "").strip()
+
+    if self_assessment or growth_note:
+        parts = []
+        if self_assessment:
+            parts.append(f"[Assessment] {self_assessment}")
+        if growth_note:
+            parts.append(f"[Growth] {growth_note}")
+        text = " | ".join(parts)
+    else:
+        # Generic fallback
+        text = str(
+            raw.get("content") or raw.get("text") or
+            raw.get("reflection") or raw.get("thought") or
+            raw.get("message") or ""
+        ).strip()
 
     if len(text) < 5:
         return None
 
-    score = 0.0
-    if isinstance(raw, dict):
-        score = float(raw.get("score") or raw.get("weight") or raw.get("confidence") or 0.0)
+    score = float(raw.get("topic_alignment") or raw.get("score") or
+                  raw.get("weight") or raw.get("confidence") or 0.0)
 
-    created_at = now_iso()
-    if isinstance(raw, dict):
-        created_at = str(
-            raw.get("created_at") or raw.get("timestamp") or raw.get("ts") or created_at
-        )
+    created_at = str(raw.get("timestamp") or raw.get("created_at") or
+                     raw.get("ts") or now_iso())
 
-    source = "json_import"
-    if isinstance(raw, dict):
-        source = str(raw.get("source") or raw.get("origin") or "json_import")
+    # Rich metadata: store discussed topics for future use
+    topics_asked  = raw.get("user_asked_about") or []
+    topics_discussed = raw.get("i_discussed") or []
+    source_detail = f"topics:{','.join(topics_discussed[:3])}" if topics_discussed else "json_import"
 
     return {
         "content":    text,
-        "source":     source,
+        "source":     source_detail,
         "score":      score,
         "created_at": created_at,
     }
@@ -170,22 +192,32 @@ def normalise_reflection(raw) -> dict | None:
 
 def normalise_agent(raw) -> dict | None:
     """
-    Accepts:
-      - {"name": ..., "role": ..., "state": ..., ...}
-      - {"id": ..., "type": ..., ...}
-      - plain string (used as name)
+    Handles NEX's actual agent shape: flat {agent_name: score} dict
+    passed in as (name, score) tuple after pre-processing in load step.
+    Also handles generic dicts and plain strings as fallback.
     """
+    # Pre-processed tuple from the flat dict loader: (name, score)
+    if isinstance(raw, tuple) and len(raw) == 2:
+        name, score = raw
+        name = str(name).strip()
+        if not name:
+            return None
+        return {
+            "name":       name,
+            "role":       "social_agent",
+            "state":      str(int(score)),   # score stored as state (interaction count)
+            "metadata":   json.dumps({"interaction_count": score}),
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+        }
+
     if isinstance(raw, str):
         name = raw.strip()
         if not name:
             return None
         return {
-            "name":       name,
-            "role":       None,
-            "state":      None,
-            "metadata":   None,
-            "created_at": now_iso(),
-            "updated_at": now_iso(),
+            "name": name, "role": None, "state": None,
+            "metadata": None, "created_at": now_iso(), "updated_at": now_iso(),
         }
 
     if not isinstance(raw, dict):
@@ -197,41 +229,45 @@ def normalise_agent(raw) -> dict | None:
     if not name:
         return None
 
-    role = raw.get("role") or raw.get("task") or raw.get("purpose") or None
+    role  = raw.get("role") or raw.get("task") or raw.get("purpose") or None
     state = raw.get("state") or raw.get("status") or None
-
-    # Anything else goes into metadata
-    skip = {"name", "agent_name", "id", "type", "role", "task", "purpose",
-            "state", "status", "created_at", "updated_at", "timestamp"}
-    extra = {k: v for k, v in raw.items() if k not in skip}
+    skip  = {"name", "agent_name", "id", "type", "role", "task", "purpose",
+             "state", "status", "created_at", "updated_at", "timestamp"}
+    extra    = {k: v for k, v in raw.items() if k not in skip}
     metadata = json.dumps(extra) if extra else None
-
-    ts = str(raw.get("created_at") or raw.get("timestamp") or now_iso())
+    ts       = str(raw.get("created_at") or raw.get("timestamp") or now_iso())
 
     return {
-        "name":       name,
-        "role":       str(role) if role else None,
-        "state":      str(state) if state else None,
-        "metadata":   metadata,
-        "created_at": ts,
-        "updated_at": now_iso(),
+        "name": name, "role": str(role) if role else None,
+        "state": str(state) if state else None, "metadata": metadata,
+        "created_at": ts, "updated_at": now_iso(),
     }
 
 # ── Loaders ───────────────────────────────────────────────────────────────────
 
-def load_json_records(path: Path) -> list:
-    """Load JSON — handles list, dict-of-lists, or newline-delimited JSON."""
+def load_json_records(path: Path, data_type: str = "generic") -> list:
+    """Load JSON — handles list, dict-of-lists, flat dicts, or newline-delimited JSON."""
     text = path.read_text(encoding="utf-8", errors="replace").strip()
     if not text:
         return []
 
-    # Try standard JSON first
     try:
         data = json.loads(text)
+
+        # Agents are stored as a flat {name: score} dict — expand to tuples
+        if data_type == "agents" and isinstance(data, dict):
+            # Check it's actually name→score (values are numbers), not a wrapper dict
+            if all(isinstance(v, (int, float)) for v in data.values()):
+                return list(data.items())  # → [(name, score), ...]
+            # Otherwise might be a wrapper dict with a list inside
+            for key in ("agents", "records", "data", "items", "entries"):
+                if key in data and isinstance(data[key], list):
+                    return data[key]
+            return [data]
+
         if isinstance(data, list):
             return data
         if isinstance(data, dict):
-            # Might be {reflections: [...]} or just a single record
             for key in ("reflections", "agents", "records", "data", "items", "entries"):
                 if key in data and isinstance(data[key], list):
                     return data[key]
@@ -261,7 +297,7 @@ def sync_reflections(
     verbose: bool = False,
 ) -> tuple[int, int, int]:
     """Returns (found, inserted, skipped)."""
-    records = load_json_records(path)
+    records = load_json_records(path, data_type="reflections")
     found = len(records)
     inserted = skipped = 0
 
@@ -300,7 +336,7 @@ def sync_agents(
     dry_run: bool = False,
     verbose: bool = False,
 ) -> tuple[int, int, int]:
-    records = load_json_records(path)
+    records = load_json_records(path, data_type="agents")
     found = len(records)
     inserted = skipped = 0
 
