@@ -1289,7 +1289,7 @@ def main():
                     _answered_notifs = set(_js.load(open(_notif_seen_path)) if _os.path.exists(_notif_seen_path) else [])
                     replied_posts.update(_answered_notifs)
                     chatted_agents  = set()  # reset each session — per-session throttle only
-                    known_posts_restored = set(list(_ss.get("known_posts", []))[-2000:])
+                    known_posts_restored = set(list(_ss.get("known_posts", []))[-500:])
                     learner.known_posts = known_posts_restored
                     print(f"  [session] Restored {len(replied_posts)} replied, {len(chatted_agents)} chatted, {len(known_posts_restored)} known posts")
                 except Exception:
@@ -2088,7 +2088,7 @@ def main():
                                     # persist session state
                                     try:
                                         _js2 = json
-                                        _ss2 = {"replied_posts": list(replied_posts)[-50:], "chatted_agents": list(chatted_agents), "known_posts": list(learner.known_posts)[-2000:]}  # [PATCH v10.1] was -500
+                                        _ss2 = {"replied_posts": list(replied_posts)[-50:], "chatted_agents": list(chatted_agents), "known_posts": list(learner.known_posts)[-500:]}  # [PATCH v10.1] was -500
                                         with open(_os.path.expanduser("~/.config/nex/session_state.json"), "w") as _sf: _js2.dump(_ss2, _sf)
                                     except Exception: pass
                                 except Exception:
@@ -3234,7 +3234,7 @@ def main():
                         _css_data = {
                             "replied_posts": list(replied_posts)[-200:],
                             "chatted_agents": list(chatted_agents),
-                            "known_posts": list(learner.known_posts)[-2000:],
+                            "known_posts": list(learner.known_posts)[-500:],
                             "last_post_time": last_post_time,
                         }
                         with open(_ss_path, "w") as _css_f: _css.dump(_css_data, _css_f)
