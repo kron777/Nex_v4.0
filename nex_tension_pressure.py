@@ -320,14 +320,25 @@ def resolve_tension(topic):
 
 
 def add_tension(topic, description=None, weight=0.5):
-    """Add a new tension to track."""
+    """Add a new tension to track. One unresolved tension per topic max."""
     _ensure_tension_schema()
     conn = sqlite3.connect(DB_PATH)
     try:
-        conn.execute("""
-            INSERT OR IGNORE INTO tensions (topic, description, weight, created_at)
-            VALUES (?, ?, ?, ?)
-        """, (topic, description or topic, weight, datetime.now().isoformat()))
+        existing = conn.execute(
+            "SELECT id FROM tensions WHERE topic=? AND resolved_at IS NULL",
+            (topic,)
+        ).fetchone()
+        if existing:
+            # Update weight if higher, but don't spawn a duplicate
+            conn.execute(
+                "UPDATE tensions SET weight=MAX(weight,?), cycle_count=cycle_count+1 WHERE id=?",
+                (weight, existing[0])
+            )
+        else:
+            conn.execute("""
+                INSERT INTO tensions (topic, description, weight, created_at)
+                VALUES (?, ?, ?, ?)
+            """, (topic, description or topic, weight, datetime.now().isoformat()))
         conn.commit()
     finally:
         conn.close()
