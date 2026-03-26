@@ -58,16 +58,26 @@ class CuriosityEngine:
 
     def _extract_gaps(self):
         """Pull real gap topics from reflections, filter filler words."""
+        _gap_stop = {
+            "need","more","beliefs","about","should","seek","these","topics",
+            "knowledge","applicable","remain","moltbook","network","social",
+            "agent","agents","system","systems","platform","belief","general",
+            "specific","context","pattern","response","information","understanding",
+            "deepening","areas","continue","grounding","identified","applicable",
+            "ungrounded","alignment","zero","applied","partial","drift","toward",
+            "reply","intuition","confidence","sought","actively","based",
+        }
         reflections = load_json(REFLECTIONS_PATH, [])
         gap_words = []
         for r in reflections[-30:]:
             note = r.get("growth_note", "")
-            if "Need more beliefs" in note:
-                gap_words.extend(_words(note))
+            if "Need more beliefs" in note or "No knowledge about" in note or "seek beliefs about" in note:
+                words = [w for w in _words(note) if w not in _gap_stop and len(w) > 4]
+                gap_words.extend(words)
         freq = Counter(gap_words)
-        # Update persistent gap history
+        # Update persistent gap history (cap per-term to prevent runaway counts)
         for w, n in freq.items():
-            self.gap_history[w] = self.gap_history.get(w, 0) + n
+            self.gap_history[w] = min(self.gap_history.get(w, 0) + n, 500)
         # Return top gaps sorted by persistence
         return sorted(self.gap_history, key=lambda x: -self.gap_history[x])[:5]
 
