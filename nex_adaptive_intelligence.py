@@ -193,8 +193,8 @@ class QueuePressureRegulator:
       - raises priority threshold (returned as min_confidence floor)
       - accelerates decay for low-attention topics
     """
-    QUEUE_SOFT_LIMIT  = 20
-    QUEUE_HARD_LIMIT  = 35
+    QUEUE_SOFT_LIMIT  = 40
+    QUEUE_HARD_LIMIT  = 60
     DECAY_ACCEL_TOPIC = 0.02   # extra confidence decay for ignored topics
     INTERVAL          = 60
 
