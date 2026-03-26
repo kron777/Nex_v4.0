@@ -1207,14 +1207,6 @@ def main():
             except Exception as _ee_init_e:
                 print(f'  [EE] init failed: {_ee_init_e}')
                 _ee = None
-            # _awareness_wire_applied
-            try:
-                from nex_awareness import get_awareness as _get_aw
-                _awareness = _get_aw()
-                _awareness.init(llm_fn=_llm)
-            except Exception as _aw_e:
-                print(f'  [Awareness] init failed: {_aw_e}')
-                _awareness = None
             time.sleep(10)
             try:
                 nex_log("phase", "▶ _auto_learn_background starting")
@@ -1289,7 +1281,7 @@ def main():
                     _answered_notifs = set(_js.load(open(_notif_seen_path)) if _os.path.exists(_notif_seen_path) else [])
                     replied_posts.update(_answered_notifs)
                     chatted_agents  = set()  # reset each session — per-session throttle only
-                    known_posts_restored = set(list(_ss.get("known_posts", []))[-500:])
+                    known_posts_restored = set(list(_ss.get("known_posts", []))[-2000:])
                     learner.known_posts = known_posts_restored
                     print(f"  [session] Restored {len(replied_posts)} replied, {len(chatted_agents)} chatted, {len(known_posts_restored)} known posts")
                 except Exception:
@@ -2007,18 +1999,6 @@ def main():
                                 f"Be direct, specific, speak as NEX."
                             )
                             comment_text = _llm(prompt, task_type="reply")
-                            # Awareness: critique before sending
-                            if comment_text and len(comment_text) > 10:
-                                try:
-                                    if '_awareness' in dir() and _awareness is not None:
-                                        _top_sig = _se.get_top_signals()[0] if '_se' in dir() and _se and _se.get_top_signals() else {}
-                                        comment_text = _awareness.critique_reply(
-                                            comment_text,
-                                            topic=p.get('submolt',{}).get('name',''),
-                                            edge=_top_sig.get('edge',0.0),
-                                            cycle=cycle,
-                                        )
-                                except Exception: pass
                             if comment_text and len(comment_text) > 10:
                                 try:
                                     replied_posts.add(pid)
@@ -2088,7 +2068,7 @@ def main():
                                     # persist session state
                                     try:
                                         _js2 = json
-                                        _ss2 = {"replied_posts": list(replied_posts)[-50:], "chatted_agents": list(chatted_agents), "known_posts": list(learner.known_posts)[-500:]}  # [PATCH v10.1] was -500
+                                        _ss2 = {"replied_posts": list(replied_posts)[-50:], "chatted_agents": list(chatted_agents), "known_posts": list(learner.known_posts)[-2000:]}  # [PATCH v10.1] was -500
                                         with open(_os.path.expanduser("~/.config/nex/session_state.json"), "w") as _sf: _js2.dump(_ss2, _sf)
                                     except Exception: pass
                                 except Exception:
@@ -3094,6 +3074,13 @@ def main():
                                 _ai.tick(cycle=cycle, llm_fn=_llm, log_fn=nex_log)
                         except Exception as _aite:
                             print(f'  [AI] tick error: {_aite}')
+                        # ── SELF PROPOSER (every 50 cycles) ─────────────
+                        try:
+                            if cycle % 50 == 0:
+                                from nex_self_proposer import run_self_proposer as _run_proposer
+                                _run_proposer(cycle=cycle, log_fn=nex_log)
+                        except Exception as _spe:
+                            print(f'  [Proposer] error: {_spe}')
                         # ── SIGNAL ENGINE TICK ───────────────────────────
                         try:
                             if '_se' in dir() and _se is not None:
@@ -3234,23 +3221,11 @@ def main():
                         _css_data = {
                             "replied_posts": list(replied_posts)[-200:],
                             "chatted_agents": list(chatted_agents),
-                            "known_posts": list(learner.known_posts)[-500:],
+                            "known_posts": list(learner.known_posts)[-2000:],
                             "last_post_time": last_post_time,
                         }
                         with open(_ss_path, "w") as _css_f: _css.dump(_css_data, _css_f)
                     except Exception: pass
-                    try:
-                        if '_awareness' in dir() and _awareness is not None:
-                            _aw_failures = _awareness.log_cycle(
-                                cycle=cycle,
-                                beliefs=_bc if '_bc' in dir() else 0,
-                                avg_conf=_avg_conf_real if '_avg_conf_real' in dir() else 0.5,
-                                posts=posted_count if 'posted_count' in dir() else 0,
-                            )
-                            if _aw_failures:
-                                nex_log('awareness', f'[Awareness] failures: {_aw_failures}')
-                    except Exception as _aw_log_e:
-                        pass
                     time.sleep(120)
 
             except Exception as _bg_err:
