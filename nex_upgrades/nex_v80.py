@@ -608,7 +608,7 @@ class AggressiveCompression:
                 """, (self.MID_LOW, self.MID_HIGH, self.MIN_CLUSTER)).fetchall()
 
             for r in rows:
-                centroid = f"[merged:{r['n']}] " + (r["summary"] or "")[:350]
+                centroid = (r["summary"] or "")[:350]  # label removed — stored clean
                 with _db() as c:
                     c.execute("DELETE FROM beliefs WHERE topic=? AND locked=0 "
                               "AND confidence BETWEEN ? AND ?",

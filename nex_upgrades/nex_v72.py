@@ -713,7 +713,8 @@ class MemoryCompressionV2:
 
             for r in rows:
                 summary = (r["summary"] or "")[:400]
-                comp    = f"[compressed:{r['n']}] {summary}"
+                comp    = summary  # label removed — stored clean, logged separately
+                _log(f"[MCv2] compressing {r['topic']} n={r['n']}")
                 with _db() as c:
                     # Delete originals, insert compressed summary
                     c.execute("DELETE FROM beliefs WHERE topic=? AND locked=0",
