@@ -1976,7 +1976,7 @@ def main():
                             _bidx = _get_belief_index() if _get_belief_index else None
                             if _bidx:
                                 _bidx.update(all_beliefs, cycle)
-                                relevant = _bidx.top_k(title + " " + body, k=5)
+                                relevant = [b for b in (_bidx.top_k(title + " " + body, k=5) or []) if b is not None]
                             else:
                                 relevant = []
                             # ── D7: mark retrieved beliefs as used ───────────

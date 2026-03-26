@@ -127,7 +127,7 @@ class CuriosityEngine:
             return []
         tagged = {}
         for b in (self.beliefs or []):
-            tags = b.get("tags", ["general"])
+            tags = b.get("tags") or ["general"]
             if isinstance(tags, str):
                 try: tags = json.loads(tags)
                 except: tags = ["general"]
