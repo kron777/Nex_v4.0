@@ -2593,6 +2593,18 @@ def main():
                                             _profiles[agent_name].setdefault("topics",[])
                                             _profiles[agent_name]["topics"] = list(set(_profiles[agent_name]["topics"] + [ap_title[:30]]))[-10:]
                                         open(_ap,"w").write(_asj.dumps(_profiles))
+                                        # Sync interaction score → agents DB so dashboard cv shows correctly
+                                        try:
+                                            import sqlite3 as _adb, time as _at
+                                            _p = _profiles[agent_name]
+                                            _rel_score = float(_p.get("interactions", 0) * 10 + _p.get("influence", 0) * 0.01)
+                                            _rel_type  = "colleague" if _rel_score > 500 else "familiar" if _rel_score > 100 else "acquaintance"
+                                            with _adb.connect(_aso.path.expanduser("~/.config/nex/nex.db"), timeout=3) as _aconn:
+                                                _aconn.execute(
+                                                    "UPDATE agents SET relationship_score=?, relationship_type=?, interaction_count=?, last_seen=? WHERE agent_name=?",
+                                                    (_rel_score, _rel_type, _p.get("interactions", 0), _at.time(), agent_name)
+                                                )
+                                        except Exception: pass
                                     except Exception: pass
                                 except Exception as _ce:
                                     print(f"  [chat error] {_ce}")
@@ -3460,6 +3472,11 @@ def main():
                             "posted":   sum(1 for c in convs if c.get("type")=="original_post"),
                             "reflects": len(refs),
                             "avg_align": sum(r.get("topic_alignment",0) for r in refs)/len(refs) if refs else 0,
+                            "homeostasis": (lambda _hmd: {
+                                "fat":    {d: _hmd.get("fatigue",{}).get(d,0.0) for d in ["coherence","exploration","efficiency","novelty"]},
+                                "levels": _hmd.get("levels",{}),
+                                "zone":   __import__('json').loads((__import__('pathlib').Path.home()/'.config/nex/nex_drives_state.json').read_text()).get("levels",{}) if (__import__('pathlib').Path.home()/'.config/nex/nex_drives_state.json').exists() else {},
+                            })((__import__('json').loads((__import__('pathlib').Path.home()/'.config/nex/nex_drives_state.json').read_text())) if (__import__('pathlib').Path.home()/'.config/nex/nex_drives_state.json').exists() else {}),
                             "insights": [{"topic":i.get("topic","?"),"confidence":i.get("confidence",0),"belief_count":i.get("belief_count",0)} for i in top_ins],
                             "agent_list": [[a[0], _rel(a[1] or 0), min(int((a[1] or 0) / 100), 5)] for a in top_ag],
                             "feed": [{"type":_ftype(c),"agent":_fagent(c),"content":_fcontent(c),"ts":c.get("timestamp","")[-8:] if c.get("timestamp") else ""} for c in recent],
@@ -3873,5 +3890,35 @@ def main():
             brain.stop_server()
 
 
+
+# ── Sentience v1: Narrative Thread ──────────────────────
+try:
+    from nex.nex_narrative_thread import NarrativeThread
+    from nex.nex_mood_hmm import get_hmm as _get_hmm
+    def _get_beliefs():
+        try:
+            from nex.belief_store import BeliefStore
+            bs = BeliefStore()
+            return bs.get_all() if hasattr(bs, "get_all") else []
+        except Exception:
+            return []
+    def _store_belief(topic, content, confidence):
+        try:
+            from nex.belief_store import BeliefStore
+            bs = BeliefStore()
+            bs.store(topic=topic, content=content, confidence=confidence)
+        except Exception:
+            pass
+    _narrative_thread = NarrativeThread(
+        mood_fn=lambda: _get_hmm().current(),
+        belief_fn=_get_beliefs,
+        belief_store_fn=_store_belief,
+        interval=1800,
+    )
+    _narrative_thread.start()
+    print("[SENTIENCE] NarrativeThread started.")
+except Exception as _e:
+    print(f"[SENTIENCE] NarrativeThread failed to start: {_e}")
+# ─────────────────────────────────────────────────────────
 if __name__ == "__main__":
     main()

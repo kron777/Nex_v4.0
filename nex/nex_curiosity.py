@@ -99,6 +99,13 @@ class CuriosityQueue:
 
     def _already_queued(self, topic: str) -> bool:
         return any(item.topic == topic for item in self._queue)
+    _NOISE = {
+        "general","security","identity","depth","beliefs","topics","reply",
+        "response","content","text","data","type","system","model","agent",
+        "question","answer","context","query","result","output","input",
+    }
+
+
 
     def enqueue(self, topic: str, reason: str,
                 confidence: float = 0.0, url: Optional[str] = None) -> bool:
@@ -108,6 +115,10 @@ class CuriosityQueue:
         """
         topic = topic.strip().lower()
         if not topic or len(topic) < 3:
+            return False
+        if topic.lower() in self._NOISE:
+            return False
+        if len(topic.split()) < 2 and len(topic) < 12:
             return False
         if self._on_cooldown(topic):
             logger.debug(f"[curiosity] skip (cooldown): {topic}")
@@ -163,6 +174,22 @@ class CuriosityQueue:
 
         self._save()
         return total_stored
+
+    def was_topic_crawled(self, topic: str) -> bool:
+        """
+        Returns True if this topic was crawled within COOLDOWN_HOURS.
+        Use in seek_knowledge_gaps (cognition.py) to avoid double-processing
+        topics the curiosity queue already handled this cycle.
+        """
+        return self._on_cooldown(topic.strip().lower())
+
+    def mark_topic_crawled(self, topic: str):
+        """
+        Mark a topic as crawled from outside the queue (e.g. seek_knowledge_gaps).
+        Prevents the curiosity queue from re-queuing it within COOLDOWN_HOURS.
+        """
+        self._crawled_topics[topic.strip().lower()] = time.time()
+        self._save()
 
     def status(self) -> dict:
         return {
@@ -542,6 +569,14 @@ class CuriosityEngine:
     def generate_desires(self, cycle_num: int) -> int:
         """Generate self-directed exploration based on NEX's actual interests."""
         return self.desire.generate_desires(cycle_num)
+
+    def was_topic_crawled(self, topic: str) -> bool:
+        """Check if topic was crawled within cooldown window. Used by seek_knowledge_gaps."""
+        return self.queue.was_topic_crawled(topic)
+
+    def mark_topic_crawled(self, topic: str):
+        """Mark topic as crawled from outside the queue (e.g. seek_knowledge_gaps)."""
+        self.queue.mark_topic_crawled(topic)
 
     def status(self) -> dict:
         s = self.queue.status()

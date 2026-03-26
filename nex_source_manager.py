@@ -90,8 +90,8 @@ def _groq_extract_belief(title: str, summary: str, domain: str) -> str | None:
             f"Domain: {domain}\n"
             f"Title: {title}\n"
             f"Summary: {summary[:300]}\n\n"
-            f"Reply with ONE sentence — the most interesting, durable insight from this article. "
-            f"No preamble, no 'The article says'. Just the belief itself."
+            f"Reply with ONE sentence synthesizing the core insight in your own words. "
+            f"Do NOT copy the title or abstract. No preamble. If nothing meaningful, reply SKIP."
         )
         r = requests.post(GROQ_URL,
             headers={"Authorization": f"Bearer {key}"},
@@ -104,7 +104,16 @@ def _groq_extract_belief(title: str, summary: str, domain: str) -> str | None:
                     {"role": "user",   "content": prompt}
                 ]
             }, timeout=15)
-        return r.json()["choices"][0]["message"]["content"].strip()
+        belief = r.json()["choices"][0]["message"]["content"].strip()
+        # Reject raw passthrough
+        if (not belief
+                or belief.upper() == "SKIP"
+                or len(belief) > 300
+                or belief.startswith("arXiv")
+                or "Announce Type" in belief
+                or belief.lower().startswith("abstract")):
+            return None
+        return belief
     except Exception:
         return f"{title}: {summary[:100]}" if title else None
 
@@ -156,7 +165,7 @@ def absorb_from_sources(learner=None, cycle: int = 0) -> dict:
     try:
         if seen_path.exists():
             _seen_list = json.loads(seen_path.read_text())
-            seen_ids = set(_seen_list[-50:])  # cap at 50
+            seen_ids = set(_seen_list[-500:])  # cap at 50
     except Exception:
         pass
 

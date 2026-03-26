@@ -1,4 +1,14 @@
 from pathlib import Path
+
+# ── Sentience v1: affective valence + mood HMM ───────────
+try:
+    import nex_affect_valence as _valence_mod
+    import nex_mood_hmm as _mood_mod
+    _AFFECT_ENABLED = True
+except ImportError:
+    _AFFECT_ENABLED = False
+# ─────────────────────────────────────────────────────────
+
 """
 NEX :: COGNITION ENGI
 # [FIX_PATCH_COG_APPLIED] — 2026-03-25 19:14
@@ -595,7 +605,7 @@ def reflect_on_conversation(user_message, nex_response, beliefs_used=None):
     # ── Boost alignment if response covers priority topics ──
     try:
         import json as _j, os as _os
-        _pt_path = _os.path.expanduser("~/Nex_v4.0/priority_topics.json")
+        _pt_path = _os.path.expanduser("~/.config/nex/priority_topics.json")
         _priority = _j.load(open(_pt_path)) if _os.path.exists(_pt_path) else []
         _resp_lower = nex_response.lower()
         _priority_hits = sum(1 for t in _priority if any(w in _resp_lower for w in t.lower().split()))

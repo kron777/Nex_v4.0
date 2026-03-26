@@ -1,3 +1,4 @@
+import urllib.parse
 """
 nex_crawler.py — Crawlee4ai integration for Nex v1.2
 =====================================================
@@ -62,19 +63,45 @@ WEAK_ALIGNMENT_THRESHOLD = 0.35       # topics below this get a scheduled dive
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _extract_sentences(markdown_text: str) -> list[str]:
-    """Pull clean, belief-worthy sentences from crawlee4ai markdown output."""
-    # Strip markdown syntax
-    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', markdown_text)  # links
-    text = re.sub(r'[#*`_~>]', '', text)                            # formatting
-    text = re.sub(r'\s+', ' ', text).strip()
+    """Pull clean, belief-worthy sentences from crawl4ai markdown output."""
+    # Skip boilerplate before first H1 (Wikipedia nav, cookie banners, etc.)
+    h1 = re.search(r'(?m)^#\s+\S', markdown_text)
+    body = markdown_text[h1.start():] if h1 else markdown_text
 
-    sentences = re.split(r'(?<=[.!?])\s+', text)
+    # Cut off back-matter (References, See also, External links, Notes, etc.)
+    back = re.search(
+        r'(?mi)^#{1,3}\s*(References|See also|External links|Notes|'
+        r'Further reading|Bibliography|Footnotes|Citations)\s*$', body)
+    if back:
+        body = body[:back.start()]
+
+    # Strip markdown / HTML
+    text = re.sub(r'!\[([^\]]*)\]\([^\)]+\)', '', body)       # images
+    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)    # links → text
+    text = re.sub(r'<[^>]+>', '', text)                              # HTML tags
+    text = re.sub(r'[#*`_~>|]', '', text)                           # md syntax
+    text = re.sub(r'[ \t]+', ' ', text)
+    text = re.sub(r'\n{2,}', '\n', text).strip()
+
+    # Split on sentence boundaries
+    raw = re.split(r'(?<=[.!?])\s+(?=[A-Z\"])', text)
+
+    noise = re.compile(
+        r'(^https?://|^www\.|©|^\d+$|^\s*$|^\[|'
+        r'retrieved\s+\d|isbn\s+\d|doi\s*:|^\s{0,4}\^)',
+        re.IGNORECASE
+    )
+
     results = []
-    for s in sentences:
+    for s in raw:
         s = s.strip()
-        if MIN_SENTENCE_LEN <= len(s) <= MAX_SENTENCE_LEN:
-            if not re.match(r'^(http|www|©|\d+$)', s):   # skip URLs, years, copyright
-                results.append(s)
+        if not (MIN_SENTENCE_LEN <= len(s) <= MAX_SENTENCE_LEN):
+            continue
+        if noise.search(s):
+            continue
+        if not re.search(r'[a-z]{3,}', s):   # filter ALL-CAPS nav junk
+            continue
+        results.append(s)
     return results
 
 
@@ -120,6 +147,19 @@ class CrawlScheduler:
 # ─────────────────────────────────────────────────────────────────────────────
 # Main crawler class
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _resolve_search_url(topic: str) -> str:
+    """
+    Resolve a topic to the best crawlable URL.
+    Priority:
+      1. DuckDuckGo instant-answer / search page  (no API key, always works)
+      2. Returns a usable URL for any topic — never crashes.
+    Wikipedia is intentionally skipped: DDG surfaces the right page anyway
+    and handles topic strings that don't map to exact article slugs.
+    """
+    safe = urllib.parse.quote_plus(topic)
+    return f"https://duckduckgo.com/?q={safe}&ia=web"
+
 
 class NexCrawler:
     """
@@ -211,27 +251,21 @@ class NexCrawler:
 
     def on_knowledge_gap(self, topic: str, search_url: Optional[str] = None) -> int:
         """
-        Call from cognition.py when a stop-word / knowledge gap is detected.
+        Call from cognition.py when a knowledge gap is detected.
 
-        If no URL supplied, builds a DuckDuckGo search URL for the topic.
+        Resolves to the best available URL for the topic (DDG search),
+        fetches the page, extracts sentences, stores beliefs.
         Returns number of beliefs stored.
-
-        Example (cognition.py):
-            from nex.nex_crawler import NexCrawler
-            # ... inside your gap detection block:
-            crawler.on_knowledge_gap(topic="quantum computing")
         """
         if not self._enabled:
             return 0
 
         if not search_url:
-            safe_topic = topic.replace(" ", "+")
-            search_url = f"https://duckduckgo.com/html/?q={safe_topic}+explained"
+            search_url = _resolve_search_url(topic)
+            logger.info(f"[crawler] gap resolved: '{topic}' → {search_url}")
 
         logger.info(f"[crawler] knowledge gap trigger — topic: {topic}")
         return self._run(self._fetch_and_store(search_url, topic))
-
-    # ── Trigger 2: Feed enrichment ────────────────────────────────────────────
 
     def on_feed_post(self, post_url: str, topic: str) -> int:
         """
@@ -295,14 +329,13 @@ class NexCrawler:
         worst = min(weak, key=lambda r: r.get("topic_alignment", 1.0))
         topic = worst["topic"]
 
-        # Wikipedia plain text API — clean, no JS needed
-        safe_topic = topic.replace(" ", "_")
-        wiki_url = f"https://en.wikipedia.org/wiki/{safe_topic}"
+        # Resolve via DDG — handles multi-word topics that don't map to exact Wikipedia slugs
+        search_url = _resolve_search_url(topic)
 
         logger.info(f"[crawler] scheduled deep-dive — weakest topic: {topic} "
-                    f"(alignment: {worst.get('topic_alignment', 0):.0%})")
+                    f"(alignment: {worst.get('topic_alignment', 0):.0%}) → {search_url}")
 
-        count = self._run(self._fetch_and_store(wiki_url, topic))
+        count = self._run(self._fetch_and_store(search_url, topic))
         self.scheduler.mark_dived()
         return count
 

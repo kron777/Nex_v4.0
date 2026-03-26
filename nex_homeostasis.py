@@ -114,19 +114,44 @@ class CognitiveEconomy:
 
 DRIVE_NAMES = ["coherence", "exploration", "efficiency", "novelty"]
 
+_DRIVES_STATE_PATH = _CFG / "nex_drives_state.json"
+
 class DriveSystem:
     """
     Four core drives with mutual tension and fatigue/recovery dynamics.
     coherence  ←→  exploration  (opposing)
     efficiency ←→  novelty      (opposing)
+    State is persisted to disk so fat values survive restarts.
     """
 
     def __init__(self):
-        self._levels: dict[str, float] = {d: 0.5 for d in DRIVE_NAMES}
-        self._fatigue: dict[str, float] = {d: 0.0 for d in DRIVE_NAMES}
         self._RECOVERY  = 0.05
         self._FATIGUE_K = 0.08
         self._TENSION   = 0.10  # suppression of opponent drive
+        saved = self._load()
+        self._levels:  dict[str, float] = saved.get("levels",  {d: 0.5 for d in DRIVE_NAMES})
+        self._fatigue: dict[str, float] = saved.get("fatigue", {d: 0.0 for d in DRIVE_NAMES})
+        for d in DRIVE_NAMES:
+            self._levels.setdefault(d, 0.5)
+            self._fatigue.setdefault(d, 0.0)
+
+    def _load(self) -> dict:
+        try:
+            if _DRIVES_STATE_PATH.exists():
+                return json.loads(_DRIVES_STATE_PATH.read_text())
+        except Exception:
+            pass
+        return {}
+
+    def _save(self):
+        try:
+            _DRIVES_STATE_PATH.write_text(json.dumps({
+                "levels":  self._levels,
+                "fatigue": self._fatigue,
+                "saved_at": datetime.now().isoformat(),
+            }, indent=2))
+        except Exception:
+            pass
 
     def tick(self, zone: str, cog_mode: str):
         """Update all drives based on current pressure zone and cognitive mode."""
@@ -166,6 +191,8 @@ class DriveSystem:
         # Clamp
         for d in DRIVE_NAMES:
             self._levels[d] = max(0.05, min(0.95, self._levels[d]))
+
+        self._save()
 
     def _boost(self, drive: str, amount: float):
         self._levels[drive] = min(1.0, self._levels[drive] + amount)
