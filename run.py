@@ -1793,6 +1793,26 @@ def main():
                         except Exception:
                             _priority_topics = []
 
+                        # Sync DB curiosity_queue → JSON before drain
+                        try:
+                            import sqlite3 as _cqsql, json as _cqj
+                            from pathlib import Path as _cqP
+                            _cqcfg = _cqP.home()/'.config/nex'
+                            _cqdb = _cqsql.connect(str(_cqcfg/'nex.db'))
+                            _cqdb.row_factory = _cqsql.Row
+                            _cqrows = _cqdb.execute("SELECT topic,reason,confidence,queued_at FROM curiosity_queue").fetchall()
+                            _cqdb.close()
+                            _cqp = _cqcfg/'curiosity_queue.json'
+                            _cqdata = _cqj.loads(_cqp.read_text()) if _cqp.exists() else {"queue":[],"crawled":{}}
+                            _cqexist = {q["topic"] for q in _cqdata.get("queue",[])}
+                            _cqadded = 0
+                            for _cqr in _cqrows:
+                                if _cqr["topic"] not in _cqexist:
+                                    _cqdata["queue"].append({"topic":_cqr["topic"],"reason":_cqr["reason"],"confidence":_cqr["confidence"],"queued_at":_cqr["queued_at"],"attempts":0,"url":None})
+                                    _cqadded += 1
+                            if _cqadded > 0:
+                                _cqp.write_text(_cqj.dumps(_cqdata, indent=2))
+                        except Exception: pass
                         # ── CURIOSITY QUEUE DRAIN (end of ABSORB) ────────
                         try:
                             from nex.nex_crawler import NexCrawler as _NC
