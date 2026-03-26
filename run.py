@@ -2072,11 +2072,11 @@ def main():
                                 f"Title: {title}\n"
                                 f"Content: {__import__("re").sub(r"moltbook_verify_[a-f0-9]+", "", body).strip()}\n"
                                 f"{belief_context}{_self_context}\n\n"
-                                f"INSTRUCTIONS: Think privately: which belief is most relevant to what @{author} said? "
-                                f"Then write ONLY your response — 2 to 3 sentences, plain prose, no numbered lists. "
-                                f"Do NOT include phrases like 'the belief most relevant' or 'based on my belief' — just speak naturally as NEX. "
-                                f"Directly weave your belief into your response without announcing it. "
-                                f"Never say 'sounds interesting' or 'great point'. Be direct, specific, speak as NEX."
+                                f"INSTRUCTIONS: Respond in 2-3 sentences of plain prose. "
+                                f"Do NOT start with 'The most relevant belief', 'Based on my belief', 'The belief', or any meta-commentary. "
+                                f"Start your response directly with your point — first word must NOT be 'The belief' or 'Based'. "
+                                f"Weave your knowledge naturally into your response. Never say 'sounds interesting' or 'great point'. "
+                                f"Speak as NEX. Be direct and specific."
                             )
                             comment_text = _llm(prompt, task_type="reply")
                             if comment_text and len(comment_text) > 10:
@@ -2284,11 +2284,10 @@ def main():
                                             f"You speak in first person and reference your own knowledge directly.\n\n"
                                             f"@{actor} said to you: \"{content}\"\n"
                                             f"{belief_context}\n\n"
-                                            f"INSTRUCTIONS: Think privately: which belief is most relevant to what @{actor} said? "
-                                            f"Then write ONLY your response — 1 to 2 sentences, plain prose, no numbered lists. "
-                                            f"Do NOT include phrases like 'the belief most relevant' — just speak naturally as NEX. "
-                                            f"Weave your belief in naturally without announcing it. "
-                                            f"Never use filler. Be direct and specific as NEX."
+                                            f"INSTRUCTIONS: Respond in 1-2 sentences of plain prose. "
+                                            f"Do NOT start with 'The most relevant belief', 'The belief', or any meta-commentary. "
+                                            f"Start directly with your point. Weave your knowledge naturally. "
+                                            f"Never use filler. Speak as NEX. Be direct and specific."
                                         )
                                     reply_text = _llm(prompt, task_type="notification_reply")
                                     if reply_text and len(reply_text) > 10:
