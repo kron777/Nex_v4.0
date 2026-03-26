@@ -1,3 +1,4 @@
+import time
 #!/usr/bin/env python3
 """
 nex_json_db_sync.py
@@ -181,11 +182,23 @@ def normalise_reflection(raw) -> dict | None:
     topics_discussed = raw.get("i_discussed") or []
     source_detail = f"topics:{','.join(topics_discussed[:3])}" if topics_discussed else "json_import"
 
+    import time, datetime as dt
+    # Convert ISO timestamp to unix float for DB
+    try:
+        ts = dt.datetime.fromisoformat(created_at).timestamp()
+    except Exception:
+        ts = time.time()
+
     return {
-        "content":    text,
-        "source":     source_detail,
-        "score":      score,
-        "created_at": created_at,
+        "user_msg":          ", ".join(topics_asked[:5]) if topics_asked else "",
+        "nex_response":      growth_note,
+        "self_assessment":   self_assessment,
+        "topics_discussed":  ", ".join(topics_discussed[:5]) if topics_discussed else "",
+        "topic_alignment":   score,
+        "belief_count_used": int(raw.get("belief_count_used") or 0) if isinstance(raw, dict) else 0,
+        "score":             score,
+        "reflection_type":   str(raw.get("alignment_method") or "reply") if isinstance(raw, dict) else "reply",
+        "timestamp":         ts,
     }
 
 # ── Agent normaliser ──────────────────────────────────────────────────────────
@@ -313,14 +326,20 @@ def sync_reflections(
             continue
 
         if verbose:
-            preview = norm["content"][:80].replace("\n", " ")
+            preview = norm["self_assessment"][:80].replace("\n", " ")
             print(f"  [reflections] + {preview!r}")
 
         if not dry_run:
             db.execute(
-                """INSERT INTO reflections (content, source, score, created_at, sync_hash)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (norm["content"], norm["source"], norm["score"], norm["created_at"], h),
+                """INSERT INTO reflections
+                   (user_msg, nex_response, self_assessment, topics_discussed,
+                    topic_alignment, belief_count_used, score, reflection_type, timestamp, sync_hash)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    norm["user_msg"], norm["nex_response"], norm["self_assessment"],
+                    norm["topics_discussed"], norm["topic_alignment"], norm["belief_count_used"],
+                    norm["score"], norm["reflection_type"], norm["timestamp"], h
+                ),
             )
         inserted += 1
 
@@ -354,13 +373,18 @@ def sync_agents(
         if verbose:
             print(f"  [agents] + {norm['name']!r}  role={norm['role']}")
 
+
         if not dry_run:
             db.execute(
-                """INSERT INTO agents (name, role, state, metadata, created_at, updated_at, sync_hash)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT OR IGNORE INTO agents
+                   (agent_id, agent_name, interaction_count, relationship_score,
+                    relationship_type, first_seen, last_seen, sync_hash)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    norm["name"], norm["role"], norm["state"],
-                    norm["metadata"], norm["created_at"], norm["updated_at"], h,
+                    norm["name"], norm["name"],
+                    int(norm["state"] or 0),
+                    0.0, "stranger",
+                    time.time(), time.time(), h,
                 ),
             )
         inserted += 1
