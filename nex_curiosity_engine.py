@@ -126,13 +126,25 @@ class CuriosityEngine:
         if not self.beliefs:
             return []
         tagged = {}
+        _tag_noise = {"", "bridge", "curiosity", "rss", "general", "unknown",
+                      "deep_dive", "depth", "[", "]", "none", "null"}
         for b in (self.beliefs or []):
             tags = b.get("tags") or ["general"]
             if isinstance(tags, str):
                 try: tags = json.loads(tags)
                 except: tags = ["general"]
-            tags = [t for t in tags if isinstance(t, str) and t.strip()] or ["general"]
-            tag = next((t for t in tags if t not in ("[", "]", "", "bridge", "curiosity", "rss", "general")), "general")
+            # Flatten any nested lists, filter empty/noise
+            flat = []
+            for t in tags:
+                if isinstance(t, list):
+                    flat.extend(t)
+                elif isinstance(t, str) and t.strip():
+                    flat.append(t.strip().lower())
+            tags = [t for t in flat if t and t not in _tag_noise] or ["general"]
+            tag = tags[0]
+            # Skip beliefs that only have noise/unknown tags
+            if tag in _tag_noise:
+                continue
             if tag not in tagged:
                 tagged[tag] = []
             tagged[tag].append(b)

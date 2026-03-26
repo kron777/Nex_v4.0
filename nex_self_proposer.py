@@ -96,7 +96,11 @@ def _collect_gap_topics() -> list[str]:
              "want","need","make","take","give","show","keep","work",
              "system","human","model","agent","topic","group","level",
              "value","input","output","state","based","field","range",
-             "often","start","began","ended","found","place","refer"}
+             "often","start","began","ended","found","place","refer",
+             "subtle","title","score","force","video","image","token",
+             "noise","index","label","class","layer","stack","param",
+             "array","valid","false","untit","simul","opera","princ",
+             "varia","struc","logit","nodes","cycle","drive","phase"}
     topics = [
         g.get("term","") for g in gaps
         if g.get("term","") not in noise
