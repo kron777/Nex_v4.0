@@ -354,6 +354,24 @@ except Exception as _s4e:
     print(f"  [SENTIENCE v4] failed to load: {_s4e}")
     _dream_cycle = _self_proposer = _snap_export = None
 # ─────────────────────────────────────────────────────────────────
+
+# ── Sentience v5: versioning + metacog + resonance + contradiction mem ────────
+try:
+    import sys as _s5, os as _o5
+    _s5.path.insert(0, _o5.path.join(_o5.path.dirname(__file__), "nex"))
+    from nex_belief_versions import init_table as _bv_init, record_update as _bv_record
+    from nex_metacog import get_mc as _get_mc
+    from nex_resonance import get_re as _get_re
+    from nex_contradiction_memory import init_table as _cm_init, record as _cm_record
+    _bv_init()
+    _cm_init()
+    _metacog     = _get_mc()
+    _resonance   = _get_re()
+    print("  [SENTIENCE v5] belief versioning + metacog + resonance + contradiction memory — loaded")
+except Exception as _s5e:
+    print(f"  [SENTIENCE v5] failed to load: {_s5e}")
+    _bv_record = _metacog = _resonance = _cm_record = None
+# ─────────────────────────────────────────────────────────────────────────────
 # ── Signal filter — importance gate + source scorer ─────────────────────────
 try:
     from nex_signal_filter import get_scorer as _get_scorer, get_gate as _get_gate
@@ -2319,6 +2337,12 @@ def main():
                                         "initial_score": p.get("score", 0),
                                         "timestamp":   time.strftime("%Y-%m-%dT%H:%M:%S")
                                     })
+                                    # ── Loop fix v5 ──
+                                    try:
+                                        from nex_proactive import get_pa as _pa_lf
+                                        _pa_lf().register_reply(str(author)[:40], ttl_seconds=600)
+                                    except Exception:
+                                        pass
                                     emit_reflection(tags=["reply",author[:12]], text=comment_text[:120], sub=f"post: {title[:50]}", align=0.5)
                                     try:
                                         if _reflect_on_convo:
@@ -2853,6 +2877,26 @@ def main():
                             except Exception as _tome:
                                 print(f"  [ToMSim ERROR] {_tome}")
                         # ─────────────────────────────────────────────────────
+                        # ── META-COGNITION (sentience v5) ───────────────────
+                        if _metacog is not None:
+                            try:
+                                def _mc_store(topic, content, conf):
+                                    try:
+                                        from nex.belief_store import BeliefStore as _BSmc
+                                        _BSmc().store(topic=topic, content=content, confidence=conf)
+                                    except Exception:
+                                        pass
+                                _mc_result = _metacog.observe(
+                                    cycle=cycle,
+                                    llm_fn=_llm,
+                                    belief_store_fn=_mc_store,
+                                )
+                                if _mc_result:
+                                    print(f"  [METACOG] {_mc_result[:100]}")
+                                    nex_log("metacog", f"[METACOG] {_mc_result}")
+                            except Exception as _mce:
+                                print(f"  [METACOG ERROR] {_mce}")
+                        # ─────────────────────────────────────────────────────
                         # ── REFLECTION V2 (#4) ───────────────────────────
                         try:
                             _qb_r = _query_beliefs
@@ -2956,6 +3000,30 @@ def main():
                                 nex_log("directives", f"[D4] Low conf warning avg_conf={_cf['avg_conf']:.3f}")
                         except Exception as _d7e:
                             print(f"  [D7 ERROR] {_d7e}")
+                        # ── Contradiction memory (sentience v5) ─────────────
+                        if _cm_record is not None:
+                            try:
+                                from nex.belief_store import get_db as _cm_db
+                                _cm_conn = _cm_db()
+                                _cm_rows = _cm_conn.execute("""
+                                    SELECT topic, content FROM beliefs
+                                    WHERE origin = 'contradiction_engine'
+                                    AND last_used_cycle >= ?
+                                    LIMIT 5
+                                """, (max(0, cycle - 2),)).fetchall()
+                                _cm_conn.close()
+                                for _cmr in _cm_rows:
+                                    _cm_record(
+                                        topic=_cmr[0] or "unknown",
+                                        thesis=_cmr[1][:200] if _cmr[1] else "",
+                                        antithesis="",
+                                        resolution="",
+                                        tension_score=0.5,
+                                        cycle=cycle,
+                                    )
+                            except Exception:
+                                pass
+                        # ─────────────────────────────────────────────────────
                         # ── Directive 14: loop sweep every 10 cycles ────────
                         if cycle % 10 == 0:
                             try:
@@ -3076,6 +3144,23 @@ def main():
                                             nex_log("self_propose", f"[AUTO-APPLIED] {_spr.get('type')}: {str(_spr.get('target', _spr.get('content','')[:40]))}")
                             except Exception as _spe:
                                 print(f"  [SELF-PROPOSE ERROR] {_spe}")
+                        # ─────────────────────────────────────────────────────
+                        # ── BELIEF FIELD RESONANCE (sentience v5) ────────────
+                        if _resonance is not None and cycle % 10 == 0:
+                            try:
+                                from pathlib import Path as _rP
+                                _rg_path = _rP.home()/".config/nex/belief_graph.json"
+                                _rg = None
+                                if _rg_path.exists():
+                                    import json as _rj
+                                    _rg = _rj.loads(_rg_path.read_text())
+                                _res_summary = _resonance.compute(_rg)
+                                if _res_summary.get("drivers"):
+                                    _top_d = _res_summary["drivers"][0]
+                                    print(f"  [RESONANCE] driver='{_top_d[0]}' ({_top_d[1]:.2f})")
+                                    nex_log("resonance", f"[RESONANCE] drivers={_res_summary['drivers'][:3]}")
+                            except Exception as _ree:
+                                print(f"  [RESONANCE ERROR] {_ree}")
                         # ─────────────────────────────────────────────────────
                         emit_phase("COGNITION", 120); nex_log("phase", "▶ COGNITION — synthesising beliefs")
                         # ── SNAPSHOT EXPORT every 100 cycles (sentience v4) ──
