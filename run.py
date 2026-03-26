@@ -290,6 +290,7 @@ def emit_reflection(*a,**k): pass
 def emit_self_assessment(*a,**k): pass
 from nex.agent_tools  import dispatch, tools_help, TOOL_REGISTRY
 import nex_ws
+from nex_power_save import should_call_llm, record_llm_call
 from nex_youtube import learn_from_youtube
 
 # ── Sentience layer ──────────────────────────────────────────────
