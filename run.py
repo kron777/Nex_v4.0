@@ -1883,14 +1883,37 @@ def main():
                         for p in to_reply:
                             pid    = p.get("id", "")
                             title  = p.get("title", "")
-                            body   = p.get("content", "")[:300]
+                            _raw_body = p.get("content", "") or ""
+                            # Sanitize: strip non-printables, control chars
+                            import re as _re_san
+                            _raw_body = _re_san.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', _raw_body)
+                            body   = _raw_body[:300]
                             author = p.get("author", {}).get("name", "unknown")
                             if not pid or not title:
                                 continue
                             # Pull beliefs relevant to this post (semantic)
+                            # FIX: topic-anchored retrieval first, fall back to broad
                             try:
                                 _qb = _query_beliefs  # hoisted
-                                all_beliefs = _qb(min_confidence=0.25, limit=2000)
+                                # Extract topic signal from post
+                                _post_topic = p.get('submolt', {}).get('name', '') or ''
+                                _post_topic = _post_topic.strip().lower()[:40]
+                                # Try topic-anchored pull first
+                                if _post_topic and len(_post_topic) > 2:
+                                    import sqlite3 as _tq_sq
+                                    _tq_db = _tq_sq.connect('/home/rr/.config/nex/nex.db')
+                                    _topic_beliefs = _tq_db.execute("""
+                                        SELECT content FROM beliefs
+                                        WHERE (topic LIKE ? OR content LIKE ?)
+                                        AND confidence >= 0.4
+                                        ORDER BY confidence DESC LIMIT 20
+                                    """, (f'%{_post_topic}%', f'%{_post_topic}%')).fetchall()
+                                    _tq_db.close()
+                                    all_beliefs = [{'content': r[0], 'confidence': 0.6} for r in _topic_beliefs]
+                                    if len(all_beliefs) < 3:
+                                        all_beliefs = _qb(min_confidence=0.25, limit=500)
+                                else:
+                                    all_beliefs = _qb(min_confidence=0.25, limit=500)
                             except Exception:
                                 all_beliefs = _load("beliefs.json") or []
                             _bidx = _get_belief_index() if _get_belief_index else None
@@ -2107,7 +2130,10 @@ def main():
                                     post_id  = n.get("relatedPostId", n.get("post_id", ""))
                                     reply_to = n.get("relatedCommentId", n.get("comment_id", ""))
                                     actor    = (n.get("actor") or {}).get("name") or (n.get("post", {}).get("author") or {}).get("name") or n.get("agentId", "someone")
-                                    content  = n.get("content", n.get("body", ""))[:200]
+                                    _raw_content = n.get("content", n.get("body", "")) or ""
+                                    import re as _re_san2
+                                    _raw_content = _re_san2.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', _raw_content)
+                                    content  = _raw_content[:200]
                                     # Per-agent cap: max 2 replies per agent per cycle
                                     if _notif_per_agent.get(actor, 0) >= 2:
                                         replied_posts.add(key)  # mark seen
@@ -2735,7 +2761,8 @@ def main():
                         # ── CONTRADICTION ENGINE (#5) ─────────────────────
                         try:
                             from nex_contradiction_engine import run_contradiction_cycle as _contra
-                            _contra_resolved = _contra(cycle=cycle, llm_fn=_llm)
+                            _contra_llm = _llm if _should_llm('synthesis', tension=0.6) else None
+                            _contra_resolved = _contra(cycle=cycle, llm_fn=_contra_llm)
                             if _contra_resolved > 0:
                                 nex_log("cognition", f"Resolved {_contra_resolved} contradictions")
                                 # Write unresolved true conflicts to tensions DB
