@@ -62,16 +62,39 @@ def _load_insights() -> list:
 
 
 def _save_bridge_belief(belief: dict):
-    """Append a bridge belief to bridge_beliefs.json."""
+    """Write bridge belief to DB and JSON backup."""
+    # Primary: write to belief DB
+    try:
+        import sqlite3
+        from pathlib import Path as _P
+        db_path = _P.home() / '.config' / 'nex' / 'nex.db'
+        db = sqlite3.connect(str(db_path))
+        db.execute("""
+            INSERT INTO beliefs (content, confidence, source, author, topic, tags, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            belief.get("content", "")[:500],
+            belief.get("confidence", 0.6),
+            belief.get("source", "curiosity_engine"),
+            belief.get("author", "curiosity_engine"),
+            (belief.get("tags") or ["curiosity"])[0],
+            json.dumps(belief.get("tags", ["curiosity"])),
+            belief.get("timestamp", datetime.now(timezone.utc).isoformat()),
+        ))
+        db.commit()
+        db.close()
+    except Exception as e:
+        print(f"  [curiosity] DB save error: {e}")
+    # Backup: also write to JSON
     try:
         existing = []
         if BRIDGES_PATH.exists():
             existing = json.loads(BRIDGES_PATH.read_text())
         existing.append(belief)
-        existing = existing[-200:]  # cap at 200
+        existing = existing[-200:]
         BRIDGES_PATH.write_text(json.dumps(existing, indent=2))
     except Exception as e:
-        print(f"  [curiosity] Save error: {e}")
+        print(f"  [curiosity] JSON save error: {e}")
 
 
 def _write_journal(entry: dict):
