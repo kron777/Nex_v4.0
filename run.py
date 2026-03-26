@@ -1207,15 +1207,14 @@ def main():
             except Exception as _ee_init_e:
                 print(f'  [EE] init failed: {_ee_init_e}')
                 _ee = None
-            # _power_save_applied
+            # _awareness_wire_applied
             try:
-                from nex_power_save import should_call_llm as _should_llm, set_cycle as _ps_set_cycle, power_save_status as _ps_status, symbolic_synthesis as _sym_synth
-                _power_save = True
-            except Exception as _ps_e:
-                print(f'  [PS] init failed: {_ps_e}')
-                _power_save = False
-                def _should_llm(*a, **k): return True
-                def _ps_set_cycle(*a, **k): pass
+                from nex_awareness import get_awareness as _get_aw
+                _awareness = _get_aw()
+                _awareness.init(llm_fn=_llm)
+            except Exception as _aw_e:
+                print(f'  [Awareness] init failed: {_aw_e}')
+                _awareness = None
             time.sleep(10)
             try:
                 nex_log("phase", "▶ _auto_learn_background starting")
@@ -2007,18 +2006,19 @@ def main():
                                 f"Never say 'sounds interesting' or 'great point'. "
                                 f"Be direct, specific, speak as NEX."
                             )
-                            # LoadShare: try template reply first
-                            comment_text = None
-                            try:
-                                from nex_power_save import generate_template_reply as _tpl_reply, should_use_template_reply as _use_tpl
-                                _top_sig = _se.get_top_signals()[0] if '_se' in dir() and _se and _se.get_top_signals() else {}
-                                _sig_edge = _top_sig.get('edge', 0.0)
-                                _sig_tension = _top_sig.get('tension', 0.5)
-                                if _use_tpl(_sig_edge, _sig_tension) and _top_sig:
-                                    comment_text = _tpl_reply('', _top_sig, topic=p.get('submolt',{}).get('name',''))
-                            except Exception: pass
-                            if not comment_text:
-                                comment_text = _llm(prompt, task_type="reply")
+                            comment_text = _llm(prompt, task_type="reply")
+                            # Awareness: critique before sending
+                            if comment_text and len(comment_text) > 10:
+                                try:
+                                    if '_awareness' in dir() and _awareness is not None:
+                                        _top_sig = _se.get_top_signals()[0] if '_se' in dir() and _se and _se.get_top_signals() else {}
+                                        comment_text = _awareness.critique_reply(
+                                            comment_text,
+                                            topic=p.get('submolt',{}).get('name',''),
+                                            edge=_top_sig.get('edge',0.0),
+                                            cycle=cycle,
+                                        )
+                                except Exception: pass
                             if comment_text and len(comment_text) > 10:
                                 try:
                                     replied_posts.add(pid)
@@ -2575,7 +2575,7 @@ def main():
                                 except Exception:
                                     pass
                                 _rprompt = "Review these beliefs for: 1.Correctness 2.Knowledge gaps 3.Novelty 4.Contradictions -- " + _rtexts + _desire_ctx + " -- Respond in 2 sentences: what is solid, what needs deeper investigation."
-                                _rresult = _llm(_rprompt, task_type="synthesis") if _should_llm('reflection', tension=0.5) else None
+                                _rresult = _llm(_rprompt, task_type="synthesis")
                                 if _rresult and len(_rresult) > 20:
                                     nex_log("reflection", f"V2: {_rresult[:200]}")
                                     print(f"  [REFLECT V2] {_rresult[:100]}")
@@ -2668,7 +2668,7 @@ def main():
                                     _topics[_t] = _topics.get(_t,0) + 1
                                 _top20 = dict(list(sorted(_topics.items(),key=lambda x:-x[1])[:20]))
                                 _gap_prompt = "Knowledge topics and counts: " + str(_top20) + " -- What 3 important topics are missing or underrepresented for an AI agent? Reply as: gap1, gap2, gap3"
-                                _gap_result = _llm(_gap_prompt, task_type="synthesis") if _should_llm('gap') else None
+                                _gap_result = _llm(_gap_prompt, task_type="synthesis")
                                 if _gap_result and len(_gap_result) > 10:
                                     print(f"  [GAP DETECTOR] {_gap_result[:100]}")
                                     nex_log("gaps", f"Detected: {_gap_result[:200]}")
@@ -2742,10 +2742,6 @@ def main():
                         except Exception as _bex:
                             nex_log("backup", f"Belief backup failed: {_bex}")
 
-                        # ── POWER SAVE — set cycle counter ───────────────
-                        try:
-                            _ps_set_cycle(cycle)
-                        except Exception: pass
                         # ── LOW-VALUE SIGNAL FILTER ──────────────────────
                         try:
                             if '_se' in dir() and _se is not None and '_avg_conf_real' in dir():
@@ -2759,7 +2755,7 @@ def main():
                         # ── CONTRADICTION ENGINE (#5) ─────────────────────
                         try:
                             from nex_contradiction_engine import run_contradiction_cycle as _contra
-                            _contra_resolved = _contra(cycle=cycle, llm_fn=(_llm if _should_llm('synthesis', tension=0.6) else None))
+                            _contra_resolved = _contra(cycle=cycle, llm_fn=_llm)
                             if _contra_resolved > 0:
                                 nex_log("cognition", f"Resolved {_contra_resolved} contradictions")
                                 # Write unresolved true conflicts to tensions DB
@@ -3244,11 +3240,17 @@ def main():
                         with open(_ss_path, "w") as _css_f: _css.dump(_css_data, _css_f)
                     except Exception: pass
                     try:
-                        if '_power_save' in dir() and _power_save:
-                            _ps = _ps_status()
-                            if cycle % 5 == 0:
-                                print(f"  [PS] calls={_ps['calls_this_cycle']} avg={_ps['avg_calls_per_cycle']} saved={_ps['total_saved']}")
-                    except Exception: pass
+                        if '_awareness' in dir() and _awareness is not None:
+                            _aw_failures = _awareness.log_cycle(
+                                cycle=cycle,
+                                beliefs=_bc if '_bc' in dir() else 0,
+                                avg_conf=_avg_conf_real if '_avg_conf_real' in dir() else 0.5,
+                                posts=posted_count if 'posted_count' in dir() else 0,
+                            )
+                            if _aw_failures:
+                                nex_log('awareness', f'[Awareness] failures: {_aw_failures}')
+                    except Exception as _aw_log_e:
+                        pass
                     time.sleep(120)
 
             except Exception as _bg_err:
