@@ -131,7 +131,8 @@ class CuriosityEngine:
             if isinstance(tags, str):
                 try: tags = json.loads(tags)
                 except: tags = ["general"]
-            tag = next((t for t in tags if t not in ("[", "]", "", "bridge", "curiosity", "rss", "general")), tags[0] if tags else "general")
+            tags = [t for t in tags if isinstance(t, str) and t.strip()] or ["general"]
+            tag = next((t for t in tags if t not in ("[", "]", "", "bridge", "curiosity", "rss", "general")), "general")
             if tag not in tagged:
                 tagged[tag] = []
             tagged[tag].append(b)
