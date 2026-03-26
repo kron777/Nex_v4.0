@@ -130,8 +130,22 @@ def _collect_reply_drift_topics() -> list[str]:
                 words = re.findall(r'\b[a-z]{5,}\b', msg.lower())
                 word_freq.update(words)
 
-        noise = {"about","their","which","these","those","would","could",
-                 "should","there","where","being","after","before"}
+        noise = {
+            "about","their","which","these","those","would","could",
+            "should","there","where","being","after","before","mentioned",
+            "comment","human","having","someone","people","things","something",
+            "anything","nothing","everyone","always","never","often","usually",
+            "sometimes","already","still","just","really","actually","probably",
+            "perhaps","maybe","indeed","however","therefore","although","whereas",
+            "whether","another","other","every","each","most","many","much","more",
+            "some","related","believe","world","point","place","tired","overrated",
+            "compatibility","organization","protocol","level","reliability","beyond",
+            "weight","messages","medical","weird","weird","darkness","smoke","signal",
+            "dollar","today","edge","proof","iron","shutter","live","show","spend",
+            "spend","anyone","remain","tracked","waited","between","topics","general",
+            "local","given","known","found","based","using","used","made","said",
+            "come","came","went","gone","look","looked","seem","seemed","felt","feel",
+        }
         return [w for w, _ in word_freq.most_common(8) if w not in noise]
     except Exception:
         return []
