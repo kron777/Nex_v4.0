@@ -27,7 +27,7 @@ echo "[NEX] Starting llama-server (GPU ngl=28)..."
     --port 8080 \
     -ngl 35 \
     --host 0.0.0.0 \
-    -c 1024 \
+    -c 4096 \
     --parallel 2 \
     --cache-type-k q8_0 \
     --cache-type-v q8_0 \
