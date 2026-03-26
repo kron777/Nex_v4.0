@@ -104,9 +104,9 @@ def _collect_gap_topics() -> list[str]:
     topics = [
         g.get("term","") for g in gaps
         if g.get("term","") not in noise
-        and len(g.get("term","")) > 4
+        and len(g.get("term","")) > 5
         and not g.get("resolved_at")
-        and g.get("priority", 0) > 1000
+        and g.get("priority", 0) > 50
     ]
     return topics[:10]
 
