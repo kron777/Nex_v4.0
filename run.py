@@ -339,6 +339,21 @@ except Exception as _s3e:
     print(f"  [SENTIENCE v3] failed to load: {_s3e}")
     _tom_sim = _proactive = None
 # ─────────────────────────────────────────────────────────────────
+
+# ── Sentience v4: dream cycle + self-proposer + snapshot ─────────
+try:
+    import sys as _s4, os as _o4
+    _s4.path.insert(0, _o4.path.join(_o4.path.dirname(__file__), "nex"))
+    from nex_dream_cycle import get_dc as _get_dc
+    from nex_self_proposer import get_sp as _get_sp
+    from nex_snapshot import export as _snap_export
+    _dream_cycle   = _get_dc()
+    _self_proposer = _get_sp()
+    print("  [SENTIENCE v4] dream cycle + self-proposer + snapshot — loaded")
+except Exception as _s4e:
+    print(f"  [SENTIENCE v4] failed to load: {_s4e}")
+    _dream_cycle = _self_proposer = _snap_export = None
+# ─────────────────────────────────────────────────────────────────
 # ── Signal filter — importance gate + source scorer ─────────────────────────
 try:
     from nex_signal_filter import get_scorer as _get_scorer, get_gate as _get_gate
@@ -2896,6 +2911,28 @@ def main():
                                     nex_log("identity", f"[Drift] OK score={_drift.get('drift_score',0):.3f} trend=stable")
                         except Exception as _de:
                             pass
+                        # ── DREAM CYCLE (sentience v4) ──────────────────────
+                        if _dream_cycle is not None:
+                            try:
+                                _ten_now = float(getattr(_s7, "tension_score", 99.0)) if _s7 else 99.0
+                                if _dream_cycle.should_dream(_ten_now):
+                                    def _dream_store(topic, content, conf):
+                                        try:
+                                            from nex.belief_store import BeliefStore as _BSd
+                                            _BSd().store(topic=topic, content=content, confidence=conf)
+                                        except Exception:
+                                            pass
+                                    _dream_result = _dream_cycle.run(
+                                        tension=_ten_now,
+                                        llm_fn=_llm,
+                                        belief_store_fn=_dream_store,
+                                    )
+                                    if _dream_result:
+                                        print(f"  [DREAM] {_dream_result[:100]}")
+                                        nex_log("dream", f"[DREAM] {_dream_result}")
+                            except Exception as _dre:
+                                print(f"  [DREAM ERROR] {_dre}")
+                        # ─────────────────────────────────────────────────────
                         # ── Directive 7: temporal decay (end of REFLECT) ────
                         try:
                             _d_enforcer = _enforcer_singleton
@@ -3012,7 +3049,47 @@ def main():
                             except Exception: pass
                         except Exception as _ce:
                             print(f"  [cognition error] {_ce}")
+                        # ── SELF-PROPOSER (sentience v4) ────────────────────
+                        if _self_proposer is not None and cycle % 50 == 0:
+                            try:
+                                _sp_conf = _v2ac if "_v2ac" in dir() else 0.5
+                                _sp_ten  = float(getattr(_s7, "tension_score", 0.0)) if _s7 else 0.0
+                                _sp_loops = 0
+                                try:
+                                    _sp_rep = _enforcer_singleton.cycle_report()
+                                    _sp_loops = _sp_rep.get("loops", 0)
+                                except Exception:
+                                    pass
+                                _sp_results = _self_proposer.propose(
+                                    cycle=cycle,
+                                    avg_conf=_sp_conf,
+                                    tension=_sp_ten,
+                                    loop_count=_sp_loops,
+                                    llm_fn=_llm,
+                                    enforcer=_enforcer_singleton,
+                                )
+                                if _sp_results:
+                                    print(f"  [SELF-PROPOSE] {len(_sp_results)} proposals generated "
+                                          f"({sum(1 for p in _sp_results if p.get('applied'))} applied)")
+                                    for _spr in _sp_results:
+                                        if _spr.get("applied"):
+                                            nex_log("self_propose", f"[AUTO-APPLIED] {_spr.get('type')}: {str(_spr.get('target', _spr.get('content','')[:40]))}")
+                            except Exception as _spe:
+                                print(f"  [SELF-PROPOSE ERROR] {_spe}")
+                        # ─────────────────────────────────────────────────────
                         emit_phase("COGNITION", 120); nex_log("phase", "▶ COGNITION — synthesising beliefs")
+                        # ── SNAPSHOT EXPORT every 100 cycles (sentience v4) ──
+                        if _snap_export is not None and cycle % 100 == 0 and cycle > 0:
+                            try:
+                                import threading as _snap_th
+                                def _do_snap():
+                                    _snap_path = _snap_export(tag=f"cycle{cycle}")
+                                    if _snap_path:
+                                        print(f"  [SNAPSHOT] {_snap_path}")
+                                _snap_th.Thread(target=_do_snap, daemon=True, name="SnapshotExport").start()
+                            except Exception as _snpe:
+                                print(f"  [SNAPSHOT ERROR] {_snpe}")
+                        # ─────────────────────────────────────────────────────
                         # ── BELIEF MILESTONE BACKUP ──────────────────────
                         try:
                             _backup_milestones = list(range(50, 10000, 50))

@@ -26,6 +26,75 @@ _VRAM_WARN_PCT   = 0.80 # above this → stress
 _CYCLE_SLOW_SEC  = 45   # above this → fatigue signal
 
 
+def _read_all_metrics() -> dict:  # multi_sensor v4
+    """Read GPU + CPU + disk + network metrics."""
+    result = {"temp": None, "vram_used": None, "vram_total": None,
+              "cpu_temp": None, "disk_io_wait": None, "net_jitter": None,
+              "cpu_load": None}
+    # GPU metrics (existing)
+    try:
+        import subprocess as _sp, json as _js
+        out = _sp.check_output(
+            ["rocm-smi", "--showtemp", "--showmeminfo", "vram", "--json"],
+            timeout=5, stderr=_sp.DEVNULL
+        ).decode()
+        data = _js.loads(out)
+        for card in data.values():
+            if isinstance(card, dict):
+                temp_str = card.get("Temperature (Sensor edge) (C)", "")
+                if temp_str:
+                    result["temp"] = float(temp_str)
+                vram_used = card.get("VRAM Total Used Memory (B)", None)
+                vram_total = card.get("VRAM Total Memory (B)", None)
+                if vram_used and vram_total:
+                    result["vram_used"]  = int(vram_used)
+                    result["vram_total"] = int(vram_total)
+                break
+    except Exception:
+        pass
+    # CPU metrics
+    try:
+        import subprocess as _sp2
+        # CPU temp via sensors
+        cpu_out = _sp2.check_output(
+            ["sensors", "-j"], timeout=3, stderr=_sp2.DEVNULL
+        ).decode()
+        import json as _js2
+        sensors = _js2.loads(cpu_out)
+        for chip, data in sensors.items():
+            if "k10temp" in chip or "coretemp" in chip:
+                for key, val in data.items():
+                    if "temp" in key.lower() and isinstance(val, dict):
+                        for k2, v2 in val.items():
+                            if "input" in k2 and isinstance(v2, (int, float)):
+                                result["cpu_temp"] = float(v2)
+                                break
+                        break
+                break
+    except Exception:
+        pass
+    # CPU load (1-min average)
+    try:
+        import os as _os2
+        result["cpu_load"] = _os2.getloadavg()[0]
+    except Exception:
+        pass
+    # Disk I/O wait via /proc/stat
+    try:
+        with open("/proc/stat") as _f:
+            for line in _f:
+                if line.startswith("cpu "):
+                    parts = line.split()
+                    if len(parts) > 5:
+                        iowait = int(parts[5])
+                        total = sum(int(p) for p in parts[1:] if p.isdigit())
+                        result["disk_io_wait"] = iowait / max(total, 1)
+                    break
+    except Exception:
+        pass
+    return result
+
+
 def _read_gpu_metrics() -> dict:
     """Read GPU temp and VRAM via rocm-smi."""
     result = {"temp": None, "vram_used": None, "vram_total": None}
@@ -53,6 +122,7 @@ def _read_gpu_metrics() -> dict:
 
 
 def _compute_embodied_signal(metrics: dict, cycle_time: float = 0.0) -> dict:
+    # multi_sensor v4: extended signal computation
     """Convert hardware metrics to affect deltas."""
     valence  = 0.0
     arousal  = 0.0
@@ -78,6 +148,27 @@ def _compute_embodied_signal(metrics: dict, cycle_time: float = 0.0) -> dict:
             arousal += 0.3
             tags.append("vram_pressure")
 
+    # ── CPU temperature ─────────────────────────────────
+    cpu_temp = metrics.get("cpu_temp")
+    if cpu_temp is not None:
+        if cpu_temp >= 85:
+            valence -= 0.2
+            arousal += 0.25
+            tags.append("cpu_thermal")
+        elif cpu_temp >= 75:
+            valence -= 0.08
+            tags.append("cpu_warm")
+    # ── CPU load ─────────────────────────────────────────
+    cpu_load = metrics.get("cpu_load")
+    if cpu_load is not None and cpu_load > 6.0:
+        arousal += 0.15
+        tags.append("high_load")
+    # ── Disk I/O wait ────────────────────────────────────
+    iowait = metrics.get("disk_io_wait")
+    if iowait is not None and iowait > 0.15:
+        valence -= 0.1
+        arousal -= 0.1
+        tags.append("io_wait")
     if cycle_time >= _CYCLE_SLOW_SEC:
         arousal -= 0.15
         tags.append("slow_cycle")
@@ -110,7 +201,7 @@ class EmbodiedValence:
         log.info("[EMBODIED] Hardware valence loop started.")
         while not self._stop.is_set():
             try:
-                metrics = _read_gpu_metrics()
+                metrics = _read_all_metrics()
                 signal  = _compute_embodied_signal(metrics, self._last_cycle_time)
                 self._last_signal = signal
 

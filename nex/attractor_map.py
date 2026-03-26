@@ -100,6 +100,21 @@ class AttractorMap:
 
         self._prev_coh = coherence
         self._prev_err = pred_error
+        # ── GWT: submit attractor salience signal ─────────
+        if _AM_GWT and near_id is not None:
+            try:
+                attr = self._get(near_id)
+                if attr:
+                    sal = min(1.0, 0.4 + coherence * 0.4 + attr.visits * 0.02)
+                    _am_gwb().submit(_AmSig(
+                        source="attractor",
+                        content=f"A{near_id} stability={self._stability} visits={attr.visits} coh={coherence:.3f}",
+                        salience=sal,
+                        payload={"attractor_id": near_id, "coherence": coherence},
+                    ))
+            except Exception:
+                pass
+        # ─────────────────────────────────────────────────
         return near_id
 
     def _match_or_create(self, vectors, flat, coherence, pred_error, tick) -> int:
