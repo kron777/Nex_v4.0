@@ -354,7 +354,7 @@ def synthesize_cluster(cluster_name, beliefs_in_cluster, llm_fn=None):
         _score = _valence_mod.ingest(str(insight["summary"]), source="cognition")
         _mood_mod.step()
         # ── Surprise memory gate ──────────────────────────────
-        if _SM_ENABLED:
+        if _SM_ENABLED and insight.get("llm_synthesized"):
             try:
                 _ar = getattr(_valence_mod.get_engine().get(), "arousal", 0.0)
                 _sm_store(
