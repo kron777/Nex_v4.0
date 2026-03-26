@@ -62,7 +62,7 @@ done
 echo "[NEX] Starting NEX brain..."
 cd "$NEX_DIR"
 source "$NEX_DIR/venv/bin/activate"
-python3 -u run.py --no-server --background > /tmp/nex_brain.log 2>&1 &
+python3 -u run.py --no-server > /tmp/nex_brain.log 2>&1 &
 NEX_PID=$!
 disown
 sleep 2
@@ -78,7 +78,7 @@ fi
 
 # ── Open terminals ────────────────────────────────────────────────────────────
 gnome-terminal --title="NEX BRAIN" -- bash -c "
-    cd $NEX_DIR && source venv/bin/activate
+    cd "$NEX_DIR" && source venv/bin/activate
     tmux kill-session -t nex 2>/dev/null
     tmux new-session -d -s nex
     tmux split-window -h -t nex
