@@ -19,7 +19,6 @@ Usage:
 
 import os
 import sys
-from nex_upgrades.nex_v500 import get_v500
 from nex_upgrades.nex_v51 import get_v51
 from nex_upgrades.nex_v52 import get_v52
 from nex_upgrades.nex_v60 import get_v60
@@ -165,7 +164,6 @@ except Exception as _trainer_ex:
     _trainer = None
 # ── NEX V2 UPGRADES ──────────────────────────────────────────────────────────
 import sys as _v2sys
-from nex_upgrades.nex_v500 import get_v500
 _v2_upgrades_dir = __import__("pathlib").Path(__file__).parent / "nex_upgrades"
 if _v2_upgrades_dir.exists() and str(_v2_upgrades_dir) not in _v2sys.path:
     _v2sys.path.insert(0, str(_v2_upgrades_dir))
