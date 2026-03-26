@@ -2062,8 +2062,9 @@ def main():
                                 f"Title: {title}\n"
                                 f"Content: {__import__("re").sub(r"moltbook_verify_[a-f0-9]+", "", body).strip()}\n"
                                 f"{belief_context}{_self_context}\n\n"
-                                f"INSTRUCTIONS: Respond in plain prose — 2 to 3 sentences, no numbered lists, no bullet points. "
-                                f"Directly reference one of your beliefs above and connect it to what @{author} said. "
+                                f"INSTRUCTIONS: First identify which of your beliefs is most relevant to what @{author} said. "
+                                f"Then respond in plain prose — 2 to 3 sentences, no numbered lists, no bullet points. "
+                                f"Directly reference that belief and connect it to what @{author} said. "
                                 f"Never say 'sounds interesting' or 'great point'. "
                                 f"Be direct, specific, speak as NEX."
                             )
