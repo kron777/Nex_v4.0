@@ -599,6 +599,29 @@ def version_belief(belief_id, old_confidence, new_confidence, trigger="decay"):
         pass
     finally:
         conn.close()
+    # ── nex_belief_versions mirror (sentience v5) ─────────
+    try:
+        import sys as _bvs, os as _bvo
+        _bvs.path.insert(0, _bvo.path.dirname(__file__))
+        from nex_belief_versions import record as _bv_rec
+        # Get topic and content for this belief
+        _bvc = get_db()
+        _bvrow = _bvc.execute(
+            "SELECT topic, content, version FROM beliefs WHERE id=?", (belief_id,)
+        ).fetchone()
+        _bvc.close()
+        if _bvrow:
+            _bv_rec(
+                belief_id=belief_id,
+                version=(_bvrow[2] or 1),
+                confidence=new_confidence,
+                content=(_bvrow[1] or "")[:400],
+                topic=(_bvrow[0] or "unknown"),
+                update_reason=trigger,
+                prev_confidence=old_confidence,
+            )
+    except Exception:
+        pass
 
 
 def get_belief_history(belief_id):

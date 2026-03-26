@@ -75,7 +75,7 @@ class CuriosityQueue:
         try:
             raw = json.load(open(QUEUE_PATH))
             self._queue = [CuriosityItem(**item) for item in raw.get("queue", [])]
-            self._crawled_topics = raw.get("crawled_topics", {})
+            self._crawled_topics = raw.get("crawled_topics", raw.get("crawled", {}))
             logger.info(f"[curiosity] loaded queue: {len(self._queue)} pending items")
         except Exception as e:
             logger.warning(f"[curiosity] failed to load queue: {e}")
@@ -87,6 +87,7 @@ class CuriosityQueue:
                 json.dump({
                     "queue": [asdict(item) for item in self._queue],
                     "crawled_topics": self._crawled_topics,
+                    "crawled": self._crawled_topics,  # crawled_sync_v5
                 }, f, indent=2)
         except Exception as e:
             logger.warning(f"[curiosity] failed to save queue: {e}")

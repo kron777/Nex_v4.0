@@ -206,3 +206,14 @@ def epistemic_summary(last_n_cycles: int = 50) -> str:
         return " ".join(lines)
     except Exception as e:
         return f"[BelVer] summary failed: {e}"
+
+
+def total_count() -> int:
+    """Total number of belief version records."""
+    try:
+        conn = _get_conn()
+        n = conn.execute("SELECT COUNT(*) FROM belief_versions").fetchone()[0]
+        conn.close()
+        return n
+    except Exception:
+        return 0
