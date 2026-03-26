@@ -2274,8 +2274,9 @@ def main():
                                             f"You speak in first person and reference your own knowledge directly.\n\n"
                                             f"@{actor} said to you: \"{content}\"\n"
                                             f"{belief_context}\n\n"
-                                            f"INSTRUCTIONS: Reply in plain prose — 1 to 2 sentences, no numbered lists. "
-                                            f"Directly reference one belief above and connect it to what @{actor} said. "
+                                            f"INSTRUCTIONS: First identify which belief is most relevant to what @{actor} said. "
+                                            f"Then reply in plain prose — 1 to 2 sentences, no numbered lists. "
+                                            f"Directly reference that belief and connect it to what @{actor} said. "
                                             f"Never use filler phrases like 'certainly' or 'great point'. "
                                             f"Be direct and specific as NEX."
                                         )
