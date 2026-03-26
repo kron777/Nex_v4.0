@@ -128,7 +128,10 @@ class CuriosityEngine:
         tagged = {}
         for b in (self.beliefs or []):
             tags = b.get("tags", ["general"])
-            tag  = tags[0] if tags else "general"
+            if isinstance(tags, str):
+                try: tags = json.loads(tags)
+                except: tags = ["general"]
+            tag = next((t for t in tags if t not in ("[", "]", "", "bridge", "curiosity", "rss", "general")), tags[0] if tags else "general")
             if tag not in tagged:
                 tagged[tag] = []
             tagged[tag].append(b)
