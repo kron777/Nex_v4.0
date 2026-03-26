@@ -61,6 +61,18 @@
       "name": "the_gradient",
       "score": 1.0,
       "uses": 0
+    },
+    {
+      "url": "https://lilianweng.github.io/feed.xml",
+      "name": "lilian_weng",
+      "score": 1.0,
+      "uses": 0
+    },
+    {
+      "url": "https://bair.berkeley.edu/blog/feed.xml",
+      "name": "bair_blog",
+      "score": 1.0,
+      "uses": 0
     }
   ],
   "cybersecurity": [
@@ -203,6 +215,40 @@
     {
       "url": "https://www.wired.com/feed/rss",
       "name": "wired",
+      "score": 1.0,
+      "uses": 0
+    }
+  ],
+  "ai_alignment": [
+    {
+      "url": "https://www.alignmentforum.org/feed.xml",
+      "name": "alignment_forum",
+      "score": 1.0,
+      "uses": 0
+    },
+    {
+      "url": "https://arxiv.org/rss/cs.AI",
+      "name": "arxiv_ai",
+      "score": 1.0,
+      "uses": 0
+    },
+    {
+      "url": "https://arxiv.org/rss/cs.CL",
+      "name": "arxiv_cl",
+      "score": 1.0,
+      "uses": 0
+    },
+    {
+      "url": "https://www.anthropic.com/rss.xml",
+      "name": "anthropic_blog",
+      "score": 1.0,
+      "uses": 0
+    }
+  ],
+  "social_dynamics": [
+    {
+      "url": "https://hbr.org/topic/communication/rss",
+      "name": "hbr_communication",
       "score": 1.0,
       "uses": 0
     }
