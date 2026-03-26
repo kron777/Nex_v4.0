@@ -90,7 +90,13 @@ def _collect_gap_topics() -> list[str]:
              "really","actually","probably","perhaps","maybe","indeed",
              "however","therefore","although","whereas","whether","another",
              "other","every","each","most","many","much","more","some",
-             "related","believe","things","people","world","point","place"}
+             "related","believe","things","people","world","point","place",
+             "build","known","local","given","based","using","used","made",
+             "said","come","came","went","gone","look","seemed","think",
+             "want","need","make","take","give","show","keep","work",
+             "system","human","model","agent","topic","group","level",
+             "value","input","output","state","based","field","range",
+             "often","start","began","ended","found","place","refer"}
     topics = [
         g.get("term","") for g in gaps
         if g.get("term","") not in noise
