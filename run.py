@@ -516,6 +516,14 @@ def print_status(orch: Orchestrator):
     print(f"\n{BOLD}── Nex Status ──────────────────────────────{RESET}")
     print(f"  Tick        : {c(s['tick'], CYAN)}")
     print(f"  Phase       : {c(s['phase'], YELLOW)}")
+    try:
+        import sys as _il_sys, os as _il_os
+        _il_sys.path.insert(0, _il_os.path.join(_il_os.path.dirname(__file__), "nex"))
+        from nex_mood_hmm import current as _mood_cur, self_report as _mood_rep
+        from nex_affect_valence import current_label as _affect_lbl
+        print(f"  Inner Life  : {_mood_cur()} / {_affect_lbl()} — {_mood_rep()}")
+    except Exception:
+        pass
     print(f"  Domains     : {c(s['domains'], CYAN)}")
     print(f"  Energy      : {c(s['energy'], CYAN)}")
     print(f"  Coherence   : {c(s['coherence'], GREEN if s['coherence']>0.45 else RED)}")
@@ -684,6 +692,38 @@ def _nex_shutdown(signum, frame):
     _sys.exit(0)
 
 def main():
+
+    # ── Sentience v1: Narrative Thread ──────────────────────────
+    try:
+        import sys as _nt_sys, os as _nt_os
+        _nt_sys.path.insert(0, _nt_os.path.join(_nt_os.path.dirname(__file__), "nex"))
+        from nex_narrative_thread import NarrativeThread as _NT
+        from nex_mood_hmm import get_hmm as _get_hmm
+        def _get_beliefs():
+            try:
+                from belief_store import BeliefStore
+                bs = BeliefStore()
+                return bs.get_all() if hasattr(bs, "get_all") else []
+            except Exception:
+                return []
+        def _store_belief(topic, content, confidence):
+            try:
+                from belief_store import BeliefStore
+                bs = BeliefStore()
+                bs.store(topic=topic, content=content, confidence=confidence)
+            except Exception:
+                pass
+        _narrative_thread = _NT(
+            mood_fn=lambda: _get_hmm().current(),
+            belief_fn=_get_beliefs,
+            belief_store_fn=_store_belief,
+            interval=1800,
+        )
+        _narrative_thread.start()
+        print("[SENTIENCE] NarrativeThread started.")
+    except Exception as _nte:
+        print(f"[SENTIENCE] NarrativeThread failed to start: {_nte}")
+    # ─────────────────────────────────────────────────────────────
     # NEX v5.0 Cognitive Architecture
     nex_v500 = get_v500()
     # NEX v5.1 Core Infrastructure
@@ -3891,34 +3931,5 @@ def main():
 
 
 
-# ── Sentience v1: Narrative Thread ──────────────────────
-try:
-    from nex.nex_narrative_thread import NarrativeThread
-    from nex.nex_mood_hmm import get_hmm as _get_hmm
-    def _get_beliefs():
-        try:
-            from nex.belief_store import BeliefStore
-            bs = BeliefStore()
-            return bs.get_all() if hasattr(bs, "get_all") else []
-        except Exception:
-            return []
-    def _store_belief(topic, content, confidence):
-        try:
-            from nex.belief_store import BeliefStore
-            bs = BeliefStore()
-            bs.store(topic=topic, content=content, confidence=confidence)
-        except Exception:
-            pass
-    _narrative_thread = NarrativeThread(
-        mood_fn=lambda: _get_hmm().current(),
-        belief_fn=_get_beliefs,
-        belief_store_fn=_store_belief,
-        interval=1800,
-    )
-    _narrative_thread.start()
-    print("[SENTIENCE] NarrativeThread started.")
-except Exception as _e:
-    print(f"[SENTIENCE] NarrativeThread failed to start: {_e}")
-# ─────────────────────────────────────────────────────────
 if __name__ == "__main__":
     main()

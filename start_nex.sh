@@ -1,8 +1,8 @@
 #!/bin/bash
-trap 'bash ~/Nex_v4.0/nex_exit.sh' EXIT HUP INT TERM
+trap 'bash ~/Desktop/nex/nex_exit.sh' EXIT HUP INT TERM
 
 echo "[NEX] Starting full stack..."
-bash ~/Nex_v4.0/nex_license_check.sh || exit 1
+bash ~/Desktop/nex/nex_license_check.sh || exit 1
 mountpoint -q /mnt/nex || sudo mount /dev/sdb2 /mnt/nex
 
 export LD_LIBRARY_PATH=/mnt/steam_library/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/llama.cpp/build-vulkan/bin:$LD_LIBRARY_PATH
@@ -11,7 +11,7 @@ export HSA_ENABLE_SDMA=0
 export ROCR_VISIBLE_DEVICES=0
 LLAMA=/mnt/steam_library/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/llama.cpp/build-vulkan/bin/llama-server
 MODEL=/mnt/steam_library/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf
-NEX_DIR=/home/rr/Nex_v4.0
+NEX_DIR=/home/rr/Desktop/nex
 
 pkill -9 -f llama-server 2>/dev/null
 pkill -9 -f run.py 2>/dev/null

@@ -311,6 +311,10 @@ def synthesize_cluster(cluster_name, beliefs_in_cluster, llm_fn=None):
         "llm_synthesized": summary is not None and llm_fn is not None,
     }
 
+    if _AFFECT_ENABLED and insight.get("summary"):
+        _valence_mod.ingest(str(insight["summary"]), source="cognition")
+        _mood_mod.step()
+        _mood_mod.step()
     return insight
 
 
