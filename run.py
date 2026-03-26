@@ -306,6 +306,24 @@ try:
 except Exception as _se:
     print(f"  [SENTIENCE] failed to load: {_se}")
     _affect = _gw = _cm = _tn = None
+
+# ── Sentience v2: GWT + Embodied + Surprise Memory ───────────────
+try:
+    import sys as _s2, os as _o2
+    _s2.path.insert(0, _o2.path.join(_o2.path.dirname(__file__), "nex"))
+    from nex_gwt import get_gwb as _get_gwb_run
+    from nex_embodied import start as _start_embodied
+    from nex_surprise_memory import get_sm as _get_sm
+    from nex_phi_proxy import get_monitor as _get_phi_mon
+    _gwb_run = _get_gwb_run()
+    _start_embodied()
+    _sm_run = _get_sm()
+    _phi_mon_run = _get_phi_mon()
+    print("  [SENTIENCE v2] GWT broadcast + embodied valence + surprise memory + Φ proxy — loaded")
+except Exception as _s2e:
+    print(f"  [SENTIENCE v2] failed to load: {_s2e}")
+    _gwb_run = _sm_run = _phi_mon_run = None
+# ─────────────────────────────────────────────────────────────────
 # ── Signal filter — importance gate + source scorer ─────────────────────────
 try:
     from nex_signal_filter import get_scorer as _get_scorer, get_gate as _get_gate
@@ -1164,7 +1182,10 @@ def main():
                             {"role": "user", "content": prompt}
                         ],
                         "max_tokens": _token_budget,
-                        "temperature": 0.75,
+                        "temperature": (0.75 + (
+                            _get_gwb_run().current_token().winner.payload.get("temp_mod", 0.0)
+                            if _gwb_run and _get_gwb_run().current_token() else 0.0
+                        )),
                         "top_p": 0.90
                     }, timeout=120)
                     _qd = _qr.json()
@@ -1203,7 +1224,10 @@ def main():
                         {"role": "user", "content": prompt}
                     ],
                     "max_tokens": _token_budget,
-                    "temperature": 0.75,
+                    "temperature": (0.75 + (
+                            _get_gwb_run().current_token().winner.payload.get("temp_mod", 0.0)
+                            if _gwb_run and _get_gwb_run().current_token() else 0.0
+                        )),
                     "top_p": 0.90
                 }, timeout=60)
                 _rd = r.json()
@@ -1302,6 +1326,25 @@ def main():
                 conversations = load_conversations()
 
                 # ── Hoist stable imports used every cycle ──
+
+                    # ── GWT broadcast cycle ──────────────────────────────
+                    if _gwb_run:
+                        try:
+                            from nex_affect_valence import current_score as _cv_score
+                            from nex_mood_hmm import current as _mood_cur
+                            _cs = _cv_score()
+                            from nex_gwt import affect_signal as _afs
+                            _gwb_run.submit(_afs(_cs.valence, _cs.arousal, _mood_cur()))
+                            _gwt_tok = _gwb_run.broadcast()
+                            if _gwt_tok:
+                                import logging as _gwt_log
+                                _gwt_log.getLogger("nex.run").info(
+                                    f"[GWT] spotlight=[{_gwt_tok.winner.source}] "
+                                    f"sal={_gwt_tok.winner.salience:.2f}"
+                                )
+                        except Exception as _gwte:
+                            pass
+                    # ─────────────────────────────────────────────────────
                 _run_cognition_cycle = None
                 try:
                     from nex.belief_store import query_beliefs as _query_beliefs

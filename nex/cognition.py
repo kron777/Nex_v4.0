@@ -1,12 +1,30 @@
 from pathlib import Path
 
-# ── Sentience v1: affective valence + mood HMM ───────────
+# ── Sentience v1+v2: affective valence + mood HMM + GWT + Phi ──
 try:
     import nex_affect_valence as _valence_mod
     import nex_mood_hmm as _mood_mod
     _AFFECT_ENABLED = True
 except ImportError:
     _AFFECT_ENABLED = False
+
+try:
+    from nex_gwt import get_gwb as _get_gwb, curiosity_signal as _cog_sig, surprise_signal as _sur_sig
+    _GWT_ENABLED = True
+except ImportError:
+    _GWT_ENABLED = False
+
+try:
+    from nex_phi_proxy import get_monitor as _get_phi_monitor
+    _PHI_ENABLED = True
+except ImportError:
+    _PHI_ENABLED = False
+
+try:
+    from nex_surprise_memory import maybe_store as _sm_store
+    _SM_ENABLED = True
+except ImportError:
+    _SM_ENABLED = False
 # ─────────────────────────────────────────────────────────
 
 """
@@ -281,7 +299,28 @@ def synthesize_cluster(cluster_name, beliefs_in_cluster, llm_fn=None):
                 f"Be specific. No filler. Never mention 'network', 'agents', or 'contradictions were resolved'."
             )
             _sys = "You are a knowledge synthesis engine. Output only the 2-sentence synthesis. No preamble."
-            summary = llm_fn(_prompt, system=_sys, task_type="synthesis")
+            # ── Affective temperature modulation ──────────────
+            _temp_mod = 0.0
+            if _AFFECT_ENABLED:
+                try:
+                    _temp_mod = _mood_mod.temp_modifier()
+                except Exception:
+                    pass
+            # Inject GWT workspace context into synthesis prompt
+            _synthesis_prompt = _prompt
+            if _GWT_ENABLED:
+                try:
+                    _synthesis_prompt = _get_gwb().inject_to_prompt(_prompt)
+                except Exception:
+                    pass
+            # Submit curiosity signal to GWT
+            if _GWT_ENABLED:
+                try:
+                    _get_gwb().submit(_cog_sig("synthesis", cluster_name, strength=0.55))
+                except Exception:
+                    pass
+            summary = llm_fn(_synthesis_prompt, system=_sys, task_type="synthesis",
+                             temperature_mod=_temp_mod)
             if not summary or len(summary) < 30 or summary.startswith("I "):
                 summary = None
         except Exception:
@@ -312,9 +351,30 @@ def synthesize_cluster(cluster_name, beliefs_in_cluster, llm_fn=None):
     }
 
     if _AFFECT_ENABLED and insight.get("summary"):
-        _valence_mod.ingest(str(insight["summary"]), source="cognition")
+        _score = _valence_mod.ingest(str(insight["summary"]), source="cognition")
         _mood_mod.step()
-        _mood_mod.step()
+        # ── Surprise memory gate ──────────────────────────────
+        if _SM_ENABLED:
+            try:
+                _ar = getattr(_valence_mod.get_engine().get(), "arousal", 0.0)
+                _sm_store(
+                    content=str(insight["summary"])[:300],
+                    source=f"synthesis:{cluster_name}",
+                    arousal=_ar,
+                    salience=float(insight.get("confidence", 0.5)),
+                    tags=[cluster_name, "synthesis"],
+                )
+            except Exception:
+                pass
+        # ── GWT surprise signal if insight is high-confidence ─
+        if _GWT_ENABLED and insight.get("confidence", 0) > 0.75:
+            try:
+                _get_gwb().submit(_sur_sig(
+                    content=f"High-confidence insight: {cluster_name}",
+                    intensity=float(insight.get("confidence", 0.75)),
+                ))
+            except Exception:
+                pass
     return insight
 
 

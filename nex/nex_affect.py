@@ -21,6 +21,15 @@ Wire-in (cognition.py or run.py):
 
 from __future__ import annotations
 
+# ── Sentience v2: GWT broadcast integration ──────────────
+try:
+    from nex_gwt import get_gwb as _get_gwb, affect_signal as _af_sig
+    _GWT_ENABLED = True
+except ImportError:
+    _GWT_ENABLED = False
+# ─────────────────────────────────────────────────────────
+
+
 import json
 import math
 import time
@@ -165,6 +174,15 @@ class AffectState:
                 self._state[k] * (1 - _LEARNING_RATE) + d * _LEARNING_RATE
             ))
         self._save()
+        # ── GWT: submit affect signal after every update ──
+        if _GWT_ENABLED:
+            try:
+                snap = dict(self._state)
+                label = self.label()
+                sig = _af_sig(snap.get("valence", 0), snap.get("arousal", 0), label)
+                _get_gwb().submit(sig)
+            except Exception:
+                pass
 
     def snapshot(self) -> dict[str, float]:
         """Return current state after decay (read-only copy)."""
@@ -258,5 +276,21 @@ class GlobalWorkspace:
             lines.append(f"In mind   : {w_str}")
 
         lines.append("── respond as this version of yourself ──\n")
+        # ── GWT spotlight ──
+        if _GWT_ENABLED:
+            try:
+                token = _get_gwb().current_token()
+                if token:
+                    lines.append(f"Spotlight : [{token.winner.source}] {token.winner.content[:80]}")
+            except Exception:
+                pass
+        # ── Surprise memory context ──
+        try:
+            from nex_surprise_memory import to_context_block as _smcb
+            sm_block = _smcb(2)
+            if sm_block:
+                lines.append(sm_block)
+        except Exception:
+            pass
         block = "\n".join(lines)
         return block + "\n" + base_prompt

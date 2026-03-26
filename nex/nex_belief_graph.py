@@ -38,6 +38,14 @@ Wire-in (cognition.py, after BeliefIndex):
 """
 
 from __future__ import annotations
+# ── Sentience v2: Phi proxy integration ──────────────────
+try:
+    from nex_phi_proxy import get_monitor as _get_phi_monitor
+    _PHI_ENABLED = True
+except ImportError:
+    _PHI_ENABLED = False
+# ─────────────────────────────────────────────────────────
+
 
 import json
 import math
@@ -215,6 +223,39 @@ class BeliefGraph:
                                   reverse=True)
             self._graph = dict(sorted_nodes[:5000])
 
+        # ── Recurrent causal edges (IIT v2) ──────────────────
+        # For every A→B support edge, add a weak B→A back-edge
+        # This creates recurrence depth that Phi proxy can detect
+        _added = 0
+        for bid, node in list(self._graph.items()):
+            for supported_id in node.get("supports", []):
+                if supported_id in self._graph:
+                    back_node = self._graph[supported_id]
+                    if bid not in back_node.get("explains", []):
+                        back_node.setdefault("explains", [])
+                        if len(back_node["explains"]) < _MAX_EDGES_PER_BELIEF:
+                            back_node["explains"].append(bid)
+                            _added += 1
+        if _added:
+            import logging as _log
+            _log.getLogger("nex.belief_graph").info(
+                f"[BeliefGraph] added {_added} recurrent back-edges"
+            )
+        # ── Phi proxy scoring pass ─────────────────────────────
+        if _PHI_ENABLED:
+            try:
+                _phi_mon = _get_phi_monitor()
+                _phi_stats = _phi_mon.tick(self._graph)
+                import logging as _log2
+                _log2.getLogger("nex.belief_graph").info(
+                    f"[Φ] mean={_phi_stats.get('mean_phi',0):.3f} "
+                    f"high={_phi_stats.get('high_integration',0)} "
+                    f"isolated={_phi_stats.get('isolated',0)}"
+                )
+            except Exception as _pe:
+                pass
+        # ── recurrent_edges marker ─────────────────────────────
+        _recurrent_edges = True
         _save(_GRAPH_PATH, self._graph)
         print(f"  [BeliefGraph] {len(self._graph)} nodes, built at cycle {cycle_num}")
 
