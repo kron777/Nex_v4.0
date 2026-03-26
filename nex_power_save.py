@@ -62,7 +62,7 @@ def avg_calls_per_cycle(last_n: int = 10) -> float:
 # =============================================================================
 
 # Task types that always need LLM — never skip
-_ALWAYS_LLM = {"reply", "notification_reply", "agent_chat", "post"}
+_ALWAYS_LLM = {"reply", "notification_reply", "agent_chat", "post", "devto_post"}
 
 # Task types that can be skipped under low signal
 _SKIPPABLE   = {"synthesis", "reflection", "curiosity", "compression", "gap"}
