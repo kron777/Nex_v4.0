@@ -43,7 +43,7 @@ except ImportError:
 # ─────────────────────────────────────────────────────────────────────────────
 
 CRAWL_CONFIG = CrawlerRunConfig(
-    cache_mode=CacheMode.ENABLED,       # cache pages so repeated topics don't re-fetch
+    cache_mode=CacheMode.BYPASS,# cache pages so repeated topics don't re-fetch
     word_count_threshold=30,            # skip thin pages (nav, 404s, etc.)
     exclude_external_links=True,        # stay on target domain
     remove_overlay_elements=True,       # strip cookie banners, modals
@@ -78,6 +78,8 @@ def _extract_sentences(markdown_text: str) -> list[str]:
     # Strip markdown / HTML
     text = re.sub(r'!\[([^\]]*)\]\([^\)]+\)', '', body)       # images
     text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)    # links → text
+    text = re.sub(r'\{\\displaystyle[^}]*\}', '', text)  # strip LaTeX
+    text = re.sub(r'\[[0-9]+\]', '', text)                    # strip citation refs [1]
     text = re.sub(r'<[^>]+>', '', text)                              # HTML tags
     text = re.sub(r'[#*`_~>|]', '', text)                           # md syntax
     text = re.sub(r'[ \t]+', ' ', text)
@@ -150,15 +152,12 @@ class CrawlScheduler:
 
 def _resolve_search_url(topic: str) -> str:
     """
-    Resolve a topic to the best crawlable URL.
-    Priority:
-      1. DuckDuckGo instant-answer / search page  (no API key, always works)
-      2. Returns a usable URL for any topic — never crashes.
-    Wikipedia is intentionally skipped: DDG surfaces the right page anyway
-    and handles topic strings that don't map to exact article slugs.
+    Resolve a topic to a crawlable Wikipedia URL.
+    Falls back to DDG only if topic has no plausible Wikipedia slug.
     """
-    safe = urllib.parse.quote_plus(topic)
-    return f"https://duckduckgo.com/?q={safe}&ia=web"
+    # Wikipedia handles underscored slugs and redirects gracefully
+    slug = topic.strip().replace(" ", "_")
+    return f"https://en.wikipedia.org/wiki/{slug}"
 
 
 class NexCrawler:
@@ -207,15 +206,48 @@ class NexCrawler:
                 logger.debug(f"[crawler] failed or empty: {url}")
                 return 0
 
+            # Detect Wikipedia "page not found" pages
+            md = result.markdown
+            if any(phrase in md[:2000] for phrase in [
+                "Wikipedia does not have an article",
+                "There is currently no text in this page",
+                "The page has been deleted",
+                "You may create this page",
+                "Search for \"",
+                "article wizard",
+                "autoconfirmed to create",
+                "You need to log in or create an account",
+                "Page contents not supported in other languages",
+                "does not have an article with this exact name",
+            ]):
+                logger.info(f"[crawler] Wikipedia 404 for: {url} — skipping")
+                return 0
+
             sentences = _extract_sentences(result.markdown)
             beliefs = _sentences_to_beliefs(sentences, url, topic)
 
             stored = 0
+            import time as _time
+            _db = self.bs() if callable(self.bs) else self.bs
             for b in beliefs:
                 try:
-                    # Compatible with BeliefStore.add() — adjust method name if yours differs
-                    self.bs.add(b["content"], confidence=b["confidence"],
-                                source=b["source"], topic=b["topic"], origin="crawl")
+                    _db.execute(
+                        """INSERT OR IGNORE INTO beliefs
+                           (content, confidence, source, topic, origin, timestamp, uncertainty, energy, salience)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            b["content"],
+                            b.get("confidence", 0.55),
+                            b.get("source", ""),
+                            b.get("topic", "crawl"),
+                            "crawl",
+                            str(_time.time()),
+                            0.45,
+                            0.5,
+                            0.5,
+                        )
+                    )
+                    _db.commit()
                     stored += 1
                 except Exception as e:
                     logger.debug(f"[crawler] belief store error: {e}")

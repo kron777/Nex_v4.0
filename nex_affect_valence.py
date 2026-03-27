@@ -173,25 +173,3 @@ if __name__ == "__main__":
     print(f"\nget_affect() → {get_affect()}")
     print(f"current_label() → {current_label()}")
     print(f"get_valence() → {get_valence()}")
-
-
-# ── get_engine() shim — required by NarrativeThread ────────────────
-_affect_singleton = None
-
-def get_engine():
-    """Return singleton affect engine instance (compatibility shim)."""
-    global _affect_singleton
-    if _affect_singleton is None:
-        try:
-            _affect_singleton = AffectProxy()
-        except Exception:
-            # Minimal fallback if AffectProxy not available
-            class _Fallback:
-                label = "Neutral"
-                valence = 0.0
-                arousal = 0.1
-                dominance = 0.1
-                def get(self, key, default=None):
-                    return default
-            _affect_singleton = _Fallback()
-    return _affect_singleton

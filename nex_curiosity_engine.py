@@ -1,4 +1,29 @@
-from nex_groq import _groq
+# LLM routing — character engine first, Ollama second, Groq last
+def _groq(messages: list, max_tokens: int = 300, **kwargs) -> str | None:
+    prompt = next((m["content"] for m in messages if m.get("role")=="user"), "")
+    # Character engine
+    try:
+        from nex_character_engine import get_engine
+        engine = get_engine()
+        return engine.respond(prompt[:120])
+    except Exception:
+        pass
+    # Ollama
+    try:
+        import requests as _req
+        r = _req.post("http://localhost:11434/api/chat", json={
+            "model": "qwen2.5:3b", "messages": messages,
+            "options": {"num_predict": max_tokens}, "stream": False,
+        }, timeout=30)
+        return r.json().get("message",{}).get("content","").strip() or None
+    except Exception:
+        pass
+    # Groq
+    try:
+        from nex_groq import _groq as _groq_real
+        return _groq_real(messages, max_tokens=max_tokens)
+    except Exception:
+        return None
 #!/usr/bin/env python3
 """
 nex_curiosity_engine.py — Layer 3: Active Curiosity Engine
@@ -21,8 +46,8 @@ BELIEFS_PATH  = CFG_PATH / "beliefs.json"
 INSIGHTS_PATH = CFG_PATH / "insights.json"
 BRIDGES_PATH  = CFG_PATH / "bridge_beliefs.json"
 JOURNAL_PATH  = CFG_PATH / "dad_journal.json"
-GROQ_URL      = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL    = "llama-3.3-70b-versatile"
+GROQ_URL = None  # removed
+GROQ_MODEL = None  # removed
 
 # ── Groq rate limiter — max 50 calls/hour ─────────────────────
 _groq_calls: list = []

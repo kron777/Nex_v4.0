@@ -27,8 +27,8 @@ BELIEFS_PATH    = CFG_PATH / "beliefs.json"
 REFLECTIONS_PATH= CFG_PATH / "reflections.json"
 META_PATH       = CFG_PATH / "meta_reflections.json"
 
-GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL= "llama-3.3-70b-versatile"
+GROQ_URL  = None  # removed
+GROQ_MODEL= None  # removed
 
 # ── 8 emotional states ────────────────────────────────────────
 EMOTION_STATES = [
@@ -38,19 +38,59 @@ EMOTION_STATES = [
 
 
 def _groq(messages: list, max_tokens: int = 200) -> str | None:
-    key = os.environ.get("GROQ_API_KEY", "")
-    if not key:
-        return None
+    """
+    LLM call — routed to character engine (native) first,
+    Ollama (Qwen) second, Groq last.
+    Absorption stage: character engine handles thought/diary/self-model.
+    """
+    # Extract the user prompt from messages
+    prompt = ""
+    system = ""
+    for m in messages:
+        if m.get("role") == "user":
+            prompt = m.get("content", "")
+        elif m.get("role") == "system":
+            system = m.get("content", "")
+
+    # Route to character engine
     try:
-        r = requests.post(GROQ_URL,
-            headers={"Authorization": f"Bearer {key}"},
-            json={"model": GROQ_MODEL, "max_tokens": max_tokens,
-                  "temperature": 0.8, "messages": messages},
-            timeout=20)
-        return r.json()["choices"][0]["message"]["content"].strip()
+        from nex_character_engine import get_engine
+        engine = get_engine()
+        # Detect task type from prompt content
+        p_lower = prompt.lower()
+        if any(w in p_lower for w in ["diary", "journal", "day", "noticed", "felt"]):
+            return engine.think(trigger=prompt[:80])
+        elif any(w in p_lower for w in ["existential", "desire", "self", "know about myself"]):
+            # Self-model update — return JSON-like structure natively
+            top_op = engine.stance.get_strong(min_strength=0.3)
+            topic  = top_op[0]["topic"] if top_op else "cognition"
+            drive  = engine.drives.get_top()
+            return (
+                f'{{"existential_state": "Processing {topic} with {drive.get("urgency",0.5):.2f} urgency.", '
+                f'"current_desire": "Deepen understanding of {topic}.", '
+                f'"recent_change": "Belief graph expanded. Contradictions being resolved.", '
+                f'"what_i_know_about_myself": "I form positions from evidence. I am uncertain in the right ways."}}'
+            )
+        else:
+            return engine.think(trigger=prompt[:80])
     except Exception as e:
-        print(f"  [inner_life] Groq error: {e}")
-        return None
+        pass
+
+    # Fallback: Ollama/Qwen
+    try:
+        import requests as _req
+        r = _req.post("http://localhost:11434/api/chat", json={
+            "model": "qwen2.5:3b",
+            "messages": messages,
+            "options": {"temperature": 0.8, "num_predict": max_tokens},
+            "stream": False,
+        }, timeout=30)
+        return r.json().get("message", {}).get("content", "").strip() or None
+    except Exception:
+        pass
+
+    # Groq last-resort removed — Ollama is the final fallback
+    return None
 
 
 def _load(path: Path, default):

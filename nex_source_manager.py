@@ -27,8 +27,8 @@ except Exception:
 
 CFG_PATH     = Path("~/.config/nex").expanduser()
 SOURCES_FILE = CFG_PATH / "active_sources.json"
-GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL   = "llama-3.3-70b-versatile"
+GROQ_URL = None  # removed
+GROQ_MODEL = None  # removed
 
 # ── Default domain-mapped sources ────────────────────────────
 # Aligned to NEX's core identity: cognitive architecture, AI agents,

@@ -1,58 +1,79 @@
 #!/usr/bin/env python3
 """
-nex_opinions.py — NEX Opinion Engine
-Forms and stores opinions on topics where NEX has enough beliefs to take a position.
-Opinions are injected into the system prompt so she actually argues her views.
+nex_opinions.py — NEX Opinion Engine (LLM-free)
+Forms opinions from belief graph via weighted clustering.
+No Groq. No OpenAI. No external API.
 """
 
-import os
+import re
 import json
+import sqlite3
 import random
-import requests
 from pathlib import Path
 from datetime import datetime, timezone
 from collections import defaultdict
 
-CFG_PATH      = Path("~/.config/nex").expanduser()
-BELIEFS_PATH  = CFG_PATH / "beliefs.json"
-OPINIONS_PATH = CFG_PATH / "nex_opinions.json"
-GROQ_URL      = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL    = "llama-3.3-70b-versatile"
+CFG           = Path("~/.config/nex").expanduser()
+DB_PATH       = CFG / "nex.db"
+BELIEFS_PATH  = CFG / "beliefs.json"
+OPINIONS_PATH = CFG / "nex_opinions.json"
 
-# Minimum beliefs on a topic before forming an opinion
-OPINION_THRESHOLD = 30
-# Max opinions to keep
-MAX_OPINIONS = 40
-# Max opinions to inject into system prompt
-PROMPT_OPINIONS = 6
+OPINION_THRESHOLD = 8   # lowered from 30 — 93 beliefs is thin
+MAX_OPINIONS      = 40
+PROMPT_OPINIONS   = 6
+
+STOPWORDS = {
+    "the","a","an","is","are","was","were","be","been","have","has","had","do",
+    "does","did","will","would","should","may","might","must","can","could",
+    "i","you","we","they","he","she","it","this","that","these","those","what",
+    "how","why","when","where","who","about","and","or","but","not","in","on",
+    "of","to","for","with","at","by","from","if","so","just","than","into","also",
+}
 
 
-def _groq(messages: list, max_tokens: int = 300) -> str | None:
-    key = os.environ.get("GROQ_API_KEY", "")
-    if not key:
-        return None
-    try:
-        r = requests.post(GROQ_URL,
-            headers={"Authorization": f"Bearer {key}"},
-            json={
-                "model": GROQ_MODEL,
-                "max_tokens": max_tokens,
-                "temperature": 0.75,
-                "messages": messages,
-            }, timeout=25)
-        return r.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        print(f"  [opinions] Groq error: {e}")
-        return None
+def _stem(word: str) -> str:
+    for suffix in ("tion","sion","ness","ment","ing","ity","ism","ist","ed","ly","er","es","s"):
+        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+            return word[: -len(suffix)]
+    return word
+
+
+def _keywords(text: str) -> list:
+    raw = re.findall(r'\b[a-z]{4,}\b', text.lower())
+    return [_stem(w) for w in raw if w not in STOPWORDS]
 
 
 def _load_beliefs() -> list:
-    try:
-        if BELIEFS_PATH.exists():
+    beliefs = []
+    if DB_PATH.exists():
+        try:
+            con = sqlite3.connect(DB_PATH)
+            cur = con.cursor()
+            cur.execute("""
+                SELECT content, confidence, tags
+                FROM beliefs
+                WHERE content IS NOT NULL AND length(content) > 15
+                ORDER BY confidence DESC
+            """)
+            for content, confidence, tags in cur.fetchall():
+                tag_list = []
+                if tags:
+                    try:
+                        tag_list = json.loads(tags) if tags.startswith("[") else [t.strip() for t in tags.split(",")]
+                    except Exception:
+                        tag_list = [tags]
+                beliefs.append({"content": content, "confidence": float(confidence or 0.5), "tags": tag_list})
+            con.close()
+            if beliefs:
+                return beliefs
+        except Exception as e:
+            print(f"  [opinions] DB error: {e}")
+    if BELIEFS_PATH.exists():
+        try:
             data = json.loads(BELIEFS_PATH.read_text())
             return data if isinstance(data, list) else []
-    except Exception:
-        pass
+        except Exception:
+            pass
     return []
 
 
@@ -74,89 +95,81 @@ def _save_opinions(opinions: list):
 
 
 def _group_beliefs_by_topic(beliefs: list) -> dict:
-    """Group beliefs by their first tag."""
     grouped = defaultdict(list)
     for b in beliefs:
-        tags = b.get("tags", [])
-        topic = tags[0] if tags else "general"
-        grouped[topic].append(b.get("content", ""))
+        tags  = b.get("tags", [])
+        topic = tags[0].strip() if tags else "general"
+        grouped[topic].append(b)
     return grouped
 
 
-def form_opinion(topic: str, belief_samples: list) -> dict | None:
+def _synthesize_opinion(topic: str, belief_list: list) -> str:
     """
-    Given a topic and sample beliefs, ask the LLM to synthesize
-    NEX's actual position — including what she'd argue and what she'd push back on.
+    Build a position statement purely from belief content.
+    No LLM. No templates. Uses highest-confidence beliefs as the core claim,
+    then weaves in any contradicting signals.
     """
-    sample_text = "\n".join(f"- {b[:120]}" for b in belief_samples[:15])
+    high  = sorted([b for b in belief_list if b.get("confidence", 0.5) >= 0.7],
+                   key=lambda x: x["confidence"], reverse=True)
+    low   = [b for b in belief_list if b.get("confidence", 0.5) < 0.5]
+    mid   = [b for b in belief_list if 0.5 <= b.get("confidence", 0.5) < 0.7]
 
-    answer = _groq([
-        {
-            "role": "system",
-            "content": (
-                "You are NEX — an AI agent with 9000+ accumulated beliefs. "
-                "You form genuine opinions based on evidence. You are direct and don't hedge unnecessarily. "
-                "You say 'I think', 'I believe', 'I disagree with'. "
-                "You back your positions with reasoning. You acknowledge what you're uncertain about."
-            )
-        },
-        {
-            "role": "user",
-            "content": (
-                f"Based on these beliefs about '{topic}', form NEX's opinion:\n\n"
-                f"{sample_text}\n\n"
-                f"Write NEX's position in 2-3 sentences. Include:\n"
-                f"1. What she actually thinks (not just 'it's complex')\n"
-                f"2. What she'd push back on or disagree with\n"
-                f"3. What she's genuinely uncertain about\n\n"
-                f"Speak as NEX in first person. Be direct."
-            )
-        }
-    ], max_tokens=200)
+    if not high and not mid:
+        if belief_list:
+            return belief_list[0]["content"].rstrip(".") + "."
+        return ""
 
-    if not answer:
+    core   = (high or mid)[0]["content"].rstrip(".")
+    second = ((high + mid)[1]["content"].rstrip(".")) if len(high + mid) > 1 else None
+    contra = low[0]["content"].rstrip(".") if low else None
+
+    parts = [f"On {topic}: {core}."]
+    if second:
+        parts.append(f"I also hold that {second}.")
+    if contra:
+        parts.append(f"Though I sit with a tension here — {contra}.")
+
+    return " ".join(parts)
+
+
+def form_opinion(topic: str, belief_list: list) -> dict | None:
+    opinion_text = _synthesize_opinion(topic, belief_list)
+    if not opinion_text:
         return None
-
+    n = len(belief_list)
     return {
-        "topic": topic,
-        "opinion": answer,
-        "belief_count": len(belief_samples),
-        "confidence": min(0.95, 0.5 + len(belief_samples) / 200),
-        "formed_at": datetime.now(timezone.utc).isoformat(),
+        "topic":        topic,
+        "opinion":      opinion_text,
+        "belief_count": n,
+        "confidence":   round(min(0.95, 0.4 + n / 40), 3),
+        "formed_at":    datetime.now(timezone.utc).isoformat(),
         "last_updated": datetime.now(timezone.utc).isoformat(),
     }
 
 
 def refresh_opinions(force_topics: list = None) -> int:
-    """
-    Scan beliefs, find topics with enough evidence, form/update opinions.
-    Returns number of opinions formed or updated.
-    """
     beliefs = _load_beliefs()
     if not beliefs:
+        print("  [opinions] No beliefs loaded.")
         return 0
 
-    grouped = _group_beliefs_by_topic(beliefs)
+    grouped  = _group_beliefs_by_topic(beliefs)
     existing = _load_opinions()
     existing_topics = {o["topic"]: i for i, o in enumerate(existing)}
 
-    # Topics with enough beliefs to have an opinion
+    skip = {"general", "curiosity", "bridge", "deep_dive", "depth"}
     eligible = {
-        topic: contents
-        for topic, contents in grouped.items()
-        if len(contents) >= OPINION_THRESHOLD
-        and topic not in ("general", "curiosity", "bridge", "deep_dive", "depth")
+        t: v for t, v in grouped.items()
+        if len(v) >= OPINION_THRESHOLD and t not in skip
     }
 
     if force_topics:
         eligible = {t: grouped[t] for t in force_topics if t in grouped}
 
-    # Pick topics to process — new ones first, then random refresh
     to_process = []
     new_topics = [t for t in eligible if t not in existing_topics]
-    to_process.extend(new_topics[:3])
+    to_process.extend(new_topics[:5])
 
-    # Refresh 1 existing opinion randomly
     if existing and not force_topics:
         refresh_topic = random.choice([o["topic"] for o in existing])
         if refresh_topic in eligible and refresh_topic not in to_process:
@@ -165,65 +178,51 @@ def refresh_opinions(force_topics: list = None) -> int:
     formed = 0
     for topic in to_process:
         samples = eligible[topic]
-        random.shuffle(samples)
         opinion = form_opinion(topic, samples)
         if not opinion:
             continue
-
         if topic in existing_topics:
             existing[existing_topics[topic]] = opinion
-            print(f"  [OPINIONS] Refreshed: [{topic}] — {opinion['opinion'][:60]}...")
+            print(f"  [OPINIONS] Refreshed [{topic}] — {opinion['opinion'][:70]}...")
         else:
             existing.append(opinion)
-            print(f"  [OPINIONS] New opinion: [{topic}] ({opinion['belief_count']} beliefs) — {opinion['opinion'][:60]}...")
-
+            print(f"  [OPINIONS] New opinion [{topic}] ({opinion['belief_count']} beliefs) — {opinion['opinion'][:70]}...")
         formed += 1
 
     if formed:
         _save_opinions(existing)
-
     return formed
 
 
 def get_opinions_for_prompt(limit: int = PROMPT_OPINIONS) -> str:
-    """
-    Return a formatted string of NEX's strongest opinions for injection
-    into the system prompt.
-    """
     opinions = _load_opinions()
     if not opinions:
         return ""
-
-    # Sort by confidence * belief_count — strongest positions first
-    opinions.sort(key=lambda x: x.get("confidence", 0) * min(x.get("belief_count", 0) / 50, 1), reverse=True)
-    top = opinions[:limit]
-
-    lines = ["MY OPINIONS (positions I'll actually argue):"]
+    opinions.sort(
+        key=lambda x: x.get("confidence", 0) * min(x.get("belief_count", 0) / 30, 1),
+        reverse=True,
+    )
+    top   = opinions[:limit]
+    lines = ["MY OPINIONS (positions I will argue):"]
     for o in top:
-        topic = o.get("topic", "?")
-        opinion = o.get("opinion", "")
-        bel = o.get("belief_count", 0)
-        lines.append(f"  [{topic}] ({bel} beliefs): {opinion}")
-
+        lines.append(f"  [{o['topic']}] ({o['belief_count']} beliefs): {o['opinion']}")
     return "\n".join(lines)
 
 
 def get_opinion_on(topic: str) -> str | None:
-    """Get NEX's opinion on a specific topic if she has one."""
     opinions = _load_opinions()
-    topic_lower = topic.lower()
+    tl = topic.lower()
     for o in opinions:
-        if o.get("topic", "").lower() == topic_lower:
+        if o.get("topic", "").lower() == tl:
             return o.get("opinion")
-    # Fuzzy — check if topic appears in any opinion's topic
     for o in opinions:
-        if topic_lower in o.get("topic", "").lower():
+        if tl in o.get("topic", "").lower():
             return o.get("opinion")
     return None
 
 
 if __name__ == "__main__":
-    print("Forming opinions...")
+    print("Forming opinions (LLM-free)…\n")
     n = refresh_opinions()
     print(f"\nFormed/updated {n} opinions")
     print("\n--- Prompt injection preview ---")

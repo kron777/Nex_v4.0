@@ -19,10 +19,10 @@ CFG_PATH      = Path("~/.config/nex").expanduser()
 GRAPH_PATH    = CFG_PATH / "synthesis_graph.json"
 BELIEFS_PATH  = CFG_PATH / "beliefs.json"
 BRIDGES_PATH  = CFG_PATH / "bridge_beliefs.json"
-GROQ_URL      = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL    = "llama-3.3-70b-versatile"
+# GROQ_URL = None  # removed
+# GROQ_MODEL = None  # removed
 
-from nex_groq import _groq
+# nex_groq removed — LLM-free
 
 RELATION_TYPES = ["implies", "contradicts", "reinforces", "analogous_to", "causes", "prerequisite_of"]
 
@@ -99,34 +99,49 @@ class SynthesisGraph:
 
     def discover_relation(self, belief_a: dict, belief_b: dict) -> dict | None:
         """
-        Use Groq to discover the relationship between two beliefs.
+        Infer relationship between two beliefs using token overlap (LLM-free).
         Returns edge dict or None.
         """
-        content_a = belief_a.get("content", "")[:150]
-        content_b = belief_b.get("content", "")[:150]
+        import re as _re
+
+        content_a = belief_a.get("content", "").lower()
+        content_b = belief_b.get("content", "").lower()
         domain_a  = (belief_a.get("tags") or ["?"])[0]
         domain_b  = (belief_b.get("tags") or ["?"])[0]
 
         if domain_a == domain_b:
             return None  # only cross-domain edges
 
-        result = _groq([
-            {"role": "system", "content": (
-                "You are a knowledge graph builder. "
-                f"Classify the relationship between two beliefs. "
-                f"Choose ONE from: {', '.join(RELATION_TYPES)}. "
-                "Also rate confidence 0.0-1.0. "
-                "Reply in JSON only: {{\"relation\": \"...\", \"confidence\": 0.0}}"
-            )},
-            {"role": "user", "content": (
-                f"Belief A [{domain_a}]: \"{content_a}\"\n"
-                f"Belief B [{domain_b}]: \"{content_b}\"\n\n"
-                f"What is the relationship from A to B? Reply in JSON only."
-            )}
-        ], max_tokens=50)
+        STOPWORDS = {"the","a","an","is","are","was","be","have","do","will",
+                     "and","or","not","in","of","to","for","with","that","this"}
 
-        if not result:
+        def tokens(text):
+            raw = set(_re.findall(r'[a-z]{3,}', text))
+            return raw - STOPWORDS
+
+        ta = tokens(content_a)
+        tb = tokens(content_b)
+        overlap = ta & tb
+
+        if not overlap:
             return None
+
+        # Negation signals contradiction
+        NEG = {"not","never","impossible","fails","wrong","false","contra","against","unlike"}
+        neg_a = bool(ta & NEG)
+        neg_b = bool(tb & NEG)
+
+        if neg_a != neg_b:
+            relation = "contradicts"
+            confidence = 0.55 + min(0.2, len(overlap) * 0.04)
+        elif len(overlap) >= 3:
+            relation = "reinforces"
+            confidence = 0.5 + min(0.3, len(overlap) * 0.05)
+        else:
+            relation = "analogous_to"
+            confidence = 0.45
+
+        return {"relation": relation, "confidence": round(confidence, 2)}
         try:
             import re
             match = re.search(r'\{[^}]+\}', result)

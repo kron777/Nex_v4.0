@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEX — Independence Panel</title>
+<style>
+  :root {
+    --bg: #0a0a0f; --panel: #111118; --border: #1e1e2e;
+    --green: #4ade80; --yellow: #facc15; --red: #f87171;
+    --blue: #60a5fa; --text: #e2e8f0; --muted: #64748b;
+    --accent: #a78bfa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 13px; padding: 20px; }
+  h1 { color: var(--accent); font-size: 16px; letter-spacing: 0.15em; margin-bottom: 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .card h2 { font-size: 10px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; margin-bottom: 10px; }
+  .stat-row { display: flex; justify-content: space-between; align-items: center; margin: 6px 0; }
+  .stat-label { color: var(--muted); }
+  .stat-val { font-weight: bold; }
+  .green { color: var(--green); }
+  .yellow { color: var(--yellow); }
+  .red { color: var(--red); }
+  .bar-track { background: #1e1e2e; border-radius: 4px; height: 6px; width: 100%; margin: 4px 0 10px; }
+  .bar-fill { height: 6px; border-radius: 4px; background: var(--accent); transition: width 0.6s ease; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .dot-green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot-yellow { background: var(--yellow); }
+  .dot-red { background: var(--red); }
+  .tension-list { max-height: 120px; overflow-y: auto; }
+  .tension-item { font-size: 11px; color: var(--muted); border-left: 2px solid var(--accent); padding-left: 8px; margin: 4px 0; }
+  .full-width { grid-column: 1 / -1; }
+  button { background: #1e1e2e; border: 1px solid var(--border); color: var(--text); padding: 6px 14px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 12px; }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  .refresh-row { display: flex; gap: 8px; margin-top: 10px; }
+  #log { font-size: 11px; color: var(--muted); max-height: 80px; overflow-y: auto; }
+</style>
+</head>
+<body>
+<h1>⬡ NEX — INDEPENDENCE PANEL</h1>
+<div class="grid" id="dashboard">
+
+  <div class="card">
+    <h2>Belief Corpus</h2>
+    <div class="stat-row">
+      <span class="stat-label">Total beliefs</span>
+      <span class="stat-val" id="belief-count">—</span>
+    </div>
+    <div class="bar-track"><div class="bar-fill" id="belief-bar" style="width:0%"></div></div>
+    <div class="stat-row">
+      <span class="stat-label">Target (800)</span>
+      <span class="stat-val" id="belief-pct">—</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Opinions formed</span>
+      <span class="stat-val" id="opinion-count">—</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>LLM Independence</h2>
+    <div class="stat-row">
+      <span class="stat-label">NexVoice active</span>
+      <span class="stat-val" id="nv-status">—</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Groq calls remaining</span>
+      <span class="stat-val" id="groq-status">—</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">brain.py wired</span>
+      <span class="stat-val" id="brain-status">—</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Templates removed</span>
+      <span class="stat-val" id="template-status">—</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Identity Tables</h2>
+    <div class="stat-row">
+      <span class="stat-label">nex_values</span>
+      <span class="stat-val" id="val-count">—</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">nex_identity</span>
+      <span class="stat-val" id="id-count">—</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">nex_intentions</span>
+      <span class="stat-val" id="int-count">—</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Active Tensions</h2>
+    <div class="stat-row">
+      <span class="stat-label">Unresolved</span>
+      <span class="stat-val" id="tension-count">—</span>
+    </div>
+    <div class="tension-list" id="tension-list"></div>
+  </div>
+
+  <div class="card full-width">
+    <h2>Crawl Activity</h2>
+    <div class="stat-row">
+      <span class="stat-label">Curiosity queue</span>
+      <span class="stat-val" id="queue-count">—</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Gaps identified</span>
+      <span class="stat-val" id="gap-count">—</span>
+    </div>
+    <div class="refresh-row">
+      <button onclick="fetchStatus()">↻ Refresh</button>
+      <button onclick="triggerDrain()">⬇ Drain (30)</button>
+      <button onclick="triggerReflect()">◎ Reflect</button>
+      <button onclick="triggerOpinions()">💬 Opinions</button>
+    </div>
+    <div id="log" style="margin-top:8px"></div>
+  </div>
+
+</div>
+
+<script>
+const API = window.location.origin;  // assumes HUD served by nex backend
+
+function setVal(id, val, colorClass) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = val;
+  el.className = "stat-val " + (colorClass || "");
+}
+
+function dot(ok) {
+  return `<span class="status-dot ${ok ? 'dot-green' : 'dot-red'}"></span>${ok ? "YES" : "NO"}`;
+}
+
+async function fetchStatus() {
+  try {
+    const r = await fetch(`${API}/api/weaning_status`);
+    const d = await r.json();
+
+    const bc = d.belief_count || 0;
+    const pct = Math.min(100, Math.round(bc / 800 * 100));
+    setVal("belief-count", bc, bc >= 500 ? "green" : bc >= 200 ? "yellow" : "red");
+    setVal("belief-pct",   pct + "%", pct >= 60 ? "green" : "yellow");
+    document.getElementById("belief-bar").style.width = pct + "%";
+
+    setVal("opinion-count", d.opinion_count || 0, (d.opinion_count||0) >= 5 ? "green" : "yellow");
+
+    document.getElementById("nv-status").innerHTML      = dot(d.nexvoice_present);
+    document.getElementById("groq-status").innerHTML    = dot(!d.groq_remaining);
+    document.getElementById("brain-status").innerHTML   = dot(d.brain_wired);
+    document.getElementById("template-status").innerHTML= dot(d.templates_removed);
+
+    setVal("val-count", d.values_count || 0, (d.values_count||0) > 0 ? "green" : "red");
+    setVal("id-count",  d.identity_count || 0, (d.identity_count||0) > 0 ? "green" : "red");
+    setVal("int-count", d.intentions_count || 0, (d.intentions_count||0) > 0 ? "green" : "red");
+
+    setVal("tension-count", d.tension_count || 0, "yellow");
+    const tl = document.getElementById("tension-list");
+    tl.innerHTML = (d.tensions || []).slice(0, 5).map(t =>
+      `<div class="tension-item">${t}</div>`).join("");
+
+    setVal("queue-count", d.queue_count || 0);
+    setVal("gap-count",   d.gap_count   || 0);
+  } catch(e) {
+    log("Status fetch failed — is nex backend running? " + e.message);
+  }
+}
+
+async function triggerDrain() {
+  log("Drain triggered…");
+  try {
+    const r = await fetch(`${API}/api/drain`, { method: "POST", body: JSON.stringify({count: 30}), headers: {"Content-Type":"application/json"} });
+    const d = await r.json();
+    log("Drain: " + JSON.stringify(d));
+    fetchStatus();
+  } catch(e) { log("Drain error: " + e.message); }
+}
+
+async function triggerReflect() {
+  log("Reflection tick…");
+  try {
+    const r = await fetch(`${API}/api/reflect`, { method: "POST" });
+    const d = await r.json();
+    log("Reflect: " + JSON.stringify(d));
+  } catch(e) { log("Reflect error: " + e.message); }
+}
+
+async function triggerOpinions() {
+  log("Forming opinions…");
+  try {
+    const r = await fetch(`${API}/api/opinions`, { method: "POST" });
+    const d = await r.json();
+    log("Opinions: " + JSON.stringify(d));
+    fetchStatus();
+  } catch(e) { log("Opinions error: " + e.message); }
+}
+
+function log(msg) {
+  const el = document.getElementById("log");
+  el.innerHTML = `<span style="color:var(--accent)">[${new Date().toLocaleTimeString()}]</span> ${msg}<br>` + el.innerHTML;
+}
+
+fetchStatus();
+setInterval(fetchStatus, 30000);
+</script>
+</body>
+</html>

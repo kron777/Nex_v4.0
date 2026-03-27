@@ -105,6 +105,17 @@ class AgentBrain:
     def chat(self, user_message: str,
              belief_state: dict = None,
              stream_cb: Optional[Callable] = None) -> str:
+        # ── NexVoice primary path ─────────────────────────────────
+        try:
+            from nex.nex_voice import NexVoiceCompositor as _NexVoice
+            _nv = _NexVoice()
+            _nv_msg = user_message if isinstance(user_message, str) else str(user_message)
+            _nv_reply = _nv.compose(_nv_msg)
+            if _nv_reply and len(_nv_reply.strip()) > 20:
+                return _nv_reply
+        except Exception:
+            pass  # fall through to llama
+        # ──────────────────────────────────────────────────────────────
         """
         Main entry point. belief_state is injected as Nex's live context.
         If a list of questions is detected, each is answered individually.
