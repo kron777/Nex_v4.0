@@ -75,3 +75,4 @@ nex_sales_ledger.jsonl
 .patch_backup_*/
 .patch_backup_*/
 .backup_*
+.backup_*
