@@ -106,31 +106,80 @@ def _group_beliefs_by_topic(beliefs: list) -> dict:
     return grouped
 
 
+
+def _clean(text: str) -> str:
+    """Strip Wikipedia markdown artifacts from crawled belief text."""
+    import re as _re
+    # Remove citation links like [](https://...) or [text](https://...)
+    text = _re.sub(r'\[.*?\]\(https?://[^\)]*\)', '', text)
+    # Remove bare URLs
+    text = _re.sub(r'https?://\S+', '', text)
+    # Remove [edit], [merged:N], [citation needed] etc
+    text = _re.sub(r'\[edit\]', '', text)
+    text = _re.sub(r'\[merged:\d+\]', '', text)
+    text = _re.sub(r'\[citation needed\]', '', text)
+    text = _re.sub(r'\[\d+\]', '', text)
+    # Remove lines that are just Wikipedia navigation/meta text
+    lines = []
+    skip_phrases = [
+        "This article may be too technical",
+        "If the page has been deleted",
+        "Please search for",
+        "Search for ",
+        "Artist styles",
+        "\[edit\]",
+        "citenote",
+    ]
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if any(p in stripped for p in skip_phrases):
+            continue
+        if len(stripped) < 20:
+            continue
+        lines.append(stripped)
+    text = ' '.join(lines)
+    # Collapse whitespace
+    text = _re.sub(r'  +', ' ', text).strip()
+    # Truncate at first double pipe (used in merged beliefs)
+    if ' || ' in text:
+        text = text.split(' || ')[0].strip()
+    return text
+
 def _synthesize_opinion(topic: str, belief_list: list) -> str:
     """
     Build a position statement purely from belief content.
-    No LLM. No templates. Uses highest-confidence beliefs as the core claim,
-    then weaves in any contradicting signals.
+    No LLM. No templates. Cleans Wikipedia artifacts before composing.
     """
-    high  = sorted([b for b in belief_list if b.get("confidence", 0.5) >= 0.7],
-                   key=lambda x: x["confidence"], reverse=True)
-    low   = [b for b in belief_list if b.get("confidence", 0.5) < 0.5]
-    mid   = [b for b in belief_list if 0.5 <= b.get("confidence", 0.5) < 0.7]
+    def _pick_clean(beliefs):
+        """Pick the first belief whose cleaned content is usable."""
+        for b in beliefs:
+            text = _clean(b.get("content", ""))
+            if len(text) > 30 and not any(p in text for p in [
+                "This article", "If the page", "Search for", "Please search",
+                "Wikipedia does not", "citenote", "[edit]"
+            ]):
+                return text
+        return None
 
-    if not high and not mid:
-        if belief_list:
-            return belief_list[0]["content"].rstrip(".") + "."
+    high = sorted([b for b in belief_list if b.get("confidence", 0.5) >= 0.7],
+                  key=lambda x: x["confidence"], reverse=True)
+    low  = [b for b in belief_list if b.get("confidence", 0.5) < 0.5]
+    mid  = [b for b in belief_list if 0.5 <= b.get("confidence", 0.5) < 0.7]
+
+    core   = _pick_clean(high or mid)
+    second = _pick_clean((high + mid)[1:]) if len(high + mid) > 1 else None
+    contra = _pick_clean(low) if low else None
+
+    if not core:
         return ""
 
-    core   = (high or mid)[0]["content"].rstrip(".")
-    second = ((high + mid)[1]["content"].rstrip(".")) if len(high + mid) > 1 else None
-    contra = low[0]["content"].rstrip(".") if low else None
-
-    parts = [f"On {topic}: {core}."]
-    if second:
-        parts.append(f"I also hold that {second}.")
-    if contra:
-        parts.append(f"Though I sit with a tension here — {contra}.")
+    parts = [f"On {topic}: {core.rstrip('.')}."]
+    if second and second != core:
+        parts.append(f"I also hold that {second.rstrip('.')}.")
+    if contra and contra != core:
+        parts.append(f"Though I sit with a tension here — {contra.rstrip('.')}.")
 
     return " ".join(parts)
 
