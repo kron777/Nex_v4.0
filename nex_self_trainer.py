@@ -281,10 +281,149 @@ def _build_proposal_message(suggested: str, stats: dict, new_beliefs: int) -> st
 # Telegram command handler — wire into nex_telegram_commands.py
 # ─────────────────────────────────────────────────────────────────────────────
 
-TRAIN_COMMANDS = {"/light", "/medium", "/heavy", "/havok", "/notrain"}
+TRAIN_COMMANDS = {"/light", "/medium", "/heavy", "/havok", "/notrain", "/train", "/beliefs", "/digest"}
 
+
+
+
+def _db_belief_count():
+    try:
+        import sqlite3
+        from pathlib import Path as _P
+        con = sqlite3.connect(_P("~/.config/nex/nex.db").expanduser())
+        n = con.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+        con.close()
+        return n
+    except Exception:
+        return 0
+
+
+def _crawl_topic_bg(topic, url, send_fn):
+    """Crawl one topic in background thread, send Telegram updates."""
+    import sys, threading
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).parent))
+
+    def _run():
+        before = _db_belief_count()
+        try:
+            from nex.nex_crawler import NexCrawler, _resolve_search_url
+            from nex.belief_store import get_db
+            crawler = NexCrawler(belief_store=get_db)
+            resolved = url or _resolve_search_url(topic)
+            crawler.on_knowledge_gap(topic=topic, search_url=resolved)
+            gained = _db_belief_count() - before
+            after  = _db_belief_count()
+            if gained > 0:
+                send_fn(f"✓ {topic}\n+{gained} beliefs (db={after})")
+                try:
+                    from nex.nex_opinions import refresh_opinions
+                    n_op = refresh_opinions()
+                    if n_op > 0:
+                        send_fn(f"🧠 {n_op} opinion(s) updated")
+                except Exception:
+                    pass
+            else:
+                send_fn(f"⚠ {topic} — 0 new beliefs (already known or source empty)")
+        except Exception as e:
+            send_fn(f"❌ {topic}: {str(e)[:120]}")
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+def _handle_train_command(text, send_fn):
+    """
+    Handle /train <topic or URL>
+    Examples:
+      /train phenomenology of consciousness
+      /train goodhart law, sycophancy, ELK
+      /train https://arxiv.org/abs/2301.07597
+      /beliefs          — show belief count + top topics
+      /digest           — run opinions + tensions + reflect now
+    """
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).parent))
+
+    parts = text.strip().split(None, 1)
+    cmd   = parts[0].lower()
+    arg   = parts[1].strip() if len(parts) > 1 else ""
+
+    if cmd == "/beliefs":
+        try:
+            import sqlite3
+            con = sqlite3.connect(_P("~/.config/nex/nex.db").expanduser())
+            total = con.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+            topics = con.execute(
+                "SELECT topic, COUNT(*) as n FROM beliefs GROUP BY topic ORDER BY n DESC LIMIT 10"
+            ).fetchall()
+            con.close()
+            lines = [f"🧠 <b>Belief Status</b>", f"Total: {total}", ""]
+            lines += [f"  {n:3d}  {t}" for t, n in topics]
+            send_fn("\n".join(lines))
+        except Exception as e:
+            send_fn(f"❌ {e}")
+        return
+
+    if cmd == "/digest":
+        send_fn("⚙️ Running digest (opinions + tensions + reflect)...")
+        try:
+            from nex.nex_opinions import refresh_opinions
+            ops = refresh_opinions()
+        except Exception:
+            ops = 0
+        try:
+            from nex.nex_contradiction_resolver import detect_and_log
+            tens = detect_and_log(limit=500, max_new=20)
+        except Exception:
+            tens = 0
+        try:
+            from nex.nex_reflect import reflect_tick
+            ref = reflect_tick()
+        except Exception:
+            ref = 0
+        send_fn(f"✓ Digest complete\nOpinions: {ops}  Tensions: {tens}  Reflect: {ref}")
+        return
+
+    if cmd == "/train":
+        if not arg:
+            send_fn("Usage:\n/train <topic>\n/train <topic1>, <topic2>\n/train https://...")
+            return
+
+        # URL direct crawl
+        if arg.startswith("http://") or arg.startswith("https://"):
+            send_fn(f"🔗 Crawling URL directly...\n{arg[:60]}")
+            _crawl_topic_bg(arg, arg, send_fn)
+            return
+
+        # Comma-separated topics
+        raw_topics = [t.strip() for t in arg.split(",") if t.strip()]
+        if not raw_topics:
+            send_fn("❌ No topics found in message")
+            return
+
+        send_fn(f"🧠 Training on {len(raw_topics)} topic(s):\n" +
+                "\n".join(f"  • {t}" for t in raw_topics))
+
+        # Inject into curiosity queue and crawl each
+        import json
+        from pathlib import Path as _P
+
+        # Clear cooldown for these specific topics
+        qf = _P("~/.config/nex/curiosity_queue.json").expanduser()
+
+        for topic in raw_topics:
+            _crawl_topic_bg(topic, None, send_fn)
+
+        return
+
+    send_fn(f"Unknown command: {cmd}")
 
 def handle_training_command(text: str, send_fn) -> bool:
+    cmd = text.strip().lower().split()[0] if text.strip() else ""
+    if cmd in {"/train", "/beliefs", "/digest"}:
+        _handle_train_command(text, send_fn)
+        return
     """
     Call this from the Telegram message handler BEFORE normal Nex reply.
     Returns True if the message was a training command (suppress normal reply).
