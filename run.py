@@ -2097,6 +2097,17 @@ def main():
                                     except Exception: pass
                         except Exception as _cqe:
                             print(f"  [CuriosityDrain] error: {_cqe}")
+                        # ── Digest before reply — opinions + tensions must precede speaking ──
+                        try:
+                            from nex.nex_opinions import refresh_opinions as _rop
+                            _rop()
+                        except Exception:
+                            pass
+                        try:
+                            from nex.nex_contradiction_resolver import detect_and_log as _dal
+                            _dal(limit=200, max_new=10)
+                        except Exception:
+                            pass
                         emit_phase("REPLY", 120); nex_log("phase", "▶ REPLY — scanning posts")
                         # ── Live belief count for prompts (cheap — just len of in-memory field) ──
                         try:
