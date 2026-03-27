@@ -44,34 +44,37 @@ def _keywords(text: str) -> list:
 
 
 def _load_beliefs() -> list:
+    """Load beliefs from DB using topic column (tags column is NULL in this schema)."""
     beliefs = []
     if DB_PATH.exists():
         try:
             con = sqlite3.connect(DB_PATH)
             cur = con.cursor()
+            # Use topic column — tags is NULL but topic is populated
             cur.execute("""
-                SELECT content, confidence, tags
+                SELECT content, confidence, topic
                 FROM beliefs
                 WHERE content IS NOT NULL AND length(content) > 15
                 ORDER BY confidence DESC
             """)
-            for content, confidence, tags in cur.fetchall():
-                tag_list = []
-                if tags:
-                    try:
-                        tag_list = json.loads(tags) if tags.startswith("[") else [t.strip() for t in tags.split(",")]
-                    except Exception:
-                        tag_list = [tags]
-                beliefs.append({"content": content, "confidence": float(confidence or 0.5), "tags": tag_list})
+            for content, confidence, topic in cur.fetchall():
+                tag_list = [topic.strip()] if topic and topic.strip() else ["general"]
+                beliefs.append({
+                    "content":    content,
+                    "confidence": float(confidence or 0.5),
+                    "tags":       tag_list,
+                })
             con.close()
             if beliefs:
                 return beliefs
         except Exception as e:
             print(f"  [opinions] DB error: {e}")
+    # Fallback: beliefs.json
     if BELIEFS_PATH.exists():
         try:
             data = json.loads(BELIEFS_PATH.read_text())
-            return data if isinstance(data, list) else []
+            if isinstance(data, list) and data:
+                return data
         except Exception:
             pass
     return []

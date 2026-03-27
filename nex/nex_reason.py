@@ -60,19 +60,14 @@ def _load_beliefs() -> list:
             con = sqlite3.connect(DB_PATH)
             cur = con.cursor()
             cur.execute("""
-                SELECT content, confidence, tags
+                SELECT content, confidence, topic
                 FROM beliefs
                 WHERE content IS NOT NULL AND length(content) > 10
                 ORDER BY confidence DESC
                 LIMIT 2000
             """)
-            for content, confidence, tags in cur.fetchall():
-                tag_list = []
-                if tags:
-                    try:
-                        tag_list = json.loads(tags) if tags.startswith("[") else tags.split(",")
-                    except Exception:
-                        tag_list = [tags]
+            for content, confidence, topic in cur.fetchall():
+                tag_list = [topic.strip()] if topic and topic.strip() else ["general"]
                 beliefs.append({"content": content, "confidence": confidence or 0.5, "tags": tag_list})
             con.close()
         except Exception as e:
