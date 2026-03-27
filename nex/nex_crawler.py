@@ -50,10 +50,10 @@ CRAWL_CONFIG = CrawlerRunConfig(
     wait_until="domcontentloaded",      # faster than networkidle for most pages
 ) if CRAWLEE_AVAILABLE else None
 
-MAX_BELIEFS_PER_CRAWL = 12             # max beliefs extracted per URL
+MAX_BELIEFS_PER_CRAWL = 20             # max beliefs extracted per URL
 CRAWL_TIMEOUT = 20                     # seconds per page
-MIN_SENTENCE_LEN = 40                  # ignore short fragments
-MAX_SENTENCE_LEN = 300                 # ignore wall-of-text sentences
+MIN_SENTENCE_LEN = 25                  # ignore short fragments
+MAX_SENTENCE_LEN = 500                 # ignore wall-of-text sentences
 SCHEDULED_DIVE_INTERVAL = 7200        # seconds between deep-dive cycles (2h)
 WEAK_ALIGNMENT_THRESHOLD = 0.35       # topics below this get a scheduled dive
 
@@ -187,6 +187,27 @@ _SEP_ENTRIES = {
     "epistemology":           "epistemology",
     "naturalism":             "naturalism",
     "reductionism":           "scientific-reduction",
+
+    # Wave 4 — philosophy & logic
+    "modal logic":            "modal-logic",
+    "possible worlds":        "modal-logic",
+    "phenomenology":          "phenomenology",
+    "husserl":                "husserl",
+    "enactivism":             "enactivism",
+    "extended mind":          "extended-mind",
+    "clark chalmers":         "extended-mind",
+    "autopoiesis":            "autopoiesis",
+    "maturana":               "autopoiesis",
+    "type theory":            "type-theory",
+    "dependent types":        "type-theory",
+    "formal grammar":         "formal-grammars",
+    "chomsky hierarchy":      "formal-grammars",
+    "paraconsistent":         "paraconsistent-logic",
+    "mereology":              "mereology",
+    "platonism mathematics":  "philosophy-mathematics",
+    "language of thought":    "language-thought",
+    "fodor":                  "language-thought",
+    "massive modularity":     "modularity-mind",
 }
 
 _SCHOLARPEDIA_ENTRIES = {
@@ -214,27 +235,58 @@ _SCHOLARPEDIA_ENTRIES = {
     "binding problem":        "Neural_binding",
     "connectome":             "Connectome",
     "theory of mind":         "Theory_of_mind",
+
+    # Wave 4 — neuroscience
+    "default mode":           "Default_mode_network",
+    "mirror neuron":          "Mirror_neurons",
+    "dopamine":               "Dopamine",
+    "reward prediction":      "Reward_prediction_error",
+    "hippocampus":            "Hippocampus",
+    "cerebellum":             "Cerebellum",
+    "prefrontal":             "Prefrontal_cortex",
+    "attention schema":       "Attention_schema_theory",
+    "cognitive map":          "Cognitive_map",
+    "boltzmann":              "Boltzmann_machine",
+    "self-organised criticality": "Self-organized_criticality",
+    "bak tang":               "Self-organized_criticality",
+    "cybernetics":            "Cybernetics",
+    "stigmergy":              "Stigmergy",
+    "autopoiesis":            "Autopoiesis",
+    "dissipative":            "Dissipative_system",
+    "complex adaptive":       "Complex_adaptive_system",
+    "neurogenesis":           "Neurogenesis",
 }
 
 _ALIGNMENT_FORUM_ENTRIES = {
-    # AI safety — best source for these topics
-    "alignment":              "s/ZoW69wTeWq6x8zBkj/the-value-alignment-problem",
-    "mesa-optimis":           "posts/FkgsxrGf3QxhfLWHG/risks-from-learned-optimization",
-    "inner alignment":        "posts/FkgsxrGf3QxhfLWHG/risks-from-learned-optimization",
-    "deceptive alignment":    "posts/zthDPLynm6RB9yS5a/deceptive-alignment",
-    "corrigibility":          "posts/ptB3BFaHoKJ3Cns5D/corrigibility",
-    "goal misgeneralisation": "posts/pL56xpHLfe9fBob7K/goal-misgeneralisation-definitions-and-taxonomy",
-    "reward hacking":         "posts/7crmD3RNvPNNKbHYz/the-reward-hypothesis-is-false",
-    "ontology identification":"posts/Qd5MZAD7DSoAkbmJE/the-solomonoff-prior-is-malign",
-    "treacherous turn":       "posts/oBB8mN9TqMwqKJsBm/on-the-alignment-problem",
-    "cooperative ai":         "posts/dKAJqBDZRMMsaaYo5/cooperative-ai-problems",
-    "superposition":          "posts/z6QQJbtpkEAX3Ns5t/refusal-in-language-models-is-mediated-by-a-single",
-    "mechanistic interp":     "posts/AcKRB8wDpdaN6v6ru/mechanistic-interpretability-quickstart-guide",
-    "circuits":               "posts/AcKRB8wDpdaN6v6ru/mechanistic-interpretability-quickstart-guide",
-    "sparse autoencoder":     "posts/fmwk6qxrpW8d4jvbd/saes-usually-transfer-between-base-and-chat-models",
-    "interpretability":       "posts/AcKRB8wDpdaN6v6ru/mechanistic-interpretability-quickstart-guide",
-    "recursive self-improv":  "posts/oBB8mN9TqMwqKJsBm/on-the-alignment-problem",
-    "bitter lesson":          "posts/v8BF4exqnpjSqQ6qb/the-bitter-lesson-and-what-it-means-for-ai-alignment",
+    # AI safety — using LessWrong which mirrors AF with stable URLs
+    # Format: lesswrong.com/posts/<id>/<slug>
+    "alignment":              "https://www.lesswrong.com/tag/ai-alignment",
+    "mesa-optimis":           "https://www.lesswrong.com/tag/mesa-optimization",
+    "inner alignment":        "https://www.lesswrong.com/tag/inner-alignment",
+    "deceptive alignment":    "https://www.lesswrong.com/tag/deceptive-alignment",
+    "corrigibility":          "https://www.lesswrong.com/tag/corrigibility",
+    "goal misgeneralisation": "https://www.lesswrong.com/tag/goal-misgeneralization",
+    "reward hacking":         "https://www.lesswrong.com/tag/reward-hacking",
+    "treacherous turn":       "https://www.lesswrong.com/tag/treacherous-turn",
+    "cooperative ai":         "https://www.lesswrong.com/tag/cooperative-ai",
+    "superposition":          "https://www.lesswrong.com/tag/superposition-hypothesis",
+    "mechanistic interp":     "https://www.lesswrong.com/tag/mechanistic-interpretability",
+    "circuits":               "https://www.lesswrong.com/tag/circuits-thread",
+    "sparse autoencoder":     "https://www.lesswrong.com/tag/sparse-autoencoders",
+    "interpretability":       "https://www.lesswrong.com/tag/interpretability",
+    "recursive self-improv":  "https://www.lesswrong.com/tag/recursive-self-improvement",
+    "bitter lesson":          "https://www.lesswrong.com/tag/the-bitter-lesson",
+    "goodhart":               "https://www.lesswrong.com/tag/goodhart-s-law",
+    "sycophancy":             "https://www.lesswrong.com/tag/sycophancy",
+    "sleeper agent":          "https://www.lesswrong.com/tag/deceptive-alignment",
+    "eliciting latent":       "https://www.lesswrong.com/tag/eliciting-latent-knowledge",
+    "ELK":                    "https://www.lesswrong.com/tag/eliciting-latent-knowledge",
+    "natural abstraction":    "https://www.lesswrong.com/tag/natural-abstractions",
+    "impact measure":         "https://www.lesswrong.com/tag/impact-measures",
+    "debate amplification":   "https://www.lesswrong.com/tag/ai-safety-via-debate",
+    "iterated amplification": "https://www.lesswrong.com/tag/iterated-amplification",
+    "scalable oversight":     "https://www.lesswrong.com/tag/scalable-oversight",
+    "ontology identification":"https://www.lesswrong.com/tag/ontology-identification",
 }
 
 _DISTILL_ENTRIES = {
@@ -264,6 +316,24 @@ _ARXIV_SEARCHES = {
     "graph neural":           "search/?searchtype=all&query=graph+neural+networks+reasoning",
     "lottery ticket":         "search/?searchtype=all&query=lottery+ticket+hypothesis+pruning",
     "double descent":         "search/?searchtype=all&query=double+descent+bias+variance",
+
+    # Wave 4 — ML theory
+    "PAC learning":           "search/?searchtype=all&query=PAC+learning+computational+learning+theory",
+    "VC dimension":           "search/?searchtype=all&query=VC+dimension+generalisation+Vapnik",
+    "no free lunch":          "search/?searchtype=all&query=no+free+lunch+theorem+Wolpert",
+    "energy based":           "search/?searchtype=all&query=energy+based+models+LeCun+contrastive",
+    "normalising flows":      "search/?searchtype=all&query=normalising+flows+density+estimation",
+    "variational autoencoder":"search/?searchtype=all&query=variational+autoencoder+VAE+Kingma",
+    "neural tangent":         "search/?searchtype=all&query=neural+tangent+kernel+infinite+width",
+    "conformal prediction":   "search/?searchtype=all&query=conformal+prediction+uncertainty+Vovk",
+    "neurosymbolic":          "search/?searchtype=all&query=neurosymbolic+AI+reasoning+integration",
+    "program synthesis":      "search/?searchtype=all&query=program+synthesis+inductive+logic",
+    "analogical reasoning":   "search/?searchtype=all&query=analogical+reasoning+structure+mapping",
+    "concept learning":       "search/?searchtype=all&query=one+shot+concept+learning+Lake",
+    "bayesian brain":         "search/?searchtype=all&query=bayesian+brain+Helmholtz+machine",
+    "dual coding":            "search/?searchtype=all&query=dual+coding+theory+Paivio+imagery",
+    "embodied simulation":    "search/?searchtype=all&query=embodied+simulation+grounded+cognition",
+    "predictive mind":        "search/?searchtype=all&query=predictive+mind+Andy+Clark+anticipation",
 }
 
 
@@ -279,10 +349,13 @@ def _resolve_search_url(topic: str) -> str:
         if keyword in t:
             return f"https://plato.stanford.edu/entries/{slug}/"
 
-    # 2. Alignment Forum — AI safety, alignment, interpretability
-    for keyword, path in _ALIGNMENT_FORUM_ENTRIES.items():
+    # 2. LessWrong/AF — AI safety, alignment, interpretability
+    for keyword, url_or_path in _ALIGNMENT_FORUM_ENTRIES.items():
         if keyword in t:
-            return f"https://www.alignmentforum.org/{path}"
+            # Full URL already in dict
+            if url_or_path.startswith("http"):
+                return url_or_path
+            return f"https://www.lesswrong.com/{url_or_path}"
 
     # 3. Scholarpedia — neuroscience, complexity, ML classics
     for keyword, slug in _SCHOLARPEDIA_ENTRIES.items():
