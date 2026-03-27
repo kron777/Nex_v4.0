@@ -921,8 +921,31 @@ def get_compositor() -> NexVoiceCompositor:
     return _compositor
 
 def compose(user_input: str) -> str:
-    """Module-level shortcut for brain.py / synthesizer to call."""
-    return get_compositor().compose(user_input)
+    """Module-level shortcut — NexVoice compositor with conversational fallback."""
+    import time
+    # Nex pauses before responding — she thinks, not reacts
+    time.sleep(3)
+    # Try NexVoice compositor
+    try:
+        result = get_compositor().compose(user_input)
+        if (result and isinstance(result, str) and len(result.strip()) > 15
+                and "bayesian belief updating" not in result.lower()[:60]
+                and "what i haven" not in result.lower()[:30]
+                and "i don't have enough" not in result.lower()[:40]):
+            return result
+    except Exception:
+        pass
+    # Conversational wrapper fallback
+    try:
+        from nex.nex_voice_wrapper import compose_reply
+        return compose_reply(user_input)
+    except ImportError:
+        try:
+            from nex_voice_wrapper import compose_reply
+            return compose_reply(user_input)
+        except ImportError:
+            pass
+    return "Still processing. Ask me something else."
 
 
 # ── CLI ────────────────────────────────────────────────────────────────
