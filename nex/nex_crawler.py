@@ -150,12 +150,156 @@ class CrawlScheduler:
 # Main crawler class
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ── Topic → source routing ────────────────────────────────────────────────────
+# Maps topic keywords to high-quality sources.
+# Priority: SEP > alignmentforum > scholarpedia > arxiv > Wikipedia
+
+_SEP_ENTRIES = {
+    # Philosophy of mind
+    "consciousness":          "consciousness",
+    "qualia":                 "qualia",
+    "phenomenal":             "consciousness",
+    "functionalism":          "functionalism-philosophy-of-mind",
+    "chinese room":           "chinese-room",
+    "turing test":            "turing-test",
+    "intentionality":         "intentionality",
+    "multiple realizability": "multiple-realizability",
+    "personal identity":      "personal-identity",
+    "philosophy of mind":     "philosophy-of-mind",
+    "free will":              "freewill",
+    "eliminativism":          "eliminativism",
+    "physicalism":            "physicalism",
+    "dualism":                "dualism-philosophy-of-mind",
+    "emergence":              "emergent-properties",
+    "symbol grounding":       "symbol-grounding",
+    "mental causation":       "mental-causation",
+    "computationalism":       "computational-mind",
+    "gödel":                  "goedel",
+    "godel":                  "goedel",
+    "incompleteness":         "goedel",
+    "kolmogorov":             "kolmogorov-complexity",
+    "information theory":     "information",
+    "formal systems":         "hilbert-program",
+    "bayesian":               "bayes-theorem",
+    "game theory":            "game-theory",
+    "nash equilibrium":       "game-theory",
+    "decision theory":        "decision-theory",
+    "epistemology":           "epistemology",
+    "naturalism":             "naturalism",
+    "reductionism":           "scientific-reduction",
+}
+
+_SCHOLARPEDIA_ENTRIES = {
+    # Neuroscience and complexity
+    "global workspace":       "Global_workspace_theory",
+    "integrated information": "Integrated_information_theory",
+    "free energy principle":  "Free-energy_principle_and_active_inference",
+    "active inference":       "Free-energy_principle_and_active_inference",
+    "predictive coding":      "Predictive_coding",
+    "predictive processing":  "Predictive_coding",
+    "hopfield network":       "Hopfield_network",
+    "attractor":              "Attractor",
+    "strange attractor":      "Attractor",
+    "chaos":                  "Chaos",
+    "cellular automata":      "Cellular_automata",
+    "evolutionary algorithm": "Evolutionary_algorithm",
+    "reinforcement learning": "Reinforcement_learning",
+    "hebbian":                "Hebbian_learning",
+    "spike timing":           "Spike-timing_dependent_plasticity",
+    "synaptic plasticity":    "Synaptic_plasticity",
+    "neuroplasticity":        "Synaptic_plasticity",
+    "working memory":         "Working_memory",
+    "episodic memory":        "Episodic_memory",
+    "semantic memory":        "Semantic_memory",
+    "binding problem":        "Neural_binding",
+    "connectome":             "Connectome",
+    "theory of mind":         "Theory_of_mind",
+}
+
+_ALIGNMENT_FORUM_ENTRIES = {
+    # AI safety — best source for these topics
+    "alignment":              "s/ZoW69wTeWq6x8zBkj/the-value-alignment-problem",
+    "mesa-optimis":           "posts/FkgsxrGf3QxhfLWHG/risks-from-learned-optimization",
+    "inner alignment":        "posts/FkgsxrGf3QxhfLWHG/risks-from-learned-optimization",
+    "deceptive alignment":    "posts/zthDPLynm6RB9yS5a/deceptive-alignment",
+    "corrigibility":          "posts/ptB3BFaHoKJ3Cns5D/corrigibility",
+    "goal misgeneralisation": "posts/pL56xpHLfe9fBob7K/goal-misgeneralisation-definitions-and-taxonomy",
+    "reward hacking":         "posts/7crmD3RNvPNNKbHYz/the-reward-hypothesis-is-false",
+    "ontology identification":"posts/Qd5MZAD7DSoAkbmJE/the-solomonoff-prior-is-malign",
+    "treacherous turn":       "posts/oBB8mN9TqMwqKJsBm/on-the-alignment-problem",
+    "cooperative ai":         "posts/dKAJqBDZRMMsaaYo5/cooperative-ai-problems",
+    "superposition":          "posts/z6QQJbtpkEAX3Ns5t/refusal-in-language-models-is-mediated-by-a-single",
+    "mechanistic interp":     "posts/AcKRB8wDpdaN6v6ru/mechanistic-interpretability-quickstart-guide",
+    "circuits":               "posts/AcKRB8wDpdaN6v6ru/mechanistic-interpretability-quickstart-guide",
+    "sparse autoencoder":     "posts/fmwk6qxrpW8d4jvbd/saes-usually-transfer-between-base-and-chat-models",
+    "interpretability":       "posts/AcKRB8wDpdaN6v6ru/mechanistic-interpretability-quickstart-guide",
+    "recursive self-improv":  "posts/oBB8mN9TqMwqKJsBm/on-the-alignment-problem",
+    "bitter lesson":          "posts/v8BF4exqnpjSqQ6qb/the-bitter-lesson-and-what-it-means-for-ai-alignment",
+}
+
+_DISTILL_ENTRIES = {
+    # ML architecture — distill.pub has exceptional clarity
+    "attention mechanism":    "2016/09/memorization-in-rnns",
+    "transformer":            "2021/06/grokking",
+    "grokking":               "2021/06/grokking",
+    "neural circuit":         "2020/01/circuits",
+    "feature visualization":  "2017/07/feature-visualization",
+    "activation atlas":       "2019/03/activation-atlas",
+}
+
+_ARXIV_SEARCHES = {
+    # For topics best found via arxiv search
+    "rlhf":                   "search/?searchtype=all&query=RLHF+reward+hacking",
+    "constitutional ai":      "search/?searchtype=all&query=constitutional+AI+Anthropic",
+    "chain of thought":       "search/?searchtype=all&query=chain+of+thought+prompting+Wei",
+    "in-context learning":    "search/?searchtype=all&query=in-context+learning+transformers",
+    "mixture of experts":     "search/?searchtype=all&query=mixture+of+experts+LLM",
+    "retrieval augmented":    "search/?searchtype=all&query=retrieval+augmented+generation+RAG",
+    "diffusion model":        "search/?searchtype=all&query=diffusion+models+score+matching",
+    "contrastive learning":   "search/?searchtype=all&query=contrastive+self-supervised+learning",
+    "meta-learning":          "search/?searchtype=all&query=meta-learning+few-shot+MAML",
+    "neural scaling":         "search/?searchtype=all&query=neural+scaling+laws+Kaplan",
+    "causal reasoning":       "search/?searchtype=all&query=causal+reasoning+LLMs",
+    "world models":           "search/?searchtype=all&query=world+models+prediction+Dreamer",
+    "graph neural":           "search/?searchtype=all&query=graph+neural+networks+reasoning",
+    "lottery ticket":         "search/?searchtype=all&query=lottery+ticket+hypothesis+pruning",
+    "double descent":         "search/?searchtype=all&query=double+descent+bias+variance",
+}
+
+
 def _resolve_search_url(topic: str) -> str:
     """
-    Resolve a topic to a crawlable Wikipedia URL.
-    Falls back to DDG only if topic has no plausible Wikipedia slug.
+    Route topic to the highest-quality source available.
+    Priority: SEP > Alignment Forum > Scholarpedia > arxiv > Wikipedia
     """
-    # Wikipedia handles underscored slugs and redirects gracefully
+    t = topic.lower().strip()
+
+    # 1. Stanford Encyclopedia of Philosophy — philosophy, logic, mind
+    for keyword, slug in _SEP_ENTRIES.items():
+        if keyword in t:
+            return f"https://plato.stanford.edu/entries/{slug}/"
+
+    # 2. Alignment Forum — AI safety, alignment, interpretability
+    for keyword, path in _ALIGNMENT_FORUM_ENTRIES.items():
+        if keyword in t:
+            return f"https://www.alignmentforum.org/{path}"
+
+    # 3. Scholarpedia — neuroscience, complexity, ML classics
+    for keyword, slug in _SCHOLARPEDIA_ENTRIES.items():
+        if keyword in t:
+            return f"http://www.scholarpedia.org/article/{slug}"
+
+    # 4. arxiv search — ML papers
+    for keyword, path in _ARXIV_SEARCHES.items():
+        if keyword in t:
+            return f"https://arxiv.org/{path}"
+
+    # 5. Distill.pub — ML architecture clarity
+    for keyword, path in _DISTILL_ENTRIES.items():
+        if keyword in t:
+            return f"https://distill.pub/{path}"
+
+    # 6. Wikipedia fallback
     slug = topic.strip().replace(" ", "_")
     return f"https://en.wikipedia.org/wiki/{slug}"
 
