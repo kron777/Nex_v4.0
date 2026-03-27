@@ -243,7 +243,7 @@ class Orchestrator:
                     self.beliefs.remove_domain(d.index)
 
     def _llm_resolve(self, prompt: str) -> str:
-        """U2 contradiction resolution via Ollama."""
+        """U2 contradiction resolution via token overlap (LLM-free)."""
         try:
             import urllib.request, json as _j
             payload = _j.dumps({

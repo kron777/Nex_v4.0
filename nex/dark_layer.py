@@ -75,29 +75,42 @@ def _get_dark_db():
 # ── Ollama call (low priority, small context) ─────────────────────────────────
 
 def _dark_llm(prompt):
-    """Minimal Ollama call for dark synthesis. No logging. No system prompt."""
+    """
+    LLM-free dark synthesis — finds non-obvious belief connections
+    via shared rare tokens (tokens appearing in exactly 2 beliefs).
+    """
+    import sqlite3, re as _re, collections
+    from pathlib import Path as _P
     try:
-        import requests
-        r = requests.post(
-            "http://localhost:8080/v1/chat/completions",
-            json={
-                "model": "mistral-abliterated",
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 80,
-                "temperature": 0.95,   # high temp = more lateral
-                "top_p": 0.95,
-            },
-            timeout=45
-        )
-        d = r.json()
-        if "choices" in d and d["choices"]:
-            return d["choices"][0]["message"]["content"].strip()
+        stop = {"the","a","an","is","are","was","were","be","to","of","in",
+                "on","at","by","for","with","as","that","this","it","its"}
+        p_words = set(_re.sub(r'[^a-z0-9 ]',' ',prompt.lower()).split()) - stop
+        con = sqlite3.connect(_P("~/.config/nex/nex.db").expanduser())
+        rows = con.execute(
+            "SELECT content FROM beliefs WHERE length(content)>30 ORDER BY confidence DESC LIMIT 300"
+        ).fetchall()
+        con.close()
+        # Word → beliefs mapping
+        word_beliefs = collections.defaultdict(list)
+        for i,(row,) in enumerate(rows):
+            for w in set(_re.sub(r'[^a-z0-9 ]',' ',row.lower()).split()) - stop:
+                word_beliefs[w].append(i)
+        # Find bridge words (in exactly 2 beliefs) that overlap with prompt
+        bridges = []
+        for w, idxs in word_beliefs.items():
+            if len(idxs) == 2 and w in p_words:
+                b1 = rows[idxs[0]][0][:80]
+                b2 = rows[idxs[1]][0][:80]
+                bridges.append(f"{b1} ↔ {b2}")
+        if bridges:
+            return bridges[0]
+        # Fallback: most overlapping belief
+        best = sorted([(len(set(_re.sub(r'[^a-z0-9 ]',' ',r[0].lower()).split()) & p_words), r[0])
+                       for r in rows], reverse=True)
+        return best[0][1][:200] if best else ""
     except Exception:
-        pass
-    return None
+        return ""
 
-
-# ── Core dark synthesis ───────────────────────────────────────────────────────
 
 def _run_dark_cycle():
     """

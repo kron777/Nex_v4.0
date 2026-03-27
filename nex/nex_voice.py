@@ -246,7 +246,7 @@ class BeliefRetriever:
     @classmethod
     def _is_garbage(cls, content: str) -> bool:
         c = content.strip()
-        if len(c) < 8:
+        if len(c) < 3:
             return True
         cl = c.lower()
         for g in cls.GARBAGE_SIGS:

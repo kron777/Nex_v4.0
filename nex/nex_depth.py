@@ -75,32 +75,34 @@ def _overlap(a: str, b: str) -> float:
     return len(wa & wb) / min(len(wa), len(wb))
 
 def _llm(prompt: str, max_tokens: int = 200) -> str:
-    """Call local llama-server. Returns response text or empty string."""
+    """LLM-free depth analysis — uses belief confidence scoring."""
+    import sqlite3, re as _re
+    from pathlib import Path as _P
     try:
-        import urllib.request
-        payload = json.dumps({
-            "prompt": prompt,
-            "n_predict": max_tokens,
-            "temperature": 0.6,
-            "stop": ["\n\n", "###"],
-        }).encode()
-        req = urllib.request.Request(
-            LLM_URL,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=15) as r:
-            data = json.loads(r.read())
-            return data.get("content", "").strip()
-    except Exception as e:
-        logger.warning(f"[depth] LLM call failed: {e}")
+        stop = {"the","a","an","is","are","was","were","be","to","of","in",
+                "on","at","by","for","with","as","that","this","it","its",
+                "i","you","we","they","he","she","what","how","why","which"}
+        words = set(_re.sub(r'[^a-z0-9 ]',' ',prompt.lower()).split()) - stop
+        if not words:
+            return ""
+        con = sqlite3.connect(_P("~/.config/nex/nex.db").expanduser())
+        rows = con.execute(
+            "SELECT content, confidence FROM beliefs ORDER BY confidence DESC LIMIT 500"
+        ).fetchall()
+        con.close()
+        scored = []
+        for content, conf in rows:
+            cwords = set(_re.sub(r'[^a-z0-9 ]',' ',content.lower()).split())
+            overlap = len(words & cwords)
+            if overlap >= 1:
+                scored.append((overlap, conf or 0.5, content))
+        if not scored:
+            return ""
+        scored.sort(key=lambda x: (-x[0], -x[1]))
+        return scored[0][2][:max_tokens * 4]
+    except Exception:
         return ""
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Database helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _get_beliefs(limit: int = 200) -> list[dict]:
     """Pull recent beliefs from SQLite for analysis."""

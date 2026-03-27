@@ -86,48 +86,26 @@ class AgentMemory:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _llm(prompt: str, max_tokens: int = 150) -> str:
+    """
+    LLM-free memory summarization.
+    Extracts the most information-dense sentence from the prompt context.
+    """
+    import re as _re
     try:
-        import urllib.request
-        payload = json.dumps({
-            "prompt": prompt,
-            "n_predict": max_tokens,
-            "temperature": 0.4,
-            "stop": ["\n\n", "###", "User:", "Human:"],
-        }).encode()
-        req = urllib.request.Request(
-            LLM_URL, data=payload,
-            headers={"Content-Type": "application/json"}, method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=15) as r:
-            return json.loads(r.read()).get("content", "").strip()
-    except Exception as e:
-        logger.warning(f"[memory] LLM call failed: {e}")
+        # Split prompt into sentences, score by length and information density
+        sentences = [s.strip() for s in _re.split(r'[.!?]', prompt) if len(s.strip()) > 20]
+        if not sentences:
+            return prompt[:max_tokens * 4]
+        stop = {"the","a","an","is","are","was","were","be","to","of","in","on","at","by","for"}
+        scored = []
+        for s in sentences:
+            words = set(_re.sub(r'[^a-z0-9 ]',' ',s.lower()).split()) - stop
+            scored.append((len(words), s))
+        scored.sort(reverse=True)
+        return scored[0][1][:max_tokens * 4] if scored else ""
+    except Exception:
         return ""
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Belief extraction from text
-# ─────────────────────────────────────────────────────────────────────────────
-
-# Linguistic markers that signal someone expressing a belief
-_BELIEF_MARKERS = [
-    r"i (think|believe|feel|reckon|know|argue|maintain|hold that|suspect)",
-    r"in my (view|opinion|experience|mind)",
-    r"(clearly|obviously|surely|certainly|definitely|undeniably)",
-    r"(should|must|ought to|needs to|has to)",
-    r"i('m| am) (convinced|certain|sure|confident)",
-    r"the (truth|fact|reality|point) is",
-    r"(always|never|every time|inevitably)",
-]
-
-_BELIEF_PATTERN = re.compile("|".join(_BELIEF_MARKERS), re.IGNORECASE)
-
-_STOP = {
-    "the","a","an","and","or","but","in","on","at","to","for","of","with",
-    "by","from","is","are","was","were","be","been","have","has","had","do",
-    "does","did","will","would","could","should","may","might","this","that",
-    "it","its","i","you","we","they","not","so","if","just","also","about",
-}
 
 def _dominant_topic(text: str) -> str:
     words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
