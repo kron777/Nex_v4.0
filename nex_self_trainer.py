@@ -305,6 +305,10 @@ def _crawl_topic_bg(topic, url, send_fn):
     sys.path.insert(0, str(_P(__file__).parent))
 
     def _run():
+        import asyncio
+        # Each thread needs its own event loop for crawl4ai
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         before = _db_belief_count()
         try:
             from nex.nex_crawler import NexCrawler, _resolve_search_url
