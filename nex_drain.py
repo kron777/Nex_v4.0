@@ -189,67 +189,50 @@ def _enqueue_seeds(engine, topics):
 
 def _pop_n_topics(engine, n):
     """
-    Atomically pop up to N DISTINCT topics from the curiosity queue.
-    Uses engine.drain() N times so each topic is consumed exactly once.
+    Pop up to N distinct topics from q._queue (CuriosityItem list).
+    Removes them from the queue so they won't be re-picked next cycle.
     Returns list of (topic, reason, url) tuples.
     """
     from nex.nex_crawler import _resolve_search_url
-
-    popped = []
-    seen_urls = set()
-
-    # Drain engine one topic at a time, up to N times
-    # Each engine.drain() internally pops the next queued item
-    # We intercept by monkey-patching on_knowledge_gap temporarily
 
     q = getattr(engine, "_queue", None) or getattr(engine, "queue", None)
     if q is None:
         return []
 
-    # Read queue items directly — each has .topic and .reason
-    # Then mark them as being-crawled so they won't be re-queued
-    items = []
-    for attr in ["_items", "items", "_queue", "queue"]:
-        candidate = getattr(q, attr, None)
-        if candidate and hasattr(candidate, "__iter__"):
-            try:
-                items = list(candidate)
-                if items:
-                    break
-            except Exception:
-                pass
+    raw = getattr(q, "_queue", [])  # the actual list of CuriosityItem
+    if not raw:
+        return []
 
-    seen_topics = set()
-    seen_urls_local = set()
+    popped = []
+    seen_urls = set()
+    to_remove = []
 
-    for item in items:
+    for item in list(raw):  # iterate a copy
         if len(popped) >= n:
             break
-
-        # Get topic from item
-        topic = None
-        reason = "general"
-        if hasattr(item, "topic"):
-            topic = item.topic
-            reason = getattr(item, "reason", "general") or "general"
-        elif isinstance(item, dict):
-            topic = item.get("topic")
-            reason = item.get("reason", "general")
-        elif isinstance(item, (list, tuple)) and len(item) >= 1:
-            topic = item[0]
-            reason = item[1] if len(item) > 1 else "general"
-
-        if not topic or topic in seen_topics:
+        topic  = getattr(item, "topic",  None)
+        reason = getattr(item, "reason", "general") or "general"
+        if not topic:
             continue
-
         url = _resolve_search_url(topic)
-        if url in seen_urls_local:
-            # Different topic name, same URL — skip to avoid duplicate crawl
-            continue
-
-        seen_topics.add(topic)
-        seen_urls_local.add(url)
+        if url in seen_urls:
+            continue  # same URL as another worker — skip
+        seen_urls.add(url)
         popped.append((topic, reason, url))
+        to_remove.append(item)
+
+    # Remove consumed items from the live queue
+    for item in to_remove:
+        try:
+            raw.remove(item)
+        except ValueError:
+            pass
+
+    # Persist queue state
+    try:
+        q._save()
+    except Exception:
+        pass
 
     return popped
 
