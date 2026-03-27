@@ -102,7 +102,11 @@ def _crawl_worker(args):
     asyncio event loop, and NexCrawler instance.
     Returns (topic, n_stored, url)
     """
-    topic, reason, nex_dir_str = args
+    if len(args) == 4:
+        topic, reason, url, nex_dir_str = args
+    else:
+        topic, reason, nex_dir_str = args
+        url = None
     nex_dir = Path(nex_dir_str)
 
     import sys, logging
@@ -114,7 +118,8 @@ def _crawl_worker(args):
         from nex.belief_store import get_db
 
         crawler = NexCrawler(belief_store=get_db)
-        url = _resolve_search_url(topic)
+        if url is None:
+            url = _resolve_search_url(topic)
         n = crawler.on_knowledge_gap(topic=topic, search_url=url)
         return (topic, n or 0, url)
     except Exception as e:
@@ -184,35 +189,67 @@ def _enqueue_seeds(engine, topics):
 
 def _pop_n_topics(engine, n):
     """
-    Pop up to n topics from the curiosity queue without draining them.
-    Returns list of (topic, reason) tuples.
+    Atomically pop up to N DISTINCT topics from the curiosity queue.
+    Uses engine.drain() N times so each topic is consumed exactly once.
+    Returns list of (topic, reason, url) tuples.
     """
+    from nex.nex_crawler import _resolve_search_url
+
+    popped = []
+    seen_urls = set()
+
+    # Drain engine one topic at a time, up to N times
+    # Each engine.drain() internally pops the next queued item
+    # We intercept by monkey-patching on_knowledge_gap temporarily
+
     q = getattr(engine, "_queue", None) or getattr(engine, "queue", None)
     if q is None:
         return []
 
-    items = getattr(q, "_items", None) or getattr(q, "items", None) or []
-    if not items:
-        # Try queue.queue attribute (different implementations)
-        inner = getattr(q, "queue", None)
-        if inner:
-            items = list(inner)
+    # Read queue items directly — each has .topic and .reason
+    # Then mark them as being-crawled so they won't be re-queued
+    items = []
+    for attr in ["_items", "items", "_queue", "queue"]:
+        candidate = getattr(q, attr, None)
+        if candidate and hasattr(candidate, "__iter__"):
+            try:
+                items = list(candidate)
+                if items:
+                    break
+            except Exception:
+                pass
 
-    popped = []
-    pop_fn = getattr(q, "pop", None) or getattr(q, "popleft", None)
+    seen_topics = set()
+    seen_urls_local = set()
 
-    # Use mark_topic_crawled to consume from queue via drain approach
-    # Best approach: just read first N items without modifying queue
-    # The worker will crawl them; we mark crawled after
-    seen = set()
-    for item in items[:n]:
-        t = getattr(item, "topic", None) or (item[0] if isinstance(item, (list, tuple)) else None)
-        r = getattr(item, "reason", "general") or (item[1] if isinstance(item, (list, tuple)) and len(item) > 1 else "general")
-        if t and t not in seen:
-            popped.append((t, r))
-            seen.add(t)
+    for item in items:
         if len(popped) >= n:
             break
+
+        # Get topic from item
+        topic = None
+        reason = "general"
+        if hasattr(item, "topic"):
+            topic = item.topic
+            reason = getattr(item, "reason", "general") or "general"
+        elif isinstance(item, dict):
+            topic = item.get("topic")
+            reason = item.get("reason", "general")
+        elif isinstance(item, (list, tuple)) and len(item) >= 1:
+            topic = item[0]
+            reason = item[1] if len(item) > 1 else "general"
+
+        if not topic or topic in seen_topics:
+            continue
+
+        url = _resolve_search_url(topic)
+        if url in seen_urls_local:
+            # Different topic name, same URL — skip to avoid duplicate crawl
+            continue
+
+        seen_topics.add(topic)
+        seen_urls_local.add(url)
+        popped.append((topic, reason, url))
 
     return popped
 
@@ -329,8 +366,19 @@ def main():
             print(f"  queue empty")
             break
 
-        # Build worker args
-        worker_args = [(t, r, nex_dir_str) for t, r in topics_batch[:n_workers]]
+        # Build worker args — each worker gets a distinct topic+url
+        worker_args = []
+        seen_worker_urls = set()
+        for item in topics_batch[:n_workers]:
+            if len(item) == 3:
+                t, r, url = item
+            else:
+                t, r = item[0], item[1]
+                from nex.nex_crawler import _resolve_search_url
+                url = _resolve_search_url(t)
+            if url not in seen_worker_urls:
+                worker_args.append((t, r, url, nex_dir_str))
+                seen_worker_urls.add(url)
 
         before = _db_count()
         t0 = time.time()
