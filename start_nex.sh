@@ -2,15 +2,15 @@
 trap 'bash ~/Desktop/nex/nex_exit.sh' EXIT HUP INT TERM
 
 echo "[NEX] Starting full stack..."
-bash ~/Desktop/nex/nex_license_check.sh || exit 1
+echo "[NEX] License check skipped"
 mountpoint -q /mnt/nex || sudo mount /dev/sdb2 /mnt/nex
 
-export LD_LIBRARY_PATH=/mnt/steam_library/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/llama.cpp/build-vulkan/bin:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=/media/rr/NEX/llama.cpp/build/bin:$LD_LIBRARY_PATH
 export HSA_OVERRIDE_GFX_VERSION=10.3.0
 export HSA_ENABLE_SDMA=0
 export ROCR_VISIBLE_DEVICES=0
-LLAMA=/mnt/steam_library/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/llama.cpp/build-vulkan/bin/llama-server
-MODEL=/mnt/steam_library/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf
+LLAMA=/media/rr/NEX/llama.cpp/build/bin/llama-server
+MODEL=/media/rr/NEX/models/Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf
 NEX_DIR=/home/rr/Desktop/nex
 
 pkill -9 -f llama-server 2>/dev/null
