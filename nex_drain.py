@@ -1,24 +1,35 @@
 #!/usr/bin/env python3
 """
-nex_drain.py v3 — dual topic drain with absorb/digest cycle
+nex_drain.py v4 — 3-process parallel crawler with absorb/digest cycle
+
+Each worker is a separate process with its own Python interpreter,
+asyncio event loop, and NexCrawler instance. WAL-mode SQLite handles
+concurrent writes safely.
 
 Usage:
   python3 nex_drain.py [N]   drain N cycles (default 10)
-  --clear                    bypass cooldown cache
-  --no-digest                skip digest between crawl waves
+  --clear                    bypass 24hr cooldown cache
+  --no-digest                skip opinion/tension/reflect synthesis
+  --workers N                number of parallel crawlers (default 3)
+
+Output per cycle:
+  cycle 01 | reinforcement_learning(+12) + bayesian_inference(+12) + chinese_room(+12) = +36 | db=723 | 4.1s
 """
-import sys, json, sqlite3, logging, inspect, traceback, time, asyncio
+import sys, json, sqlite3, logging, inspect, traceback, time
+import multiprocessing as mp
 from pathlib import Path
 
+# Must be at module level for multiprocessing to pickle correctly
 logging.basicConfig(level=logging.WARNING, format="%(message)s")
+
 NEX_DIR = Path(__file__).parent
 sys.path.insert(0, str(NEX_DIR))
 CFG = Path("~/.config/nex").expanduser()
 DB  = CFG / "nex.db"
 
-DIGEST_EVERY  = 3    # digest after every N crawl cycles
-ABSORB_CAP    = 60   # max new beliefs before forcing a digest pause
-TOPICS_PER_CYCLE = 2 # topics to drain per cycle (sequential, asyncio-safe)
+DIGEST_EVERY     = 3
+ABSORB_CAP       = 60
+DEFAULT_WORKERS  = 3
 
 SEED_TOPICS = [
     ("reinforcement learning",               "machine_learning"),
@@ -84,6 +95,33 @@ SEED_TOPICS = [
 ]
 
 
+# ── Worker function — runs in its own process ─────────────────────
+def _crawl_worker(args):
+    """
+    Spawned as a separate process. Gets its own Python interpreter,
+    asyncio event loop, and NexCrawler instance.
+    Returns (topic, n_stored, url)
+    """
+    topic, reason, nex_dir_str = args
+    nex_dir = Path(nex_dir_str)
+
+    import sys, logging
+    sys.path.insert(0, str(nex_dir))
+    logging.basicConfig(level=logging.WARNING)  # silence crawl4ai noise
+
+    try:
+        from nex.nex_crawler import NexCrawler, _resolve_search_url
+        from nex.belief_store import get_db
+
+        crawler = NexCrawler(belief_store=get_db)
+        url = _resolve_search_url(topic)
+        n = crawler.on_knowledge_gap(topic=topic, search_url=url)
+        return (topic, n or 0, url)
+    except Exception as e:
+        return (topic, 0, f"err:{e}")
+
+
+# ── Helpers ───────────────────────────────────────────────────────
 def _db_count():
     try:
         con = sqlite3.connect(str(DB))
@@ -95,24 +133,23 @@ def _db_count():
 
 
 def _clear_cooldown():
-    for fname in ["curiosity_queue.json"]:
-        f = CFG / fname
-        if not f.exists():
-            continue
-        try:
-            data = json.loads(f.read_text())
-            changed = False
-            for key in ["crawled_topics", "crawled"]:
-                if key in data and data[key]:
-                    data[key] = {}
-                    changed = True
-            if changed:
-                f.write_text(json.dumps(data, indent=2))
-                print(f"  [cooldown] cleared")
-                return
-        except Exception as exc:
-            print(f"  [cooldown] error: {exc}")
-    print("  [cooldown] already clear")
+    f = CFG / "curiosity_queue.json"
+    if not f.exists():
+        print("  [cooldown] nothing to clear")
+        return
+    try:
+        data = json.loads(f.read_text())
+        changed = False
+        for key in ["crawled_topics", "crawled"]:
+            if key in data and data[key]:
+                n = len(data[key])
+                data[key] = {}
+                changed = True
+                print(f"  [cooldown] cleared {key} ({n} entries)")
+        if changed:
+            f.write_text(json.dumps(data, indent=2))
+    except Exception as exc:
+        print(f"  [cooldown] error: {exc}")
 
 
 def _enqueue_seeds(engine, topics):
@@ -145,14 +182,49 @@ def _enqueue_seeds(engine, topics):
     return added
 
 
+def _pop_n_topics(engine, n):
+    """
+    Pop up to n topics from the curiosity queue without draining them.
+    Returns list of (topic, reason) tuples.
+    """
+    q = getattr(engine, "_queue", None) or getattr(engine, "queue", None)
+    if q is None:
+        return []
+
+    items = getattr(q, "_items", None) or getattr(q, "items", None) or []
+    if not items:
+        # Try queue.queue attribute (different implementations)
+        inner = getattr(q, "queue", None)
+        if inner:
+            items = list(inner)
+
+    popped = []
+    pop_fn = getattr(q, "pop", None) or getattr(q, "popleft", None)
+
+    # Use mark_topic_crawled to consume from queue via drain approach
+    # Best approach: just read first N items without modifying queue
+    # The worker will crawl them; we mark crawled after
+    seen = set()
+    for item in items[:n]:
+        t = getattr(item, "topic", None) or (item[0] if isinstance(item, (list, tuple)) else None)
+        r = getattr(item, "reason", "general") or (item[1] if isinstance(item, (list, tuple)) and len(item) > 1 else "general")
+        if t and t not in seen:
+            popped.append((t, r))
+            seen.add(t)
+        if len(popped) >= n:
+            break
+
+    return popped
+
+
 def _digest(label=""):
     tag = f" [{label}]" if label else ""
     ops = tens = ref = 0
     try:
         from nex.nex_opinions import refresh_opinions
         ops = refresh_opinions()
-    except Exception as e:
-        ops = f"err"
+    except Exception:
+        ops = "err"
     try:
         from nex.nex_contradiction_resolver import detect_and_log
         tens = detect_and_log(limit=500, max_new=20)
@@ -166,9 +238,18 @@ def _digest(label=""):
     print(f"  digest{tag} → opinions:{ops} tensions:{tens} reflect:{ref}")
 
 
+# ── Main ──────────────────────────────────────────────────────────
 def main():
     clear_mode = "--clear" in sys.argv
     no_digest  = "--no-digest" in sys.argv
+
+    n_workers = DEFAULT_WORKERS
+    for arg in sys.argv[1:]:
+        if arg.startswith("--workers="):
+            try:
+                n_workers = int(arg.split("=")[1])
+            except ValueError:
+                pass
 
     n_cycles = 10
     for arg in sys.argv[1:]:
@@ -179,24 +260,24 @@ def main():
         except ValueError:
             pass
 
-    print(f"\n  nex_drain v3 | {TOPICS_PER_CYCLE} topics/cycle | digest every {DIGEST_EVERY}")
+    print(f"\n  nex_drain v4 | {n_workers} parallel workers | digest every {DIGEST_EVERY}")
     print(f"  cycles={n_cycles}  clear={clear_mode}  digest={not no_digest}\n")
 
     if clear_mode:
         _clear_cooldown()
 
-    # Init crawler — must stay on main thread (asyncio)
+    # Init engine on main process (manages queue state)
     try:
         from nex.nex_crawler import NexCrawler
         from nex.belief_store import get_db
-        crawler = NexCrawler(belief_store=get_db)
-        print("  [crawler] ready ✓")
+        _main_crawler = NexCrawler(belief_store=get_db)
+        print("  [main] crawler ready ✓")
     except Exception:
         traceback.print_exc()
         sys.exit(1)
 
     from nex.nex_curiosity import CuriosityEngine
-    engine = CuriosityEngine(crawler)
+    engine = CuriosityEngine(_main_crawler)
 
     status = engine.status()
     if status.get("pending", 0) == 0:
@@ -204,60 +285,92 @@ def main():
         print(f"  seeded {added} topics → {engine.status().get('pending',0)} pending")
 
     start = _db_count()
-    print(f"  beliefs at start: {start}\n")
+    print(f"  beliefs at start: {start}")
+    print(f"  launching {n_workers}× worker processes...\n")
 
-    session_new = 0
-    n_digests   = 0
+    session_new  = 0
+    n_digests    = 0
+    nex_dir_str  = str(NEX_DIR)
+
+    # Use spawn context to avoid asyncio/fork issues on Linux
+    ctx = mp.get_context("spawn")
 
     for cycle in range(n_cycles):
 
-        # Check absorb cap — compare against session new beliefs
+        # Absorb cap check
         if not no_digest and session_new >= ABSORB_CAP:
-            print(f"  absorb cap ({session_new} new this session) — digesting...")
+            print(f"  absorb cap ({session_new} new) — digesting...")
             _digest("cap")
             n_digests += 1
-            session_new = 0  # reset counter after digest
+            session_new = 0
 
-        # Re-seed if empty
-        if engine.status().get("pending", 0) == 0:
+        # Re-seed if needed
+        if engine.status().get("pending", 0) < n_workers:
             added = _enqueue_seeds(engine, SEED_TOPICS)
             if engine.status().get("pending", 0) == 0:
-                print(f"  all topics on cooldown — run with --clear to bypass")
+                print(f"  all topics on cooldown — run with --clear")
                 break
 
-        # Drain TOPICS_PER_CYCLE topics sequentially (asyncio-safe)
+        # Pop N topics from queue (peek without consuming)
+        topics_batch = _pop_n_topics(engine, n_workers)
+        if not topics_batch:
+            # Fall back to sequential drain
+            topics_batch = []
+            for _ in range(n_workers):
+                if engine.status().get("pending", 0) == 0:
+                    break
+                # Get topic name via engine status
+                s = engine.status()
+                topic_list = s.get("topics", [])
+                if topic_list:
+                    topics_batch.append((topic_list[0], "general"))
+
+        if not topics_batch:
+            print(f"  queue empty")
+            break
+
+        # Build worker args
+        worker_args = [(t, r, nex_dir_str) for t, r in topics_batch[:n_workers]]
+
         before = _db_count()
         t0 = time.time()
 
-        topics_drained = []
-        for _ in range(TOPICS_PER_CYCLE):
-            if engine.status().get("pending", 0) == 0:
-                break
-            # Get topic name before draining (peek at queue)
-            q = getattr(engine, "_queue", None) or getattr(engine, "queue", None)
-            topic_name = "?"
-            if q is not None:
-                items = getattr(q, "_items", None) or getattr(q, "items", None) or []
-                if items:
-                    topic_name = getattr(items[0], "topic", "?")
-            n = engine.drain()
-            topics_drained.append(f"{topic_name}(+{n})")
+        # Run workers in parallel processes
+        with ctx.Pool(processes=len(worker_args)) as pool:
+            results = pool.map(_crawl_worker, worker_args)
+
+        # Consume from engine queue (mark topics as crawled)
+        for topic, n_stored, url in results:
+            try:
+                engine.mark_topic_crawled(topic)
+            except Exception:
+                pass
+            # Also drain from queue to keep it consistent
+            try:
+                q = getattr(engine, "_queue", None) or getattr(engine, "queue", None)
+                if q and hasattr(q, "mark_topic_crawled"):
+                    q.mark_topic_crawled(topic)
+            except Exception:
+                pass
 
         after   = _db_count()
         n_new   = after - before
         elapsed = time.time() - t0
         session_new += n_new
 
-        topics_str = " | ".join(topics_drained) if topics_drained else "—"
-        print(f"  cycle {cycle+1:02d} | {topics_str:<55} | db={after} | {elapsed:.1f}s")
+        # Format output line
+        parts = [f"{t[:25]}(+{n})" for t, n, _ in results]
+        combined = " + ".join(parts)
+        total_str = f"= +{n_new}"
+        print(f"  cycle {cycle+1:02d} | {combined} {total_str} | db={after} | {elapsed:.1f}s")
 
-        # Digest every N cycles
+        # Periodic digest
         if not no_digest and (cycle + 1) % DIGEST_EVERY == 0:
             _digest(f"c{cycle+1}")
             n_digests += 1
 
         if n_new == 0 and cycle > 3:
-            print(f"  no new beliefs — dedup cap or queue empty")
+            print(f"  no new beliefs (dedup or empty queue)")
             break
 
     final = _db_count()
