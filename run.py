@@ -2078,17 +2078,7 @@ def main():
                                 from nex.nex_auto_seeder import check_and_seed as _cas
                                 _seed_n = _cas(verbose=True)
                                 if _seed_n > 0:
-                            # Self-directed research
-                            try:
-                                from nex.nex_self_directed_research import run_self_research as _sdr
-                                _sdr_n = _sdr(verbose=True)
-                                if _sdr_n > 0:
-                                    pass
-                                    print(f"  [SelfResearch] +{_sdr_n} beliefs")
-                            except Exception: pass
-                                    print(f'  [AutoSeeder] +{_seed_n} beliefs absorbed')
-                            except Exception as _ase:
-                                pass
+                                    print(f"  [AutoSeeder] +{_seed_n} beliefs absorbed")
 
                             # Legacy gap scan every 10 cycles as backup
                             if cycle % 10 == 0:
