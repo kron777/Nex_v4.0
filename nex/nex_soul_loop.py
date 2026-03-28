@@ -412,69 +412,69 @@ def _get_contradiction(tokens: set[str]) -> Optional[str]:
 
 def _cross_domain_beliefs(top_beliefs: list, tokens: set, limit: int = 4) -> list:
     """
-    Given the top matching beliefs, follow cross_domain links to retrieve
-    beliefs from adjacent topics. Returns unexpected-but-relevant beliefs.
-    These are the source of surprising connections.
+    Find beliefs from DIFFERENT topics that are relevant to the query.
+    v2: direct token-overlap across topics — no edge traversal needed.
+    This fires immediately at any belief count.
     """
-    if not top_beliefs:
+    if not tokens or not top_beliefs:
         return []
     db = _db()
     if not db:
         return []
     try:
-        top_ids = [b.get("id") for b in top_beliefs[:4] if b.get("id")]
-        if not top_ids:
+        # Get the topics of the top matching beliefs — exclude these
+        primary_topics = set()
+        for b in top_beliefs[:4]:
+            t = (b.get("topic") or "").lower().strip()
+            if t:
+                primary_topics.add(t)
+
+        if not primary_topics:
             return []
 
-        # Follow cross_domain links from top belief IDs
-        placeholders = ",".join("?" * len(top_ids))
-        linked_ids = set()
+        # Load all beliefs NOT in the primary topics
+        placeholders = ",".join("?" * len(primary_topics))
         rows = db.execute(
-            f"SELECT child_id FROM belief_links "
-            f"WHERE parent_id IN ({placeholders}) "
-            f"LIMIT 40",
-            top_ids
-        ).fetchall()
-        for r in rows:
-            linked_ids.add(r["child_id"])
-        rows2 = db.execute(
-            f"SELECT parent_id FROM belief_links "
-            f"WHERE child_id IN ({placeholders}) "
-            f"LIMIT 40",
-            top_ids
-        ).fetchall()
-        for r in rows2:
-            linked_ids.add(r["parent_id"])
-
-        if not linked_ids:
-            return []
-
-        # Exclude already-retrieved belief IDs
-        exclude = set(top_ids)
-        linked_ids -= exclude
-
-        if not linked_ids:
-            return []
-
-        # Fetch the linked beliefs
-        ph2 = ",".join("?" * len(linked_ids))
-        linked_rows = db.execute(
             f"SELECT id, content, confidence, topic FROM beliefs "
-            f"WHERE id IN ({ph2}) AND content IS NOT NULL AND length(content) > 20 "
-            f"ORDER BY confidence DESC LIMIT ?",
-            list(linked_ids) + [limit]
+            f"WHERE topic IS NOT NULL AND topic != '' "
+            f"AND lower(topic) NOT IN ({placeholders}) "
+            f"AND content IS NOT NULL AND length(content) > 20 "
+            f"ORDER BY confidence DESC LIMIT 300",
+            list(primary_topics)
         ).fetchall()
         db.close()
 
+        if not rows:
+            return []
+
+        # Score each belief by token overlap with query
+        scored = []
+        for row in rows:
+            content = row["content"] or ""
+            b_tokens = _tokenize(content)
+            overlap  = len(tokens & b_tokens)
+            if overlap >= 2:
+                scored.append((overlap, {
+                    "id":         row["id"],
+                    "content":    content,
+                    "confidence": row["confidence"],
+                    "topic":      row["topic"] or "",
+                    "_cross_domain": True,
+                }))
+
+        scored.sort(key=lambda x: -x[0])
+
+        # Deduplicate by topic — one belief per cross-domain topic
+        seen_topics = set()
         result = []
-        for r in linked_rows:
-            result.append({
-                "id":         r["id"],
-                "content":    r["content"],
-                "confidence": r["confidence"],
-                "topic":      r["topic"] or "",
-                "_cross_domain": True,
-            })
+        for _, b in scored:
+            t = b["topic"].lower().strip()
+            if t not in seen_topics:
+                seen_topics.add(t)
+                result.append(b)
+            if len(result) >= limit:
+                break
+
         return result
     except Exception:
         try: db.close()
