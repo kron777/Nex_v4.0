@@ -374,7 +374,7 @@ def _get_opinion(topic_tokens: set[str]) -> Optional[dict]:
         else:
             # Clean fallback — grammatically correct directional statement
             if abs(stance) >= 0.5:
-                position = f"I hold a strong position on {topic_name} — the evidence doesn't support the consensus framing." if stance < 0 else f"On {topic_name}, the evidence lands clearly."
+                position = f"I hold a strong position on {topic_name} — the evidence doesn't support the consensus framing." if stance < 0 else "The evidence lands clearly on this."
             elif abs(stance) >= 0.25:
                 position = f"I lean skeptical on {topic_name}." if stance < 0 else f"I lean toward the stronger reading of {topic_name}."
             else:
@@ -977,7 +977,7 @@ def _directional_opener(stance_score: float, topic: str) -> str:
     elif stance_score >= 0.6:
         opts = [
             f"I hold a strong position on {topic}. ",
-            f"On {topic}, the evidence lands clearly for me. ",
+            "The evidence lands clearly for me. ",
         ]
     elif stance_score >= 0.25:
         opts = [
