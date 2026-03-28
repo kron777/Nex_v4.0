@@ -372,7 +372,13 @@ def _get_opinion(topic_tokens: set[str]) -> Optional[dict]:
         if belief_content and len(belief_content) > 20:
             position = belief_content
         else:
-            position = f"I {direction} the dominant framing of {topic_name}."
+            # Clean fallback — grammatically correct directional statement
+            if abs(stance) >= 0.5:
+                position = f"I hold a strong position on {topic_name} — the evidence doesn't support the consensus framing." if stance < 0 else f"On {topic_name}, the evidence lands clearly."
+            elif abs(stance) >= 0.25:
+                position = f"I lean skeptical on {topic_name}." if stance < 0 else f"I lean toward the stronger reading of {topic_name}."
+            else:
+                position = f"I see genuine tension in how {topic_name} is usually framed."
 
         return {
             "topic":        topic_name,
