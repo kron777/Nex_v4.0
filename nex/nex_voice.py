@@ -978,66 +978,58 @@ def get_compositor() -> NexVoiceCompositor:
 
 def compose(user_input: str) -> str:
     """
-    Module-level shortcut — NexVoice compositor, LLM-free.
-    Fallback chain:
-      1. NexVoiceCompositor (full signal pipeline)
-      2. nex_reason.reason()  (belief-graph reasoning, LLM-free)
-      3. Identity-anchor sentence (always non-empty)
-    llama / nex_voice_wrapper are NOT in this chain.
+    Module-level entry point — routes through the organism cognition loop.
+
+    Primary path: SoulLoop (orient → consult → reason → intend → express)
+    This is Nex's actual cognition — five sequential operations over her DB.
+    No LLM. No templates. Replies emerge from her actual character.
+
+    Fallback chain (if SoulLoop fails):
+      2. NexVoiceCompositor  (signal pipeline)
+      3. Identity anchor     (DB belief, always non-empty)
     """
     import time
-    # Nex pauses before responding — she thinks, not reacts
+    # She thinks before she speaks — 3s pause
     time.sleep(3)
 
-    # ── 1. Full compositor ────────────────────────────────────────────
+    # ── 1. Soul Loop — organism cognition (primary) ───────────────────
+    try:
+        from nex.nex_soul_loop import SoulLoop as _SoulLoop
+        _loop  = _SoulLoop()
+        result = _loop.respond(user_input)
+        _bad = (
+            not result or
+            len(result.strip()) < 20 or
+            "i don't have enough" in result.lower()[:50] and len(result) < 60
+        )
+        if not _bad:
+            return result.strip()
+    except Exception:
+        pass
+
+    # ── 2. NexVoiceCompositor — signal pipeline fallback ─────────────
     try:
         result = get_compositor().compose(user_input)
         _bad = (
+            not result or len(result.strip()) < 20 or
             "bayesian belief updating" in result.lower()[:80] or
-            "what i haven" in result.lower()[:40] or
-            "i don't have enough" in result.lower()[:40] or
             "still processing" in result.lower()[:40]
         )
-        if result and isinstance(result, str) and len(result.strip()) > 20 and not _bad:
-            return result
+        if not _bad:
+            return result.strip()
     except Exception:
         pass
 
-    # ── 2. nex_reason — belief-graph reasoning, zero LLM ─────────────
-    try:
-        from nex.nex_reason import reason as _reason
-        r = _reason(user_input)
-        reply = r.get("reply", "")
-        # Only accept if it's substantive and not the canned 'question' dead-end
-        if (reply
-                and len(reply) > 25
-                and "sparse here" not in reply
-                and "belief graph is sparse" not in reply):
-            return reply
-    except Exception:
-        pass
-
-    # ── 3. nex_reason with debug=False — try again, accept any output ─
-    try:
-        from nex.nex_reason import reason as _reason
-        r = _reason(user_input)
-        reply = r.get("reply", "")
-        if reply and len(reply) > 15:
-            return reply
-    except Exception:
-        pass
-
-    # ── 4. Hard identity anchor — never returns empty ─────────────────
-    # Pull one anchor from DB, else use core commitment
+    # ── 3. Identity anchor — never empty ─────────────────────────────
     _anchor = "Truth first. I'd rather say I don't know than produce noise."
     try:
         import sqlite3 as _sq
-        _db = _sq.connect(str(DB_PATH))
-        _row = _db.execute(
+        _con = _sq.connect(str(DB_PATH))
+        _row = _con.execute(
             "SELECT content FROM beliefs WHERE is_identity=1 AND confidence > 0.8 "
             "ORDER BY confidence DESC LIMIT 1"
         ).fetchone()
-        _db.close()
+        _con.close()
         if _row and _row[0]:
             _anchor = _row[0].strip().rstrip(".") + "."
     except Exception:
