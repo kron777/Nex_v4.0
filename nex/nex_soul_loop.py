@@ -244,7 +244,7 @@ def _load_all_beliefs() -> list[dict]:
         return []
     try:
         rows = db.execute(
-            "SELECT content, confidence, topic, is_identity, pinned "
+            "SELECT id, content, confidence, topic, is_identity, pinned "
             "FROM beliefs WHERE content IS NOT NULL AND length(content) > 15 "
             "ORDER BY confidence DESC LIMIT 800"
         ).fetchall()
