@@ -453,7 +453,7 @@ def _cross_domain_beliefs(top_beliefs: list, tokens: set, limit: int = 4) -> lis
             content = row["content"] or ""
             b_tokens = _tokenize(content)
             overlap  = len(tokens & b_tokens)
-            if overlap >= 2:
+            if overlap >= 1:
                 scored.append((overlap, {
                     "id":         row["id"],
                     "content":    content,
