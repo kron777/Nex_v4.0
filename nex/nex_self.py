@@ -74,7 +74,7 @@ SEEDED_VALUES = [
 
 SELF_PATH             = os.path.expanduser("~/.config/nex/nex_self.json")
 DB_PATH               = os.path.expanduser("~/.config/nex/nex.db")
-LLM_URL               = "http://localhost:8080/completion"
+LLM_URL = None  # already LLM-free — constant unused
 
 INTENTION_INTERVAL    = 86400       # 24h — one intention per day
 VALUE_EVOLUTION_DAYS  = 7           # re-examine values weekly

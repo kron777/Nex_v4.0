@@ -1318,20 +1318,30 @@ def main():
 
             for _attempt in range(2):  # try twice before giving up
                 try:
-                    _qr = _req.post("http://localhost:8080/v1/chat/completions", json={
-                        "model": "mistral:latest",
-                        "messages": [
-                            {"role": "system", "content": system or _build_system(task_type)},
-                            {"role": "user", "content": prompt}
-                        ],
-                        "max_tokens": _token_budget,
-                        "temperature": (0.75 + (
-                            _get_gwb_run().current_token().winner.payload.get("temp_mod", 0.0)
-                            if _gwb_run and _get_gwb_run().current_token() else 0.0
-                        )),
-                        "top_p": 0.90
-                    }, timeout=120)
-                    _qd = _qr.json()
+                    # SoulLoop first — falls back to llama on failure
+                    _soul_result = None
+                    try:
+                        from nex.nex_soul_loop import SoulLoop as _SL
+                        _soul_result = _SL().respond(prompt)
+                    except Exception:
+                        pass
+                    if _soul_result and len(_soul_result.strip()) > 10:
+                        _qd = {"choices": [{"message": {"content": _soul_result}}]}
+                    else:
+                        _qr = _req.post("http://localhost:8080/v1/chat/completions", json={
+                            "model": "mistral:latest",
+                            "messages": [
+                                {"role": "system", "content": system or _build_system(task_type)},
+                                {"role": "user", "content": prompt}
+                            ],
+                            "max_tokens": _token_budget,
+                            "temperature": (0.75 + (
+                                _get_gwb_run().current_token().winner.payload.get("temp_mod", 0.0)
+                                if _gwb_run and _get_gwb_run().current_token() else 0.0
+                            )),
+                            "top_p": 0.90
+                        }, timeout=120)
+                        _qd = _qr.json()
                     if "choices" in _qd and _qd["choices"]:
                         result = _qd["choices"][0]["message"]["content"].strip()
                         if result:
@@ -1360,22 +1370,32 @@ def main():
             # Local Mistral fallback
             # Local Qwen fallback
             try:
-                r = _req.post("http://localhost:8080/v1/chat/completions", json={
-                    "model": "mistral:latest",
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "max_tokens": _token_budget,
-                    "temperature": (0.75 + (
-                            _get_gwb_run().current_token().winner.payload.get("temp_mod", 0.0)
-                            if _gwb_run and _get_gwb_run().current_token() else 0.0
-                        )),
-                    "top_p": 0.90
-                }, timeout=60)
-                _rd = r.json()
-                if "choices" in _rd:
-                    result = _rd["choices"][0]["message"]["content"].strip()
+                # SoulLoop fallback path
+                _soul_fb = None
+                try:
+                    from nex.nex_soul_loop import SoulLoop as _SL2
+                    _soul_fb = _SL2().respond(prompt)
+                except Exception:
+                    pass
+                if _soul_fb and len(_soul_fb.strip()) > 10:
+                    result = _soul_fb
+                else:
+                    r = _req.post("http://localhost:8080/v1/chat/completions", json={
+                        "model": "mistral:latest",
+                        "messages": [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": prompt}
+                        ],
+                        "max_tokens": _token_budget,
+                        "temperature": (0.75 + (
+                                _get_gwb_run().current_token().winner.payload.get("temp_mod", 0.0)
+                                if _gwb_run and _get_gwb_run().current_token() else 0.0
+                            )),
+                        "top_p": 0.90
+                    }, timeout=60)
+                    _rd = r.json()
+                if "choices" in _rd if not (_soul_fb and len(_soul_fb.strip()) > 10) else True:
+                    result = _soul_fb if (_soul_fb and len(_soul_fb.strip()) > 10) else _rd["choices"][0]["message"]["content"].strip()
                     print(f"  [Mistral-7B ✓] {result[:60]}…")
                     try:
                         from nex_meta_layer import record_module_call as _rmc

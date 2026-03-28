@@ -158,10 +158,8 @@ class TemporalNarrative:
         entries_to_process = list(self._entries)
         date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-        if llm_fn is not None:
-            text = self._llm_consolidate(entries_to_process, llm_fn)
-        else:
-            text = self._template_consolidate(entries_to_process)
+        # Always use LLM-free consolidation (llm_fn ignored)
+        text = self._llm_consolidate(entries_to_process)
 
         self._chapters.append({
             "ts":   time.time(),
@@ -246,29 +244,27 @@ class TemporalNarrative:
         return " ".join(parts)
 
     @staticmethod
-    def _llm_consolidate(entries: list[dict], llm_fn: Callable[[str], str]) -> str:
+    def _llm_consolidate(entries: list[dict], llm_fn=None) -> str:
         """
-        Use the local LLM to write a short first-person narrative paragraph.
-        Keeps it compact (3-4 sentences).
+        LLM-free: compose narrative from cognitive events via belief + affect state.
+        llm_fn parameter retained for API compatibility but ignored.
         """
-        lines = []
-        for e in entries[-20:]:   # feed last 20 to stay within context
-            verb = EVENT_TYPES.get(e["type"], e["type"])
-            lines.append(f"- I {verb}: {e['content']}")
-
-        prompt = (
-            "You are writing a private journal entry for an AI named Nex. "
-            "Based on the following cognitive events from her recent session, "
-            "write a short first-person paragraph (3-4 sentences) that captures "
-            "what she was most focused on, what shifted, and what she's still "
-            "carrying. Write as Nex, in her voice — direct, curious, self-aware. "
-            "Do not list the events — synthesise them into lived experience.\n\n"
-            "Events:\n" + "\n".join(lines) + "\n\nJournal entry:"
-        )
-
         try:
-            result = llm_fn(prompt)
-            # Trim to ~400 chars for prompt injection efficiency
-            return result.strip()[:400]
+            from nex.nex_llm_free import generate_reflection as _gr, _affect, _beliefs_json, _db
+            _af  = _affect()
+            _bel = _beliefs_json()[:8]
+            _ten = [{"content": r[0]} for r in _db("SELECT content FROM tensions LIMIT 2")]
+            # Enrich with recent event content as pseudo-beliefs
+            event_beliefs = []
+            for e in entries[-6:]:
+                verb    = EVENT_TYPES.get(e.get("type", ""), e.get("type", ""))
+                content = e.get("content", "")
+                if content:
+                    event_beliefs.append({"content": f"I {verb}: {content}", "confidence": 0.7})
+            combined = (event_beliefs + _bel)[:12]
+            result = _gr(combined, _af, _ten)
+            if result:
+                return result[:400]
         except Exception:
-            return TemporalNarrative._template_consolidate(entries)
+            pass
+        return TemporalNarrative._template_consolidate(entries)
