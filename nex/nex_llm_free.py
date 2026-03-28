@@ -103,7 +103,7 @@ _NOISE_STRINGS = {
     "check the deletion log", "why was the page", "this page has been deleted",
     "announce type:", "arxiv:", "this article is about", "for other uses, see",
     "this disambiguation", "citation needed", "edit | talk", "talk page",
-    "external links modified", "template:", "wikipedia:", "page not found", "404", "does not exist", "not supported in other languages", "first published", "substantive revision", "alt-c", "alt-t", "english tools", "if you think this is an error", "moved somewhere", "please do not modify",
+    "external links modified", "template:", "wikipedia:", "page not found", "404", "does not exist", "not supported in other languages", "first published", "substantive revision", "alt-c", "alt-t", "english tools", "if you think this is an error", "moved somewhere", "as the scholar", "seventeenth century", "eighteenth century", "nineteenth century", "wherein if", "partake of", "waking and sleeping", "present mayor", "born in", "died in", "is an american", "is a british", "is an english", "is a french", "in the history of", "from the latin", "from the greek", "etymology", "traditionally defined", "historically", "wrote in his", "wrote in her", "according to aristotle", "according to plato", "according to kant", "according to hume", "according to descartes", "socrates", "queenborough", "on the other hand, identity", "this border case", "personal identity is based on", "please do not modify",
 }
 
 def _is_noise(text: str) -> bool:
@@ -142,7 +142,12 @@ def extract_beliefs_from_text(text: str, topic: str, max_beliefs: int = 3) -> li
         penalty   += 0.3 if s.count('(') > 1 else 0.0        # heavy parentheticals
         penalty   += 0.4 if re.search(r'\d{4}.*\d{4}', s) else 0.0  # citation-heavy
         score = overlap + factual - penalty
-        if score > 0.5 and not _is_noise(s):
+        # Reject sentences that are quotes/attributions (start with name + "wrote/said/argued")
+        _attr_pat = __import__('re').search(
+            r'^[A-Z][a-z]+ (wrote|said|argued|stated|claimed|noted|observed|proposed|suggested|described)',
+            s
+        )
+        if score > 0.5 and not _is_noise(s) and not _attr_pat:
             scored.append((score, s))
 
     scored.sort(key=lambda x: -x[0])
