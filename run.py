@@ -2073,6 +2073,16 @@ def main():
                                         print(f"  [BeliefGraph] {len(_gedges)} cross-domain edges rebuilt")
                                     _gcon.close()
                                 except Exception as _ge: pass
+
+                            # Accumulate insights from SoulLoop replies
+                            try:
+                                from nex.nex_insight_accumulator import accumulate_insight as _ai
+                                _ai(
+                                    query=_soul_query if '_soul_query' in dir() else '',
+                                    reply=soul_reply if 'soul_reply' in dir() else '',
+                                    common_thread=_soul_thread if '_soul_thread' in dir() else '',
+                                )
+                            except Exception: pass
                             # ── Auto-seeder: self-expand belief corpus ──────
                             try:
                                 from nex.nex_auto_seeder import check_and_seed as _cas
