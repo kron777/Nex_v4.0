@@ -1285,6 +1285,8 @@ class SoulLoop:
                 "confidence":   r["confidence"],
                 "topic":        r["topic"],
                 "sparse":       r["sparse"],
+                "cross_domain": [b.get("content","")[:80] for b in r.get("cross_domain",[])],
+                "common_thread": r.get("common_thread",""),
             },
             "intend": {
                 "intention":   i["intention"],
