@@ -906,6 +906,7 @@ def _clean_belief(content: str) -> str:
     # Strip arXiv/Wikipedia boilerplate patterns
     content = re.sub(r'arXiv:\S+.*', '', content).strip()
     content = re.sub(r'^\d+\.\s*', '', content).strip()
+    content = re.sub(r'\[merged:\d+\]\s*', '', content).strip()
     return content
 
 def _first_person(content: str) -> str:
