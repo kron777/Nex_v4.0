@@ -151,7 +151,7 @@ class CuriosityQueue:
         # Sort: stop_word_hit first (she was mid-thought), then lowest confidence
         self._queue.sort(key=lambda x: (
             0 if x.reason == "stop_word_hit" else 1,
-            x.confidence
+            x.confidence if x.confidence is not None else 0.0
         ))
 
         to_process = self._queue[:max_items]

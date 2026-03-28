@@ -145,6 +145,30 @@ class AffectProxy:
         return f"<AffectProxy label={s['label']} v={s['valence']:.2f} a={s['arousal']:.2f} d={s['dominance']:.2f}>"
 
 
+
+    def ingest(self, text: str = "", source: str = "") -> "AffectProxy":
+        """Accept text signal, nudge affect, return self with .valence/.arousal."""
+        try:
+            import re as _re
+            tl  = (text or "").lower()
+            pos = {'good','great','success','learn','discover','resolve','insight','progress'}
+            neg = {'error','fail','conflict','contradict','uncertain','broken','problem'}
+            words = set(_re.sub(r'[^a-z ]', ' ', tl).split())
+            delta = len(words & pos) * 0.08 - len(words & neg) * 0.08
+            self._v = max(-1.0, min(1.0, getattr(self, '_v', 0.0) + delta * 0.15))
+            self._a = min(1.0,  getattr(self, '_a', 0.2) + abs(delta) * 0.05)
+        except Exception:
+            pass
+        return self
+
+    @property
+    def valence(self) -> float:
+        return getattr(self, '_v', 0.0)
+
+    @property
+    def arousal(self) -> float:
+        return getattr(self, '_a', 0.2)
+
 def get_affect() -> AffectProxy:
     """Fixes 'cannot import name get_affect from nex.nex_affect'."""
     return AffectProxy()
