@@ -431,17 +431,16 @@ def _cross_domain_beliefs(top_beliefs: list, tokens: set, limit: int = 4) -> lis
         linked_ids = set()
         rows = db.execute(
             f"SELECT child_id FROM belief_links "
-            f"WHERE parent_id IN ({placeholders}) AND link_type='cross_domain' "
-            f"LIMIT 20",
+            f"WHERE parent_id IN ({placeholders}) "
+            f"LIMIT 40",
             top_ids
         ).fetchall()
         for r in rows:
             linked_ids.add(r["child_id"])
-        # Also traverse in the other direction
         rows2 = db.execute(
             f"SELECT parent_id FROM belief_links "
-            f"WHERE child_id IN ({placeholders}) AND link_type='cross_domain' "
-            f"LIMIT 20",
+            f"WHERE child_id IN ({placeholders}) "
+            f"LIMIT 40",
             top_ids
         ).fetchall()
         for r in rows2:
