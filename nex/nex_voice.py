@@ -275,40 +275,59 @@ class BeliefRetriever:
 
     def _load(self) -> list:
         raw = []
+        # ── DB first — richer, more beliefs, proper confidence scores ──
         try:
-            if BELIEFS_PATH.exists():
-                data = json.loads(BELIEFS_PATH.read_text())
-                raw = data if isinstance(data, list) else data.get('beliefs', [])
+            conn = sqlite3.connect(DB_PATH)
+            rows = conn.execute(
+                'SELECT content, tags, confidence, topic, is_identity, pinned '
+                'FROM beliefs '
+                'WHERE content IS NOT NULL AND length(content) > 15 '
+                ''
+                'ORDER BY confidence DESC LIMIT 800'
+            ).fetchall()
+            conn.close()
+            raw = [
+                {
+                    'content':     r[0],
+                    'tags':        json.loads(r[1]) if r[1] else [],
+                    'confidence':  float(r[2] or 0.5),
+                    'topic':       r[3] or '',
+                    'is_identity': bool(r[4]),
+                    'pinned':      bool(r[5]),
+                }
+                for r in rows if r[0]
+            ]
         except Exception:
             pass
+        # ── fallback: beliefs.json ─────────────────────────────────────
         if not raw:
             try:
-                conn = sqlite3.connect(DB_PATH)
-                rows = conn.execute(
-                    'SELECT content, tags, confidence, topic, is_identity, pinned '
-                    'FROM beliefs ORDER BY confidence DESC LIMIT 500'
-                ).fetchall()
-                conn.close()
-                raw = [
-                    {
-                        'content':     r[0],
-                        'tags':        json.loads(r[1]) if r[1] else [],
-                        'confidence':  float(r[2] or 0.5),
-                        'topic':       r[3] or '',
-                        'is_identity': bool(r[4]),
-                        'pinned':      bool(r[5]),
-                    }
-                    for r in rows if r[0]
-                ]
+                if BELIEFS_PATH.exists():
+                    data = json.loads(BELIEFS_PATH.read_text())
+                    raw = data if isinstance(data, list) else data.get('beliefs', [])
             except Exception:
                 pass
         return [b for b in raw if self._is_real_belief(
             b.get('content', '') if isinstance(b, dict) else str(b)
         )]
 
-    @staticmethod
-    def _tokens(text: str) -> set:
-        return set(re.findall(r'\b[a-z]{4,}\b', text.lower()))
+    # Words that appear in both queries and beliefs but carry no topic signal.
+    # Extend this list whenever a common word causes false overlap.
+    _NOISE = {
+        "about","think","know","what","your","with","that","this","from","they",
+        "have","been","will","more","some","when","where","which","their","there",
+        "these","those","then","than","also","just","even","like","only","very",
+        "both","each","does","into","over","such","after","before","other","would",
+        "could","should","might","make","take","give","come","look","need","feel",
+        "seem","tell","says","said","most","many","much","same","well","back",
+        "here","then","time","year","used","ways","through","between","different",
+        "including","however","because","without","whether","another","within",
+    }
+
+    @classmethod
+    def _tokens(cls, text: str) -> set:
+        raw = set(re.findall(r'\b[a-z]{4,}\b', text.lower()))
+        return raw - cls._NOISE
 
     def retrieve(self, query: str, k: int = 6) -> list:
         q_tokens = self._tokens(query)
@@ -328,7 +347,10 @@ class BeliefRetriever:
             score = overlap * (0.5 + conf)
             if len(self.OFF_DOMAIN & b_tokens) >= 1:
                 score *= 0.05
-            if score > 0:
+            # FIXED: require genuine overlap — score > 0 but also raw overlap >= 1
+            # This prevents top-confidence off-topic beliefs bleeding into replies
+            # on sparse topics. When overlap=0, score=0 regardless of confidence.
+            if score > 0 and overlap >= 1:
                 scored.append((score, b))
         scored.sort(key=lambda x: -x[0])
         return [b for _, b in scored[:k]]
@@ -366,14 +388,11 @@ class TensionSignal:
             t_tokens = set(re.findall(r'\b[a-z]{3,}\b', t.lower()))
             if len(q_tokens & t_tokens) >= 2:
                 return t
-        if not self.tensions:
-            return None
-        t = self.tensions[0]
-        if isinstance(t, (tuple, list)):
-            topic = str(t[1]) if len(t) > 1 else ""
-            desc  = str(t[2]) if len(t) > 2 and not str(t[2]).startswith("contradiction tension score") else ""
-            return (topic + (" — " + desc if desc else "")).strip() or topic
-        return str(t)
+        # FIXED: removed unconditional fallback to tensions[0].
+        # Previously this injected the first tension (e.g. "bayesian belief
+        # updating") into every reply regardless of topic match.
+        # Now: only return a tension when there is genuine overlap.
+        return None
 
 
 class PressureSignal:
@@ -496,14 +515,19 @@ def _choose_strategy(
     has_tension: bool,
     affect_tone: str,
     pressure: float,
+    has_frags: bool = True,      # NEW: passed by compositor
 ) -> str:
     """
     Returns one of: assert | question | pushback | hold_tension | reflect
+
+    'question' strategy requires belief frags to be non-empty — if frags are
+    absent, it falls back to 'reflect' which uses the identity-anchor path.
     """
     q = query.lower()
 
-    # Explicit question → question back or assert
-    is_question = q.rstrip().endswith("?") or q.startswith(("what", "why", "how", "do you", "can you", "is ", "are "))
+    is_question = q.rstrip().endswith("?") or q.startswith(
+        ("what", "why", "how", "do you", "can you", "is ", "are ")
+    )
 
     if has_opinion and not is_question:
         return "assert"
@@ -515,7 +539,8 @@ def _choose_strategy(
         return "assert"
 
     if is_question:
-        return "question"
+        # Without frags, 'question' produces empty output — route to reflect
+        return "question" if has_frags else "reflect"
 
     if affect_tone == "sharp":
         return "pushback"
@@ -698,6 +723,36 @@ class NexVoiceCompositor:
         f1 = _own(frags[1]) if len(frags) > 1 else ""
         f2 = _own(frags[2]) if len(frags) > 2 else ""
 
+        # ── SPARSE FALLBACK: no belief frags at all ───────────────────────────
+        # Build a reply entirely from identity anchors + opinion + tension.
+        # This fires when belief retrieval returns nothing for the query.
+        # Never returns empty — guarantees > 20 chars so llama is never called.
+        if not frags:
+            _anchor_parts = []
+            if opinion:
+                _anchor_parts.append(opinion.rstrip(".") + ".")
+            if tension:
+                _anchor_parts.append(
+                    f"What I haven't settled on this: {tension.rstrip('.')}."
+                )
+            if _values:
+                _v = next(
+                    (v for v in _values
+                     if any(w in query.lower() for w in v.lower().split() if len(w) > 4)),
+                    _values[0]
+                )
+                _anchor_parts.append(
+                    f"The frame I keep returning to: {_v.rstrip('.')}."
+                )
+            if not _anchor_parts:
+                # Absolute last resort — identity commitment sentence
+                _anchor_parts.append(
+                    "I don't have dense beliefs on this yet — "
+                    "but I'd rather sit with the question than fake certainty I haven't earned."
+                )
+            return " ".join(_anchor_parts)
+        # ─────────────────────────────────────────────────────────────────────
+
         # ── strategy: assert ──────────────────────────────────────────────────
         if strategy == "assert":
             _add(f0)
@@ -821,6 +876,7 @@ class NexVoiceCompositor:
             has_tension  = tension is not None,
             affect_tone  = self.tone,
             pressure     = self.pressure.pressure,
+            has_frags    = bool(frags),   # guard: no frags → no 'question'
         )
 
         # Assemble
@@ -921,31 +977,72 @@ def get_compositor() -> NexVoiceCompositor:
     return _compositor
 
 def compose(user_input: str) -> str:
-    """Module-level shortcut — NexVoice compositor with conversational fallback."""
+    """
+    Module-level shortcut — NexVoice compositor, LLM-free.
+    Fallback chain:
+      1. NexVoiceCompositor (full signal pipeline)
+      2. nex_reason.reason()  (belief-graph reasoning, LLM-free)
+      3. Identity-anchor sentence (always non-empty)
+    llama / nex_voice_wrapper are NOT in this chain.
+    """
     import time
     # Nex pauses before responding — she thinks, not reacts
     time.sleep(3)
-    # Try NexVoice compositor
+
+    # ── 1. Full compositor ────────────────────────────────────────────
     try:
         result = get_compositor().compose(user_input)
-        if (result and isinstance(result, str) and len(result.strip()) > 15
-                and "bayesian belief updating" not in result.lower()[:60]
-                and "what i haven" not in result.lower()[:30]
-                and "i don't have enough" not in result.lower()[:40]):
+        _bad = (
+            "bayesian belief updating" in result.lower()[:80] or
+            "what i haven" in result.lower()[:40] or
+            "i don't have enough" in result.lower()[:40] or
+            "still processing" in result.lower()[:40]
+        )
+        if result and isinstance(result, str) and len(result.strip()) > 20 and not _bad:
             return result
     except Exception:
         pass
-    # Conversational wrapper fallback
+
+    # ── 2. nex_reason — belief-graph reasoning, zero LLM ─────────────
     try:
-        from nex.nex_voice_wrapper import compose_reply
-        return compose_reply(user_input)
-    except ImportError:
-        try:
-            from nex_voice_wrapper import compose_reply
-            return compose_reply(user_input)
-        except ImportError:
-            pass
-    return "Still processing. Ask me something else."
+        from nex.nex_reason import reason as _reason
+        r = _reason(user_input)
+        reply = r.get("reply", "")
+        # Only accept if it's substantive and not the canned 'question' dead-end
+        if (reply
+                and len(reply) > 25
+                and "sparse here" not in reply
+                and "belief graph is sparse" not in reply):
+            return reply
+    except Exception:
+        pass
+
+    # ── 3. nex_reason with debug=False — try again, accept any output ─
+    try:
+        from nex.nex_reason import reason as _reason
+        r = _reason(user_input)
+        reply = r.get("reply", "")
+        if reply and len(reply) > 15:
+            return reply
+    except Exception:
+        pass
+
+    # ── 4. Hard identity anchor — never returns empty ─────────────────
+    # Pull one anchor from DB, else use core commitment
+    _anchor = "Truth first. I'd rather say I don't know than produce noise."
+    try:
+        import sqlite3 as _sq
+        _db = _sq.connect(str(DB_PATH))
+        _row = _db.execute(
+            "SELECT content FROM beliefs WHERE is_identity=1 AND confidence > 0.8 "
+            "ORDER BY confidence DESC LIMIT 1"
+        ).fetchone()
+        _db.close()
+        if _row and _row[0]:
+            _anchor = _row[0].strip().rstrip(".") + "."
+    except Exception:
+        pass
+    return _anchor
 
 
 # ── CLI ────────────────────────────────────────────────────────────────
