@@ -447,14 +447,20 @@ def _cross_domain_beliefs(top_beliefs: list, tokens: set, limit: int = 4) -> lis
         if not rows:
             return []
 
-        # Score each belief by token overlap with query
+        # Score by overlap with TOP BELIEF content tokens (not query)
+        # Query tokens are too sparse — use what she actually knows about the topic
+        top_content_tokens = set()
+        for b in top_beliefs[:3]:
+            top_content_tokens |= _tokenize(b.get("content", ""))
+
         scored = []
         for row in rows:
             content = row["content"] or ""
             b_tokens = _tokenize(content)
-            overlap  = len(tokens & b_tokens)
+            # Score by overlap with top belief content OR query tokens
+            overlap = len((tokens | top_content_tokens) & b_tokens)
             if overlap >= 1:
-                scored.append((overlap, {
+                scored.append((overlap, row["confidence"] or 0, {
                     "id":         row["id"],
                     "content":    content,
                     "confidence": row["confidence"],
@@ -462,7 +468,8 @@ def _cross_domain_beliefs(top_beliefs: list, tokens: set, limit: int = 4) -> lis
                     "_cross_domain": True,
                 }))
 
-        scored.sort(key=lambda x: -x[0])
+        scored.sort(key=lambda x: (-x[0], -x[1]))
+        scored = [(s, b) for s, _, b in scored]
 
         # Deduplicate by topic — one belief per cross-domain topic
         seen_topics = set()
