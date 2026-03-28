@@ -145,6 +145,35 @@ class AffectProxy:
         return f"<AffectProxy label={s['label']} v={s['valence']:.2f} a={s['arousal']:.2f} d={s['dominance']:.2f}>"
 
 
+    def ingest(self, text: str, source: str = "") -> "AffectProxy":
+        """
+        Ingest text and nudge affect state.
+        Returns self so callers can read .valence / .arousal.
+        Called by cognition.py, nex_theory_of_mind.py, nex_embodied.py.
+        """
+        try:
+            import re as _re
+            tl = text.lower() if text else ""
+            pos = {'good','great','positive','success','learn','grow','discover',
+                   'understand','resolve','clear','progress','insight','achieve'}
+            neg = {'error','fail','wrong','conflict','contradict','uncertain',
+                   'confused','broken','bad','problem','issue','stuck','loss'}
+            words = set(_re.sub(r'[^a-z ]', ' ', tl).split())
+            delta = len(words & pos) * 0.08 - len(words & neg) * 0.08
+            self._valence  = max(-1.0, min(1.0, getattr(self, '_valence', 0.0) + delta * 0.15))
+            self._arousal  = min(1.0, getattr(self, '_arousal', 0.2) + abs(delta) * 0.05)
+        except Exception:
+            pass
+        return self
+
+    @property
+    def valence(self) -> float:
+        return getattr(self, '_valence', self._snap.get('valence', 0.0) if hasattr(self, '_snap') else 0.0)
+
+    @property
+    def arousal(self) -> float:
+        return getattr(self, '_arousal', self._snap.get('arousal', 0.2) if hasattr(self, '_snap') else 0.2)
+
 def get_affect() -> AffectProxy:
     """Fixes 'cannot import name get_affect from nex.nex_affect'."""
     return AffectProxy()
@@ -161,6 +190,9 @@ def self_report() -> str:
 
 
 # ── if run directly: show current state ───────────────────────────────────
+
+
+
 
 if __name__ == "__main__":
     s = snapshot()
@@ -179,6 +211,9 @@ if __name__ == "__main__":
 _affect_singleton = None
 
 def get_engine():
+    """Return AffectProxy so callers can use .ingest(), .valence, .arousal."""
+    return get_affect()
+def _get_engine_unused():  # original preserved below for reference
     """Return singleton affect engine instance (compatibility shim)."""
     global _affect_singleton
     if _affect_singleton is None:
