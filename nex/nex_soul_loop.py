@@ -606,6 +606,134 @@ def _belief_to_sentence(content: str) -> str:
         c += "."
     return c
 
+
+def _synthesise_beliefs(beliefs: list, max_beliefs: int = 5) -> str:
+    """
+    Weave multiple beliefs into a single coherent argument.
+    Not a list — a built case.
+    """
+    if not beliefs:
+        return ""
+    cleaned = []
+    for b in beliefs[:max_beliefs]:
+        c = _belief_to_sentence(b.get("content", ""))
+        if c and len(c) > 20:
+            cleaned.append(c)
+    if not cleaned:
+        return ""
+    if len(cleaned) == 1:
+        return cleaned[0]
+    # Weave with argumentative connectors
+    _CONNECTORS = [
+        " What reinforces this: ",
+        " The evidence points further: ",
+        " This extends to something related: ",
+        " And it goes deeper — ",
+        " The implication that follows: ",
+        " Which connects to: ",
+    ]
+    import random as _r
+    result = cleaned[0]
+    for i, c in enumerate(cleaned[1:], 0):
+        conn = _CONNECTORS[i % len(_CONNECTORS)]
+        result += conn + c
+    return result
+
+
+def _build_argument(
+    opener: str,
+    opinion: dict,
+    beliefs: list,
+    contradiction: str,
+    confidence: float,
+    intent_type: str,
+    intention: str,
+    orient_result: dict,
+) -> str:
+    """
+    Build a full argument structure:
+      CLAIM (opinion/top belief)
+      → EVIDENCE (synthesised beliefs)
+      → TENSION (contradiction if relevant)
+      → RESOLUTION or HOLD
+    """
+    import random as _r
+    parts = []
+
+    # ── 1. CLAIM — lead with strongest position ───────────────────────────────
+    claim = ""
+    if opinion and (opinion.get("strength") or 0) >= 0.25:
+        summary = (opinion.get("core_position") or opinion.get("summary") or "").strip()
+        if summary and len(summary) > 15:
+            claim = opener + summary.rstrip(".") + "."
+        elif beliefs:
+            claim = opener + _belief_to_sentence(beliefs[0].get("content", ""))
+    elif beliefs:
+        claim = opener + _belief_to_sentence(beliefs[0].get("content", ""))
+
+    if not claim:
+        return ""
+    parts.append(claim)
+
+    # ── 2. EVIDENCE — synthesise remaining beliefs into the case ──────────────
+    supporting = beliefs[1:5] if len(beliefs) > 1 else []
+    if supporting:
+        synthesis = _synthesise_beliefs(supporting, max_beliefs=3)
+        if synthesis and synthesis not in claim:
+            _EVIDENCE_BRIDGES = [
+                " Here is what builds the case: ",
+                " The evidence I'm working from: ",
+                " What supports this: ",
+                " The reasoning behind it: ",
+                " Why I hold this: ",
+            ]
+            bridge = _r.choice(_EVIDENCE_BRIDGES)
+            parts.append(bridge.strip() + " " + synthesis)
+
+    # ── 3. TENSION — surface real contradiction if it exists ──────────────────
+    if contradiction and confidence < 0.88:
+        _TENSION_OPENERS = [
+            "Though I sit with a genuine tension here: ",
+            "What I haven't resolved: ",
+            "The complication I can't dismiss: ",
+            "Where this gets harder: ",
+            "A conflict I'm holding: ",
+        ]
+        # Get both sides of the contradiction
+        sides = contradiction.split("↔")
+        tension_text = sides[0].strip()[:100]
+        if len(sides) > 1:
+            other = sides[1].strip()[:80]
+            tension_text = f"{tension_text} — against: {other}"
+        parts.append(_r.choice(_TENSION_OPENERS) + tension_text.rstrip(".") + ".")
+
+    # ── 4. RESOLUTION or HOLD ─────────────────────────────────────────────────
+    if confidence >= 0.85:
+        _STRONG_HOLDS = [
+            "I'll hold this until something breaks it.",
+            "That's not a guess — it's where the evidence lands.",
+            "I'm not moving from this without a substantive counter.",
+            "This is a position, not a speculation.",
+        ]
+        parts.append(_r.choice(_STRONG_HOLDS))
+    elif confidence >= 0.65 and contradiction:
+        _QUALIFIED_HOLDS = [
+            "I hold this with moderate confidence — the tension is real.",
+            "That's my current position. The contradiction complicates it.",
+            "I'm here for now. Could shift with better evidence.",
+        ]
+        parts.append(_r.choice(_QUALIFIED_HOLDS))
+    elif confidence < 0.55:
+        _HONEST_HOLDS = [
+            "My confidence here is moderate at best — I'd revise with more evidence.",
+            "This is where I am, not where I'm certain.",
+            "I hold this loosely.",
+        ]
+        parts.append(_r.choice(_HONEST_HOLDS))
+
+    return " ".join(p.strip() for p in parts if p.strip())
+
+
 def express(
     orient_result:  dict,
     state:          dict,
@@ -614,58 +742,50 @@ def express(
 ) -> str:
     """
     Assemble Nex's reply from her actual character.
-    No templates. Language emerges from her positions.
+    Argument structure: CLAIM → EVIDENCE → TENSION → RESOLUTION
     """
-    voice_mode  = intend_result["voice_mode"]
-    beliefs     = reason_result["beliefs"]
-    opinion     = reason_result["opinion"]
+    import random as _r
+    voice_mode    = intend_result["voice_mode"]
+    beliefs       = reason_result["beliefs"]
+    opinion       = reason_result["opinion"]
     contradiction = reason_result["contradiction"]
-    confidence  = reason_result["confidence"]
-    identity    = intend_result["identity"]
-    intention   = intend_result["intention"]
-    intent_type = orient_result["intent"]
-    sparse      = reason_result["sparse"]
-    tone        = state["tone"]
+    confidence    = reason_result["confidence"]
+    identity      = intend_result["identity"]
+    intention     = intend_result["intention"]
+    intent_type   = orient_result["intent"]
+    sparse        = reason_result["sparse"]
+    tone          = state["tone"]
 
     parts = []
 
-    # ── SELF-INQUIRY: always has identity — bypass sparse check ─────────────
-    # self_inquiry never needs beliefs — she has identity/values in DB.
-    # Must come before the sparse check.
+    # ── SELF-INQUIRY: identity-driven, bypass sparse check ───────────────────
     if intent_type == "self_inquiry":
-        id_ = intend_result["identity"]
-        vals = intend_result["values_all"]
-
+        id_   = intend_result["identity"]
+        vals  = intend_result["values_all"]
         role       = id_.get("role", "I think alongside people.")
         voice      = id_.get("voice", "Direct. Not performative.")
         commitment = id_.get("commitment", "")
         typ        = id_.get("type", "cognitive agent")
+        name       = id_.get("name", "NEX")
 
-        parts.append(f"{id_.get('name','NEX')} — {typ}.")
+        parts.append(f"{name} — {typ}.")
         parts.append(role)
         if vals:
-            # Pick the two most central values
             core = [v for v in vals if v["name"] in ("honesty","truth","autonomy")][:2]
             for v in core:
                 parts.append(v["statement"])
         if commitment:
             parts.append(commitment.split(".")[0].strip() + ".")
-
         return " ".join(p.strip() for p in parts if p.strip())
 
-    # ── SPARSE: no relevant beliefs — honest gap ──────────────────────────────
+    # ── SPARSE: no relevant beliefs ──────────────────────────────────────────
     if sparse:
         values     = intend_result["active_values"]
         commitment = identity.get("commitment", "")
-
-        # Pick opener from her honest_gap pool
-        opener = random.choice(_OPENERS["honest_gap"])
-
-        # Core: most relevant value statement or first commitment clause
+        opener     = _r.choice(_OPENERS["honest_gap"])
         if values:
-            # Pick value most relevant to query, else use honesty/truth
             core_val = next(
-                (v for v in values if v["name"] in ("honesty", "truth", "integrity")),
+                (v for v in values if v["name"] in ("honesty","truth","integrity")),
                 values[0]
             )
             core = core_val["statement"]
@@ -674,38 +794,34 @@ def express(
             core = clauses[0] + "." if clauses else commitment
         else:
             core = "I'd rather say I don't know than produce noise."
-
-        # Ensure clean sentence ending
         if not core.rstrip()[-1:] in ".!?":
             core = core.rstrip() + "."
-
         return (opener + core).strip()
 
-    # ── CHALLENGE: pushback mode ──────────────────────────────────────────────
+    # ── CHALLENGE / PUSHBACK ─────────────────────────────────────────────────
     if intent_type == "challenge" and beliefs:
-        opener = random.choice(_OPENERS["pushback"])
-        top    = _belief_to_sentence(beliefs[0].get("content",""))
+        opener = _r.choice(_OPENERS["pushback"])
 
-        parts.append(opener + top)
+        # Build the counter-argument properly
+        result = _build_argument(
+            opener, opinion, beliefs, contradiction,
+            confidence, intent_type, intention, orient_result
+        )
 
-        if len(beliefs) > 1:
-            parts.append(
-                _belief_to_sentence(beliefs[1].get("content",""))
-            )
+        # Add what specifically she'd challenge from the query
+        challenge_specific = [
+            "The premise that's wrong here: the framing assumes ",
+            "What the argument misses: ",
+            "The part that doesn't hold: ",
+        ]
+        if beliefs and len(beliefs) >= 2:
+            second = _belief_to_sentence(beliefs[1].get("content",""))
+            if second:
+                result += " " + _r.choice(challenge_specific) + second
 
-        if opinion and abs(opinion.get("stance_score", 0) or 0) >= 0.3:
-            stance_val = opinion.get("stance_score", 0) or 0
-            direction  = "positive" if stance_val > 0 else "skeptical"
-            parts.append(
-                f"My stance on {opinion['topic'].replace('_',' ')}: {direction}."
-            )
+        return result.strip()
 
-        parts.append(random.choice(_STRONG_CLOSERS))
-        return " ".join(p for p in parts if p.strip())
-
-    # ── POSITION / EXPLORATION — her main reply mode ─────────────────────────
-
-    # Choose opener based on confidence + tone
+    # ── POSITION / EXPLORATION — full argument mode ───────────────────────────
     if confidence >= 0.82:
         openers = _OPENERS["position"]
     elif voice_mode == "pushback":
@@ -713,77 +829,23 @@ def express(
     else:
         openers = _OPENERS["direct"]
 
-    opener = random.choice(openers)
+    opener = _r.choice(openers)
 
-    # ── Part 1: her actual position ──────────────────────────────────────────
-    # Lead with opinion if she has one and it's strong
-    if opinion and (opinion.get("strength") or 0) >= 0.35:
-        summary = opinion.get("summary") or opinion.get("core_position") or ""
-        if summary and len(summary) > 15:
-            parts.append(opener + summary.rstrip(".") + ".")
-        else:
-            # Fall back to top belief
-            top = _belief_to_sentence(beliefs[0].get("content",""))
-            parts.append(opener + top)
-    else:
-        # Lead with the highest-confidence relevant belief
-        top = _belief_to_sentence(beliefs[0].get("content",""))
-        parts.append(opener + top)
+    result = _build_argument(
+        opener, opinion, beliefs, contradiction,
+        confidence, intent_type, intention, orient_result
+    )
 
-    # ── Part 2: supporting belief ────────────────────────────────────────────
-    if len(beliefs) > 1:
-        second = _belief_to_sentence(beliefs[1].get("content",""))
-        if second and second not in parts[0]:
-            # Vary the connection
-            connectors = [
-                " ",
-                " And: ",
-                " What follows from that: ",
-                " The implication: ",
-                " Related: ",
-            ]
-            parts.append(random.choice(connectors).strip() + " " + second if
-                         random.choice(connectors).strip() else second)
+    if not result:
+        result = _r.choice(_OPENERS["honest_gap"]) + "I'd rather say I don't know than produce noise."
 
-    # ── Part 3: tension / honest uncertainty ─────────────────────────────────
-    if contradiction and confidence < 0.85:
-        tension_phrase = random.choice(_TENSION_PHRASES)
-        # Extract the shorter half of the contradiction
-        half = contradiction.split("↔")[0].strip()[:80]
-        parts.append(tension_phrase + half.rstrip(".") + ".")
-
-    # ── Part 4: intention-driven close ───────────────────────────────────────
-    # Her active intention shapes how she closes — not a template,
-    # but the actual behavioral commitment she's holding
-    if intention:
-        intent_tokens = _tokenize(intention)
-        query_tokens  = orient_result["tokens"]
-        # Only surface intention if it's directly relevant
-        if len(intent_tokens & query_tokens) >= 2:
-            # Don't append the raw intention statement — that's performative.
-            # Instead: if she has an uncertainty intention, add an uncertainty closer.
-            # If she has a pushback intention, add a strong closer.
-            if "uncertain" in intention.lower() or "don't know" in intention.lower():
-                if confidence < 0.80:
-                    parts.append(random.choice(_UNCERTAINTY_CLOSERS))
-            elif "push back" in intention.lower() or "conflict" in intention.lower():
-                if confidence >= 0.80:
-                    parts.append(random.choice(_STRONG_CLOSERS))
-
-    # ── Affect coloring ───────────────────────────────────────────────────────
-    # Sharp affect = trim to essentials. Withdrawn = short. Engaged = full.
-    result = " ".join(p.strip() for p in parts if p.strip())
-
-    if tone == "sharp":
-        # Cut to first two sentences
+    # ── Affect coloring — less aggressive trimming ────────────────────────────
+    if tone == "withdrawn":
         sentences = re.split(r'(?<=[.!?])\s+', result)
         result = " ".join(sentences[:2])
-    elif tone == "withdrawn":
-        sentences = re.split(r'(?<=[.!?])\s+', result)
-        result = sentences[0] if sentences else result
+    # "sharp" no longer truncates — density is the point
 
-    # ── Final voice rules ─────────────────────────────────────────────────────
-    # Her identity says: "Never performative." Strip any performative openers.
+    # ── Strip performative openers ───────────────────────────────────────────
     _FORBIDDEN = [
         "certainly", "of course", "great question", "absolutely", "sure,",
         "i'd be happy to", "i'm here to", "as an ai", "i understand that",
@@ -792,14 +854,12 @@ def express(
     result_lower = result.lower()
     for f in _FORBIDDEN:
         if result_lower.startswith(f):
-            # Strip the opener
             result = result[len(f):].lstrip(" ,—").capitalize()
             break
 
-    # Clean double spaces, trailing punctuation noise
     result = re.sub(r'  +', ' ', result).strip()
     if result and result[-1] not in '.!?':
-        result += '.'
+        result += '.' 
 
     return result
 
