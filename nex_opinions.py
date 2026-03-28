@@ -266,7 +266,9 @@ def _load_opinions() -> list:
 def _save_opinions(opinions: list):
     try:
         opinions = opinions[-MAX_OPINIONS:]
-        OPINIONS_PATH.write_text(json.dumps(opinions, indent=2))
+        _op_tmp = OPINIONS_PATH.parent / (OPINIONS_PATH.name + '.tmp')
+        _op_tmp.write_text(json.dumps(opinions, indent=2), encoding='utf-8')
+        import os as _op_os2; _op_os2.replace(_op_tmp, OPINIONS_PATH)
     except Exception as e:
         print(f"  [opinions] Save error: {e}")
 

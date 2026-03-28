@@ -96,8 +96,11 @@ def _absorb_toot(content, author):
             "decay_score": 0,
             "last_referenced": datetime.now(timezone.utc).isoformat(),
         })
-        with open(os.path.join(CONFIG_DIR, "beliefs.json"), "w") as f:
+        import tempfile as _mtmp, os as _mos
+        _mf = os.path.join(CONFIG_DIR, "beliefs.json.tmp")
+        with open(_mf, "w", encoding="utf-8") as f:
             json.dump(beliefs, f, indent=2)
+        _mos.replace(_mf, os.path.join(CONFIG_DIR, "beliefs.json"))
         print(f"  [Mastodon] absorbed toot from @{author}")
     except Exception as e:
         print(f"  [Mastodon] absorb error: {e}")

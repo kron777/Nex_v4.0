@@ -3648,8 +3648,10 @@ def main():
                                         _bexist.append(_bd)
                                         _bnew += 1
                                 if _bnew > 0:
-                                    (_bcfg/'beliefs.json').write_text(
-                                        _bjson.dumps(_bexist, indent=2, default=str))
+                                    # atomic write — prevents truncation on crash
+                                    _btmp = _bcfg / 'beliefs.json.tmp'
+                                    _btmp.write_text(_bjson.dumps(_bexist, indent=2, default=str), encoding='utf-8')
+                                    import os as _bos2; _bos2.replace(_btmp, _bcfg / 'beliefs.json')
                                     nex_log('belief', f'[BeliefSync] +{_bnew} DB beliefs → JSON')
                                 _bdb.close()
                             except Exception as _bse:
