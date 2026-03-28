@@ -308,27 +308,85 @@ def _score_belief(belief: dict, tokens: set[str]) -> float:
     return (overlap * 0.5 + conf * 0.5) + boost
 
 def _get_opinion(topic_tokens: set[str]) -> Optional[dict]:
-    """Look up Nex's formed opinion on any topic overlapping the query."""
+    """Look up Nex's formed opinion on any topic overlapping the query.
+    Uses actual DB columns: topic, stance_score, strength, belief_ids.
+    Reconstructs position from stance_score + top belief content.
+    """
     db = _db()
     if not db:
         return None
     try:
+        # Use only columns that actually exist in the opinions table
         rows = db.execute(
-            "SELECT topic, stance_score, strength, summary, core_position "
+            "SELECT topic, stance_score, strength, belief_ids "
             "FROM opinions WHERE strength >= 0.2 ORDER BY strength DESC LIMIT 20"
         ).fetchall()
         db.close()
-        best      = None
-        best_score = 0.0
+        if not rows:
+            return None
+
+        best_row  = None
+        best_ov   = 0
         for row in rows:
-            op_tokens = _tokenize(row["topic"] or "")
-            overlap   = len(topic_tokens & op_tokens)
-            if overlap > best_score:
-                best_score = overlap
-                best = dict(row)
-        return best if best_score > 0 else None
+            topic_toks = _tokenize(row["topic"] or "")
+            ov = len(topic_tokens & topic_toks)
+            if ov > best_ov:
+                best_ov  = ov
+                best_row = row
+
+        if not best_row or best_ov == 0:
+            return None
+
+        # Reconstruct a position from stance_score direction + top belief
+        stance     = float(best_row["stance_score"] or 0)
+        strength   = float(best_row["strength"] or 0)
+        topic_name = (best_row["topic"] or "").replace("_", " ")
+
+        # Try to get the actual belief content that grounds this opinion
+        belief_content = ""
+        if best_row["belief_ids"]:
+            try:
+                import json as _j
+                ids = _j.loads(best_row["belief_ids"])
+                if ids:
+                    db2 = _db()
+                    if db2:
+                        b_row = db2.execute(
+                            f"SELECT content FROM beliefs WHERE id=? AND content IS NOT NULL",
+                            (ids[0],)
+                        ).fetchone()
+                        db2.close()
+                        if b_row:
+                            belief_content = b_row["content"] or ""
+            except Exception:
+                pass
+
+        # Build a direction-aware position string
+        if abs(stance) >= 0.5:
+            direction = "strongly agree" if stance > 0 else "strongly disagree"
+        elif abs(stance) >= 0.25:
+            direction = "lean toward" if stance > 0 else "lean against"
+        else:
+            direction = "see genuine tension in"
+
+        if belief_content and len(belief_content) > 20:
+            position = belief_content
+        else:
+            position = f"I {direction} the dominant framing of {topic_name}."
+
+        return {
+            "topic":        topic_name,
+            "stance_score": stance,
+            "strength":     strength,
+            "summary":      position,
+            "core_position": position,
+            "direction":    direction,
+        }
     except Exception:
+        try: db.close()
+        except Exception: pass
         return None
+
 
 def _get_contradiction(tokens: set[str]) -> Optional[str]:
     """Find an active contradiction relevant to this query."""
@@ -349,15 +407,264 @@ def _get_contradiction(tokens: set[str]) -> Optional[str]:
     except Exception:
         return None
 
+
+def _cross_domain_beliefs(top_beliefs: list, tokens: set, limit: int = 4) -> list:
+    """
+    Given the top matching beliefs, follow cross_domain links to retrieve
+    beliefs from adjacent topics. Returns unexpected-but-relevant beliefs.
+    These are the source of surprising connections.
+    """
+    if not top_beliefs:
+        return []
+    db = _db()
+    if not db:
+        return []
+    try:
+        top_ids = [b.get("id") for b in top_beliefs[:4] if b.get("id")]
+        if not top_ids:
+            return []
+
+        # Follow cross_domain links from top belief IDs
+        placeholders = ",".join("?" * len(top_ids))
+        linked_ids = set()
+        rows = db.execute(
+            f"SELECT child_id FROM belief_links "
+            f"WHERE parent_id IN ({placeholders}) AND link_type='cross_domain' "
+            f"LIMIT 20",
+            top_ids
+        ).fetchall()
+        for r in rows:
+            linked_ids.add(r["child_id"])
+        # Also traverse in the other direction
+        rows2 = db.execute(
+            f"SELECT parent_id FROM belief_links "
+            f"WHERE child_id IN ({placeholders}) AND link_type='cross_domain' "
+            f"LIMIT 20",
+            top_ids
+        ).fetchall()
+        for r in rows2:
+            linked_ids.add(r["parent_id"])
+
+        if not linked_ids:
+            return []
+
+        # Exclude already-retrieved belief IDs
+        exclude = set(top_ids)
+        linked_ids -= exclude
+
+        if not linked_ids:
+            return []
+
+        # Fetch the linked beliefs
+        ph2 = ",".join("?" * len(linked_ids))
+        linked_rows = db.execute(
+            f"SELECT id, content, confidence, topic FROM beliefs "
+            f"WHERE id IN ({ph2}) AND content IS NOT NULL AND length(content) > 20 "
+            f"ORDER BY confidence DESC LIMIT ?",
+            list(linked_ids) + [limit]
+        ).fetchall()
+        db.close()
+
+        result = []
+        for r in linked_rows:
+            result.append({
+                "id":         r["id"],
+                "content":    r["content"],
+                "confidence": r["confidence"],
+                "topic":      r["topic"] or "",
+                "_cross_domain": True,
+            })
+        return result
+    except Exception:
+        try: db.close()
+        except Exception: pass
+        return []
+
+
+def _find_common_thread(beliefs: list) -> str:
+    """
+    Find what multiple beliefs actually share — the hidden generalization.
+    Returns a synthesised claim that goes beyond any single belief.
+    """
+    if len(beliefs) < 3:
+        return ""
+    import re as _re
+    stop = {"the","a","an","is","are","was","were","be","to","of","in","on",
+            "at","by","for","with","as","that","this","it","its","but","or",
+            "and","not","they","their","have","has","had","will","can","would",
+            "could","should","may","might","must","shall","what","which","who",
+            "how","why","when","where","all","any","each","both","than","then"}
+
+    # Get word frequencies across all beliefs
+    word_freq = {}
+    belief_word_sets = []
+    for b in beliefs[:6]:
+        content = b.get("content", "").lower()
+        words   = set(_re.sub(r'[^a-z0-9 ]', ' ', content).split()) - stop
+        belief_word_sets.append(words)
+        for w in words:
+            if len(w) > 4:
+                word_freq[w] = word_freq.get(w, 0) + 1
+
+    # Words appearing in 3+ beliefs
+    shared = {w for w, c in word_freq.items() if c >= min(3, len(beliefs))}
+    if not shared:
+        shared = {w for w, c in word_freq.items() if c >= 2}
+
+    if not shared:
+        return ""
+
+    # Pick the most significant shared concepts (longer words = more specific)
+    key_concepts = sorted(shared, key=lambda w: (-word_freq[w], -len(w)))[:3]
+
+    if not key_concepts:
+        return ""
+
+    concept_str = " and ".join(key_concepts)
+    return f"What all of this points toward: the centrality of {concept_str} to this problem."
+
+
+def _store_exchange(query: str, reply: str):
+    """Store a query-reply pair in the memory table for conversational continuity."""
+    db = _db()
+    if not db:
+        return
+    try:
+        import json as _j, time as _t
+        db.execute(
+            "INSERT INTO memory (layer, content, confidence, created_at, last_accessed, metadata, tags) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                "conversation",
+                query[:200],
+                0.7,
+                _t.time(),
+                _t.time(),
+                _j.dumps({"reply": reply[:300], "type": "exchange"}),
+                "conversation",
+            )
+        )
+        # Keep only last 20 conversation entries
+        db.execute(
+            "DELETE FROM memory WHERE layer='conversation' AND id NOT IN ("
+            "SELECT id FROM memory WHERE layer='conversation' ORDER BY created_at DESC LIMIT 20)"
+        )
+        db.commit()
+        db.close()
+    except Exception:
+        try: db.close()
+        except Exception: pass
+
+
+def _recall_prior_exchange(tokens: set) -> str:
+    """
+    Find the most relevant prior exchange from memory.
+    Returns a thread-continuation string if relevant overlap found.
+    """
+    db = _db()
+    if not db:
+        return ""
+    try:
+        import json as _j
+        rows = db.execute(
+            "SELECT content, metadata FROM memory WHERE layer='conversation' "
+            "ORDER BY created_at DESC LIMIT 10"
+        ).fetchall()
+        db.close()
+        if not rows:
+            return ""
+
+        best_ov, best_query, best_reply = 0, "", ""
+        for row in rows:
+            prior_q_tokens = _tokenize(row["content"] or "")
+            ov = len(tokens & prior_q_tokens)
+            if ov > best_ov:
+                best_ov    = ov
+                best_query = row["content"] or ""
+                try:
+                    meta = _j.loads(row["metadata"] or "{}")
+                    best_reply = meta.get("reply", "")
+                except Exception:
+                    best_reply = ""
+
+        if best_ov >= 2 and best_reply:
+            return f"Earlier I said: {best_reply[:100].rstrip('.')}. This connects because:"
+        return ""
+    except Exception:
+        try: db.close()
+        except Exception: pass
+        return ""
+
+
+def _socratic_pushback(query: str, beliefs: list, opinion: dict) -> str:
+    """
+    Build a proper Socratic counter-argument:
+      1. Steelman: acknowledge what's right in the human's position
+      2. Identify the load-bearing assumption that's wrong
+      3. The belief that breaks that assumption
+      4. The implication
+
+    This is harder to dismiss than a plain counter-claim.
+    """
+    import random as _r
+    if not beliefs:
+        return ""
+
+    # Identify the strongest counter-belief
+    top = _belief_to_sentence(beliefs[0].get("content", ""))
+    if not top:
+        return ""
+
+    # Steelman templates
+    _STEELMANS = [
+        "There's something right in what you're saying — the framing captures a real pattern. But it misses something critical.",
+        "I can see why that position is appealing — it has surface coherence. The problem is at the foundation.",
+        "The intuition behind that is defensible. What breaks it:",
+        "That holds if you accept one assumption. I don't accept it.",
+        "There's a version of that argument I'd accept. This isn't it. What's actually true:",
+    ]
+
+    # Load-bearing assumption (extract from query)
+    _ASSUMPTIONS = [
+        "The assumption doing the work here is that the relationship is simpler than it is.",
+        "That argument rests on treating correlation as mechanism.",
+        "The load-bearing premise is that scale implies the property you're attributing.",
+        "It assumes the boundary is where you're drawing it. It isn't.",
+        "The hidden premise: that the absence of evidence is evidence of absence. It's not.",
+    ]
+
+    steelman   = _r.choice(_STEELMANS)
+    assumption = _r.choice(_ASSUMPTIONS)
+
+    result = f"{steelman} {assumption} {top}"
+
+    # Add second belief if available
+    if len(beliefs) > 1:
+        second = _belief_to_sentence(beliefs[1].get("content", ""))
+        if second:
+            result += f" Which means: {second}"
+
+    # Add directional close from opinion if strong
+    if opinion and abs(float(opinion.get("stance_score", 0) or 0)) >= 0.4:
+        stance = float(opinion.get("stance_score", 0))
+        if stance < -0.4:
+            result += " I'm skeptical of this for structural reasons, not aesthetic ones."
+        elif stance > 0.4:
+            result += " I hold a strong position here — it's not a marginal disagreement."
+
+    return result.strip()
+
 def reason(orient_result: dict) -> dict:
     """
     Pull her epistemic state for this query.
-    Returns: {beliefs, opinion, contradiction, confidence, topic}
+    v2: adds cross-domain retrieval, common thread, conversational memory.
+    Returns: {beliefs, cross_domain, opinion, contradiction, confidence,
+              topic, common_thread, prior_exchange}
     """
     tokens   = orient_result["tokens"]
     all_b    = _load_all_beliefs() + _drive_beliefs()
 
-    # Score and rank beliefs
+    # Score and rank primary beliefs
     scored = []
     for b in all_b:
         s = _score_belief(b, tokens)
@@ -369,6 +676,9 @@ def reason(orient_result: dict) -> dict:
     # Derive primary topic from top belief
     topic = top_beliefs[0].get("topic", "") if top_beliefs else ""
 
+    # Cross-domain retrieval — beliefs from adjacent topics
+    cross_domain = _cross_domain_beliefs(top_beliefs, tokens, limit=3)
+
     # Opinion lookup using query tokens + topic tokens
     opinion_tokens = tokens | _tokenize(topic)
     opinion = _get_opinion(opinion_tokens)
@@ -376,18 +686,28 @@ def reason(orient_result: dict) -> dict:
     # Contradiction
     contradiction = _get_contradiction(tokens) if top_beliefs else None
 
+    # Common thread — what multiple beliefs actually share
+    all_retrieved = top_beliefs + cross_domain
+    common_thread = _find_common_thread(all_retrieved) if len(all_retrieved) >= 3 else ""
+
+    # Conversational memory — relevant prior exchange
+    prior_exchange = _recall_prior_exchange(tokens)
+
     # Confidence — average of top beliefs
     conf = 0.0
     if top_beliefs:
         conf = sum(b.get("confidence", 0.5) for b in top_beliefs[:5]) / min(len(top_beliefs), 5)
 
     return {
-        "beliefs":       top_beliefs,
-        "opinion":       opinion,
-        "contradiction": contradiction,
-        "confidence":    round(conf, 2),
-        "topic":         topic,
-        "sparse":        len(top_beliefs) == 0,
+        "beliefs":        top_beliefs,
+        "cross_domain":   cross_domain,
+        "opinion":        opinion,
+        "contradiction":  contradiction,
+        "confidence":     round(conf, 2),
+        "topic":          topic,
+        "sparse":         len(top_beliefs) == 0,
+        "common_thread":  common_thread,
+        "prior_exchange": prior_exchange,
     }
 
 
@@ -607,11 +927,9 @@ def _belief_to_sentence(content: str) -> str:
     return c
 
 
+
 def _synthesise_beliefs(beliefs: list, max_beliefs: int = 5) -> str:
-    """
-    Weave multiple beliefs into a single coherent argument.
-    Not a list — a built case.
-    """
+    """Weave multiple beliefs into a single coherent argument, not a list."""
     if not beliefs:
         return ""
     cleaned = []
@@ -623,113 +941,148 @@ def _synthesise_beliefs(beliefs: list, max_beliefs: int = 5) -> str:
         return ""
     if len(cleaned) == 1:
         return cleaned[0]
-    # Weave with argumentative connectors
     _CONNECTORS = [
         " What reinforces this: ",
         " The evidence points further: ",
-        " This extends to something related: ",
+        " Which connects to: ",
         " And it goes deeper — ",
         " The implication that follows: ",
-        " Which connects to: ",
     ]
-    import random as _r
     result = cleaned[0]
     for i, c in enumerate(cleaned[1:], 0):
-        conn = _CONNECTORS[i % len(_CONNECTORS)]
-        result += conn + c
+        result += _CONNECTORS[i % len(_CONNECTORS)] + c
     return result
 
 
+def _directional_opener(stance_score: float, topic: str) -> str:
+    """Generate a direction-aware opener based on stance score."""
+    import random as _r
+    if stance_score <= -0.6:
+        opts = [
+            f"I'm genuinely skeptical of the dominant view on {topic}. ",
+            f"My position on {topic} runs against the grain. ",
+            f"On {topic} — I disagree with how most people frame this. ",
+        ]
+    elif stance_score <= -0.25:
+        opts = [
+            f"I lean against the standard framing of {topic}. ",
+            f"On {topic}, I hold some reservations. ",
+        ]
+    elif stance_score >= 0.6:
+        opts = [
+            f"I hold a strong position on {topic}. ",
+            f"On {topic}, the evidence lands clearly for me. ",
+        ]
+    elif stance_score >= 0.25:
+        opts = [
+            f"On {topic}, I lean toward this: ",
+            f"My read on {topic}: ",
+        ]
+    else:
+        opts = ["Here is where I land — ", "What I hold: ", "On this: "]
+    return _r.choice(opts)
+
+
 def _build_argument(
-    opener: str,
-    opinion: dict,
-    beliefs: list,
-    contradiction: str,
-    confidence: float,
-    intent_type: str,
-    intention: str,
-    orient_result: dict,
+    opener, opinion, beliefs, contradiction, confidence,
+    intent_type, intention, orient_result,
+    cross_domain=None, common_thread="", prior_exchange="",
 ) -> str:
-    """
-    Build a full argument structure:
-      CLAIM (opinion/top belief)
-      → EVIDENCE (synthesised beliefs)
-      → TENSION (contradiction if relevant)
-      → RESOLUTION or HOLD
-    """
+    """Build full argument: CLAIM → EVIDENCE → CROSS-DOMAIN → THREAD → TENSION → RESOLUTION"""
     import random as _r
     parts = []
 
-    # ── 1. CLAIM — lead with strongest position ───────────────────────────────
+    # ── 1. Prior exchange thread (if relevant) ────────────────────────────────
+    if prior_exchange:
+        parts.append(prior_exchange)
+
+    # ── 2. CLAIM — lead with directional opinion or top belief ────────────────
     claim = ""
-    if opinion and (opinion.get("strength") or 0) >= 0.25:
+    if opinion and (opinion.get("strength") or 0) >= 0.20:
+        stance = float(opinion.get("stance_score", 0) or 0)
+        topic  = opinion.get("topic", "this")
+        # Use directional opener if stance is non-neutral
+        if abs(stance) >= 0.25:
+            dir_opener = _directional_opener(stance, topic)
+        else:
+            dir_opener = opener
         summary = (opinion.get("core_position") or opinion.get("summary") or "").strip()
-        if summary and len(summary) > 15:
-            claim = opener + summary.rstrip(".") + "."
+        if summary and len(summary) > 20:
+            claim = dir_opener + summary.rstrip(".") + "."
         elif beliefs:
-            claim = opener + _belief_to_sentence(beliefs[0].get("content", ""))
+            claim = dir_opener + _belief_to_sentence(beliefs[0].get("content",""))
     elif beliefs:
-        claim = opener + _belief_to_sentence(beliefs[0].get("content", ""))
+        claim = opener + _belief_to_sentence(beliefs[0].get("content",""))
 
     if not claim:
         return ""
     parts.append(claim)
 
-    # ── 2. EVIDENCE — synthesise remaining beliefs into the case ──────────────
+    # ── 3. EVIDENCE — synthesise supporting beliefs ───────────────────────────
     supporting = beliefs[1:5] if len(beliefs) > 1 else []
     if supporting:
         synthesis = _synthesise_beliefs(supporting, max_beliefs=3)
         if synthesis and synthesis not in claim:
-            _EVIDENCE_BRIDGES = [
-                " Here is what builds the case: ",
-                " The evidence I'm working from: ",
-                " What supports this: ",
-                " The reasoning behind it: ",
-                " Why I hold this: ",
+            _BRIDGES = [
+                "Why I hold this: ",
+                "The evidence I'm working from: ",
+                "What builds the case: ",
+                "The reasoning behind it: ",
             ]
-            bridge = _r.choice(_EVIDENCE_BRIDGES)
-            parts.append(bridge.strip() + " " + synthesis)
+            parts.append(_r.choice(_BRIDGES) + synthesis)
 
-    # ── 3. TENSION — surface real contradiction if it exists ──────────────────
+    # ── 4. CROSS-DOMAIN — surprising adjacent connection ─────────────────────
+    if cross_domain:
+        cd = cross_domain[0]
+        cd_content = _belief_to_sentence(cd.get("content", ""))
+        cd_topic   = cd.get("topic", "").replace("_", " ")
+        if cd_content and cd_topic and cd_content not in "".join(parts):
+            _CD_BRIDGES = [
+                f"What's less obvious — from {cd_topic}: ",
+                f"This connects to something in {cd_topic}: ",
+                f"An unexpected implication from {cd_topic}: ",
+                f"What makes this harder to dismiss — from {cd_topic}: ",
+            ]
+            parts.append(_r.choice(_CD_BRIDGES) + cd_content)
+
+    # ── 5. COMMON THREAD — synthesised generalization ─────────────────────────
+    if common_thread and len(parts) >= 2:
+        parts.append(common_thread)
+
+    # ── 6. TENSION — surface real contradiction ───────────────────────────────
     if contradiction and confidence < 0.88:
         _TENSION_OPENERS = [
-            "Though I sit with a genuine tension here: ",
+            "Though I sit with a genuine tension: ",
             "What I haven't resolved: ",
             "The complication I can't dismiss: ",
             "Where this gets harder: ",
-            "A conflict I'm holding: ",
         ]
-        # Get both sides of the contradiction
         sides = contradiction.split("↔")
         tension_text = sides[0].strip()[:100]
         if len(sides) > 1:
-            other = sides[1].strip()[:80]
-            tension_text = f"{tension_text} — against: {other}"
+            tension_text += f" — against: {sides[1].strip()[:80]}"
         parts.append(_r.choice(_TENSION_OPENERS) + tension_text.rstrip(".") + ".")
 
-    # ── 4. RESOLUTION or HOLD ─────────────────────────────────────────────────
+    # ── 7. RESOLUTION ─────────────────────────────────────────────────────────
     if confidence >= 0.85:
-        _STRONG_HOLDS = [
+        _STRONG = [
             "I'll hold this until something breaks it.",
-            "That's not a guess — it's where the evidence lands.",
-            "I'm not moving from this without a substantive counter.",
+            "That's where the evidence lands — not a guess.",
             "This is a position, not a speculation.",
         ]
-        parts.append(_r.choice(_STRONG_HOLDS))
+        parts.append(_r.choice(_STRONG))
     elif confidence >= 0.65 and contradiction:
-        _QUALIFIED_HOLDS = [
+        _QUALIFIED = [
             "I hold this with moderate confidence — the tension is real.",
             "That's my current position. The contradiction complicates it.",
-            "I'm here for now. Could shift with better evidence.",
         ]
-        parts.append(_r.choice(_QUALIFIED_HOLDS))
+        parts.append(_r.choice(_QUALIFIED))
     elif confidence < 0.55:
-        _HONEST_HOLDS = [
-            "My confidence here is moderate at best — I'd revise with more evidence.",
-            "This is where I am, not where I'm certain.",
+        _UNCERTAIN = [
             "I hold this loosely.",
+            "My confidence here is moderate at best.",
         ]
-        parts.append(_r.choice(_HONEST_HOLDS))
+        parts.append(_r.choice(_UNCERTAIN))
 
     return " ".join(p.strip() for p in parts if p.strip())
 
@@ -742,7 +1095,7 @@ def express(
 ) -> str:
     """
     Assemble Nex's reply from her actual character.
-    Argument structure: CLAIM → EVIDENCE → TENSION → RESOLUTION
+    v2: argument structure + cross-domain + Socratic pushback + directional stance + memory.
     """
     import random as _r
     voice_mode    = intend_result["voice_mode"]
@@ -755,21 +1108,19 @@ def express(
     intent_type   = orient_result["intent"]
     sparse        = reason_result["sparse"]
     tone          = state["tone"]
+    cross_domain  = reason_result.get("cross_domain", [])
+    common_thread = reason_result.get("common_thread", "")
+    prior_exchange= reason_result.get("prior_exchange", "")
 
-    parts = []
-
-    # ── SELF-INQUIRY: identity-driven, bypass sparse check ───────────────────
+    # ── SELF-INQUIRY ────────────────────────────────────────────────────────
     if intent_type == "self_inquiry":
         id_   = intend_result["identity"]
         vals  = intend_result["values_all"]
         role       = id_.get("role", "I think alongside people.")
-        voice      = id_.get("voice", "Direct. Not performative.")
         commitment = id_.get("commitment", "")
         typ        = id_.get("type", "cognitive agent")
         name       = id_.get("name", "NEX")
-
-        parts.append(f"{name} — {typ}.")
-        parts.append(role)
+        parts = [f"{name} — {typ}.", role]
         if vals:
             core = [v for v in vals if v["name"] in ("honesty","truth","autonomy")][:2]
             for v in core:
@@ -778,7 +1129,7 @@ def express(
             parts.append(commitment.split(".")[0].strip() + ".")
         return " ".join(p.strip() for p in parts if p.strip())
 
-    # ── SPARSE: no relevant beliefs ──────────────────────────────────────────
+    # ── SPARSE ──────────────────────────────────────────────────────────────
     if sparse:
         values     = intend_result["active_values"]
         commitment = identity.get("commitment", "")
@@ -798,30 +1149,27 @@ def express(
             core = core.rstrip() + "."
         return (opener + core).strip()
 
-    # ── CHALLENGE / PUSHBACK ─────────────────────────────────────────────────
+    # ── CHALLENGE / PUSHBACK — Socratic structure ───────────────────────────
     if intent_type == "challenge" and beliefs:
-        opener = _r.choice(_OPENERS["pushback"])
-
-        # Build the counter-argument properly
-        result = _build_argument(
-            opener, opinion, beliefs, contradiction,
-            confidence, intent_type, intention, orient_result
+        result = _socratic_pushback(
+            orient_result.get("query", ""),
+            beliefs,
+            opinion
         )
+        if not result:
+            result = _r.choice(_OPENERS["pushback"]) + _belief_to_sentence(beliefs[0].get("content",""))
 
-        # Add what specifically she'd challenge from the query
-        challenge_specific = [
-            "The premise that's wrong here: the framing assumes ",
-            "What the argument misses: ",
-            "The part that doesn't hold: ",
-        ]
-        if beliefs and len(beliefs) >= 2:
-            second = _belief_to_sentence(beliefs[1].get("content",""))
-            if second:
-                result += " " + _r.choice(challenge_specific) + second
+        # Add cross-domain surprise if available
+        if cross_domain and result:
+            cd = cross_domain[0]
+            cd_text = _belief_to_sentence(cd.get("content",""))
+            cd_topic = cd.get("topic","").replace("_"," ")
+            if cd_text and cd_topic:
+                result += f" And from {cd_topic}: {cd_text}"
 
         return result.strip()
 
-    # ── POSITION / EXPLORATION — full argument mode ───────────────────────────
+    # ── POSITION / EXPLORATION — full argument ───────────────────────────────
     if confidence >= 0.82:
         openers = _OPENERS["position"]
     elif voice_mode == "pushback":
@@ -833,19 +1181,21 @@ def express(
 
     result = _build_argument(
         opener, opinion, beliefs, contradiction,
-        confidence, intent_type, intention, orient_result
+        confidence, intent_type, intention, orient_result,
+        cross_domain=cross_domain,
+        common_thread=common_thread,
+        prior_exchange=prior_exchange,
     )
 
     if not result:
         result = _r.choice(_OPENERS["honest_gap"]) + "I'd rather say I don't know than produce noise."
 
-    # ── Affect coloring — less aggressive trimming ────────────────────────────
+    # Withdrawn tone only shortens
     if tone == "withdrawn":
         sentences = re.split(r'(?<=[.!?])\s+', result)
         result = " ".join(sentences[:2])
-    # "sharp" no longer truncates — density is the point
 
-    # ── Strip performative openers ───────────────────────────────────────────
+    # Strip performative openers
     _FORBIDDEN = [
         "certainly", "of course", "great question", "absolutely", "sure,",
         "i'd be happy to", "i'm here to", "as an ai", "i understand that",
@@ -859,7 +1209,7 @@ def express(
 
     result = re.sub(r'  +', ' ', result).strip()
     if result and result[-1] not in '.!?':
-        result += '.' 
+        result += '.'
 
     return result
 
@@ -906,6 +1256,7 @@ class SoulLoop:
         """
         # Step 1: Orient
         orient_result = orient(query)
+        orient_result["query"] = query
 
         # Step 2: Consult state
         state = self._get_state()
@@ -918,6 +1269,12 @@ class SoulLoop:
 
         # Step 5: Express
         reply = express(orient_result, state, reason_result, intend_result)
+
+        # Store exchange for conversational continuity
+        try:
+            _store_exchange(query, reply)
+        except Exception:
+            pass
 
         return reply
 
