@@ -178,7 +178,7 @@ _TOPIC_SOURCES = {
 
 _FALLBACK_SOURCES = [
     _WIKIPEDIA_BASE + "{slug}",
-    _ARXIV_SEARCH.format(q=urllib.parse.quote(topic)),
+    _ARXIV_SEARCH,
 ]
 
 
