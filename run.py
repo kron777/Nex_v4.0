@@ -2083,6 +2083,11 @@ def main():
                                     common_thread=_soul_thread if '_soul_thread' in dir() else '',
                                 )
                             except Exception: pass
+                            # Session memory store
+                            try:
+                                from nex.nex_session_memory import store_exchange as _se
+                            except Exception: pass
+
                             # ── Auto-seeder: self-expand belief corpus ──────
                             try:
                                 from nex.nex_auto_seeder import check_and_seed as _cas
