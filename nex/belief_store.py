@@ -7,6 +7,15 @@ PATCH: fixed schema split (BUG1), D6 logging (BUG2), wider topic map (BUG3)
 """
 import json, os, sqlite3, hashlib
 from datetime import datetime
+
+def _atomic_write_json(path, data):
+    """Write JSON atomically via temp file — prevents truncation on crash."""
+    import tempfile, os
+    path = Path(path)
+    tmp  = path.parent / (path.name + '.tmp')
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding='utf-8')
+    os.replace(tmp, path)  # atomic on Linux
+
 try:
     from nex.nex_upgrades import u3_topic_alignment_penalty, u12_weight_agent_input
     _UPGRADES = True
