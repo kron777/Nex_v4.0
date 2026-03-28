@@ -305,7 +305,7 @@ def gaps_from_auto_check(con) -> list:
         # Topics mentioned in reflections/insights but thin in beliefs
         # Cross-reference topics from reflections vs beliefs
         reflection_rows = con.execute(
-            "SELECT content FROM reflections ORDER BY id DESC LIMIT 100"
+            "SELECT user_msg || ' ' || COALESCE(nex_response, '') FROM reflections ORDER BY id DESC LIMIT 100"
         ).fetchall()
 
         # Count topic mentions in reflections
