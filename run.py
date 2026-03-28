@@ -2042,6 +2042,38 @@ def main():
                                     print(f"  [GapFeeder] +{_gaps_added} topics queued")
                             except Exception as _gfe:
                                 print(f"  [GapFeeder] error: {_gfe}")
+                            # ── Belief graph edge builder (every 10 cycles) ──
+                            if cycle % 10 == 0:
+                                try:
+                                    from nex.nex_gap_feeder import _db as _gdb
+                                    import re as _gre
+                                    _GSTOP = {'the','a','an','and','or','is','are','was','were','be',
+                                              'to','of','in','on','at','by','for','with','as','that',
+                                              'this','it','its','but','not','they','their','have','has'}
+                                    def _gtok(t): return set(_gre.sub(r'[^a-z0-9 ]',' ',(t or '').lower()).split()) - _GSTOP
+                                    _gcon = _gdb()
+                                    _gbeliefs = _gcon.execute("SELECT id, content, topic FROM beliefs WHERE content IS NOT NULL AND length(content) > 20 ORDER BY confidence DESC LIMIT 200").fetchall()
+                                    _gtoks = {b[0]: _gtok(b[1]) for b in _gbeliefs}
+                                    _gedges = set()
+                                    _blist = list(_gtoks.items())
+                                    for _gi, (_gid1, _gt1) in enumerate(_blist):
+                                        if len(_gt1) < 3: continue
+                                        _gt1_topic = next((b[2] for b in _gbeliefs if b[0]==_gid1), "")
+                                        for _gid2, _gt2 in _blist[_gi+1:]:
+                                            _gt2_topic = next((b[2] for b in _gbeliefs if b[0]==_gid2), "")
+                                            if _gt1_topic == _gt2_topic: continue
+                                            if len(_gt1 & _gt2) >= 3:
+                                                _gedges.add((min(_gid1,_gid2), max(_gid1,_gid2)))
+                                    if _gedges:
+                                        _gcon.execute("DELETE FROM belief_links")
+                                        for _gp, _gc in list(_gedges)[:500]:
+                                            try: _gcon.execute("INSERT OR IGNORE INTO belief_links (parent_id,child_id,link_type) VALUES (?,?,'cross_domain')",(_gp,_gc))
+                                            except Exception: pass
+                                        _gcon.commit()
+                                        print(f"  [BeliefGraph] {len(_gedges)} cross-domain edges rebuilt")
+                                    _gcon.close()
+                                except Exception as _ge: pass
+
                             # Legacy gap scan every 10 cycles as backup
                             if cycle % 10 == 0:
                                 try:
