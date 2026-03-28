@@ -2083,6 +2083,7 @@ def main():
                                 from nex.nex_self_directed_research import run_self_research as _sdr
                                 _sdr_n = _sdr(verbose=True)
                                 if _sdr_n > 0:
+                                    pass
                                     print(f"  [SelfResearch] +{_sdr_n} beliefs")
                             except Exception: pass
                                     print(f'  [AutoSeeder] +{_seed_n} beliefs absorbed')
