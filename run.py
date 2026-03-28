@@ -2079,6 +2079,7 @@ def main():
                                 _seed_n = _cas(verbose=True)
                                 if _seed_n > 0:
                                     print(f"  [AutoSeeder] +{_seed_n} beliefs absorbed")
+                            except Exception: pass
 
                             # Legacy gap scan every 10 cycles as backup
                             if cycle % 10 == 0:
