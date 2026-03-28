@@ -274,8 +274,13 @@ def save_all(learner, conversations=None):
         for _b in _beliefs_to_save:
             if 'karma' not in _b:
                 _b['karma'] = 0.0
-        with open(BELIEFS_PATH, 'w') as f:
-            json.dump(_beliefs_to_save, f)
+        # atomic write — prevents truncation on crash
+        import os as _alос
+        _al_tmp = BELIEFS_PATH + '.tmp'
+        with open(_al_tmp, 'w', encoding='utf-8') as f:
+            import json as _alj
+            _alj.dump(_beliefs_to_save, f, indent=2, ensure_ascii=False)
+        _alос.replace(_al_tmp, BELIEFS_PATH)
         # Merge with existing agents.json — never overwrite with fewer entries
         _existing_agents = {}
         try:
