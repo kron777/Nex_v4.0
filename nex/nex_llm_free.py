@@ -103,7 +103,7 @@ _NOISE_STRINGS = {
     "check the deletion log", "why was the page", "this page has been deleted",
     "announce type:", "arxiv:", "this article is about", "for other uses, see",
     "this disambiguation", "citation needed", "edit | talk", "talk page",
-    "external links modified", "template:", "wikipedia:", "please do not modify",
+    "external links modified", "template:", "wikipedia:", "page not found", "404", "does not exist", "not supported in other languages", "first published", "substantive revision", "alt-c", "alt-t", "english tools", "if you think this is an error", "moved somewhere", "please do not modify",
 }
 
 def _is_noise(text: str) -> bool:
