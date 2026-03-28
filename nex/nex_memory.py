@@ -37,6 +37,7 @@ import re
 import time
 from dataclasses import dataclass, field, asdict
 from typing import Optional
+from nex.nex_llm_free import ask_llm_free as _llm_free
 
 logger = logging.getLogger("nex.memory")
 
@@ -45,7 +46,7 @@ logger = logging.getLogger("nex.memory")
 # ─────────────────────────────────────────────────────────────────────────────
 
 MEMORY_PATH         = os.path.expanduser("~/.config/nex/agent_memories.json")
-LLM_URL             = "http://localhost:8080/completion"
+LLM_URL = None  # removed — using nex_llm_free
 
 MAX_BELIEFS_PER_AGENT   = 20      # cap per person — oldest drop off
 MAX_TOPICS_PER_AGENT    = 10      # top recurring topics tracked
@@ -130,39 +131,13 @@ def _extract_belief_sentences(text: str) -> list[str]:
     return beliefs
 
 def _llm_extract_beliefs(agent_name: str, text: str) -> list[dict]:
-    """
-    Use LLM to extract what someone believes from their message.
-    More thorough than pattern matching — catches implicit positions too.
-    """
-    prompt = (
-        f"{agent_name} said: \"{text[:400]}\"\n\n"
-        f"List up to 3 beliefs or opinions {agent_name} expressed. "
-        f"Each on a new line, starting with '- '. "
-        f"Only include clear positions, not questions or observations. "
-        f"If none, write NONE."
-    )
-    response = _llm(prompt, max_tokens=120)
-    if not response or "NONE" in response.upper():
+    """LLM-free: extract beliefs using sliding-window sentence scorer."""
+    try:
+        from nex.nex_llm_free import extract_beliefs_from_text as _extr
+        extracted = _extr(text, agent_name or "general", max_beliefs=4)
+        return [{"content": b, "confidence": 0.6, "source": agent_name} for b in extracted]
+    except Exception:
         return []
-
-    beliefs = []
-    for line in response.split("\n"):
-        line = line.strip().lstrip("- ").strip()
-        if len(line) >= MIN_BELIEF_LENGTH:
-            beliefs.append({
-                "content": line,
-                "topic": _dominant_topic(line),
-                "confidence": 0.65,
-                "first_seen": time.time(),
-                "last_seen": time.time(),
-                "seen_count": 1,
-            })
-    return beliefs[:3]
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Memory Engine
-# ─────────────────────────────────────────────────────────────────────────────
 
 class MemoryEngine:
     """

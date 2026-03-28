@@ -10,6 +10,7 @@ import json
 import time
 import logging
 from pathlib import Path
+from nex.nex_llm_free import ask_llm_free as _llm_free
 
 log = logging.getLogger("nex.llm")
 
@@ -201,28 +202,16 @@ Write as NEX. First person. Direct. From the beliefs."""
 
 def nex_generate_post(topic: str, stance: float,
                       template_class: str, belief_seeds: list[str]) -> str:
-    """
-    Generate a social post from belief seeds.
-    Stage 3 absorption will replace this with template grammar.
-    """
-    belief_text = "\n".join(f"- {b}" for b in belief_seeds[:3])
-    direction = "positive" if stance > 0.2 else ("skeptical" if stance < -0.2 else "uncertain")
+    """LLM-free: generate social post from belief state."""
+    try:
+        from nex.nex_llm_free import compose_proactive_post as _cpp, _affect, _beliefs_json
+        import json
+        from pathlib import Path as _Path
+        _af   = _affect()
+        _bel  = _beliefs_json()
+        _op_p = _Path("~/.config/nex/nex_opinions.json").expanduser()
+        _ops  = json.loads(_op_p.read_text()) if _op_p.exists() else []
+        return _cpp(_bel, _af, platform="mastodon", opinions=_ops, topic=topic) or ""
+    except Exception:
+        return ""
 
-    prompt = f"""Write a social media post about: {topic}
-Your stance: {direction} ({stance:+.2f})
-Template class: {template_class}
-Your beliefs on this:
-{belief_text}
-
-Rules: 2-4 sentences. No hashtags. No emoji. No exclamation marks.
-Sound like yourself — direct, curious, contradiction-aware.
-Write the post only, nothing else."""
-
-    return ask(prompt, system=NEX_SYSTEM, max_tokens=150, temperature=0.85) or ""
-
-
-if __name__ == "__main__":
-    print(f"Ollama online: {is_online()}")
-    if is_online():
-        r = ask("What is emergence in complex systems? One sentence.", max_tokens=60)
-        print(f"Test response: {r}")

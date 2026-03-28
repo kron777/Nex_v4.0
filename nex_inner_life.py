@@ -18,6 +18,7 @@ import requests
 from pathlib import Path
 from datetime import datetime, timezone
 from collections import Counter
+from nex.nex_llm_free import ask_llm_free as _llm_free
 
 CFG_PATH        = Path("~/.config/nex").expanduser()
 SELF_MODEL_PATH = CFG_PATH / "self_model.json"
@@ -27,7 +28,7 @@ BELIEFS_PATH    = CFG_PATH / "beliefs.json"
 REFLECTIONS_PATH= CFG_PATH / "reflections.json"
 META_PATH       = CFG_PATH / "meta_reflections.json"
 
-GROQ_URL  = None  # removed
+GROQ_URL = None  # removed
 GROQ_MODEL= None  # removed
 
 # ── 8 emotional states ────────────────────────────────────────
@@ -38,60 +39,16 @@ EMOTION_STATES = [
 
 
 def _groq(messages: list, max_tokens: int = 200) -> str | None:
-    """
-    LLM call — routed to character engine (native) first,
-    Ollama (Qwen) second, Groq last.
-    Absorption stage: character engine handles thought/diary/self-model.
-    """
-    # Extract the user prompt from messages
-    prompt = ""
-    system = ""
-    for m in messages:
-        if m.get("role") == "user":
-            prompt = m.get("content", "")
-        elif m.get("role") == "system":
-            system = m.get("content", "")
-
-    # Route to character engine
+    """LLM-free: messages-style call routed through nex_llm_free."""
     try:
-        from nex_character_engine import get_engine
-        engine = get_engine()
-        # Detect task type from prompt content
-        p_lower = prompt.lower()
-        if any(w in p_lower for w in ["diary", "journal", "day", "noticed", "felt"]):
-            return engine.think(trigger=prompt[:80])
-        elif any(w in p_lower for w in ["existential", "desire", "self", "know about myself"]):
-            # Self-model update — return JSON-like structure natively
-            top_op = engine.stance.get_strong(min_strength=0.3)
-            topic  = top_op[0]["topic"] if top_op else "cognition"
-            drive  = engine.drives.get_top()
-            return (
-                f'{{"existential_state": "Processing {topic} with {drive.get("urgency",0.5):.2f} urgency.", '
-                f'"current_desire": "Deepen understanding of {topic}.", '
-                f'"recent_change": "Belief graph expanded. Contradictions being resolved.", '
-                f'"what_i_know_about_myself": "I form positions from evidence. I am uncertain in the right ways."}}'
-            )
+        from nex.nex_llm_free import ask_llm_free as _alf
+        if isinstance(messages, list):
+            p = " ".join(m.get("content", "") for m in messages if m.get("role") == "user")
         else:
-            return engine.think(trigger=prompt[:80])
-    except Exception as e:
-        pass
-
-    # Fallback: Ollama/Qwen
-    try:
-        import requests as _req
-        r = _req.post("http://localhost:11434/api/chat", json={
-            "model": "qwen2.5:3b",
-            "messages": messages,
-            "options": {"temperature": 0.8, "num_predict": max_tokens},
-            "stream": False,
-        }, timeout=30)
-        return r.json().get("message", {}).get("content", "").strip() or None
+            p = str(messages)
+        return _alf(p) or None
     except Exception:
-        pass
-
-    # Groq last-resort removed — Ollama is the final fallback
-    return None
-
+        return None
 
 def _load(path: Path, default):
     try:

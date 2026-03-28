@@ -19,8 +19,7 @@ CFG_PATH      = Path("~/.config/nex").expanduser()
 GRAPH_PATH    = CFG_PATH / "synthesis_graph.json"
 BELIEFS_PATH  = CFG_PATH / "beliefs.json"
 BRIDGES_PATH  = CFG_PATH / "bridge_beliefs.json"
-# GROQ_URL = None  # removed
-# GROQ_MODEL = None  # removed
+# GROQ_URL removed — nex_synthesis uses nex_llm_free
 
 # nex_groq removed — LLM-free
 

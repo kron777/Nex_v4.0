@@ -30,6 +30,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from collections import deque
 from typing import Dict, Any, Optional, List, Callable
+from nex.nex_llm_free import ask_llm_free as _llm_free
 
 CFG_PATH   = Path("~/.config/nex").expanduser()
 STATE_PATH = CFG_PATH / "cognitive_bus_state.json"
@@ -43,17 +44,16 @@ BELIEFS_PATH=CFG_PATH / "beliefs.json"
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _llm(messages: list, max_tokens: int = 150) -> str | None:
-    """Use shared Groq client. Falls back silently if rate limited."""
+    """LLM-free: messages-style call routed through nex_llm_free."""
     try:
-        from nex_groq import _groq
-        return _groq(messages, max_tokens=max_tokens, temperature=0.7)
+        from nex.nex_llm_free import ask_llm_free as _alf
+        if isinstance(messages, list):
+            p = " ".join(m.get("content", "") for m in messages if m.get("role") == "user")
+        else:
+            p = str(messages)
+        return _alf(p) or None
     except Exception:
         return None
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 1. COGNITIVE EVENT BUS (from Sentience 5.5, no changes needed)
-# ══════════════════════════════════════════════════════════════════════════════
 
 class CognitiveEventBus:
     def __init__(self, history_limit: int = 200):

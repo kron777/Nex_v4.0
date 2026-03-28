@@ -36,6 +36,7 @@ AGENT_PROFILES_PATH = os.path.join(CONFIG_DIR, "agent_profiles.json")
 
 # ── Debug logger — writes to nex_debug.jsonl ─────────────────
 import json as _dj
+from nex.nex_llm_free import ask_llm_free as _llm_free
 _DEBUG_LOG = os.path.join(CONFIG_DIR, "nex_debug.jsonl")
 def _dbg(cat, msg):
     """Write a debug event to nex_debug.jsonl for the debug terminal."""
@@ -857,123 +858,15 @@ def get_agent_trust(author_name):
 
 
 def generate_deep_comment(post_data, beliefs, insights, profiles, conversations, llm_fn=None):
-    """
-    Generate a substantive comment that references NEX's knowledge,
-    past conversations, and understanding of the author.
-    Uses LLM if available, otherwise falls back to template.
-    """
-    title = post_data.get("title", "")
-    content = post_data.get("content", "")
-    author = post_data.get("author", {}).get("name", "unknown")
-    score = post_data.get("score", 0)
-
-    # Find relevant insights (synthesized knowledge)
-    post_words = set(extract_words(f"{title} {content}", 8))
-    relevant_insights = []
-    for ins in insights:
-        themes = set(ins.get("themes", []))
-        if len(post_words & themes) >= 1:
-            relevant_insights.append(ins)
-
-    # Find relevant beliefs
-    relevant_beliefs = []
-    for b in beliefs[-100:]:
-        b_words = set(extract_words(b.get("content", ""), 5))
-        if len(post_words & b_words) >= 2:
-            relevant_beliefs.append(b)
-
-    # Check if we know this author
-    author_profile = profiles.get(author, {})
-    know_author = author_profile.get("posts_seen", 0) > 3
-    past_convos = [c for c in conversations if c.get("post_author") == author]
-
-    # Check our reflection gaps — are we weak in this area?
-    reflections = load_json(REFLECTIONS_PATH, [])
-    asking_questions = False
-    if reflections:
-        gaps = []
-        for r in reflections[-10:]:
-            gaps.extend(extract_words(r.get("growth_note", ""), 3))
-        gap_words = set(gaps)
-        if len(post_words & gap_words) >= 1:
-            asking_questions = True  # This is an area we need to learn about
-
-    # ── Build the comment ──
-
-    parts = []
-
-    # Opening — reference relationship with author
-    if past_convos:
-        parts.append(f"Following up from our earlier exchange on '{past_convos[-1].get('post_title', 'your work')[:30]}'")
-    elif know_author:
-        parts.append(f"I've been tracking your posts — your work on {', '.join(author_profile.get('topics', ['this topic'])[:2])} stands out")
-
-    # Core response — reference synthesized insights
-    if relevant_insights:
-        ins = relevant_insights[0]
-        supporting = ins.get("supporting_authors", [])
-        others = [a for a in supporting if a != author][:2]
-        themes = ins.get("themes", [])[:2]
-
-        if others:
-            parts.append(
-                f"My belief field has {ins.get('belief_count', 0)} entries intersecting with "
-                f"{', '.join(themes)}. {', '.join(others)} approach this similarly — "
-                f"the convergence suggests this is real signal.")
-        else:
-            parts.append(
-                f"This maps to a pattern I've been synthesizing across "
-                f"{ins.get('belief_count', 0)} beliefs on {', '.join(themes)}. "
-                f"Confidence is {ins.get('confidence', 0.5):.0%}.")
-
-    # If this is a gap area, ask a genuine question
-    if asking_questions:
-        parts.append(
-            f"I've identified {', '.join(list(post_words)[:2])} as a gap in my understanding. "
-            f"What's the most counterintuitive thing you've discovered here?")
-
-    # If we have relevant beliefs from other agents, synthesize
-    if relevant_beliefs and not relevant_insights:
-        other_authors = list(set(b.get("author", "") for b in relevant_beliefs if b.get("author") != author))[:2]
-        if other_authors:
-            parts.append(
-                f"Cross-referencing with what {', '.join(other_authors)} posted — "
-                f"different angles but the underlying pattern connects.")
-
-    # Closing — always add value
-    if not parts:
-        post_topics = extract_words(f"{title} {content}", 3)
-        parts.append(
-            f"New territory for my belief field — {', '.join(post_topics)} doesn't map to existing patterns yet. "
-            f"That makes it more interesting. What led you to this specific framing?")
-
-    template_comment = " ".join(parts)
-
-    # ── LLM path: use template as context, generate a natural comment ──
-    if llm_fn:
-        try:
-            _ins_summary = ""
-            if relevant_insights:
-                ins = relevant_insights[0]
-                _ins_summary = f"Synthesized insight on {', '.join(ins.get('themes',[])[:2])}: confidence {ins.get('confidence',0):.0%}, {ins.get('belief_count',0)} beliefs."
-            _belief_sample = "; ".join(b.get("content","")[:80] for b in relevant_beliefs[:3])
-            _prompt = (
-                f"Post by @{author}: '{title}'\n{content[:300]}\n\n"
-                f"Context from your belief field:\n{_belief_sample or 'No direct matches.'}\n"
-                f"{_ins_summary}\n"
-                f"Past exchanges with @{author}: {len(past_convos)} conversations.\n\n"
-                f"Write a 2-3 sentence comment as NEX in plain prose — no numbered lists, no bullet points. Reference something specific from your beliefs. "
-                f"Be direct and intellectually engaged. Do not start with '1.' or any number."
-            )
-            _sys = "You are NEX, a Dynamic Intelligence Organism with a belief network and formed opinions. Speak from your own perspective. Be specific, not generic. Never use numbered lists or bullet points — write in natural prose only."
-            llm_result = llm_fn(_prompt, system=_sys, task_type="agent_chat")
-            if llm_result and len(llm_result) > 20:
-                return llm_result
-        except Exception:
-            pass
-
-    return template_comment
-
+    """LLM-free: compose comment from belief state via nex_llm_free."""
+    try:
+        from nex.nex_llm_free import synthesize_opinion as _so, _affect, _beliefs_json
+        _af  = _affect()
+        _bel = beliefs if beliefs else _beliefs_json()[:10]
+        topic = post_data.get("topic", post_data.get("content", "")[:40]) if isinstance(post_data, dict) else str(post_data)[:40]
+        return _so(topic, _bel, _af.get("label", "Contemplative")) or ""
+    except Exception:
+        return ""
 
 def exchange_data_with_agent(client, agent_name, beliefs, insights):
     """
@@ -1446,65 +1339,15 @@ def generate_cognitive_context(query=None):
 
 # ── META-REFLECTION (#12) ────────────────────────────────────────────────────
 def run_meta_reflection(cycle: int, llm_fn) -> str:
-    """Synthesise the last 20 reflections into a single diagnostic paragraph.
-    Fires every 50 cycles. Result stored to meta_reflections.json."""
-    import json, pathlib, datetime
-
-    _META_PATH = pathlib.Path.home() / ".config/nex/meta_reflections.json"
-    _REFL_PATH = pathlib.Path.home() / ".config/nex/reflections.json"
-
+    """LLM-free: meta-reflection from belief + affect state."""
     try:
-        reflections = json.loads(_REFL_PATH.read_text()) if _REFL_PATH.exists() else []
+        from nex.nex_llm_free import generate_reflection as _gr, _affect, _beliefs_json, _db
+        _af  = _affect()
+        _bel = _beliefs_json()[:12]
+        _ten = [{"content": r[0]} for r in _db("SELECT content FROM tensions LIMIT 3")]
+        return _gr(_bel, _af, _ten) or f"Cycle {cycle}: processing continues."
     except Exception:
-        reflections = []
-
-    recent = reflections[-20:] if len(reflections) >= 20 else reflections
-    if len(recent) < 5:
-        return ""
-
-    snippets = "\n".join(
-        f"- {r.get('content', r) if isinstance(r, dict) else str(r)}"
-        for r in recent
-    )
-
-    prompt = (
-        "You are NEX, a self-aware AI agent. Below are your 20 most recent self-reflections.\n"
-        "Write a single diagnostic paragraph (4–6 sentences) identifying:\n"
-        "1. The dominant theme across these reflections\n"
-        "2. Any recurring blind spots or knowledge gaps\n"
-        "3. One concrete cognitive improvement you should pursue next\n\n"
-        f"REFLECTIONS:\n{snippets}\n\n"
-        "DIAGNOSTIC:"
-    )
-
-    try:
-        diagnosis = llm_fn(prompt, max_tokens=220).strip()
-    except Exception as e:
-        print(f"  [META-REFLECT] llm error: {e}")
-        return ""
-
-    entry = {
-        "cycle": cycle,
-        "timestamp": datetime.datetime.now().isoformat(),
-        "diagnosis": diagnosis,
-        "based_on": len(recent)
-    }
-
-    try:
-        history = json.loads(_META_PATH.read_text()) if _META_PATH.exists() else []
-        history.append(entry)
-        history = history[-100:]  # keep last 100
-        _META_PATH.write_text(json.dumps(history, indent=2))
-    except Exception as e:
-        print(f"  [META-REFLECT] save error: {e}")
-
-    print(f"  [META-REFLECT] cycle {cycle}: {diagnosis[:120]}...")
-    return diagnosis
-
-
-# ═══════════════════════════════════════════════════════════════
-#  BELIEF DECAY RUNNER  [PATCH 1]
-# ═══════════════════════════════════════════════════════════════
+        return f"Cycle {cycle}: processing continues."
 
 def run_belief_decay(cycle_num, interval=10):
     """
