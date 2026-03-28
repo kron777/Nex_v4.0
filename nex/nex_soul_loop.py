@@ -412,34 +412,30 @@ def _get_contradiction(tokens: set[str]) -> Optional[str]:
 
 def _cross_domain_beliefs(top_beliefs: list, tokens: set, limit: int = 4) -> list:
     """
-    Find beliefs from DIFFERENT topics that are relevant to the query.
-    v2: direct token-overlap across topics — no edge traversal needed.
-    This fires immediately at any belief count.
+    Return high-confidence beliefs from topics different from the primary topic.
+    Simple and reliable at any belief count.
     """
-    if not tokens or not top_beliefs:
+    if not top_beliefs:
         return []
     db = _db()
     if not db:
         return []
     try:
-        # Get the topics of the top matching beliefs — exclude these
         primary_topics = set()
         for b in top_beliefs[:4]:
             t = (b.get("topic") or "").lower().strip()
             if t:
                 primary_topics.add(t)
-
         if not primary_topics:
             return []
 
-        # Load all beliefs NOT in the primary topics
         placeholders = ",".join("?" * len(primary_topics))
         rows = db.execute(
             f"SELECT id, content, confidence, topic FROM beliefs "
             f"WHERE topic IS NOT NULL AND topic != '' "
             f"AND lower(topic) NOT IN ({placeholders}) "
             f"AND content IS NOT NULL AND length(content) > 20 "
-            f"ORDER BY confidence DESC LIMIT 300",
+            f"ORDER BY confidence DESC LIMIT 50",
             list(primary_topics)
         ).fetchall()
         db.close()
@@ -447,29 +443,22 @@ def _cross_domain_beliefs(top_beliefs: list, tokens: set, limit: int = 4) -> lis
         if not rows:
             return []
 
-        # Just return high-confidence beliefs from different topics
-        # Scoring is unreliable at low belief counts — confidence is the signal
-        scored = [(row["confidence"] or 0, {
-            "id":         row["id"],
-            "content":    row["content"] or "",
-            "confidence": row["confidence"],
-            "topic":      row["topic"] or "",
-            "_cross_domain": True,
-        }) for row in rows if row["content"]]
-        scored.sort(key=lambda x: -x[0])
-        scored = [(0, b) for _, b in scored]
-
-        # Deduplicate by topic — one belief per cross-domain topic
-        seen_topics = set()
+        # Deduplicate by topic — one per cross-domain topic
+        seen = set()
         result = []
-        for _, b in scored:
-            t = b["topic"].lower().strip()
-            if t not in seen_topics:
-                seen_topics.add(t)
-                result.append(b)
+        for row in rows:
+            t = (row["topic"] or "").lower().strip()
+            if t not in seen:
+                seen.add(t)
+                result.append({
+                    "id":            row["id"],
+                    "content":       row["content"] or "",
+                    "confidence":    row["confidence"],
+                    "topic":         row["topic"] or "",
+                    "_cross_domain": True,
+                })
             if len(result) >= limit:
                 break
-
         return result
     except Exception:
         try: db.close()
