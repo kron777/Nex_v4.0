@@ -1011,6 +1011,7 @@ def _build_argument(
             claim = dir_opener + summary.rstrip(".") + "."
         elif beliefs:
             claim = dir_opener + _belief_to_sentence(beliefs[0].get("content",""))
+            opener = ""  # consumed by dir_opener
     elif beliefs:
         claim = opener + _belief_to_sentence(beliefs[0].get("content",""))
 
