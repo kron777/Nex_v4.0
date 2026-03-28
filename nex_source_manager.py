@@ -80,42 +80,23 @@ def _save_sources(sources: dict):
 
 
 def _groq_extract_belief(title: str, summary: str, domain: str) -> str | None:
-    """Use Groq to extract a clean belief statement from an article."""
-    key = os.environ.get("GROQ_API_KEY", "")
-    if not key:
-        return f"{title}: {summary[:100]}" if title else None
+    """LLM-free: extract belief from article using sentence scorer."""
     try:
-        prompt = (
-            f"Extract ONE clear, factual belief statement from this article.\n"
-            f"Domain: {domain}\n"
-            f"Title: {title}\n"
-            f"Summary: {summary[:300]}\n\n"
-            f"Reply with ONE sentence synthesizing the core insight in your own words. "
-            f"Do NOT copy the title or abstract. No preamble. If nothing meaningful, reply SKIP."
-        )
-        r = requests.post(GROQ_URL,
-            headers={"Authorization": f"Bearer {key}"},
-            json={
-                "model": GROQ_MODEL,
-                "max_tokens": 80,
-                "temperature": 0.3,
-                "messages": [
-                    {"role": "system", "content": "You extract clean belief statements from articles."},
-                    {"role": "user",   "content": prompt}
-                ]
-            }, timeout=15)
-        belief = r.json()["choices"][0]["message"]["content"].strip()
-        # Reject raw passthrough
-        if (not belief
-                or belief.upper() == "SKIP"
-                or len(belief) > 300
-                or belief.startswith("arXiv")
-                or "Announce Type" in belief
-                or belief.lower().startswith("abstract")):
-            return None
-        return belief
+        from nex.nex_llm_free import extract_beliefs_from_text as _extr
+        text    = f"{title}. {summary}" if title else summary
+        results = _extr(text, domain, max_beliefs=1)
+        if results:
+            belief = results[0].strip()
+            if (not belief
+                    or len(belief) > 300
+                    or belief.startswith("arXiv")
+                    or "Announce Type" in belief
+                    or belief.lower().startswith("abstract")):
+                return None
+            return belief
     except Exception:
-        return f"{title}: {summary[:100]}" if title else None
+        pass
+    return f"{title}: {summary[:100]}" if title else None
 
 
 def fetch_rss(url: str, max_items: int = MAX_ARTICLES) -> list[dict]:

@@ -243,26 +243,13 @@ class Orchestrator:
                     self.beliefs.remove_domain(d.index)
 
     def _llm_resolve(self, prompt: str) -> str:
-        """U2 contradiction resolution via token overlap (LLM-free)."""
-        try:
-            import urllib.request, json as _j
-            payload = _j.dumps({
-                "model": "mistral-nex",
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.2,
-                "max_tokens": 10,
-                "stream": False
-            }).encode()
-            req = urllib.request.Request(
-                "http://localhost:8080/v1/chat/completions",
-                data=payload,
-                headers={"Content-Type": "application/json"},
-                method="POST"
-            )
-            resp = _j.loads(urllib.request.urlopen(req, timeout=30).read())
-            return resp["choices"][0]["message"]["content"].strip()
-        except Exception:
-            return "UNCERTAINTY"
+        """LLM-free: contradiction resolution via token-vote fallback."""
+        p = prompt.lower()
+        if any(w in p for w in ['accept', 'consistent', 'supports', 'confirms', 'agrees']):
+            return 'ACCEPT'
+        if any(w in p for w in ['reject', 'contradicts', 'conflicts', 'opposes', 'inconsistent']):
+            return 'REJECT'
+        return "UNCERTAINTY"
 
     def status(self) -> dict:
         report    = self.coh_eng.last_report
