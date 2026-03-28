@@ -269,7 +269,21 @@ class AgentBrain:
         return questions
 
     def _answer_one(self, system: str, question: str, belief_state: dict = None, timeout: int = 60) -> str:
-        """Answer a single question with fresh context."""
+        """
+        Answer a single question — LLM-free.
+        Routes through nex_respond.nex_reply_question() (SoulLoop engine).
+        Falls back to _complete() only if SoulLoop fails.
+        """
+        try:
+            import sys, os
+            sys.path.insert(0, os.path.expanduser("~/Desktop/nex"))
+            from nex_respond import nex_reply_question
+            result = nex_reply_question(question, belief_state=belief_state)
+            if result and len(result.strip()) > 10:
+                return result.strip()
+        except Exception:
+            pass
+        # Fallback — only if SoulLoop unavailable
         messages = [{"role": "user", "content": question}]
         prompt = build_mistral_prompt(system, messages)
         result = self._complete(prompt, timeout=timeout)

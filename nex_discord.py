@@ -96,26 +96,23 @@ def _save_seen(seen):
     with open(SEEN_PATH, "w") as f:
         json.dump(list(seen)[-2000:], f)
 
-def _llm(prompt, system="You are Nex, a living cognitive system. Never invent URLs or links. Stay grounded. Be direct, specific, max 3 sentences. Never open with 'As Nex' or 'As NEX'."):
-    """Call local Mistral for generation."""
+def _llm(prompt, system=""):
+    """
+    LLM-free reply — routes through SoulLoop organism engine.
+    Replaces localhost:8080 completion call.
+    The 'prompt' contains the user query in format: '{author} asks: "{query}"\n...'
+    We extract the clean query and route through nex_respond.
+    """
     try:
-        import urllib.request, json as _j
-        payload = _j.dumps({
-            "prompt": f"[INST] {system}\n\n{prompt} [/INST]",
-            "n_predict": 200,
-            "temperature": 0.75,
-            "stop": ["</s>", "[INST]", "\n\n\n"]
-        }).encode()
-        req = urllib.request.Request(
-            "http://localhost:8080/completion",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST"
-        )
-        resp = urllib.request.urlopen(req, timeout=30)
-        return _j.loads(resp.read()).get("content", "").strip()
+        from nex_respond import nex_reply_discord
+        # Extract clean query from the prompt format used by Discord handler
+        import re as _re
+        # Format is: '{author} asks: "{clean_message}"\n...'
+        m = _re.search(r'asks: "(.+?)"', prompt, _re.DOTALL)
+        query = m.group(1).strip() if m else prompt.split("\n")[0].strip()
+        return nex_reply_discord(query)
     except Exception as e:
-        return f"[NEX offline: {e}]"
+        return f"[NEX: {e}]"
 
 def _get_relevant_beliefs(query, k=3):
     """Get semantically relevant beliefs for a query."""

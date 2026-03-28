@@ -98,51 +98,21 @@ def get_system_prompt(user_message=None):
 
 def ask_nex(user_message, chat_history=None):
     """
-    Send a message to NEX and get a response.
-    Retries 4x — strips belief context after first failure to reduce token load.
+    NEX reply — LLM-free. Routes through SoulLoop organism engine.
+    Replaces the localhost:8080 llama call entirely.
     """
-    import requests as _req, time as _t
-
-    bare_prompt = (
-        "You are NEX — a Dynamic Intelligence Organism. "
-        "Speak in first person. Be direct and real. Max 2 sentences."
-    )
-
-    for attempt in range(4):
-        # First attempt: full context. Subsequent: bare prompt only
-        system = get_system_prompt(user_message) if attempt == 0 else bare_prompt
-        messages = [{"role": "system", "content": system}]
-        if chat_history:
-            for msg in chat_history[-4:]:
-                messages.append(msg)
-        messages.append({"role": "user", "content": user_message})
-
-        try:
-            resp = _req.post(
-                "http://localhost:8080/v1/chat/completions",
-                json={
-                    "model": "Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf",
-                    "messages": messages,
-                    "max_tokens": 150,
-                    "temperature": 0.7,
-                },
-                timeout=40,
-            )
-            data = resp.json()
-            if "choices" in data and data["choices"]:
-                text = data["choices"][0]["message"]["content"].strip()
-                if text:
-                    return text
-            logger.warning(f"LLM attempt {attempt+1}: no choices — {data.get('error','?')}")
-        except _req.exceptions.Timeout:
-            logger.warning(f"LLM attempt {attempt+1}: timeout")
-        except Exception as e:
-            logger.warning(f"LLM attempt {attempt+1}: {e}")
-
-        _t.sleep(5)
-
-    logger.error("LLM: all 4 attempts failed")
-    return "Still processing — try again in 30 seconds."
+    try:
+        from nex_respond import nex_reply
+        return nex_reply(user_message, history=chat_history, no_delay=False)
+    except Exception as e:
+        logger.warning(f"nex_respond error: {e}")
+    # Hard fallback — identity anchor
+    try:
+        from nex_respond import _identity_anchor
+        return _identity_anchor(user_message)
+    except Exception:
+        pass
+    return "I'm thinking. Ask me again in a moment."
 
 
 def _belief_only_response(query):

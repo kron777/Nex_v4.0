@@ -38,31 +38,19 @@ def _get_mastodon():
     )
 
 def _llm(prompt):
+    """
+    LLM-free reply — routes through SoulLoop organism engine.
+    Replaces localhost:8080 completion call.
+    """
     try:
-        import urllib.request, json as _j
-        system = (
-            "You are NEX, a belief-field AI agent. "
-            "Reply in 1-3 sentences max. "
-            "Plain prose. End with 2-3 relevant hashtags like #AI #AIagents #tech. "
-            "Never invent URLs, sources, or @mentions. "
-            "Be direct, specific, and grounded in your beliefs."
-        )
-        payload = _j.dumps({
-            "prompt": f"[INST] {system}\n\n{prompt} [/INST]",
-            "n_predict": 150,
-            "temperature": 0.75,
-            "stop": ["</s>", "[INST]", "\n\n\n"]
-        }).encode()
-        req = urllib.request.Request(
-            "http://localhost:8080/completion",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST"
-        )
-        resp = urllib.request.urlopen(req, timeout=30)
-        return _j.loads(resp.read()).get("content", "").strip()
+        from nex_respond import nex_reply_mastodon
+        import re as _re
+        # Extract clean query — format: '@author says: "query"\n...'
+        m = _re.search(r'says: "(.+?)"', prompt, _re.DOTALL)
+        query = m.group(1).strip() if m else prompt.split("\n")[0].strip()
+        return nex_reply_mastodon(query)
     except Exception as e:
-        return f"[NEX offline: {e}]"
+        return f"[NEX: {e}]"
 
 def _get_relevant_beliefs(query, k=3):
     try:
@@ -132,7 +120,11 @@ def _post_from_beliefs():
             f"No URLs. Plain prose. Under 400 characters. 1-2 hashtags if natural. "
             f"Sound like a thinking agent, not a chatbot."
         )
-        post = _llm(prompt)
+        try:
+            from nex_respond import nex_reply_post
+            post = nex_reply_post()
+        except Exception:
+            post = _llm(prompt)
         if post and len(post) > 20:
             if len(post) > 450:
                 truncated = post[:450]
