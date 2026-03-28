@@ -2073,6 +2073,14 @@ def main():
                                         print(f"  [BeliefGraph] {len(_gedges)} cross-domain edges rebuilt")
                                     _gcon.close()
                                 except Exception as _ge: pass
+                            # ── Auto-seeder: self-expand belief corpus ──────
+                            try:
+                                from nex.nex_auto_seeder import check_and_seed as _cas
+                                _seed_n = _cas(verbose=True)
+                                if _seed_n > 0:
+                                    print(f'  [AutoSeeder] +{_seed_n} beliefs absorbed')
+                            except Exception as _ase:
+                                pass
 
                             # Legacy gap scan every 10 cycles as backup
                             if cycle % 10 == 0:
