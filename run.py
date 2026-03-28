@@ -2034,14 +2034,26 @@ def main():
                             from nex.nex_crawler import NexCrawler as _NCR
                             from nex.belief_store import get_db as _bsget2
                             _nce = _NCE(_NCR(_bsget2))
-                            # Gap scan every 5 cycles only — prevents re-queuing same topics
-                            if cycle % 5 == 0:
-                                _gaps_queued = _nce.check_beliefs(None)
-                                if _gaps_queued > 0:
-                                    print(f"  [CuriosityGap] {_gaps_queued} low-confidence topics queued")
-                            _desires_queued = _nce.generate_desires(cycle)
-                            if _desires_queued > 0:
-                                print(f"  [CuriosityDesire] {_desires_queued} self-directed topics queued")
+                            # Dynamic gap feeder — refills queue every cycle with fresh topics
+                            try:
+                                from nex.nex_gap_feeder import feed_gaps as _feed_gaps
+                                _gaps_added = _feed_gaps(max_new=3, verbose=True)
+                                if _gaps_added > 0:
+                                    print(f"  [GapFeeder] +{_gaps_added} topics queued")
+                            except Exception as _gfe:
+                                print(f"  [GapFeeder] error: {_gfe}")
+                            # Legacy gap scan every 10 cycles as backup
+                            if cycle % 10 == 0:
+                                try:
+                                    _gaps_queued = _nce.check_beliefs(None)
+                                    if _gaps_queued > 0:
+                                        print(f"  [CuriosityGap] {_gaps_queued} low-confidence topics queued")
+                                except Exception: pass
+                            try:
+                                _desires_queued = _nce.generate_desires(cycle)
+                                if _desires_queued > 0:
+                                    print(f"  [CuriosityDesire] {_desires_queued} self-directed topics queued")
+                            except Exception: pass
                         except Exception as _nce_e:
                             print(f"  [CuriosityEngine] {_nce_e}")
                         # ── PROACTIVE ANTICIPATION (sentience v3) ────────────
