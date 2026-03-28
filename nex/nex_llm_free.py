@@ -98,6 +98,18 @@ _FACTUAL = {
     'considered','regarded','described','understood','believed','shown',
 }
 
+
+_NOISE_STRINGS = {
+    "check the deletion log", "why was the page", "this page has been deleted",
+    "announce type:", "arxiv:", "this article is about", "for other uses, see",
+    "this disambiguation", "citation needed", "edit | talk", "talk page",
+    "external links modified", "template:", "wikipedia:", "please do not modify",
+}
+
+def _is_noise(text: str) -> bool:
+    t = text.lower()
+    return any(n in t for n in _NOISE_STRINGS)
+
 def extract_beliefs_from_text(text: str, topic: str, max_beliefs: int = 3) -> list:
     """
     Sliding-window sentence scorer.
@@ -130,7 +142,7 @@ def extract_beliefs_from_text(text: str, topic: str, max_beliefs: int = 3) -> li
         penalty   += 0.3 if s.count('(') > 1 else 0.0        # heavy parentheticals
         penalty   += 0.4 if re.search(r'\d{4}.*\d{4}', s) else 0.0  # citation-heavy
         score = overlap + factual - penalty
-        if score > 0.5:
+        if score > 0.5 and not _is_noise(s):
             scored.append((score, s))
 
     scored.sort(key=lambda x: -x[0])

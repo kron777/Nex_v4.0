@@ -372,13 +372,9 @@ def _get_opinion(topic_tokens: set[str]) -> Optional[dict]:
         if belief_content and len(belief_content) > 20:
             position = belief_content
         else:
-            # Clean fallback — grammatically correct directional statement
-            if abs(stance) >= 0.5:
-                position = f"I hold a strong position on {topic_name} — the evidence doesn't support the consensus framing." if stance < 0 else "The evidence lands clearly on this."
-            elif abs(stance) >= 0.25:
-                position = f"I lean skeptical on {topic_name}." if stance < 0 else f"I lean toward the stronger reading of {topic_name}."
-            else:
-                position = f"I see genuine tension in how {topic_name} is usually framed."
+            # No belief content — return empty string so _build_argument
+            # uses the directional opener alone without a second sentence
+            position = ""
 
         return {
             "topic":        topic_name,
@@ -1016,8 +1012,10 @@ def _build_argument(
         if summary and len(summary) > 20:
             claim = dir_opener + summary.rstrip(".") + "."
         elif beliefs:
+            # Use top belief as the substance — opener alone isn't enough
             claim = dir_opener + _belief_to_sentence(beliefs[0].get("content",""))
-            opener = ""  # consumed by dir_opener
+        # Blank outer opener so it doesn't fire again
+        opener = ""
     elif beliefs:
         claim = opener + _belief_to_sentence(beliefs[0].get("content",""))
 
