@@ -1,65 +1,43 @@
 #!/usr/bin/env python3
 """
-nex_groq.py — Shared LLM client for NEX modules.
-Primary: Mistral-7B local (port 8080)
-Fallback: Groq (rate limited to 40/hr)
+nex_groq.py — LLM-Free Router (Groq removed)
+=============================================
+Previously: routed to Groq cloud API.
+Now: routes to nex_llm_free engineering primitives.
+All callers continue to work unchanged.
 """
-import os, time, requests
+from nex.nex_llm_free import ask_llm_free as _alf
 
-# Local Mistral
-LOCAL_URL   = "http://localhost:8080/v1/chat/completions"
-LOCAL_MODEL = "mistral"
 
-# Groq fallback
-GROQ_URL        = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL      = "llama-3.3-70b-versatile"
-GROQ_MAX_PER_HR = 40
+def ask_llm(prompt: str, system: str = "", max_tokens: int = 300, **kwargs) -> str:
+    """Drop-in for the old Groq ask_llm. Routes to nex_llm_free."""
+    context = {}
+    if system:
+        context['system'] = system
+    return _alf(prompt, context) or ""
 
-_groq_calls: list = []
 
-def _groq(messages: list, max_tokens: int = 300, temperature: float = 0.7) -> str | None:
-    # Try local Mistral first
+def ask_llm_json(prompt: str, system: str = "", **kwargs) -> dict:
+    """Drop-in for JSON-structured LLM calls. Returns empty dict on failure."""
+    result = ask_llm(prompt, system=system)
     try:
-        r = requests.post(LOCAL_URL,
-            json={"model": LOCAL_MODEL, "max_tokens": max_tokens,
-                  "temperature": temperature, "messages": messages},
-            timeout=20)
-        data = r.json()
-        if "choices" in data:
-            return data["choices"][0]["message"]["content"].strip()
+        import json, re
+        clean = re.sub(r"```json|```", "", result).strip()
+        return json.loads(clean)
     except Exception:
-        pass
+        return {}
 
-    # Fallback to Groq with rate limit
-    global _groq_calls
-    now = time.time()
-    _groq_calls = [t for t in _groq_calls if now - t < 3600]
-    if len(_groq_calls) >= GROQ_MAX_PER_HR:
-        return None
-    _groq_calls.append(now)
 
-    key = os.environ.get("GROQ_API_KEY", "")
-    if key:
-        try:
-            r = requests.post(GROQ_URL,
-                headers={"Authorization": f"Bearer {key}"},
-                json={"model": GROQ_MODEL, "max_tokens": max_tokens,
-                      "temperature": temperature, "messages": messages},
-                timeout=20)
-            data = r.json()
-            if "choices" in data:
-                return data["choices"][0]["message"]["content"].strip()
-        except Exception:
-            pass
-    # ── Fallback: local Ollama ────────────────────────────────────────────────
-    try:
-        r = requests.post("http://localhost:8080/v1/chat/completions",
-            json={"model": "mistral-nex", "messages": messages,
-                  "max_tokens": max_tokens, "temperature": temperature},
-            timeout=60)
-        data = r.json()
-        if "choices" in data:
-            return data["choices"][0]["message"]["content"].strip()
-    except Exception:
-        pass
-    return None
+def ask_llm_list(prompt: str, system: str = "", **kwargs) -> list:
+    """Drop-in for list-structured LLM calls. Returns empty list on failure."""
+    result = ask_llm(prompt, system=system)
+    lines = [l.strip().lstrip('-•*').strip() for l in result.split('\n') if l.strip()]
+    return [l for l in lines if l]
+
+
+# Legacy aliases
+query_llm      = ask_llm
+call_llm       = ask_llm
+groq_ask       = ask_llm
+groq_call      = ask_llm
+ask            = ask_llm

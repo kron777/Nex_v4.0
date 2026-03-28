@@ -12,6 +12,7 @@ import requests
 from pathlib import Path
 from datetime import datetime, timezone
 from collections import defaultdict
+from nex.nex_llm_free import ask_llm_free as _llm_free_fn
 
 CFG_PATH      = Path("~/.config/nex").expanduser()
 BELIEFS_PATH  = CFG_PATH / "beliefs.json"
@@ -28,23 +29,17 @@ PROMPT_OPINIONS = 6
 
 
 def _groq(messages: list, max_tokens: int = 300) -> str | None:
-    key = os.environ.get("GROQ_API_KEY", "")
-    if not key:
-        return None
+    """LLM-free: delegates to nex_llm_free engine (Groq removed)."""
     try:
-        r = requests.post(GROQ_URL,
-            headers={"Authorization": f"Bearer {key}"},
-            json={
-                "model": GROQ_MODEL,
-                "max_tokens": max_tokens,
-                "temperature": 0.75,
-                "messages": messages,
-            }, timeout=25)
-        return r.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        print(f"  [opinions] Groq error: {e}")
+        from nex.nex_llm_free import ask_llm_free as _alf
+        if isinstance(messages, list):
+            prompt = " ".join(m.get("content", "") for m in messages if m.get("role") == "user")
+        else:
+            prompt = str(messages) if messages else ""
+        result = _alf(prompt)
+        return result if result else None
+    except Exception:
         return None
-
 
 def _load_beliefs() -> list:
     try:
