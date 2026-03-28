@@ -303,8 +303,13 @@ def _score_belief(belief: dict, tokens: set[str]) -> float:
         return 0.0
 
     conf = belief.get("confidence", 0.5)
-    # Identity/pinned beliefs get a boost even with low overlap
+    # Identity/pinned beliefs get a boost
     boost = 0.3 if (belief.get("is_identity") or belief.get("pinned")) else 0.0
+    # Penalise pure historical/biographical trivia
+    import re as _re
+    _hist = {"seventeenth","eighteenth","nineteenth","century","born","died","philosopher","wrote","published","scholar"}
+    _cwords = set(_re.sub(r"[^a-z ]"," ",content.lower()).split())
+    if len(_cwords & _hist) >= 2: boost -= 0.25
     return (overlap * 0.5 + conf * 0.5) + boost
 
 def _get_opinion(topic_tokens: set[str]) -> Optional[dict]:
