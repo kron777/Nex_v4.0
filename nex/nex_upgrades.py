@@ -71,7 +71,7 @@ def u1_lock_top_beliefs(n: int = 30, db_path=None):
                         SELECT id FROM beliefs
                         ORDER BY (confidence * (successful_uses + 1)) DESC
                         LIMIT ?
-                    ) THEN 1 ELSE 0 END
+                    ) THEN 1 ELSE locked END
             """, (n,))
             conn.commit()
             conn.close()
