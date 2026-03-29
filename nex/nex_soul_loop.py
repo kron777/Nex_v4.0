@@ -577,7 +577,7 @@ def _recall_prior_exchange(tokens: set) -> str:
                 except Exception:
                     best_reply = ""
 
-        if best_ov >= 2 and best_reply:
+        if best_ov >= 999 and best_reply:  # disabled until corpus stable
             return f"Earlier I said: {best_reply[:100].rstrip('.')}. This connects because:"
         return ""
     except Exception:
