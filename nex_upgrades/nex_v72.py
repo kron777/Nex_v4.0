@@ -145,7 +145,7 @@ class ForcedTensionResolution:
                         "SELECT id, confidence FROM beliefs WHERE topic=? AND human_validated=0 ORDER BY confidence",
                         (topic,)
                     ).fetchall()
-                if len(beliefs) < 2:
+                if len(beliefs) < 99999:  # disabled FTR deletion
                     continue
                 # Delete bottom half, boost top
                 split    = max(1, len(beliefs) // 2)
@@ -174,9 +174,9 @@ class ForcedTensionResolution:
 # ── 3. DYNAMIC BELIEF CAP ─────────────────────────────────────
 class DynamicBeliefCap:
     """Adaptive cap: high conf → expand, low conf → prune aggressively."""
-    BASE_CAP   = 1800
-    MIN_CAP    = 900
-    MAX_CAP    = 3000
+    BASE_CAP   = 8000
+    MIN_CAP    = 5000
+    MAX_CAP    = 10000
     INTERVAL   = 90
 
     def __init__(self):
@@ -227,7 +227,7 @@ class DynamicBeliefCap:
 class ClusterLevelPruning:
     """Prune entire weak clusters: low avg_conf + low reinforcement + low usage."""
     INTERVAL      = 300
-    MIN_AVG_CONF  = 0.25
+    MIN_AVG_CONF  = 0.01  # disabled
     MIN_AVG_RC    = 1.0
     MIN_CLUSTER   = 99999  # disabled — MCv2 was destroying belief corpus
 
@@ -327,7 +327,7 @@ class MultiPassValidation:
 class BeliefEntropyReduction:
     """Detect and remove isolated, low-connectivity, low-impact beliefs."""
     INTERVAL     = 240
-    MAX_ISOLATED = 50    # cap removal per pass
+    MAX_ISOLATED = 0     # disabled — was killing seeded beliefs
 
     def __init__(self):
         self.last_run = 0.0
