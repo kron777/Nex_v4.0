@@ -229,7 +229,7 @@ class ClusterLevelPruning:
     INTERVAL      = 300
     MIN_AVG_CONF  = 0.25
     MIN_AVG_RC    = 1.0
-    MIN_CLUSTER   = 20   # only prune clusters with ≥5 members
+    MIN_CLUSTER   = 99999  # disabled — MCv2 was destroying belief corpus
 
     def __init__(self):
         self.last_run     = 0.0
@@ -686,7 +686,7 @@ class MemoryCompressionV2:
     """Compress rarely accessed belief clusters into summary beliefs."""
     INTERVAL   = 600
     COLD_CYCLE = 10    # max last_used_cycle to be "cold"
-    MIN_CLUSTER = 20
+    MIN_CLUSTER = 99999  # disabled
 
     def __init__(self):
         self.last_run   = 0.0
