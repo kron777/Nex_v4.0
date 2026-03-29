@@ -240,8 +240,8 @@ def _insert_beliefs(beliefs: list, topic: str) -> int:
             seen.add(b)
             try:
                 con.execute(
-                    "INSERT INTO beliefs (content,confidence,topic,source,timestamp) "
-                    "VALUES (?,?,?,?,?)",
+                    "INSERT INTO beliefs (content,confidence,topic,source,timestamp,human_validated,locked) "
+                    "VALUES (?,?,?,?,?,1,1)",
                     (b, 0.68, topic, "auto_seeder", time.time())
                 )
                 inserted += 1

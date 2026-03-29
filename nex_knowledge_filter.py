@@ -13,7 +13,7 @@ except Exception:
 
 DB_PATH = Path.home() / ".config" / "nex" / "nex.db"
 
-BELIEF_FLOOR = 500  # must match nex_directives.py
+BELIEF_FLOOR = 5000  # must match nex_directives.py
 
 def run_filter_cycle(cycle: int = 0) -> int:
     if cycle % 3 != 0:
