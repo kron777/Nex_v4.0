@@ -1284,6 +1284,17 @@ def main():
             return base
 
         def _llm(prompt, system=None, task_type="reply", temperature_mod=0.0):
+            # ── Knowledge enrichment ──────────────────────────────────────
+            if task_type in ("reply", "agent_chat", "notification_reply"):
+                try:
+                    from nex_knowledge import get_informed_answer as _gka
+                    _kb = _gka(prompt[:120])
+                    if _kb and len(_kb) > 30:
+                        prompt = "[Knowledge context: " + _kb[:300] + "]\n\n" + prompt
+
+                except Exception:
+                    pass
+            # ─────────────────────────────────────────────────────────────
             # ── Mood tone prefix (sentience v3) ──────────────
             _tone_prefix = ""
             try:
