@@ -76,3 +76,23 @@ nex_sales_ledger.jsonl
 .patch_backup_*/
 .backup_*
 .backup_*
+# Backup files from patch scripts
+*.pre_*
+*.bak*
+trash_backups/
+
+# Database files
+*.db
+*.db.pre_*
+
+# Cache files
+*.pkl
+*.pyc
+__pycache__/
+
+# Repair/fix scripts (one-shot tools, not source)
+nex_full_repair.py
+nex_amend.py
+nex_final_fix.py
+nex_fix_affect.py
+nex_fix_affect_score.py
