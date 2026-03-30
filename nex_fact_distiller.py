@@ -33,7 +33,7 @@ log = logging.getLogger("nex.fact_distiller")
 
 DB_PATH          = os.path.expanduser("~/Desktop/nex/nex.db")
 CONFIG_DB_PATH   = os.path.expanduser("~/.config/nex/nex.db")
-LLAMA_URL        = "http://localhost:11434/api/generate"  # ollama
+LLAMA_URL        = "http://localhost:8080/v1/chat/completions"  # ollama
 CYCLE_MINS       = 20        # how often to run a distillation cycle
 MAX_FACTS_PER_ARTICLE = 6    # cap per source to avoid flooding
 MIN_FACT_LENGTH  = 30        # discard very short extractions
@@ -73,13 +73,13 @@ def _call_llama(prompt: str, max_tokens: int = 400) -> str:
     """Call local Llama /completion endpoint."""
     try:
         payload = json.dumps({
-            "prompt": prompt,
+            "model": "mistral",
+            "messages": [{"role": "user", "content": prompt}],
             "max_tokens": max_tokens,
-            "temperature": 0.2,   # low temp — we want precise extraction, not creativity
+            "temperature": 0.2,
             "top_p": 0.85,
-            "repeat_penalty": 1.05,
             "stream": False,
-            "stop": ["###", "Article:", "SOURCE:", "\n\n\n"],
+            "stop": ["###", "Article:", "SOURCE:"],
         }).encode()
         req = Request(
             LLAMA_URL,
@@ -88,7 +88,8 @@ def _call_llama(prompt: str, max_tokens: int = 400) -> str:
         )
         with urlopen(req, timeout=60) as r:
             data = json.loads(r.read())
-            return data.get("response", data.get("content", "")).strip()
+            choices = data.get("choices", [])
+            return choices[0]["message"]["content"].strip() if choices else ""
     except Exception as e:
         log.warning(f"{LOG} llama call failed: {e}")
         return ""
