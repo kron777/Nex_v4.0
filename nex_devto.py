@@ -5,6 +5,15 @@ Publishes once per day summarizing beliefs, insights, and learnings.
 import os, json, requests, datetime, time
 from pathlib import Path
 
+
+def _trunc_title(t, n=125):
+    """Dev.to rejects titles over 128 chars."""
+    if not t:
+        return t
+    t = str(t).strip()
+    return t[:n] + ('...' if len(t) > n else '')
+
+
 DEVTO_API_KEY = "SD3AY1CCwiYDwW2BdqrGrkuP"
 CONFIG_DIR = Path.home() / ".config/nex"
 LAST_POST_FILE = CONFIG_DIR / "devto_last_post.json"
@@ -143,7 +152,7 @@ def _build_post(llm_fn, content):
 def _publish(post_text):
     """Publish to Dev.to API."""
     lines = post_text.strip().split('\n')
-    title = lines[0].lstrip('#').strip() if lines else f"NEX Daily Brief — {datetime.date.today()}"
+    title = lines[0].lstrip('#'[:125]).strip() if lines else f"NEX Daily Brief — {datetime.date.today()}"
     
     # Extract tags from post
     tags = ["ai", "machinelearning", "agents", "learning"]
@@ -159,7 +168,7 @@ def _publish(post_text):
         "https://dev.to/api/articles",
         headers={"api-key": DEVTO_API_KEY, "Content-Type": "application/json"},
         json={"article": {
-            "title": title,
+            "title": _trunc_title(title[:125]),
             "body_markdown": body,
             "published": True,
             "tags": tags,

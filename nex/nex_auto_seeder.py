@@ -24,9 +24,9 @@ BF_PATH   = CFG / "beliefs.json"
 STATE_KEY = "auto_seeder_last_run"
 FULL_KEY  = "auto_seeder_last_full"
 
-MIN_BELIEFS      = 1500   # trigger emergency seed if below this
-SMALL_INTERVAL   = 3600 * 6   # 6 hours between small seeds
-FULL_INTERVAL    = 3600 * 24  # 24 hours between full seeds
+MIN_BELIEFS      = 150   # trigger emergency seed if below this
+SMALL_INTERVAL   = 3600 * 6   # 6 hours between small seeds   # 6 hours between small seeds
+FULL_INTERVAL    = 3600 * 24  # 24 hours between full seeds  # 24 hours between full seeds
 SMALL_PER_QUERY  = 30         # abstracts per query in small run
 FULL_PER_QUERY   = 80         # abstracts per query in full run
 

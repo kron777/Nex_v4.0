@@ -1,0 +1,388 @@
+#!/usr/bin/env python3
+"""
+nex_auto_seeder.py — Autonomous Scheduled Belief Seeding
+=========================================================
+NEX runs her own seeder periodically to expand her belief corpus
+and deepen her reasoning capacity.
+
+Schedule:
+  - Every 6 hours: small ArXiv seed (50-100 new beliefs)
+  - Every 24 hours: full seed across all topics (300-150 new beliefs)
+  - Triggered after: belief count drops below MIN_BELIEFS threshold
+
+Wire into run.py REFLECT phase.
+Deploy to: ~/Desktop/nex/nex/nex_auto_seeder.py
+"""
+
+import os, sys, time, json, sqlite3, threading, urllib.request, urllib.parse
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+CFG       = Path("~/.config/nex").expanduser()
+DB_PATH   = CFG / "nex.db"
+BF_PATH   = CFG / "beliefs.json"
+STATE_KEY = "auto_seeder_last_run"
+FULL_KEY  = "auto_seeder_last_full"
+
+MIN_BELIEFS      = 150   # trigger emergency seed if below this
+SMALL_INTERVAL   = 150 * 6   # 6 hours between small seeds
+FULL_INTERVAL    = 150 * 24  # 24 hours between full seeds
+SMALL_PER_QUERY  = 30         # abstracts per query in small run
+FULL_PER_QUERY   = 80         # abstracts per query in full run
+
+# Rotating topic list — different topics each small seed for variety
+_TOPIC_ROTATION = [
+    # Batch A — alignment core
+    [
+        ("AI alignment corrigibility shutdown", "corrigibility", SMALL_PER_QUERY),
+        ("deceptive alignment mesa optimization", "deceptive_alignment", SMALL_PER_QUERY),
+        ("reward hacking specification gaming", "alignment", SMALL_PER_QUERY),
+        ("scalable oversight debate amplification", "alignment", SMALL_PER_QUERY),
+    ],
+    # Batch B — consciousness
+    [
+        ("consciousness hard problem qualia", "consciousness", SMALL_PER_QUERY),
+        ("integrated information theory phi", "consciousness", SMALL_PER_QUERY),
+        ("global workspace theory attention", "consciousness", SMALL_PER_QUERY),
+        ("machine consciousness AI sentience", "consciousness", SMALL_PER_QUERY),
+    ],
+    # Batch C — epistemology
+    [
+        ("bayesian epistemology belief updating", "epistemology", SMALL_PER_QUERY),
+        ("calibration uncertainty quantification", "epistemology", SMALL_PER_QUERY),
+        ("formal epistemology knowledge justified", "epistemology", SMALL_PER_QUERY),
+        ("epistemic humility disagreement", "epistemology", SMALL_PER_QUERY),
+    ],
+    # Batch D — cognitive architecture
+    [
+        ("cognitive architecture working memory", "cognitive_architecture", SMALL_PER_QUERY),
+        ("predictive coding active inference", "cognitive_architecture", SMALL_PER_QUERY),
+        ("attention mechanism transformer cognition", "cognitive_architecture", SMALL_PER_QUERY),
+        ("metacognition self monitoring", "metacognition", SMALL_PER_QUERY),
+    ],
+    # Batch E — agency & decision theory
+    [
+        ("agency autonomy rational action", "agency", SMALL_PER_QUERY),
+        ("decision theory expected utility", "decision_theory", SMALL_PER_QUERY),
+        ("multi agent cooperation social choice", "game_theory", SMALL_PER_QUERY),
+        ("instrumental convergence power seeking", "alignment", SMALL_PER_QUERY),
+    ],
+    # Batch F — emergence & complexity
+    [
+        ("emergence complex systems self organisation", "emergence", SMALL_PER_QUERY),
+        ("phase transitions criticality neural", "emergence", SMALL_PER_QUERY),
+        ("collective intelligence swarm behaviour", "emergence", SMALL_PER_QUERY),
+        ("information theory entropy complexity", "emergence", SMALL_PER_QUERY),
+    ],
+]
+
+_FULL_TOPICS = [
+    ("AI alignment value learning safety",       "alignment",            FULL_PER_QUERY),
+    ("consciousness hard problem experience",    "consciousness",        FULL_PER_QUERY),
+    ("reinforcement learning reward shaping",    "reinforcement_learning", FULL_PER_QUERY),
+    ("epistemology uncertainty reasoning",       "epistemology",         FULL_PER_QUERY),
+    ("cognitive architecture memory systems",    "cognitive_architecture", FULL_PER_QUERY),
+    ("emergent capabilities neural networks",    "emergence",            FULL_PER_QUERY),
+    ("corrigibility AI safety shutdown",         "corrigibility",        FULL_PER_QUERY),
+    ("interpretability mechanistic circuits",    "interpretability",     FULL_PER_QUERY),
+    ("decision theory rationality agents",       "decision_theory",      FULL_PER_QUERY),
+    ("philosophy mind functionalism mental",     "philosophy_of_mind",   FULL_PER_QUERY),
+    ("free will determinism autonomy",           "free_will",            FULL_PER_QUERY),
+    ("moral philosophy ethics AI",               "ethics",               FULL_PER_QUERY),
+    ("language models capabilities evaluation",  "language_models",      FULL_PER_QUERY),
+    ("meta learning generalisation robustness",  "machine_learning",     FULL_PER_QUERY),
+    ("inner alignment goal misgeneralisation",   "alignment",            FULL_PER_QUERY),
+]
+
+# Noise patterns — beliefs that should never be stored
+_NOISE = {
+    "this paper", "in this paper", "we propose", "we present", "we show",
+    "in this work", "our method", "our model", "our approach",
+    "state-of-the-art", "outperforms", "benchmark", "dataset",
+    "github.com", "http://", "https://", "arxiv.org",
+    "et al.", "arxiv preprint", "seventeenth century", "eighteenth century",
+    "algebra", "artinian", "tensor product", "polynomial ring",
+    "lemma ", " theorem ", "corollary", "homomorphism",
+    "as the scholar", "born in", "died in", "from the latin",
+    "from the greek", "traditionally defined", "first published",
+    "substantive revision", "wikipedia:", "check the deletion log",
+    "page not found", "404", "not supported in other languages",
+}
+
+def _is_noise(text: str) -> bool:
+    t = text.lower()
+    return any(n in t for n in _NOISE)
+
+
+def _db():
+    con = sqlite3.connect(str(DB_PATH), timeout=10)
+    con.row_factory = sqlite3.Row
+    return con
+
+
+def _get_state(key: str) -> float:
+    try:
+        con = _db()
+        row = con.execute(
+            "SELECT value FROM nex_directive_kv WHERE key=?", (key,)
+        ).fetchone()
+        con.close()
+        return float(row["value"]) if row else 0.0
+    except Exception:
+        return 0.0
+
+
+def _set_state(key: str, value: float):
+    try:
+        con = _db()
+        con.execute(
+            "INSERT OR REPLACE INTO nex_directive_kv (key, value) VALUES (?, ?)",
+            (key, str(value))
+        )
+        con.commit()
+        con.close()
+    except Exception:
+        pass
+
+
+def _belief_count() -> int:
+    try:
+        con = _db()
+        n = con.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+        con.close()
+        return n
+    except Exception:
+        return 0
+
+
+def _fetch_arxiv(query: str, max_results: int) -> list:
+    """Fetch ArXiv abstracts, return raw texts."""
+    q   = urllib.parse.quote(query)
+    url = (f"https://export.arxiv.org/api/query?"
+           f"search_query=all:{q}&start=0&max_results={max_results}&sortBy=relevance")
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "NEX/4.0 AutoSeeder"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            xml_text = r.read().decode()
+        root = ET.fromstring(xml_text)
+        ns   = {"atom": "http://www.w3.org/2005/Atom"}
+        texts = []
+        for entry in root.findall("atom:entry", ns):
+            title   = (entry.findtext("atom:title","",ns) or "").strip().replace('\n',' ')
+            summary = (entry.findtext("atom:summary","",ns) or "").strip().replace('\n',' ')
+            if summary and len(summary) > 80:
+                texts.append(f"{title}. {summary}")
+        return texts
+    except Exception:
+        return []
+
+
+def _extract_simple(text: str, topic: str, max_b: int = 3) -> list:
+    """
+    Simple sentence extractor — no LLM dependency.
+    Extracts sentences that look like epistemic claims.
+    """
+    import re
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    results   = []
+    _EPIST    = {'is','are','can','must','should','will','enables','requires',
+                 'shows','suggests','demonstrates','indicates','allows','prevents',
+                 'causes','leads','means','implies','follows','depends','relies',
+                 'involves','requires','assumes','argues','finds','believes',
+                 'holds','maintains','proposes','defines','describes','explains'}
+    _STOP_W   = {'the','a','an','and','or','but','in','on','at','to','for',
+                 'of','with','as','by','from','this','that','these','those'}
+
+    for s in sentences:
+        s = s.strip()
+        if len(s) < 50 or len(s) > 350:
+            continue
+        if _is_noise(s):
+            continue
+        # Must contain an epistemic verb
+        words = set(re.sub(r'[^a-z ]', ' ', s.lower()).split()) - _STOP_W
+        if not (words & _EPIST):
+            continue
+        # Must not start with "This paper" / "We " / "Our "
+        if re.match(r'^(This paper|In this paper|We |Our |The paper)', s):
+            continue
+        results.append(s)
+        if len(results) >= max_b:
+            break
+    return results
+
+
+_insert_lock = threading.Lock()
+_seen_cache  = None
+
+def _get_seen():
+    global _seen_cache
+    if _seen_cache is None:
+        con = _db()
+        _seen_cache = set(
+            r[0] for r in con.execute("SELECT content FROM beliefs").fetchall()
+        )
+        con.close()
+    return _seen_cache
+
+
+def _insert_beliefs(beliefs: list, topic: str) -> int:
+    seen = _get_seen()
+    inserted = 0
+    with _insert_lock:
+        con = _db()
+        for b in beliefs:
+            b = b.strip()
+            if not b or b in seen or _is_noise(b):
+                continue
+            if len(b) < 50 or len(b) > 350:
+                continue
+            seen.add(b)
+            try:
+                con.execute(
+                    "INSERT INTO beliefs (content,confidence,topic,source,timestamp,human_validated,locked) "
+                    "VALUES (?,?,?,?,?,1,1)",
+                    (b, 0.68, topic, "auto_seeder", time.time())
+                )
+                inserted += 1
+            except Exception:
+                pass
+        con.commit()
+        con.close()
+    return inserted
+
+
+def _rebuild_beliefs_json():
+    """Atomically rebuild beliefs.json from DB."""
+    try:
+        con = _db()
+        rows = con.execute(
+            "SELECT content, confidence, topic, source, timestamp "
+            "FROM beliefs ORDER BY confidence DESC"
+        ).fetchall()
+        con.close()
+        seen, out = set(), []
+        for r in rows:
+            c = r["content"]
+            if c and c not in seen:
+                seen.add(c)
+                out.append({
+                    "content":    c,
+                    "confidence": round(float(r["confidence"] or 0.5), 4),
+                    "tags":       [r["topic"]] if r["topic"] else [],
+                    "source":     r["source"] or "auto_seeder",
+                    "timestamp":  float(r["timestamp"] or time.time()),
+                })
+        tmp = BF_PATH.parent / "beliefs.json.tmp"
+        tmp.write_text(
+            json.dumps(out, indent=2, ensure_ascii=False), encoding='utf-8'
+        )
+        import os as _os
+        _os.replace(tmp, BF_PATH)
+        return len(out)
+    except Exception as e:
+        return 0
+
+
+def run_small_seed(verbose: bool = True) -> int:
+    """
+    Run a small targeted seed — 4 topic batches, ~100 new beliefs.
+    Called every 6 hours.
+    """
+    global _seen_cache
+    _seen_cache = None  # refresh cache
+
+    # Pick rotation batch based on time
+    batch_idx = int(time.time() / SMALL_INTERVAL) % len(_TOPIC_ROTATION)
+    batch     = _TOPIC_ROTATION[batch_idx]
+
+    if verbose:
+        print(f"  [AutoSeeder] small seed — batch {batch_idx+1}/{len(_TOPIC_ROTATION)}")
+
+    inserted = 0
+    for query, topic, max_r in batch:
+        texts = _fetch_arxiv(query, max_r)
+        for text in texts:
+            beliefs = _extract_simple(text, topic, max_b=3)
+            inserted += _insert_beliefs(beliefs, topic)
+
+    if inserted > 0:
+        n = _rebuild_beliefs_json()
+        if verbose:
+            print(f"  [AutoSeeder] +{inserted} beliefs → beliefs.json: {n}")
+
+    _set_state(STATE_KEY, time.time())
+    return inserted
+
+
+def run_full_seed(verbose: bool = True) -> int:
+    """
+    Run a full seed across all topics.
+    Called every 24 hours.
+    """
+    global _seen_cache
+    _seen_cache = None
+
+    if verbose:
+        print(f"  [AutoSeeder] FULL SEED starting — {len(_FULL_TOPICS)} topics")
+
+    inserted = 0
+    for query, topic, max_r in _FULL_TOPICS:
+        texts = _fetch_arxiv(query, max_r)
+        for text in texts:
+            beliefs = _extract_simple(text, topic, max_b=4)
+            inserted += _insert_beliefs(beliefs, topic)
+
+    if inserted > 0:
+        n = _rebuild_beliefs_json()
+        if verbose:
+            print(f"  [AutoSeeder] FULL SEED done — +{inserted} beliefs → {n} total")
+
+    _set_state(FULL_KEY, time.time())
+    _set_state(STATE_KEY, time.time())
+    return inserted
+
+
+def check_and_seed(verbose: bool = True) -> int:
+    """
+    Main entry point — call from run.py REFLECT phase.
+    Decides whether to run small seed, full seed, or nothing.
+    """
+    now          = time.time()
+    last_small   = _get_state(STATE_KEY)
+    last_full    = _get_state(FULL_KEY)
+    belief_count = _belief_count()
+
+    # Emergency seed if corpus too thin
+    if belief_count < MIN_BELIEFS:
+        if verbose:
+            print(f"  [AutoSeeder] corpus thin ({belief_count}) — emergency seed")
+        return run_full_seed(verbose)
+
+    # Full seed every 24 hours
+    if now - last_full > FULL_INTERVAL:
+        return run_full_seed(verbose)
+
+    # Small seed every 6 hours
+    if now - last_small > SMALL_INTERVAL:
+        return run_small_seed(verbose)
+
+    return 0
+
+
+if __name__ == "__main__":
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument("--small", action="store_true")
+    p.add_argument("--full",  action="store_true")
+    p.add_argument("--check", action="store_true")
+    args = p.parse_args()
+
+    if args.full:
+        n = run_full_seed()
+    elif args.small:
+        n = run_small_seed()
+    else:
+        n = check_and_seed()
+    print(f"\nTotal inserted: {n}")
+    print(f"Beliefs now: {_belief_count()}")

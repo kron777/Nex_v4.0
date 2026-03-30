@@ -31,6 +31,15 @@ from datetime import datetime, timezone
 from collections import deque
 from typing import Dict, Any, Optional, List, Callable
 from nex.nex_llm_free import ask_llm_free as _llm_free
+# ── NEX v4 groq shim ─────────────────────────────────────────
+try:
+    from nex.nex_groq_shim import _groq, _call_groq, call_groq
+except ImportError:
+    try:
+        from nex_groq_shim import _groq, _call_groq, call_groq
+    except ImportError:
+        pass
+# ─────────────────────────────────────────────────────────────
 
 CFG_PATH   = Path("~/.config/nex").expanduser()
 STATE_PATH = CFG_PATH / "cognitive_bus_state.json"

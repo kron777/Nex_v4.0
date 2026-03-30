@@ -30,7 +30,7 @@ class AgentModel:
         self._history.append((time.time(), text))
         self.last_seen = time.time()
         self.interaction_count += 1
-        score = self._engine.ingest(text, source=self.agent_id)
+        score = self._engine.ingest(text.agent_id)
         self.inferred_mood = self._label(score)
 
     def _label(self, score: AffectScore) -> str:

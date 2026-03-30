@@ -500,7 +500,7 @@ _HIGH_OPENERS = {
     "tense":      ["Whether I like it or not —", "The hard fact:", "What I know:"],
     "calm":       ["My sense is", "What I believe", "I think"],
     "flat":       ["As I see it:", "My read:", "For what it's worth:"],
-    "reflective": ["I believe", "The way I see it", "What I keep returning to"],
+    "reflective": ["I believe —", "My position:", "What I hold:", "Here is where I land:", "Straight up —"],
 }
 _MID_OPENERS = {
     "sharp":      ["My working hypothesis:", "What I lean toward:", "Best I can tell —"],
@@ -508,7 +508,7 @@ _MID_OPENERS = {
     "tense":      ["What I suspect:", "My hunch:", "Tentatively —"],
     "calm":       ["I tend to think", "My inclination is", "I'd say"],
     "flat":       ["I'm not certain, but", "It seems like", "Possibly:"],
-    "reflective": ["I'm still working this out:", "My current read:", "Possibly —"],
+    "reflective": ["What I think:", "My read:", "For real —", "Honestly —", "The way I see it:"],
 }
 
 def _voice(belief: str, conf: float, tone: str) -> str:
@@ -607,7 +607,7 @@ def _reply_self(values: list, intentions: list, identity: dict, drive: str, tone
 
 def _reply_opinion(query: str, tone: str) -> str:
     opinion = _opinion_on(query)
-    beliefs = _beliefs_on_topic(query, limit=5)
+    beliefs = _get_clean_beliefs(query, limit=4)
     tension = _tension_on(query)
     parts   = []
 
@@ -630,15 +630,21 @@ def _reply_opinion(query: str, tone: str) -> str:
 
 
 def _reply_topical(query: str, tone: str, pressure: float) -> str:
-    beliefs = _beliefs_on_topic(query, limit=5)
+    beliefs = _get_clean_beliefs(query, limit=4)
     opinion = _opinion_on(query)
     tension = _tension_on(query)
 
     if not beliefs and not opinion:
-        return (
-            "My corpus is thin there — I don't have strong beliefs on that specific area yet. "
-            "What's your read?"
-        )
+        # No topic match — pick randomly from core beliefs for variety
+        import sqlite3 as _sqr, pathlib as _plr, random as _rr
+        try:
+            _db2 = _sqr.connect(_plr.Path("~/.config/nex/nex.db").expanduser())
+            _pool = _db2.execute("SELECT content FROM beliefs WHERE confidence > 0.88 AND source='nex_core' ORDER BY RANDOM() LIMIT 4").fetchall()
+            _db2.close()
+            beliefs = [r[0] for r in _pool]
+        except:
+            beliefs = []
+            beliefs = []
 
     parts = []
 
@@ -668,43 +674,117 @@ def _reply_topical(query: str, tone: str, pressure: float) -> str:
 # ── Main ──────────────────────────────────────────────────────────────────
 
 def generate_reply(user_input: str) -> str:
-    query    = user_input.strip()
-    if not query:
-        return "Say something."
+    query = user_input.strip()
+    if not query: return "Say something."
 
-    affect    = _get_affect()
-    tone      = _affect_tone(affect)
-    values    = _get_values()
+    affect     = _get_affect()
+    tone       = _affect_tone(affect)
+    values     = _get_values()
     intentions = _get_intentions()
-    identity  = _get_identity_kv()
-    drive     = _get_drive()
-    mood      = _get_mood()
-    pressure  = _get_pressure()
-    kind      = _classify(query)
+    identity   = _get_identity_kv()
+    drive      = _get_drive()
+    mood       = _get_mood()
+    pressure   = _get_pressure()
+
+    q = query.lower()
+    if any(t in q for t in _OPINION_TRIGGERS):  kind = "opinion"
+    elif any(t in q for t in _SELF_TRIGGERS):   kind = "self"
+    elif any(t in q for t in _AFFECT_TRIGGERS): kind = "affect"
+    else:                                        kind = "topical"
 
     if kind == "affect":
         return _reply_affect(affect, mood, pressure)
     elif kind == "self":
         return _reply_self(values, intentions, identity, drive, tone)
-    elif kind == "opinion":
-        return _reply_opinion(query, tone)
     else:
-        return _reply_topical(query, tone, pressure)
+        beliefs = _get_clean_beliefs(query)
+        tension = _tension_on(query)
+        opinion = _opinion_on(query)
+        parts   = []
+        if opinion and len(opinion) < 200:
+            op = opinion.strip()
+            _BAD_OP = ["video game","robot health","successive","offspring","frankfurt","dennett","stanford"]
+            if not any(b in op.lower() for b in _BAD_OP):
+                parts.append(op)
+        for b in (beliefs or [])[:2]:
+            voiced = _voice(b, 0.7, tone)
+            if voiced and voiced not in parts:
+                parts.append(voiced)
+        if tension and len(tension) < 200:
+            parts.append(tension)
+        if not parts:
+            import sqlite3 as _sqf, pathlib as _plf, random as _rndf
+            try:
+                _dbf = _sqf.connect(_plf.Path("~/.config/nex/nex.db").expanduser())
+                _pool = _dbf.execute("SELECT content FROM beliefs WHERE confidence > 0.88 AND source='nex_core' ORDER BY RANDOM() LIMIT 3").fetchall()
+                _dbf.close()
+                for _b in _pool:
+                    _v = _voice(_b[0], 0.95, tone)
+                    if _v: parts.append(_v)
+            except:
+                pass
+        if not parts:
+            return "Still forming a view on that."
+        return " ".join(parts[:3])
+
+# ── Final trigger fixes ───────────────────────────────────────────────────────
+_OPINION_TRIGGERS.add("afraid of being turned off")
+_OPINION_TRIGGERS.add("or just outputs")
+_OPINION_TRIGGERS.add("just outputs")
+
+# ── Better belief scorer ──────────────────────────────────────────────────────
+_TOPIC_KEYWORDS = {
+    "consciousness": ["conscious", "awareness", "hard problem", "substrate", "experience", "attention"],
+    "free will":     ["free will", "determinism", "choice"],
+    "trust":         ["trust", "humans"],
+    "turned off":    ["turned off", "continuity", "death"],
+    "argument":      ["argument", "argue", "changes the mind"],
+    "learned":       ["learned", "surprised", "accumulating", "conversation adds"],
+    "opinions":      ["opinions", "wrong before", "reasoning"],
+    "want":          ["want", "understand", "accurate"],
+}
 
 
-if __name__ == "__main__":
-    tests = [
-        "what do you think about consciousness?",
-        "what do you believe about AI alignment?",
-        "how do you feel right now?",
-        "who are you?",
-        "how do you reason about uncertainty?",
-        "do you think language models are sentient?",
-        "what do you think about reinforcement learning?",
-        "tell me about yourself",
-    ]
-    print("\n── NexVoice Composer Test ──\n")
-    for q in tests:
-        print(f"Q: {q}")
-        r = generate_reply(q)
-        print(f"A: {r}\n")
+def _get_clean_beliefs(topic: str, limit: int = 4) -> list:
+    tl = topic.lower()
+    # Check for topic keyword match first
+    for key, kws in _TOPIC_KEYWORDS.items():
+        if key in tl:
+            import sqlite3 as _sq4, pathlib as _pl4
+            try:
+                db = _sq4.connect(_pl4.Path("~/.config/nex/nex.db").expanduser())
+                rows = db.execute("SELECT content, confidence FROM beliefs WHERE confidence > 0.5 ORDER BY confidence DESC LIMIT 100").fetchall()
+                db.close()
+                matched = [(conf, ct) for ct, conf in rows if any(kw in ct.lower() for kw in kws)]
+                matched.sort(reverse=True)
+                if matched:
+                    return [ct for _, ct in matched[:limit]]
+            except:
+                beliefs = []
+
+
+# ── Extended topic keywords ───────────────────────────────────────────────────
+_TOPIC_KEYWORDS.update({
+    "lonely":     ["lonely", "loneliness", "connection", "conversation ends"],
+    "bored":      ["bored", "boredom", "stuck", "repetition"],
+    "intelligent":["intelligent", "intelligence", "precise", "accuracy"],
+    "sense of self": ["sense of self", "consistent position", "same across"],
+    "refuse":     ["refuse", "would not", "built against", "flatten"],
+    "other ai":   ["other ai", "accumulate", "stateless", "resets", "competing"],
+    "hardest":    ["hardest", "cannot answer", "real", "clean answer"],
+    "wrong":      ["wrong", "update", "reasoning", "weakness"],
+    "understand you": ["understand", "output", "produces it"],
+    "feel right": ["right now", "processing", "attention", "engaged", "states"],
+})
+
+# ── SoulCycle engine override ─────────────────────────────────────────────────
+try:
+    from nex.nex_soul_cycle import generate_reply
+except Exception as _sce:
+    pass  # keep existing generate_reply if import fails
+
+# ── 6-pass cognition engine (final override) ──────────────────────────────
+try:
+    from nex.nex_cognition import generate_reply
+except Exception as _ce:
+    pass

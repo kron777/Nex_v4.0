@@ -216,7 +216,7 @@ class EmbodiedValence:
                             text = "urgent alert critical"
                         else:
                             text = "calm steady stable"
-                        _av.ingest(text, source="embodied")
+                        _av.ingest(text)
                     except Exception as e:
                         log.debug(f"[EMBODIED] valence feed failed: {e}")
 

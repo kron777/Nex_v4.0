@@ -305,6 +305,13 @@ def _score_belief(belief: dict, tokens: set[str]) -> float:
     conf = belief.get("confidence", 0.5)
     # Identity/pinned beliefs get a boost
     boost = 0.3 if (belief.get("is_identity") or belief.get("pinned")) else 0.0
+
+    # Quality bonus from response history
+    try:
+        from nex.nex_belief_quality import get_topic_bonus
+        boost += get_topic_bonus(belief.get("topic", ""))
+    except Exception:
+        pass
     # Penalise pure historical/biographical trivia
     import re as _re
     _hist = {"seventeenth","eighteenth","nineteenth","century","born","died","philosopher","wrote","published","scholar"}
@@ -653,11 +660,36 @@ def reason(orient_result: dict) -> dict:
     """
     tokens   = orient_result["tokens"]
     all_b    = _load_all_beliefs() + _drive_beliefs()
+    # --- reinforce retrieved beliefs (temporal pressure) ---
+    try:
+        from nex.nex_temporal_pressure import reinforce_beliefs as _rb
+        _rb(beliefs if isinstance(beliefs, list) else list(beliefs))
+    except Exception:
+        pass
+    # -------------------------------------------------------
+
+
+    # ── Concept graph expansion — richer retrieval ────────────────────────
+    _expanded_topics = set()
+    _concept_primary = ""
+    try:
+        from nex.nex_concept_graph import expand_query_concepts
+        _cg_result = expand_query_concepts(tokens)
+        _expanded_topics = set(_cg_result.get("topics", []))
+        _concept_primary = _cg_result.get("primary", "")
+        orient_result["_concept_primary"] = _concept_primary
+        orient_result["_concept_related"] = _cg_result.get("related", [])
+    except Exception:
+        pass
+    # ─────────────────────────────────────────────────────────────────────
 
     # Score and rank primary beliefs
     scored = []
     for b in all_b:
         s = _score_belief(b, tokens)
+        # Boost beliefs from the expanded concept cluster
+        if _expanded_topics and (b.get("topic", "").lower() in _expanded_topics):
+            s += 2.5
         if s > 0:
             scored.append((s, b))
     scored.sort(key=lambda x: -x[0])

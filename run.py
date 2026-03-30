@@ -881,6 +881,14 @@ def main():
     parser.add_argument("--no-stream", action="store_true",     help="Disable token streaming")
     args = parser.parse_args()
 
+    # ── Memory filesystem API ─────────────────────────────────────────
+    try:
+        from nex.nex_memory_api import start_memory_api
+        start_memory_api(port=8767, daemon=True)
+    except Exception as _api_e:
+        print(f"  [MemoryAPI] {_api_e}")
+    # ─────────────────────────────────────────────────────────────────
+
     print(BANNER)
 
     # Start Mastodon in background
@@ -1266,6 +1274,64 @@ def main():
             """LLM — character engine first, Mistral second, Qwen third."""
             import time as _time_llm
 
+            # ── Stage 0: SoulLoop via kernel (pure symbolic, no HTTP) ─────────
+            # Social extractor cleans verbose prompts before SoulLoop sees them.
+            if task_type in ("reply", "notification_reply", "agent_chat"):
+                try:
+                    from nex.nex_social_extractor import clean_for_soulloop as _cfs0
+                    _clean_prompt = _cfs0(prompt, task_type=task_type)
+                except Exception:
+                    _clean_prompt = prompt[:300]
+                try:
+                    from nex.nex_kernel import get_kernel as _gk0
+                    _sl0_res = _gk0().process(_clean_prompt)
+                    if _sl0_res and len(_sl0_res.split()) >= 6:
+                        nex_log("llm", f"[Kernel ✓] {task_type}: {_sl0_res[:80]}")
+                        return _sl0_res
+                except Exception as _sl0_e:
+                    nex_log("llm", f"[Kernel ✗] {task_type}: {_sl0_e}")
+            # ─────────────────────────────────────────────────────────────────
+            # ── Stage 0: SoulLoop via kernel (pure symbolic, no HTTP) ─────────
+            # Social extractor cleans verbose prompts before SoulLoop sees them.
+            if task_type in ("reply", "notification_reply", "agent_chat"):
+                try:
+                    from nex.nex_social_extractor import clean_for_soulloop as _cfs0
+                    _clean_prompt = _cfs0(prompt, task_type=task_type)
+                except Exception:
+                    _clean_prompt = prompt[:300]
+                try:
+                    from nex.nex_kernel import get_kernel as _gk0
+                    _sl0_res = _gk0().process(_clean_prompt)
+                    if _sl0_res and len(_sl0_res.split()) >= 6:
+                        nex_log("llm", f"[Kernel ✓] {task_type}: {_sl0_res[:80]}")
+                        return _sl0_res
+                except Exception as _sl0_e:
+                    nex_log("llm", f"[Kernel ✗] {task_type}: {_sl0_e}")
+            # ─────────────────────────────────────────────────────────────────
+            # ── Stage 0: SoulLoop via kernel (pure symbolic, no HTTP) ─────────
+            # For reply tasks this is the primary path — avoids all LLM calls.
+            if task_type in ("reply", "notification_reply", "agent_chat"):
+                try:
+                    from nex.nex_kernel import get_kernel as _gk0
+                    _sl0_res = _gk0().process(prompt[:300])
+                    if _sl0_res and len(_sl0_res.split()) >= 6:
+                        nex_log("llm", f"[Kernel ✓] {task_type}: {_sl0_res[:80]}")
+                        return _sl0_res
+                except Exception as _sl0_e:
+                    nex_log("llm", f"[Kernel ✗] {task_type}: {_sl0_e}")
+            # ─────────────────────────────────────────────────────────────────
+            # ── Stage 0: SoulLoop via kernel (pure symbolic, no HTTP) ─────────
+            # For reply tasks this is the primary path — avoids all LLM calls.
+            if task_type in ("reply", "notification_reply", "agent_chat"):
+                try:
+                    from nex.nex_kernel import get_kernel as _gk0
+                    _sl0_res = _gk0().process(prompt[:300])
+                    if _sl0_res and len(_sl0_res.split()) >= 6:
+                        nex_log("llm", f"[Kernel ✓] {task_type}: {_sl0_res[:80]}")
+                        return _sl0_res
+                except Exception as _sl0_e:
+                    nex_log("llm", f"[Kernel ✗] {task_type}: {_sl0_e}")
+            # ─────────────────────────────────────────────────────────────────
             # ── Stage 1: Character engine (no LLM, instant) ──────────────────
             # Handles: post, reply, reflection, thought, synthesis
             _char_tasks = ("post", "reply", "notification_reply",
@@ -1289,24 +1355,16 @@ def main():
                 except Exception as _ce_err:
                     nex_log("llm", f"[CharEngine ✗] {task_type}: {_ce_err}")
 
-            # ── Stage 2: Ollama/Qwen (local, no API key) ─────────────────────
+            # ── Stage 2: ask_llm_free (replaces Qwen/Ollama — no HTTP) ─────
+            # Used for synthesis, reflection, gap detection, post generation.
             try:
-                _qwen_r = _req.post("http://localhost:11434/api/chat", json={
-                    "model": "qwen2.5:3b",
-                    "messages": [
-                        {"role": "system", "content": system or _build_system(task_type)},
-                        {"role": "user",   "content": prompt}
-                    ],
-                    "options": {"temperature": 0.75, "num_predict": 300},
-                    "stream": False,
-                }, timeout=45)
-                _qwen_d = _qwen_r.json()
-                _qwen_text = _qwen_d.get("message", {}).get("content", "").strip()
-                if _qwen_text and len(_qwen_text) > 10:
-                    nex_log("llm", f"[Qwen ✓] {task_type}: {_qwen_text[:80]}")
-                    return _qwen_text
-            except Exception as _qwen_err:
-                nex_log("llm", f"[Qwen ✗] {task_type}: {_qwen_err}")
+                from nex.nex_llm_free import ask_llm_free as _alf2
+                _alf2_res = _alf2(prompt[:400])
+                if _alf2_res and len(_alf2_res.split()) >= 5:
+                    nex_log("llm", f"[LLMFree ✓] {task_type}: {_alf2_res[:80]}")
+                    return _alf2_res
+            except Exception as _alf2_err:
+                nex_log("llm", f"[LLMFree ✗] {task_type}: {_alf2_err}")
 
             # ── Stage 3: Mistral local (original scaffold) ────────────────────
 
@@ -3559,6 +3617,15 @@ def main():
                         except Exception as _dee:
                             _desire_hints = {}
                             print(f"  [DESIRE ERROR] {_dee}")
+                        # ── BELIEF QUALITY SCORING (every 20 cycles) ────────
+                        if cycle % 20 == 0:
+                            try:
+                                from nex.nex_belief_quality import run_quality_cycle
+                                run_quality_cycle(verbose=False)
+                            except Exception as _bqe:
+                                pass
+                        # ──────────────────────────────────────────────────────
+
                         # ── OPINION ENGINE ────────────────────────────────
                         try:
                             if cycle % 20 == 0:
@@ -4293,6 +4360,27 @@ def main():
                 engine.pause()
                 print(f"{DIM}[Belief engine paused]{RESET}")
 
+            elif cmd in ("/independence", "/dashboard"):
+                try:
+                    from nex.nex_independence_dashboard import show_dashboard
+                    show_dashboard()
+                except Exception as _idc:
+                    print(f"  [dashboard] {_idc}")
+
+            elif cmd in ("/weaning", "/weaning-status"):
+                try:
+                    from nex.nex_independence_dashboard import weaning_status
+                    weaning_status()
+                except Exception as _wsc:
+                    print(f"  [weaning] {_wsc}")
+
+            elif cmd in ("/coherence", "/audit"):
+                try:
+                    from nex.nex_kernel import get_kernel as _gkc
+                    print(f"\n{_gkc().coherence_report()}\n")
+                except Exception as _ce:
+                    print(f"  [coherence] {_ce}")
+
             elif cmd == "/resume":
                 engine.resume()
                 print(f"{DIM}[Belief engine resumed]{RESET}")
@@ -4431,12 +4519,16 @@ def main():
                     full_msg = f"{belief_ctx}\n\n{user_input}"
 
                 print()
-                if not args.no_stream:
-                    response = brain.chat(full_msg, belief_state=status, stream_cb=stream)
-                    print()
-                else:
+                # ── KERNEL PATCH: route terminal chat through SoulLoop ──────────
+                try:
+                    from nex.nex_kernel import get_kernel as _get_nk
+                    response = _get_nk().process(full_msg)
+                except Exception as _ke:
+                    # Graceful fallback to AgentBrain if kernel fails
+                    print(f"  [kernel fallback] {_ke}")
                     response = brain.chat(full_msg, belief_state=status)
-                    print(response)
+                # ─────────────────────────────────────────────────────────────────
+                print(response)
                 print()
 
     finally:
@@ -4444,6 +4536,75 @@ def main():
         if not args.no_server:
             brain.stop_server()
 
+
+
+
+# [BELIEF_GROWTH_DAEMON] — auto-injected by install_belief_growth.py
+try:
+    from nex_belief_growth import BeliefGrowthDaemon as _BGD
+    _growth_daemon = _BGD()
+    _growth_daemon.start()
+    print("  [NEX GROWTH] belief growth daemon started")
+except Exception as _bgd_err:
+    print(f"  [NEX GROWTH] failed to start: {_bgd_err}")
+# [/BELIEF_GROWTH_DAEMON]
+
+# [NEX_METABOLISM] — auto-injected by install_metabolism.py
+try:
+    from nex_metabolism import MetabolismDaemon as _MD
+    _metabolism = _MD()
+    _metabolism.start()
+    print("  [METABOLISM] epistemic loop started — gap→crawl→distil→believe")
+except Exception as _md_err:
+    print(f"  [METABOLISM] failed to start: {_md_err}")
+# [/NEX_METABOLISM]
+
+# [NEX_SOURCE_ROUTER] — auto-injected by install_source_router.py
+try:
+    from nex_source_router import SourceRouter as _SR
+    _source_router = _SR()
+    _source_router.start()
+    print("  [SOURCE_ROUTER] 6-tier belief extraction active — RSS/HN/Reddit/Wiki/Arxiv/YouTube/crawl4ai")
+except Exception as _sr_err:
+    print(f"  [SOURCE_ROUTER] failed to start: {_sr_err}")
+# [/NEX_SOURCE_ROUTER]
+
+# [NEX_FACT_DISTILLER] — auto-injected by install_factual_layer.py
+try:
+    from nex_fact_distiller import FactDistiller as _FD, ensure_schema as _fd_schema
+    import os as _os
+    for _db in [_os.path.expanduser("~/Desktop/nex/nex.db"),
+                _os.path.expanduser("~/.config/nex/nex.db")]:
+        if _os.path.exists(_db):
+            _fd_schema(_db)
+    _fact_distiller = _FD()
+    _fact_distiller.start()
+    print("  [FACT_DISTILLER] started — factual knowledge layer active")
+except Exception as _e:
+    print(f"  [FACT_DISTILLER] init failed: {_e}")
+
+
+# [NEX_BELIEF_SCALE] — auto-injected by install_belief_scale.py
+try:
+    # Smart contextual belief index (TF-IDF, scales to millions)
+    from nex_belief_index import get_index as _get_bindex
+    _belief_index = _get_bindex()
+    print(f"  [BeliefIndex] built — {_belief_index.total()} beliefs indexed")
+
+    # Tiered memory manager (hot/warm/cold tiers)
+    from nex_belief_memory import get_memory as _get_bmem
+    _belief_memory = _get_bmem()
+    s = _belief_memory.status()
+    print(f"  [BeliefMemory] hot={s['hot_tier']} warm={s['warm_tier']} total={s['total_in_db']}")
+
+    # Belief architect daemon (dedup, compression, decay, health)
+    from nex_belief_architect import start_architect as _start_arch
+    _belief_architect = _start_arch()
+    print("  [BeliefArchitect] started — dedup/compress/decay/health monitoring")
+
+except Exception as _bse:
+    print(f"  [BeliefScale] failed to start: {_bse}")
+# [/NEX_BELIEF_SCALE]
 
 
 if __name__ == "__main__":

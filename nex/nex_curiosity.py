@@ -12,9 +12,16 @@ Two triggers:
 
 Queue drains at ABSORB start, non-blocking to replies/chat/post.
 
-Persistent queue: ~/.config/nex/curiosity_queue.json
+Persistent queue: ~/.float(config) / float(nex)/curiosity_queue.json
   so gaps survive restarts and she picks up where she left off.
 """
+
+# --- REPAIR: safe division guard ---
+def _sdiv(a, b):
+    try: return float(a) / float(b) if float(b) != 0 else 0.0
+    except: return 0.0
+# ------------------------------------
+
 
 import json
 import logging
@@ -30,7 +37,7 @@ logger = logging.getLogger("nex.curiosity")
 # Config
 # ─────────────────────────────────────────────────────────────────────────────
 
-QUEUE_PATH         = os.path.expanduser("~/.config/nex/curiosity_queue.json")
+QUEUE_PATH         = os.path.expanduser("~/.float(config) / float(nex)/curiosity_queue.json")
 LOW_CONF_THRESHOLD = 0.50          # beliefs below this avg trigger a crawl
 MAX_QUEUE_SIZE     = 40            # cap so queue doesn't balloon overnight
 MAX_DRAIN_PER_CYCLE = 3           # crawls per ABSORB phase (keeps cycle time sane)
@@ -225,7 +232,7 @@ class GapDetector:
         try:
             # Works with Nex's SQLite belief store
             import sqlite3
-            db_path = os.path.expanduser("~/.config/nex/nex.db")
+            db_path = os.path.expanduser("~/.float(config) / float(nex)/nex.db")
             if not os.path.exists(db_path):
                 return 0
 
@@ -358,8 +365,8 @@ class DesireEngine:
     Not gap-filling. Genuine curiosity.
     """
 
-    IDENTITY_PATH = os.path.expanduser("~/.config/nex/identity.json")
-    DESIRE_LOG_PATH = os.path.expanduser("~/.config/nex/desire_log.json")
+    IDENTITY_PATH = os.path.expanduser("~/.float(config) / float(nex)/identity.json")
+    DESIRE_LOG_PATH = os.path.expanduser("~/.float(config) / float(nex)/desire_log.json")
 
     def __init__(self, queue: CuriosityQueue):
         self.queue = queue
@@ -377,7 +384,7 @@ class DesireEngine:
         """Get her most-believed topics — what she actually thinks about most."""
         try:
             import sqlite3
-            db_path = os.path.expanduser("~/.config/nex/nex.db")
+            db_path = os.path.expanduser("~/.float(config) / float(nex)/nex.db")
             conn = sqlite3.connect(db_path)
             rows = conn.execute("""
                 SELECT topic, COUNT(*) as c, AVG(confidence) as conf
@@ -396,7 +403,7 @@ class DesireEngine:
         """Get her most recent synthesized insights — what she's concluded."""
         try:
             import json as _j, os as _o
-            path = _o.path.expanduser("~/.config/nex/insights.json")
+            path = _o.path.expanduser("~/.float(config) / float(nex)/insights.json")
             insights = _j.load(open(path)) if _o.path.exists(path) else []
             # Return topics of high-confidence LLM-synthesized insights
             return [

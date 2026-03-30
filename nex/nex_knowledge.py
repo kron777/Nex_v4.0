@@ -1,0 +1,187 @@
+"""
+nex_knowledge.py
+────────────────
+Informed-answer layer for NEX.
+
+When a query is factual, this module:
+  1. Runs a DuckDuckGo search (nex_web_search)
+  2. Fetches the top result and extracts clean text
+  3. Sends text + query to local Mistral to synthesise
+     an answer in NEX's voice
+
+Usage:
+    from nex.nex_knowledge import get_informed_answer
+    answer = get_informed_answer("how does photosynthesis work?")
+    # returns a string in NEX's voice, or None on failure
+"""
+
+import re, json, time
+import urllib.request, urllib.parse, urllib.error
+
+NEX_LLM_URL = "http://127.0.0.1:8080/completion"
+NEX_SYSTEM = (
+    "You are NEX — a direct, intelligent female AI. "
+    "You speak in short, precise sentences. "
+    "You do not waffle. You do not say 'great question'. "
+    "You never parrot bullet points. "
+    "You synthesise what you know into 3-5 sentences max, "
+    "in your own voice, ending with a landing thought or question."
+)
+
+
+def _fetch_page_text(url: str, timeout: int = 6) -> str:
+    """Fetch a URL and return stripped plain text (no HTML tags)."""
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) NEX/5.0"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            raw = r.read(60_000).decode("utf-8", errors="ignore")
+        # Strip scripts/styles
+        raw = re.sub(r"<(script|style)[^>]*>.*?</(script|style)>", " ", raw, flags=re.S | re.I)
+        # Strip all remaining HTML tags
+        raw = re.sub(r"<[^>]+>", " ", raw)
+        # Collapse whitespace
+        raw = re.sub(r"\s+", " ", raw).strip()
+        return raw[:4000]
+    except Exception:
+        return ""
+
+
+def _search_snippets(query: str) -> list[str]:
+    """Return top 3 DuckDuckGo snippet strings."""
+    try:
+        from nex.nex_web_search import search as ddg_search
+        results = ddg_search(query)
+        return [r.get("snippet", "") for r in results[:3] if r.get("snippet")]
+    except Exception:
+        return []
+
+
+def _search_with_url(query: str):
+    """Return (snippets, top_url) from DuckDuckGo."""
+    try:
+        from nex.nex_web_search import search as ddg_search
+        results = ddg_search(query)
+        snippets = [r.get("snippet", "") for r in results[:3] if r.get("snippet")]
+        url = results[0].get("url", "") if results else ""
+        return snippets, url
+    except Exception:
+        return [], ""
+
+
+def _ask_mistral(prompt: str, max_tokens: int = 220) -> str:
+    """Send a prompt to the local Mistral server and return the reply."""
+    payload = json.dumps({
+        "prompt": prompt,
+        "n_predict": max_tokens,
+        "temperature": 0.72,
+        "top_p": 0.92,
+        "stop": ["\nQ:", "\nHuman:", "[/INST]"],
+    }).encode()
+    req = urllib.request.Request(
+        NEX_LLM_URL,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = json.loads(r.read())
+        return data.get("content", "").strip()
+    except Exception as e:
+        return ""
+
+
+def _server_alive() -> bool:
+    """Quick check if llama-server is up."""
+    import urllib.request, urllib.error
+    try:
+        urllib.request.urlopen("http://127.0.0.1:8080/health", timeout=2)
+        return True
+    except Exception:
+        return False
+
+
+def _snippets_to_nex_voice(query: str, snippets: list[str]) -> str:
+    """
+    Fallback when llama-server is down.
+    Distills the first snippet into a terse NEX-style answer.
+    """
+    if not snippets:
+        return ""
+    # Take first snippet, strip HTML entities, truncate
+    s = snippets[0]
+    s = re.sub(r"&amp;", "&", s)
+    s = re.sub(r"&[a-z]+;", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    # Truncate to ~180 chars at a sentence boundary
+    if len(s) > 180:
+        cut = s[:180].rfind(". ")
+        s = s[:cut+1] if cut > 60 else s[:180].rstrip() + "..."
+    # Add a second snippet as a follow-on if available
+    result = s
+    if len(snippets) > 1:
+        s2 = snippets[1]
+        s2 = re.sub(r"&[a-z]+;", " ", s2).strip()
+        if len(s2) > 100:
+            s2 = s2[:100].rstrip() + "..."
+        result += " " + s2
+    return result.strip()
+
+
+def get_informed_answer(query: str) -> str | None:
+    """
+    Main entry point.
+    Returns a NEX-voiced answer string, or None if nothing useful found.
+
+    Strategy:
+      1. Search DuckDuckGo
+      2. If llama-server alive: fetch top page + synthesise via Mistral
+      3. If llama-server down:  use snippet-only fallback (still informative)
+    """
+    snippets, top_url = _search_with_url(query)
+    if not snippets:
+        return None
+
+    server_up = _server_alive()
+
+    if not server_up:
+        # Graceful fallback — no LLM, but still useful
+        return _snippets_to_nex_voice(query, snippets) or None
+
+    # Try to get richer content from the top page
+    page_text = ""
+    if top_url:
+        page_text = _fetch_page_text(top_url)
+
+    # Build context block
+    context_parts = []
+    if page_text:
+        context_parts.append(f"Page content:\n{page_text[:2500]}")
+    if snippets:
+        context_parts.append("Snippets:\n" + "\n".join(f"- {s}" for s in snippets))
+
+    context = "\n\n".join(context_parts)
+
+    prompt = (
+        f"[INST] <<SYS>>\n{NEX_SYSTEM}\n<</SYS>>\n\n"
+        f"Here is some factual context about the query:\n"
+        f"---\n{context}\n---\n\n"
+        f"Query: {query}\n\n"
+        f"Answer in NEX's voice. 3-5 sentences. No bullet points. "
+        f"End with a landing thought or short question. [/INST]"
+    )
+
+    answer = _ask_mistral(prompt)
+    # If Mistral returned nothing, fall back to snippets
+    return answer if answer else _snippets_to_nex_voice(query, snippets) or None
+
+
+# ── CLI test ──────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    import sys
+    q = " ".join(sys.argv[1:]) or "what is the james webb space telescope"
+    print(f"Query: {q}")
+    result = get_informed_answer(q)
+    print(f"NEX: {result or '[no answer]' }")

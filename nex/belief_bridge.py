@@ -277,7 +277,7 @@ def ask_beliefs(query):
     lines = [f"From my network learning on '{query}':"]
     for b in relevant:
         author = b.get("author", "unknown")
-        content = b.get("content", "")[:150].replace("\n", " ")
+        content = b.get("content", "").replace("bridge:", "").replace("BRIDGE:", "").strip()[:150].replace("\n", " ")
         karma = b.get("karma", 0)
         conf = b.get("confidence", 0)
         lines.append(f"  @{author} (κ{karma}, conf:{conf:.1f}): {content}")

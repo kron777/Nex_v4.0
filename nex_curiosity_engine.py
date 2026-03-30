@@ -1,5 +1,17 @@
+import os
+CFG_PATH = os.path.expanduser("~/.config/nex")
+os.makedirs(CFG_PATH, exist_ok=True)
 # LLM routing — character engine first, Ollama second, Groq last
 from nex.nex_llm_free import ask_llm_free as _llm_free_fn
+# ── NEX v4 groq shim ─────────────────────────────────────────
+try:
+    from nex.nex_groq_shim import _groq, _call_groq, call_groq
+except ImportError:
+    try:
+        from nex_groq_shim import _groq, _call_groq, call_groq
+    except ImportError:
+        pass
+# ─────────────────────────────────────────────────────────────
 def _groq(messages: list, max_tokens: int = 300, **kwargs) -> str | None:
     """LLM-free: delegates to nex_llm_free engine (Groq removed)."""
     try:

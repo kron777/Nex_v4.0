@@ -135,7 +135,7 @@ class DecisionEngine:
 # ══════════════════════════════════════════════════════════════
 
 class HardPruningSystem:
-    MAX_BELIEFS = 1000
+    MAX_BELIEFS = 8000
 
     def __init__(self):
         self.prune_count = 0
