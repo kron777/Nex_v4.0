@@ -935,10 +935,9 @@ def main():
 
     # Start Discord in background (delayed — give Telegram time to settle)
     try:
-        import time as _t; _t.sleep(5)
-        from nex_discord import start_discord_background
-        _dc_thread = start_discord_background()
-        _t.sleep(8)
+        pass  # Discord disabled — was blocking startup for 8+ minutes
+        if False:
+            pass
         if _dc_thread.is_alive():
             print("  \033[92m🎮 Discord: Nex_v4#9613 ONLINE\033[0m")
         else:
@@ -975,7 +974,7 @@ def main():
                             f"https://api.telegram.org/bot{_V2_TG_TOKEN}/sendMessage",
                             json={"chat_id": _V2_TG_OWNER, "text": msg, "parse_mode": "Markdown"},
                             timeout=10,
-                            proxies={"https": "socks5h://127.0.0.1:9050"} if True else None,
+                            proxies=None,
                         )
                     except Exception as _v2ne:
                         nex_log("v2", f"notify failed: {_v2ne}")
@@ -4061,7 +4060,8 @@ def main():
                 time.sleep(60)
                 _auto_learn_background()  # self-restart
         print("  \033[92m🧠 Auto-learn: background (120s cycle) — reply+post+chat ACTIVE\033[0m")
-        threading.Thread(target=_auto_learn_background, daemon=True, name="nex-autolearn").start()
+        _al_thread = threading.Thread(target=_auto_learn_background, daemon=False, name="nex-autolearn")
+        _al_thread.start()
         try: __import__('subprocess').run(['fuser','-k','8765/tcp'], capture_output=True)
         except: pass
         ws_start()
@@ -4168,7 +4168,7 @@ def main():
 
     # ── Belief engine warm-up ─────────────────────────────────────────
     orch = Orchestrator(seed=42)
-    if args.ticks > 0:
+    if args.ticks > 0 and not args.background:
         for _ in range(args.ticks):
             orch.step()
 
@@ -4185,15 +4185,6 @@ def main():
     if args.background or not _sys.stdin.isatty():
         print(f"{DIM}Nex: running in background mode.{RESET}")
 
-    # ── Background keepalive — holds main thread alive forever ──────────────
-    if args.background or not _sys.stdin.isatty():
-        print(f"{DIM}Nex: locked into background mode — immortal loop.{RESET}")
-        import time as _immortal_t
-        while True:
-            try:
-                _immortal_t.sleep(30)
-            except (KeyboardInterrupt, SystemExit, Exception):
-                pass  # ignore everything — never exit
     try:
         while True:
             try:
@@ -4205,9 +4196,9 @@ def main():
                 try:
                     while True:
                         time.sleep(60)
-                except (KeyboardInterrupt, SystemExit):
-                    print(f"\n{DIM}Nex: coherence maintained.{RESET}")
-                continue  # loop back — never break, never exit
+                except KeyboardInterrupt:
+                    print(f"\n{DIM}Nex: coherence maintained. Goodbye.{RESET}")
+                break
 
             if not user_input:
                 continue
