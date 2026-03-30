@@ -1,49 +1,32 @@
 """
-nex_belief_index.py — O(k) inverted token index for belief retrieval.
-Replaces O(N) linear scan in _load_all_beliefs().
+nex/nex_belief_index.py — importlib shim (circular-import proof)
+=================================================================
+Loads ~/Desktop/nex/nex_belief_index.py by absolute path so Python
+can never confuse it with this file, regardless of sys.path order.
+DO NOT add logic here. Edit the root file only.
 """
-import os, re, json, time, threading
-from pathlib import Path
-from collections import defaultdict
+import importlib.util as _util
+import sys as _sys
+from pathlib import Path as _Path
 
-_INDEX: dict = {}          # token → set of belief ids
-_BELIEFS: dict = {}        # id → belief dict
-_MTIME: float = 0.0
-_LOCK = threading.Lock()
+_ROOT    = _Path(__file__).resolve().parent.parent / "nex_belief_index.py"
+_MODNAME = "nex_belief_index"
 
-def _tokenise(text: str) -> list[str]:
-    return [w.lower() for w in re.findall(r"[a-z]{3,}", text.lower())]
+# Load and register under the canonical module name only if not already loaded
+if _MODNAME not in _sys.modules:
+    _spec = _util.spec_from_file_location(_MODNAME, str(_ROOT))
+    _mod  = _util.module_from_spec(_spec)
+    _sys.modules[_MODNAME] = _mod   # register BEFORE exec to break any re-entry
+    _spec.loader.exec_module(_mod)  # NOW execute it so BeliefIndex etc. are defined
 
-def build_index(beliefs: list[dict]) -> None:
-    """Call with the full belief list after loading from DB."""
-    global _INDEX, _BELIEFS, _MTIME
-    idx: dict = defaultdict(set)
-    store: dict = {}
-    for b in beliefs:
-        bid = b.get("id") or b.get("belief_id") or id(b)
-        store[bid] = b
-        tokens = _tokenise(b.get("text", "") + " " + b.get("topic", ""))
-        for tok in tokens:
-            idx[tok].add(bid)
-    with _LOCK:
-        _INDEX   = dict(idx)
-        _BELIEFS = store
-        _MTIME   = time.time()
-    print(f"  [BeliefIndex] built — {len(store)} beliefs indexed")
-
-def query(text: str, top_k: int = 12) -> list[dict]:
-    """Return top_k beliefs matching query tokens."""
-    tokens = _tokenise(text)
-    if not tokens or not _BELIEFS:
-        return []
-    scores: dict = defaultdict(int)
-    with _LOCK:
-        for tok in tokens:
-            for bid in _INDEX.get(tok, set()):
-                scores[bid] += 1
-    ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
-    with _LOCK:
-        return [_BELIEFS[bid] for bid, _ in ranked if bid in _BELIEFS]
-
-def size() -> int:
-    return len(_BELIEFS)
+# Re-export everything from the root module so
+# "from nex.nex_belief_index import BeliefIndex" works too
+from nex_belief_index import *  # noqa: F401, F403
+from nex_belief_index import (  # noqa: F401
+    BeliefIndex,
+    get_index,
+    retrieve,
+    retrieve_for_conversation,
+    thin_topics,
+    rich_topics,
+)

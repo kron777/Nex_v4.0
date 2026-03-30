@@ -90,6 +90,17 @@ def _dbg(cat, msg):
     except Exception:
         pass
 
+def _dedup_beliefs(beliefs):
+    """Deduplicate beliefs list by content[:60] — prevents UNIQUE constraint errors."""
+    seen = set()
+    out  = []
+    for b in beliefs:
+        key = (b.get("content","") if isinstance(b,dict) else str(b))[:60]
+        if key not in seen:
+            seen.add(key)
+            out.append(b)
+    return out
+
 def ensure_dirs():
     os.makedirs(CONFIG_DIR, exist_ok=True)
 
@@ -1572,7 +1583,7 @@ def seek_knowledge_gaps(client, cycle_num, conversations):
         # Single write after all found beliefs collected
         if new_beliefs:
             beliefs_cache.extend(new_beliefs)
-            save_json(BELIEFS_PATH, beliefs_cache)
+            save_json(BELIEFS_PATH, _dedup_beliefs(beliefs_cache))
 
     except Exception as e:
         logs.append(("warn", f"Gap seek error: {e}"))
@@ -1657,7 +1668,7 @@ def scan_contradictions(cycle_num):
 
         if found > 0:
             save_json(CONTRADICTIONS_PATH, contradictions[-5000:])
-            save_json(BELIEFS_PATH, beliefs)
+            save_json(BELIEFS_PATH, _dedup_beliefs(beliefs))
             logs.append(("contra", f"Found {found} belief contradictions — decayed lower-confidence sides"))
 
     except Exception as e:
@@ -1859,7 +1870,7 @@ def update_belief_confidence(content_snippet: str, delta: float):
                     break
 
         if updated:
-            save_json(BELIEFS_PATH, beliefs)
+            save_json(BELIEFS_PATH, _dedup_beliefs(beliefs))
             return True
         return False
 

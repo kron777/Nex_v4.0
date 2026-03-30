@@ -195,7 +195,13 @@ def load(fname, default=None):
     except: return [] if default is None else default
 
 def llama_ok():
-    # Check local llama.cpp first
+    # Check ollama (primary — port 11434)
+    try:
+        import urllib.request
+        urllib.request.urlopen("http://localhost:11434/api/tags", timeout=1)
+        return True
+    except: pass
+    # Check legacy llama.cpp (port 8080)
     try:
         import urllib.request
         urllib.request.urlopen("http://localhost:8080/health", timeout=1)
@@ -445,8 +451,19 @@ def data_thread():
                 if m: gaps.extend([g.strip() for g in m.group(1).split(",")])
             top_gaps=list(dict.fromkeys(gaps))[:4]
             # Network coverage: unique agents interacted with vs total agents tracked
+            # Falls back to belief-source diversity when agent data is sparse
             _interacted = sum(1 for _,p in profiles.items() if p.get("conversations_had",0) > 0)
-            cov = min(100, int((_interacted / max(len(agents), 1)) * 100))
+            # Fallback 1: agents with karma > 0 (have been seen/scored)
+            _active     = sum(1 for v in agents.values() if v > 0) if agents else 0
+            _total_agents = max(len(agents), 1)
+            if _interacted > 0:
+                cov = min(100, int((_interacted / _total_agents) * 100))
+            elif _active > 0:
+                cov = min(100, int((_active / _total_agents) * 100))
+            else:
+                # Fallback 2: source diversity across recent beliefs
+                _sources = {b.get("source","") for b in beliefs[-100:] if b.get("source","")}
+                cov = min(100, max(1, len(_sources) * 5))
             sl.append(f"{T}Belief confidence{RS}  [{bc}] {G}{avg_c:.0%}{RS}")
             sl.append(f"{T}Topic alignment  {RS}  [{bal}] {G}{avg_al:.0%}{RS}")
             sl.append(f"{T}High confidence  {RS}  {G}{hi}{RS} beliefs  {D}>70%{RS}")
@@ -520,9 +537,12 @@ def data_thread():
                     zone_col = {
                         "calm": G, "active": CY, "stressed": Y, "crisis": R
                     }.get(zone, D)
+                    fat = hm_out.get('fat', round(avg_c, 2))
                     il.append(f"{D}── homeostasis ──{RS}")
                     il.append(f"{D}zone    {RS}{zone_col}{B}{zone.upper()}{RS}  {D}drive {M}{drive}{RS}")
                     il.append(f"{D}mode    {RS}{CY}{mode}{RS}  {D}mom {CY}{momentum:+.4f}{RS}")
+                    sl_idx = next((i for i,l in enumerate(sl) if 'coherence' in l or 'fat' in l), None)
+                    if sl_idx is not None: sl[sl_idx] = f"{T}coherence       {RS}  [{bc}] fat={G}{fat:.2f}{RS}"
                 except Exception:
                     pass
 

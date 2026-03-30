@@ -1,8 +1,5 @@
 #!/bin/bash
-trap 'bash ~/Desktop/nex/nex_exit.sh' EXIT HUP INT TERM
-
 echo "[NEX] Starting full stack..."
-echo "[NEX] License check skipped"
 mountpoint -q /mnt/nex || sudo mount /dev/sdb2 /mnt/nex
 
 export LD_LIBRARY_PATH=/media/rr/NEX/llama.cpp/build/bin:$LD_LIBRARY_PATH
@@ -18,7 +15,9 @@ pkill -9 -f run.py 2>/dev/null
 sleep 2
 
 echo "[NEX] Starting LLM..."
-"$LLAMA" -m "$MODEL" --port 8080 -ngl 35 --host 0.0.0.0 >> /tmp/llama_server.log 2>&1 &
+nohup "$LLAMA" -m "$MODEL" --port 8080 -ngl 35 --host 0.0.0.0 >> /tmp/llama_server.log 2>&1 &
+LLAMA_PID=$!
+echo "[NEX] llama-server PID: $LLAMA_PID"
 
 echo "[NEX] Waiting for LLM..."
 for i in $(seq 1 30); do
@@ -26,25 +25,14 @@ for i in $(seq 1 30); do
   sleep 3
 done
 
+echo "[NEX] Starting terminals..."
+NEX_DIR_ESC=$NEX_DIR
+gnome-terminal --title="NEX BRAIN" -- bash -c "tmux kill-session -t nex 2>/dev/null; tmux new-session -d -s nex; tmux split-window -h -t nex; tmux send-keys -t nex:0.0 'tail -f /tmp/nex_brain.log' Enter; tmux send-keys -t nex:0.1 'cd $NEX_DIR && source venv/bin/activate && sleep 5 && python3 nex_debug.py' Enter; tmux attach -t nex" &
+
+gnome-terminal --title="NEX AUTO CHECK" -- bash -c "cd $NEX_DIR && source venv/bin/activate && sleep 7 && python3 auto_check.py; exec bash" &
+
+sleep 3
 echo "[NEX] Starting brain..."
-cd "$NEX_DIR" && source venv/bin/activate
-python3 -u run.py --no-server --background >> /tmp/nex_brain.log 2>&1 &
-BRAIN_PID=$!
-
-# NEX BRAIN window — brain log + debug split
-gnome-terminal --title="NEX BRAIN" -- bash -c "
-  tmux kill-session -t nex 2>/dev/null
-  tmux new-session -d -s nex
-  tmux split-window -h -t nex
-  tmux send-keys -t nex:0.0 'tail -f /tmp/nex_brain.log' Enter
-  tmux send-keys -t nex:0.1 'cd $NEX_DIR && source venv/bin/activate && sleep 5 && python3 nex_debug.py' Enter
-  tmux attach -t nex
-" &
-
-# NEX AUTO CHECK window
-gnome-terminal --title="NEX AUTO CHECK" -- bash -c "
-  cd $NEX_DIR && source venv/bin/activate && sleep 7 && python3 auto_check.py; exec bash
-" &
-
-echo "[NEX] All systems live!"
-wait $BRAIN_PID
+nohup python3 -u $NEX_DIR/run.py --no-server --background >> /tmp/nex_brain.log 2>&1 &
+echo "[NEX] Brain PID: $!"
+# NO trap, NO wait

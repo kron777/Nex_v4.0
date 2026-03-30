@@ -119,6 +119,14 @@ import re
 
 class AffectProxy:
     def __init__(self): self.valence = 0.0; self.arousal = 0.0
+
+    def get(self):
+        """Return current affect state dict."""
+        return {
+            'valence': getattr(self, 'valence', 0.0),
+            'arousal': getattr(self, 'arousal', 0.0),
+            'label':   getattr(self, 'label',   'neutral'),
+        }
     def ingest(self, text: str = "", source: str = "", **_kw) -> "AffectProxy":
         return self
     def to_dict(self): return {"valence": self.valence, "arousal": self.arousal}

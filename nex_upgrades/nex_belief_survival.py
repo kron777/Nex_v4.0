@@ -273,7 +273,7 @@ class BeliefSurvivalEngine:
             cur = conn.cursor()
 
             cur.execute("""
-                SELECT id, content, topic, confidence, belief_links
+                SELECT id, content, topic, confidence, source, belief_type
                 FROM beliefs
                 WHERE confidence > 0
                 ORDER BY confidence ASC
@@ -283,15 +283,13 @@ class BeliefSurvivalEngine:
 
             beliefs = []
             for row in rows:
-                bid, content, topic, conf, links_json = row
+                bid, content, topic, conf, source, belief_type = row
                 beliefs.append(BeliefRecord(
                     belief_id=str(bid),
                     content=content or "",
                     topic=topic or "",
                     confidence=conf or 0.5,
-                    belief_links=[] if not links_json else
-                                 (links_json if isinstance(links_json, list)
-                                  else []),
+                    belief_links=[],
                 ))
 
             result = self.run_cycle(beliefs)

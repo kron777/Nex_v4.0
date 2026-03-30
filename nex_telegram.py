@@ -1,3 +1,33 @@
+
+# ── Telegram network error retry patch (nex_fix_runtime.py) ──────────────────
+import asyncio as _asyncio
+import telegram.error as _tgerr
+
+_TELEGRAM_ORIG_RUN_POLLING = None
+
+def _patch_telegram_retry(app):
+    """Wrap run_polling to survive transient httpx.ReadError / NetworkError."""
+    import httpx as _httpx
+    orig = app.run_polling
+
+    async def _resilient_polling(*args, **kwargs):
+        backoff = 5
+        while True:
+            try:
+                await orig(*args, **kwargs)
+                break
+            except (_tgerr.NetworkError, _httpx.ReadError, _httpx.ConnectError,
+                    _httpx.TimeoutException, ConnectionResetError, OSError) as e:
+                print(f"  [Telegram] network error: {e} — retry in {backoff}s")
+                await _asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 120)
+            except Exception as e:
+                print(f"  [Telegram] fatal error: {e}")
+                raise
+
+    app.run_polling = _resilient_polling
+    return app
+# ─────────────────────────────────────────────────────────────────────────────
 import sys as _tgsys, os as _tgos; _tgsys.path.insert(0, _tgos.path.expanduser("~/Desktop/nex"))
 try:
     from nex_ws import emit_feed as _emit_feed
@@ -878,6 +908,8 @@ def main():
     print()
 
     # Run
+
+    app = _patch_telegram_retry(app)  # retry on network errors
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 

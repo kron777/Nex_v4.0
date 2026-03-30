@@ -187,6 +187,8 @@ def data_thread():
 
         # IQ calc (mirror of auto_check)
         iq = 0
+        avg_c  = 0.0
+        avg_al = 0.0
         if beliefs:
             confs  = [b.get("confidence",0.5) for b in beliefs]
             avg_c  = sum(confs)/len(confs)

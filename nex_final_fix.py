@@ -109,7 +109,7 @@ if found_in:
         m = re.search(r'def ingest\s*\(([^)]*)\)', text)
         if m and '**' not in m.group(1):
             new_args = m.group(1).rstrip(', ') + ', **_kw'
-            new_text = text.replace(m.group(0), f'def ingest({new_args})', 1)
+            new_text = text.replace(m.group(0), f'def ingest({new_args}, source=None)', 1)
             backup(full_path)
             full_path.write_text(new_text, errors="replace")
             if syntax_ok(full_path):
@@ -123,7 +123,7 @@ if found_in:
         elif m:
             ok(f"{fpath} — ingest() already accepts **kwargs")
 else:
-    info("def ingest() not found as a standalone function anywhere")
+    info("source=Nonedsource=Noneesource=Nonefsource=None source=Noneisource=Nonensource=Nonegsource=Noneesource=Nonessource=Nonetsource=None(source=None)source=None not found as a standalone function anywhere")
     info("The 'source=' callers (nex_theory_of_mind, nex_embodied) are already patched")
     info("No further action needed — the error was at the call sites, not definition")
 

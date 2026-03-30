@@ -610,7 +610,7 @@ def run_dream_cycle(
         # Write to DB
         try:
             db.execute("""
-                INSERT INTO beliefs
+                INSERT OR IGNORE INTO beliefs
                     (content, confidence, source, author, topic, tags, origin, timestamp)
                 VALUES (?, ?, 'dream_cycle', 'NEX', ?, ?, 'dream_cycle', ?)
             """, (

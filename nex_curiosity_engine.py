@@ -1,6 +1,21 @@
 import os
-CFG_PATH = os.path.expanduser("~/.config/nex")
-os.makedirs(CFG_PATH, exist_ok=True)
+import json
+import time
+import random
+from pathlib import Path
+from datetime import datetime, timezone
+from collections import Counter
+
+CFG_PATH   = Path(os.path.expanduser("~/.config/nex"))
+CFG_PATH.mkdir(parents=True, exist_ok=True)
+
+BELIEFS_PATH  = CFG_PATH / "beliefs.json"
+INSIGHTS_PATH = CFG_PATH / "insights.json"
+BRIDGES_PATH  = CFG_PATH / "curiosity_bridges.json"
+JOURNAL_PATH  = CFG_PATH / "dad_journal.json"
+
+GROQ_MAX_PER_HOUR = 20
+_groq_calls: list = []
 # LLM routing — character engine first, Ollama second, Groq last
 from nex.nex_llm_free import ask_llm_free as _llm_free_fn
 # ── NEX v4 groq shim ─────────────────────────────────────────
@@ -484,11 +499,23 @@ class NoveltyScorer:
         except Exception:
             pass
 
-    def update(self, current_topics: set, belief_count: int) -> float:
+    def update(self, current_topics, belief_count: int) -> float:
         """
         Update novelty score from current cycle topics and belief count.
         Returns updated score.
         """
+        # Guard: accept str, list, or set — always coerce to set
+        if isinstance(current_topics, str):
+            current_topics = set(current_topics.split())
+        elif isinstance(current_topics, (list, tuple)):
+            current_topics = set(current_topics)
+        elif not isinstance(current_topics, set):
+            current_topics = set()
+        # Guard: belief_count must be int
+        try:
+            belief_count = int(belief_count)
+        except (TypeError, ValueError):
+            belief_count = 0
         self._belief_history.append(belief_count)
 
         if len(self._topic_history) < 2:

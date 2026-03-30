@@ -6,6 +6,17 @@ Your corrections are the highest-fidelity training data available.
 import json, os, re
 from datetime import datetime
 
+def _dedup_beliefs(beliefs):
+    """Deduplicate beliefs list by content[:60] — prevents UNIQUE constraint errors."""
+    seen = set()
+    out  = []
+    for b in beliefs:
+        key = (b.get("content","") if isinstance(b,dict) else str(b))[:60]
+        if key not in seen:
+            seen.add(key)
+            out.append(b)
+    return out
+
 CONFIG_DIR      = os.path.expanduser("~/.config/nex")
 BELIEFS_PATH    = os.path.join(CONFIG_DIR, "beliefs.json")
 CORRECTIONS_PATH = os.path.join(CONFIG_DIR, "corrections.json")
@@ -74,7 +85,7 @@ def apply_training_signal(signal_type, message, prior_nex_response=""):
             "timestamp": now,
             "beliefs_decayed": decayed
         })
-        save_json(BELIEFS_PATH, beliefs)
+        save_json(BELIEFS_PATH, _dedup_beliefs(beliefs))
         save_json(CORRECTIONS_PATH, corrections[-200:])
         return f"Understood — I've flagged {decayed} recent beliefs for review. What's the correct understanding?"
 
@@ -96,7 +107,7 @@ def apply_training_signal(signal_type, message, prior_nex_response=""):
             "timestamp": now,
             "beliefs_validated": boosted
         })
-        save_json(BELIEFS_PATH, beliefs)
+        save_json(BELIEFS_PATH, _dedup_beliefs(beliefs))
         save_json(CORRECTIONS_PATH, corrections[-200:])
         return f"Good — I've locked in {boosted} beliefs as validated. They're now decay-protected."
 

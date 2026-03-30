@@ -7,16 +7,7 @@ DB: nex.db | table: beliefs | cols: id, content, topic, confidence, source
 
 
 # ── Log throttle (prevents [Distiller] Llama error flood) ──
-import time as _sr_time
-_sr_last_llama_warn = 0.0
-_SR_WARN_INTERVAL   = 30.0  # max one warning per 30s
-
-def _llama_warn_throttled(logger, msg):
-    global _sr_last_llama_warn
-    now = _sr_time.time()
-    if now - _sr_last_llama_warn > _SR_WARN_INTERVAL:
-        logger.warning(msg)
-        _sr_last_llama_warn = now
+# Duplicate throttle removed — using _llama_warn() below (60s gate)
 # ────────────────────────────────────────────────────────────
 
 import time
@@ -59,7 +50,7 @@ log = logging.getLogger("nex.source_router")
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "nex.db")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL = "llama3-70b-8192"
+GROQ_MODEL = "llama3:latest"  # using local ollama
 
 # ─────────────────────────────────────────────
 # RSS FEEDS — fires every 15 min
@@ -440,7 +431,7 @@ def _call_groq(prompt):
             "stream": False,
         }).encode()
         req = Request(
-            "http://localhost:8080/v1/chat/completions",
+            "http://localhost:11434/v1/chat/completions",  # ollama OpenAI-compat
             data=payload,
             headers={"Content-Type": "application/json"}
         )
@@ -448,7 +439,7 @@ def _call_groq(prompt):
             data = json.loads(r.read())
             return data["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        _llama_warn(None)
+        _llama_warn(None, f'Distiller: llama-server unavailable ({type(e).__name__})')
         return None
 
 _groq_lock = __import__("threading").Lock()
@@ -511,14 +502,14 @@ def _store_to_db(db_path, beliefs, topic, source_url, confidence, schema="simple
             try:
                 if schema == "full":
                     conn.execute(
-                        """INSERT INTO beliefs
+                        """INSERT OR IGNORE INTO beliefs
                            (content, confidence, source, topic, origin, salience, energy)
                            VALUES (?, ?, ?, ?, 'source_router', 0.5, 0.5)""",
                         (belief, confidence, source_url, topic)
                     )
                 else:
                     conn.execute(
-                        "INSERT INTO beliefs (content, topic, confidence, source) VALUES (?, ?, ?, ?)",
+                        "INSERT OR IGNORE INTO beliefs (content, topic, confidence, source) VALUES (?, ?, ?, ?)",
                         (belief, topic, confidence, source_url)
                     )
                 inserted += 1

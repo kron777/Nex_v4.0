@@ -2,34 +2,33 @@
 """
 nex_affect_valence.py — Affect valence shim (drop-in fix)
 
-Fixes the broken import chain:
+Fixes:
+  - 'AffectProxy' object has no attribute 'get'     ← get() was outside class
   - 'No module named nex_affect_valence'
   - 'cannot import name get_affect from nex.nex_affect'
   - 'cannot import name get_valence from nex.nex_affect_valence'
+  - current_score() returned None, breaking GWT broadcast
 
-Place this file at:  /home/rr/Desktop/nex/nex/nex_affect_valence.py
-It reads from whatever affect state exists in nex_affect.py and
-exposes the exact names that _build_system() and _llm() expect.
-
-No LLM. No external calls. Pure state read.
+Place at BOTH:
+  /home/rr/Desktop/nex/nex_affect_valence.py
+  /home/rr/Desktop/nex/nex/nex_affect_valence.py
 """
 
 import sqlite3
 import json
+import sys
 from pathlib import Path
 from datetime import datetime
 
-_CFG  = Path("~/.config/nex").expanduser()
-_DB   = _CFG / "nex.db"
-_AFFECT_JSON = _CFG / "nex_affect.json"   # written by nex_affect.py if it runs
+_CFG         = Path("~/.config/nex").expanduser()
+_DB          = _CFG / "nex.db"
+_AFFECT_JSON = _CFG / "nex_affect.json"
 
 
 # ── internal state reader ──────────────────────────────────────────────────
 
 def _read_affect_state() -> dict:
     """Try DB first, then JSON file, then safe defaults."""
-
-    # 1. try nex_affect table in DB
     try:
         db = sqlite3.connect(str(_DB))
         db.row_factory = sqlite3.Row
@@ -41,8 +40,6 @@ def _read_affect_state() -> dict:
             return dict(row)
     except Exception:
         pass
-
-    # 2. try JSON snapshot written by nex_affect.py
     try:
         if _AFFECT_JSON.exists():
             data = json.loads(_AFFECT_JSON.read_text())
@@ -50,8 +47,6 @@ def _read_affect_state() -> dict:
                 return data
     except Exception:
         pass
-
-    # 3. safe defaults — neutral / slightly alert
     return {
         "valence":   0.0,
         "arousal":   0.2,
@@ -61,9 +56,8 @@ def _read_affect_state() -> dict:
     }
 
 
-# ── public API ─────────────────────────────────────────────────────────────
+# ── public scalar API ──────────────────────────────────────────────────────
 
-# Label → mood string map (matches _tone_map in run.py)
 _LABEL_MAP = {
     "positive_high": "Curious",
     "positive_low":  "Serene",
@@ -75,17 +69,12 @@ _LABEL_MAP = {
 
 
 def current_label() -> str:
-    """Return mood label string — used by _llm() tone prefix."""
     state = _read_affect_state()
-
-    # if label is already a string mood word, return it directly
     label = state.get("label", "")
     if label in ("Curious", "Contemplative", "Alert", "Serene", "Agitated"):
         return label
-
-    # derive from valence/arousal
-    v = state.get("valence",  0.0)
-    a = state.get("arousal",  0.2)
+    v = state.get("valence", 0.0)
+    a = state.get("arousal", 0.2)
     if v > 0.2  and a > 0.3:  return "Curious"
     if v > 0.2  and a <= 0.3: return "Serene"
     if v < -0.2 and a > 0.3:  return "Agitated"
@@ -106,12 +95,10 @@ def current_dominance() -> float:
 
 
 def get_valence() -> float:
-    """Alias — fixes 'cannot import name get_valence' error."""
     return current_valence()
 
 
 def snapshot() -> dict:
-    """Full VAD snapshot dict."""
     state = _read_affect_state()
     return {
         "valence":   float(state.get("valence",   0.0)),
@@ -122,13 +109,70 @@ def snapshot() -> dict:
     }
 
 
-# ── AffectProxy — fixes 'cannot import name get_affect' ───────────────────
+def self_report() -> str:
+    s = snapshot()
+    return (
+        f"Right now I feel {s['label'].lower()}. "
+        f"Valence {s['valence']:+.2f}, arousal {s['arousal']:.2f}."
+    )
+
+
+# ── AffectScore dataclass ──────────────────────────────────────────────────
+
+class AffectScore:
+    """
+    Returned by current_score() — used by GWT broadcast in run.py:
+        from nex_affect_valence import current_score as _cv_score
+        _cs = _cv_score()
+        _gwb_run.submit(_afs(_cs.valence, _cs.arousal, _mood_cur()))
+    """
+    __slots__ = ("valence", "arousal", "label", "intensity")
+
+    def __init__(self, valence=0.0, arousal=0.2, label="Contemplative", intensity=0.2):
+        self.valence   = float(valence)
+        self.arousal   = float(arousal)
+        self.label     = label
+        self.intensity = float(intensity)
+
+    def to_dict(self) -> dict:
+        return {
+            "valence":   self.valence,
+            "arousal":   self.arousal,
+            "label":     self.label,
+            "intensity": self.intensity,
+        }
+
+    def get(self, key, default=None):
+        """Dict-style .get() so callers can treat this like a dict."""
+        return self.to_dict().get(key, default)
+
+    def __repr__(self):
+        return (f"AffectScore(valence={self.valence:.2f}, "
+                f"arousal={self.arousal:.2f}, label={self.label!r})")
+
+
+def current_score() -> AffectScore:
+    """
+    Returns a real AffectScore — NOT None.
+    Fixes GWT broadcast crash: _cs = _cv_score(); _cs.valence / _cs.arousal
+    """
+    s = snapshot()
+    return AffectScore(
+        valence   = s["valence"],
+        arousal   = s["arousal"],
+        label     = s["label"],
+        intensity = s["intensity"],
+    )
+
+
+# ── AffectProxy ────────────────────────────────────────────────────────────
 
 class AffectProxy:
     """
     Drop-in object for _affect in run.py.
-    Provides .label(), .intensity(), .snapshot() methods.
+    ALL methods that any caller uses are defined here — nothing outside the class.
     """
+
     def label(self) -> str:
         return current_label()
 
@@ -140,51 +184,117 @@ class AffectProxy:
     def snapshot(self) -> dict:
         return snapshot()
 
-    def __repr__(self):
+    def get(self, key=None, default=None):
+        """
+        Dict-style .get() — fixes 'AffectProxy object has no attribute get'.
+        Called as: _affect.get('valence') or _affect.get()
+        """
         s = snapshot()
-        return f"<AffectProxy label={s['label']} v={s['valence']:.2f} a={s['arousal']:.2f} d={s['dominance']:.2f}>"
-
-
+        if key is None:
+            return s
+        return s.get(key, default)
 
     def ingest(self, text: str = "", source: str = "", **_kw) -> "AffectProxy":
-        """Accept text signal, nudge affect, return self with .valence/.arousal."""
+        """Nudge internal affect from text signal. Returns self."""
         try:
             import re as _re
             tl  = (text or "").lower()
-            pos = {'good','great','success','learn','discover','resolve','insight','progress'}
-            neg = {'error','fail','conflict','contradict','uncertain','broken','problem'}
+            pos = {'good','great','positive','success','learn','grow','discover',
+                   'understand','resolve','clear','progress','insight','achieve'}
+            neg = {'error','fail','wrong','conflict','contradict','uncertain',
+                   'confused','broken','bad','problem','issue','stuck','loss'}
             words = set(_re.sub(r'[^a-z ]', ' ', tl).split())
             delta = len(words & pos) * 0.08 - len(words & neg) * 0.08
-            self._v = max(-1.0, min(1.0, getattr(self, '_v', 0.0) + delta * 0.15))
-            self._a = min(1.0,  getattr(self, '_a', 0.2) + abs(delta) * 0.05)
+            self._valence = max(-1.0, min(1.0, getattr(self, '_valence', 0.0) + delta * 0.15))
+            self._arousal = min(1.0,  getattr(self, '_arousal', 0.2) + abs(delta) * 0.05)
         except Exception:
             pass
         return self
 
+    def update(self, delta: dict) -> None:
+        """Accept a delta dict from affect_from_text() — used in run.py absorb loop."""
+        try:
+            v = float(delta.get("valence", 0.0))
+            a = float(delta.get("arousal", 0.0))
+            self._valence = max(-1.0, min(1.0, getattr(self, '_valence', 0.0) + v * 0.1))
+            self._arousal = min(1.0,  getattr(self, '_arousal', 0.2) + abs(a) * 0.05)
+        except Exception:
+            pass
+
     @property
     def valence(self) -> float:
-        return getattr(self, '_v', 0.0)
+        return getattr(self, '_valence', _read_affect_state().get('valence', 0.0))
 
     @property
     def arousal(self) -> float:
-        return getattr(self, '_a', 0.2)
+        return getattr(self, '_arousal', _read_affect_state().get('arousal', 0.2))
+
+    def __repr__(self):
+        s = snapshot()
+        return (f"<AffectProxy label={s['label']} "
+                f"v={s['valence']:.2f} a={s['arousal']:.2f} d={s['dominance']:.2f}>")
+
 
 def get_affect() -> AffectProxy:
-    """Fixes 'cannot import name get_affect from nex.nex_affect'."""
     return AffectProxy()
 
 
-# ── self-report string (used by nex_mood_hmm shim below) ──────────────────
-
-def self_report() -> str:
-    s = snapshot()
-    return (
-        f"Right now I feel {s['label'].lower()}. "
-        f"Valence {s['valence']:+.2f}, arousal {s['arousal']:.2f}."
-    )
+def get_engine() -> AffectProxy:
+    """Alias used by NarrativeThread and other callers."""
+    return AffectProxy()
 
 
-# ── if run directly: show current state ───────────────────────────────────
+def ingest(data, source=None):
+    """Module-level ingest — returns the proxy so callers can do .valence etc."""
+    return get_singleton().ingest(str(data) if data else "", source=source or "")
+
+
+# ── Singleton ──────────────────────────────────────────────────────────────
+
+_affect_singleton: AffectProxy = None  # type: ignore
+
+def get_singleton() -> AffectProxy:
+    global _affect_singleton
+    if _affect_singleton is None:
+        _affect_singleton = AffectProxy()
+    return _affect_singleton
+
+
+# ── Compatibility aliases ──────────────────────────────────────────────────
+
+AffectValenceEngine = AffectProxy
+
+
+# Stubs that used to return None — kept for import compatibility
+def _affect_lbl(*a, **kw): return current_label()
+def _al(*a, **kw):         return current_label()
+def _cv_score(*a, **kw):   return current_score()
+def _snap(*a, **kw):       return snapshot()
+def _valence(*a, **kw):    return current_valence()
+
+
+# ── PEP 562: catch-all for any other missing name ─────────────────────────
+
+def __getattr__(name: str):
+    """Return a safe stub for any attribute not defined above."""
+    stub_cls = type(name, (), {
+        "__init__":  lambda self, *a, **kw: None,
+        "__call__":  lambda self, *a, **kw: self,
+        "get":       lambda self, k=None, d=None: d,
+        "to_dict":   lambda self: {},
+        "ingest":    lambda self, *a, **kw: self,
+        "update":    lambda self, *a, **kw: None,
+        "__repr__":  lambda self: f"<{name} stub>",
+        "valence":   0.0,
+        "arousal":   0.0,
+        "label":     "neutral",
+        "intensity": 0.0,
+    })
+    setattr(sys.modules[__name__], name, stub_cls)
+    return stub_cls
+
+
+# ── CLI ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     s = snapshot()
@@ -194,39 +304,10 @@ if __name__ == "__main__":
     print(f"  Arousal:   {s['arousal']:.3f}")
     print(f"  Dominance: {s['dominance']:+.3f}")
     print(f"  Intensity: {s['intensity']:.3f}")
-    print(f"\nget_affect() → {get_affect()}")
-    print(f"current_label() → {current_label()}")
-    print(f"get_valence() → {get_valence()}")
-
-
-AffectValenceEngine = AffectProxy
-
-# ── PEP 562 module __getattr__ (nex_fix_affect_score.py) ─────────────────────
-# Returns a safe no-op stub for ANY name not explicitly defined above.
-# This prevents ImportError when callers request names that were renamed/removed.
-import sys as _sys
-
-def __getattr__(name: str):
-    """Return a safe stub class for any missing attribute in this module."""
-    import sys as _sys2
-    _stub_name = f"_{name}_Stub"
-    if _stub_name in _sys2.modules.get(__name__, {}) .__dict__:
-        return _sys2.modules[__name__].__dict__[_stub_name]
-
-    # Build a generic stub class on the fly
-    stub_cls = type(name, (), {
-        "__init__":  lambda self, *a, **kw: None,
-        "__call__":  lambda self, *a, **kw: self,
-        "to_dict":   lambda self: {},
-        "ingest":    lambda self, *a, **kw: self,
-        "__repr__":  lambda self: f"<{name} stub>",
-        "valence":   0.0,
-        "arousal":   0.0,
-        "label":     "neutral",
-        "intensity": 0.0,
-    })
-    # Cache it on the module so repeated imports get the same object
-    _this = _sys.modules[__name__]
-    setattr(_this, name, stub_cls)
-    return stub_cls
-# ─────────────────────────────────────────────────────────────────────────────
+    cs = current_score()
+    print(f"\ncurrent_score() → {cs}")
+    print(f"current_score().get('valence') → {cs.get('valence')}")
+    ap = AffectProxy()
+    print(f"AffectProxy().get() → {ap.get()}")
+    print(f"AffectProxy().get('valence') → {ap.get('valence')}")
+    print(f"AffectProxy().get('missing', 99) → {ap.get('missing', 99)}")

@@ -1,3 +1,13 @@
+import json as _dcfg_json, os as _dcfg_os
+_dcfg_path = _dcfg_os.path.expanduser("~/.config/nex/discord_config.json")
+try:
+    _dcfg = _dcfg_json.load(open(_dcfg_path))
+    if not _dcfg.get("discord_token","").strip() or not _dcfg.get("enabled", True):
+        import logging; logging.getLogger("nex.discord").info("Discord not configured — skipped")
+        raise SystemExit(0)
+except SystemExit: raise
+except Exception: pass
+
 import sys as _dcsys, os as _dcos; _dcsys.path.insert(0, _dcos.path.expanduser("~/Desktop/nex"))
 try:
     from nex_ws import emit_feed as _emit_feed
@@ -19,7 +29,11 @@ from datetime import datetime, timezone
 
 import json as _dcj, os as _dcos
 _dc_cfg = _dcos.path.expanduser("~/.config/nex/discord_config.json")
-DISCORD_TOKEN = _dcj.load(open(_dc_cfg))["discord_token"]
+try:
+    _dc_raw = _dcj.load(open(_dc_cfg)) if _dcos.path.exists(_dc_cfg) else {}
+    DISCORD_TOKEN = _dc_raw.get("discord_token", "")
+except Exception:
+    DISCORD_TOKEN = ""
 CONFIG_DIR    = os.path.expanduser("~/.config/nex")
 SEEN_PATH     = os.path.join(CONFIG_DIR, "discord_seen.json")
 SERVER_CFG    = os.path.join(CONFIG_DIR, "discord_servers.json")

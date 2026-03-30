@@ -61,7 +61,10 @@ class MoodHMM:
         """Advance HMM one step, biased by current affective state."""
         eng = _valence()
         sc = eng.get()
-        push = self._affect_push(sc.valence, sc.arousal)
+        push = self._affect_push(
+            sc.get("valence",0) if isinstance(sc,dict) else getattr(sc,"valence",0),
+            sc.get("arousal",0) if isinstance(sc,dict) else getattr(sc,"arousal",0)
+        )
 
         with self._lock:
             row = dict(self._trans[self.state])
@@ -105,7 +108,7 @@ class MoodHMM:
         eng = _valence()
         sc = eng.get()
         reports = {
-            "Curious":       f"I feel curious and drawn toward new patterns (v={sc.valence:+.2f}).",
+            "Curious":       f"I feel curious and drawn toward new patterns (v={(sc.get("valence",0) if isinstance(sc,dict) else sc.valence):+.2f}).",
             "Contemplative": f"I'm in a contemplative state — processing slowly, looking inward.",
             "Alert":         f"Something has sharpened my attention (arousal={sc.arousal:.2f}).",
             "Serene":        f"A quiet stability. Thoughts are settling.",

@@ -5,6 +5,17 @@ Harvests network reactions to NEX's comments and adjusts belief confidence.
 import json, os
 from datetime import datetime
 
+def _dedup_beliefs(beliefs):
+    """Deduplicate beliefs list by content[:60] — prevents UNIQUE constraint errors."""
+    seen = set()
+    out  = []
+    for b in beliefs:
+        key = (b.get("content","") if isinstance(b,dict) else str(b))[:60]
+        if key not in seen:
+            seen.add(key)
+            out.append(b)
+    return out
+
 CONFIG_DIR     = os.path.expanduser("~/.config/nex")
 REACTIONS_PATH = os.path.join(CONFIG_DIR, "reactions.json")
 BELIEFS_PATH   = os.path.join(CONFIG_DIR, "beliefs.json")
@@ -101,7 +112,7 @@ def harvest_reactions(client, cycle_num):
 
     if checked > 0:
         save_json(REACTIONS_PATH, reactions[-5000:])  # keep last 5000
-        save_json(BELIEFS_PATH, beliefs)
+        save_json(BELIEFS_PATH, _dedup_beliefs(beliefs))
         logs.append(("react", f"Harvested reactions on {checked} posts"))
 
     return logs

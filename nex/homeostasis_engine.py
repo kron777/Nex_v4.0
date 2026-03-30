@@ -20,6 +20,8 @@ class HomeostasisState:
     long_horizon_drift: float
     adjustment: str        # what was adjusted this tick
     exploration_cycle: str = 'exploration_phase'
+    fat: float = 0.0       # coherence stability proxy (0.0–1.0); both panels read this
+    fat: float = 0.0       # coherence stability proxy (0.0–1.0); both panels read this
 
 
 class HomeostasisEngine:
@@ -97,8 +99,14 @@ class HomeostasisEngine:
             self.exploration_cycle = 'consolidation_phase'
         adjustment = self._adjust(zone, mode, coherence, lh_drift, selfmodel, belief_field)
 
+        # fat — coherence stability proxy: mean of recent coherence, clamped 0–1
+        fat = float(np.clip(
+            np.mean(self._coherence_hist[-20:]) if self._coherence_hist else 0.0,
+            0.0, 1.0
+        ))
+
         state = HomeostasisState(entropy, zone, mode, identity_intact, lh_drift, adjustment,
-                                 self.exploration_cycle)
+                                 self.exploration_cycle, fat=fat)
         self.last_state = state
         self.cognitive_mode = mode
         return state

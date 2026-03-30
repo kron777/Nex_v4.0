@@ -9,7 +9,26 @@ from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
 
-DB_PATH  = Path.home() / ".config/nex/nex.db"
+# Auto-detect the active nex.db — prefer the one with the most beliefs
+def _find_db() -> Path:
+    candidates = [
+        Path.home() / "Desktop/nex/nex.db",
+        Path.home() / ".config/nex/nex.db",
+        Path.home() / ".config/nex/nex/config/nex.db",
+    ]
+    best, best_count = candidates[0], 0
+    for p in candidates:
+        if p.exists():
+            try:
+                import sqlite3 as _s3
+                n = _s3.connect(str(p)).execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+                if n > best_count:
+                    best, best_count = p, n
+            except Exception:
+                pass
+    return best
+
+DB_PATH = _find_db()
 LOG      = Path("/tmp/nex_u100.log")
 SKIP_LOG = Path("/tmp/nex_skipped_actions.log")
 
@@ -115,20 +134,33 @@ class DecisiveBeliefUpdateSystem:
         try:
             with _db() as c:
                 # Pick the belief most in need of a decision
-                row = c.execute("""
-                    SELECT id, topic, content, confidence, reinforce_count, outcome_count
+                # Detect available columns defensively
+                all_cols = [r[1] for r in c.execute("PRAGMA table_info(beliefs)").fetchall()]
+                has_rc = "reinforce_count" in all_cols
+                has_oc = "outcome_count" in all_cols
+                has_locked = "locked" in all_cols
+
+                extra = ""
+                if has_rc: extra += ", reinforce_count"
+                if has_oc: extra += ", outcome_count"
+                locked_where = "locked=0 AND" if has_locked else ""
+                order_extra = ", reinforce_count DESC" if has_rc else ""
+
+                row = c.execute(f"""
+                    SELECT id, topic, content, confidence{extra}
                     FROM beliefs
-                    WHERE locked=0 AND topic NOT IN
+                    WHERE {locked_where} topic NOT IN
                       ('truth_seeking','contradiction_resolution','uncertainty_honesty')
-                    ORDER BY ABS(confidence - 0.50) ASC, reinforce_count DESC
+                    ORDER BY ABS(confidence - 0.50) ASC{order_extra}
                     LIMIT 1
                 """).fetchone()
             if not row: return None
 
             bid  = row["id"]
             conf = row["confidence"]
-            rc   = row["reinforce_count"]
-            oc   = row["outcome_count"]
+            _rk  = row.keys() if hasattr(row, "keys") else []
+            rc   = row["reinforce_count"] if "reinforce_count" in _rk else 0
+            oc   = row["outcome_count"] if "outcome_count" in _rk else 0
             ratio= rc / max(oc, 1)
 
             if ratio > 6 and conf < 0.40:
@@ -390,35 +422,55 @@ class ReflectionKillSwitch:
                         "contradicts", "suggests", "establishes"]
         return any(v in cl.split() for v in belief_verbs)
 
+    _REFLECTIONS_JSON = Path.home() / ".config/nex/reflections.json"
+
+    def _find_reflections_json(self) -> Path | None:
+        """Find reflections.json — check common locations."""
+        candidates = [
+            Path.home() / ".config/nex/reflections.json",
+            Path.home() / "Desktop/nex/reflections.json",
+            Path("/tmp/nex_reflections.json"),
+        ]
+        for p in candidates:
+            if p.exists():
+                return p
+        return None
+
     def tick(self):
         if time.time() - self.last_run < self.INTERVAL:
             return
         self.last_run = time.time()
         try:
-            with _db() as c:
-                rows = c.execute("""
-                    SELECT rowid, nex_response as content FROM reflections
-                    ORDER BY timestamp DESC LIMIT 50
-                """).fetchall()
+            rfile = self._find_reflections_json()
+            if not rfile:
+                return  # no reflections file yet — skip silently
 
-            kill_ids = []
-            for r in rows:
-                content = r["content"] or ""
+            with open(rfile) as f:
+                refs = json.load(f)
+            if not isinstance(refs, list) or not refs:
+                return
+
+            keep = []
+            for r in refs[-200:]:  # only check recent 200
+                content = ""
+                for key in ("nex_response", "content", "response", "text", "reflection"):
+                    if key in r and r[key]:
+                        content = str(r[key])
+                        break
                 if self._is_restatement(content) or not self._creates_belief(content):
-                    kill_ids.append(r["rowid"])
                     self.killed += 1
                 else:
+                    keep.append(r)
                     self.kept += 1
 
-            if kill_ids:
-                with _db() as c:
-                    c.execute(
-                        f"DELETE FROM reflections WHERE rowid IN "
-                        f"({','.join('?'*len(kill_ids))})",
-                        tuple(kill_ids)
-                    )
-                    # commit handled by _db() context manager
-                _log(f"[RKS] Killed {len(kill_ids)} low-value reflections")
+            # Rewrite file keeping only high-value reflections
+            # (preserve everything older than the 200 we checked)
+            if self.killed > 0:
+                preserved = refs[:-200] if len(refs) > 200 else []
+                with open(rfile, "w") as f:
+                    json.dump(preserved + keep, f)
+                _log(f"[RKS] Killed {self.killed} low-value reflections "
+                     f"from {rfile.name}")
         except Exception as e:
             _log(f"[RKS] error: {e}")
 

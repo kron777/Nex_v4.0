@@ -322,3 +322,12 @@ def thin_topics(threshold=20):
 def rich_topics(n=20):
     """Return the belief-richest topics."""
     return get_index().get_rich_topics(n)
+
+# ─────────────────────────────────────────────────────────
+# SHIMS — backwards compatibility for callers using old API
+# ─────────────────────────────────────────────────────────
+def build_index(force=False):
+    """Shim: satisfies 'from nex.nex_belief_index import build_index' in legacy callers."""
+    get_index().build(force=force)
+
+query = retrieve  # shim: satisfies 'from nex.nex_belief_index import query'

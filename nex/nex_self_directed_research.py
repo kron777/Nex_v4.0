@@ -257,7 +257,7 @@ def fetch_and_insert(query, topic, max_results=40):
                     continue
                 try:
                     con.execute(
-                        "INSERT INTO beliefs (content,confidence,topic,source,timestamp) "
+                        "INSERT OR IGNORE INTO beliefs (content,confidence,topic,source,timestamp) "
                         "VALUES (?,?,?,?,?)",
                         (s, 0.67, topic, "self_research", time.time())
                     )

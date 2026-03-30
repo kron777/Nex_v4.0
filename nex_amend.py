@@ -171,7 +171,7 @@ if cog.exists():
         else:
             ok("nex_cognition.py — ingest() already has **kwargs")
     else:
-        info("nex_cognition.py — def ingest() not found in this file")
+        info("nex_cognition.py — source=Nonedsource=Noneesource=Nonefsource=None source=Noneisource=Nonensource=Nonegsource=Noneesource=Nonessource=Nonetsource=None(source=None)source=None not found in this file")
 
 # ═══════════════════════════════════════════════════════════════
 # FIX C — nex_soul_loop.py reinforce_beliefs wiring

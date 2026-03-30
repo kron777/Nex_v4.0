@@ -6,6 +6,17 @@ Run nightly during consolidation window.
 import json, os
 from datetime import datetime, timedelta
 
+def _dedup_beliefs(beliefs):
+    """Deduplicate beliefs list by content[:60] — prevents UNIQUE constraint errors."""
+    seen = set()
+    out  = []
+    for b in beliefs:
+        key = (b.get("content","") if isinstance(b,dict) else str(b))[:60]
+        if key not in seen:
+            seen.add(key)
+            out.append(b)
+    return out
+
 CONFIG_DIR    = os.path.expanduser("~/.config/nex")
 CONVOS_PATH   = os.path.join(CONFIG_DIR, "conversations.json")
 ARCHIVE_PATH  = os.path.join(CONFIG_DIR, "monthly_summary.json")
@@ -75,7 +86,7 @@ def run_compression(cycle_num):
             key=lambda x: x.get("confidence",0), reverse=True
         )[:5000 - len(protected)]
         beliefs = protected + rest
-        save_json(BELIEFS_PATH, beliefs)
+        save_json(BELIEFS_PATH, _dedup_beliefs(beliefs))
         logs.append(("compress", f"Belief field pruned to {len(beliefs)} entries"))
 
     return logs

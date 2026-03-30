@@ -10,15 +10,6 @@ from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
 
-# ── NEX Architecture Upgrades (auto-patched) ──────────────────────────────────
-import sys as _nex_sys
-try:
-    from nex_v72_integration import install_patches as _nex_install
-    _nex_install(_nex_sys.modules[__name__])
-except Exception as _e:
-    import logging; logging.getLogger("nex.integration").warning("Patch load failed: %s", _e)
-# ─────────────────────────────────────────────────────────────────────────────
-
 DB_PATH = Path.home() / ".config/nex/nex.db"
 LOG     = Path("/tmp/nex_v72.log")
 
@@ -103,12 +94,6 @@ class DecisionQualityScoring:
             _log(f"[DQS] Scored {len(self._scores)} clusters")
         except Exception as e:
             _log(f"[DQS] tick error: {e}")
-
-        # _nex_tension_wired
-        try:
-            from nex_tension_pressure import tension_tick as _nex_tt
-            _nex_tt()
-        except Exception: pass
 
     def status(self) -> dict:
         try:

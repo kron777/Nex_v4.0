@@ -15,6 +15,17 @@ GAPS_PATH        = os.path.join(CONFIG_DIR, "gaps.json")
 
 import numpy as np
 
+def _dedup_beliefs(beliefs):
+    """Deduplicate beliefs list by content[:60] — prevents UNIQUE constraint errors."""
+    seen = set()
+    out  = []
+    for b in beliefs:
+        key = (b.get("content","") if isinstance(b,dict) else str(b))[:60]
+        if key not in seen:
+            seen.add(key)
+            out.append(b)
+    return out
+
 STOP = {'the','and','for','that','this','with','from','have','been','they',
         'what','when','your','will','more','about','than','them','into',
         'just','like','some','would','could','should','also','were',
@@ -207,7 +218,14 @@ class CuriosityEngine:
                 logs.append(("curious", f"Curiosity sought: [{matched[0]}] @{author}: {title[:40]}…"))
 
             if added > 0:
-                save_json(BELIEFS_PATH, beliefs)
+                seen = set()
+                unique = []
+                for b in beliefs:
+                    key = b.get("content", "")[:60]
+                    if key not in seen:
+                        seen.add(key)
+                        unique.append(b)
+                save_json(BELIEFS_PATH, unique)
 
         except Exception as e:
             logs.append(("warn", f"Curiosity seek error: {e}"))

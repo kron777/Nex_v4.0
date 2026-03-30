@@ -33,7 +33,7 @@ log = logging.getLogger("nex.fact_distiller")
 
 DB_PATH          = os.path.expanduser("~/Desktop/nex/nex.db")
 CONFIG_DB_PATH   = os.path.expanduser("~/.config/nex/nex.db")
-LLAMA_URL        = "http://localhost:8080/completion"
+LLAMA_URL        = "http://localhost:11434/api/generate"  # ollama
 CYCLE_MINS       = 20        # how often to run a distillation cycle
 MAX_FACTS_PER_ARTICLE = 6    # cap per source to avoid flooding
 MIN_FACT_LENGTH  = 30        # discard very short extractions
@@ -88,7 +88,7 @@ def _call_llama(prompt: str, max_tokens: int = 400) -> str:
         )
         with urlopen(req, timeout=60) as r:
             data = json.loads(r.read())
-            return data.get("content", "").strip()
+            return data.get("response", data.get("content", "")).strip()
     except Exception as e:
         log.warning(f"{LOG} llama call failed: {e}")
         return ""
