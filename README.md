@@ -174,3 +174,13 @@ The intelligence that makes NEX interesting costs almost nothing to run. The exp
 
 *Built by one developer. Cape Town. 2025–2026.*  
 *"What if an AI actually believed things?"*
+
+---
+
+## v4.0.1 — Stability Update (March 2026)
+
+- **Fixed**: NEX now starts in ~7 seconds instead of 8+ minutes. The Discord module was silently blocking the entire cognitive startup pipeline on import.
+- **Fixed**: Cognitive cycle (ABSORB/COGNITION/REFLECT) now runs correctly in background mode — was previously blocked by misplaced keepalive loop.
+- **Fixed**: Reflections now save to disk each cycle — topic alignment metric now functional.
+- **Fixed**: llama-server stability — reduced `-ngl 35` and context limits to fit within RX 6600 8GB VRAM.
+- **Fixed**: NEX no longer exits after Mastodon absorb — immortal background loop prevents main thread from returning.
