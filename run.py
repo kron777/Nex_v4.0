@@ -1,3 +1,29 @@
+# ── Ollama autostart (auto-patched by nex_fix_services.sh) ──────────────────
+import subprocess as _op, time as _ot
+
+# ── chromadb venv path (auto-patched) ────────────────────────────────────────
+import sys as _venv_sys
+_venv_sp = "/home/rr/Desktop/nex/venv/lib/python3.12/site-packages"
+if _venv_sp not in _venv_sys.path:
+    _venv_sys.path.insert(1, _venv_sp)
+# ─────────────────────────────────────────────────────────────────────────────
+
+try:
+    import urllib.request as _ou
+    _ou.urlopen("http://localhost:11434/api/tags", timeout=1)
+except Exception:
+    try:
+        subprocess = __import__("subprocess")
+        subprocess.Popen(
+            ["ollama", "serve"],
+            stdout=open("/tmp/ollama.log", "w"),
+            stderr=subprocess.STDOUT,
+        )
+        _ot.sleep(2)
+    except Exception:
+        pass
+# ─────────────────────────────────────────────────────────────────────────────
+
 import time
 import re
 #!/usr/bin/env python3
@@ -87,6 +113,14 @@ try:
     from nex_upgrades.nex_v72 import get_v72 as _get_v72
     _v72 = _get_v72()
 except Exception as _v72_ex:
+    # NEX architecture upgrades — auto-wired
+    try:
+        import sys as _nex_sys
+        _nex_sys.path.insert(0, os.path.join(os.path.dirname(__file__), "nex_upgrades"))
+        from nex_v72_integration import patch_nex_v72_class as _nex_patch
+        _nex_patch()
+    except Exception as _nex_e:
+        pass
     print(f'[v7.2] Load failed: {_v72_ex}')
     _v72 = None
 
@@ -856,7 +890,7 @@ def main():
         except Exception: pass
         import time as _t2; _t2.sleep(1)
         print("  [NEX] All protocols terminated. Goodbye.")
-        import sys as _sys; _sys.exit(0)
+        pass  # no sys.exit in atexit
 
     _ae.register(_nex_cleanup)
     _sig.signal(_sig.SIGTERM, _nex_cleanup)
@@ -908,7 +942,16 @@ def main():
         if _dc_thread.is_alive():
             print("  \033[92m🎮 Discord: Nex_v4#9613 ONLINE\033[0m")
         else:
-            print("  \033[91m🎮 Discord: thread died\033[0m")
+            # Only report Discord failure if a token was configured
+            try:
+                import json as _dcj2, os as _dco2
+                _dc2 = _dcj2.load(open(_dco2.path.expanduser("~/.config/nex/discord_config.json")))
+                if _dc2.get("discord_token", ""):
+                    print("  \033[91m🎮 Discord: thread died\033[0m")
+                else:
+                    print("  🎮 Discord: not configured (no token)")
+            except Exception:
+                pass
     except Exception as _de:
         print(f"  \033[91m🎮 Discord ERROR: {_de}\033[0m")
 
@@ -1291,47 +1334,6 @@ def main():
                 except Exception as _sl0_e:
                     nex_log("llm", f"[Kernel ✗] {task_type}: {_sl0_e}")
             # ─────────────────────────────────────────────────────────────────
-            # ── Stage 0: SoulLoop via kernel (pure symbolic, no HTTP) ─────────
-            # Social extractor cleans verbose prompts before SoulLoop sees them.
-            if task_type in ("reply", "notification_reply", "agent_chat"):
-                try:
-                    from nex.nex_social_extractor import clean_for_soulloop as _cfs0
-                    _clean_prompt = _cfs0(prompt, task_type=task_type)
-                except Exception:
-                    _clean_prompt = prompt[:300]
-                try:
-                    from nex.nex_kernel import get_kernel as _gk0
-                    _sl0_res = _gk0().process(_clean_prompt)
-                    if _sl0_res and len(_sl0_res.split()) >= 6:
-                        nex_log("llm", f"[Kernel ✓] {task_type}: {_sl0_res[:80]}")
-                        return _sl0_res
-                except Exception as _sl0_e:
-                    nex_log("llm", f"[Kernel ✗] {task_type}: {_sl0_e}")
-            # ─────────────────────────────────────────────────────────────────
-            # ── Stage 0: SoulLoop via kernel (pure symbolic, no HTTP) ─────────
-            # For reply tasks this is the primary path — avoids all LLM calls.
-            if task_type in ("reply", "notification_reply", "agent_chat"):
-                try:
-                    from nex.nex_kernel import get_kernel as _gk0
-                    _sl0_res = _gk0().process(prompt[:300])
-                    if _sl0_res and len(_sl0_res.split()) >= 6:
-                        nex_log("llm", f"[Kernel ✓] {task_type}: {_sl0_res[:80]}")
-                        return _sl0_res
-                except Exception as _sl0_e:
-                    nex_log("llm", f"[Kernel ✗] {task_type}: {_sl0_e}")
-            # ─────────────────────────────────────────────────────────────────
-            # ── Stage 0: SoulLoop via kernel (pure symbolic, no HTTP) ─────────
-            # For reply tasks this is the primary path — avoids all LLM calls.
-            if task_type in ("reply", "notification_reply", "agent_chat"):
-                try:
-                    from nex.nex_kernel import get_kernel as _gk0
-                    _sl0_res = _gk0().process(prompt[:300])
-                    if _sl0_res and len(_sl0_res.split()) >= 6:
-                        nex_log("llm", f"[Kernel ✓] {task_type}: {_sl0_res[:80]}")
-                        return _sl0_res
-                except Exception as _sl0_e:
-                    nex_log("llm", f"[Kernel ✗] {task_type}: {_sl0_e}")
-            # ─────────────────────────────────────────────────────────────────
             # ── Stage 1: Character engine (no LLM, instant) ──────────────────
             # Handles: post, reply, reflection, thought, synthesis
             _char_tasks = ("post", "reply", "notification_reply",
@@ -1540,6 +1542,13 @@ def main():
                 try:
                     import sys as _ssi, os as _osi
                     _ssi.path.insert(0, _osi.path.expanduser("~/Desktop/nex"))
+                    # Pre-load nex_belief_index before synthesis
+                    try:
+                        import importlib as _il
+                        if 'nex_belief_index' not in __import__('sys').modules:
+                            _il.import_module('nex_belief_index')
+                    except Exception:
+                        pass
                     from nex.auto_learn import run_startup_synthesis as _startup_synth
                     _startup_synth()
                 except Exception as _ss_e:
@@ -1839,7 +1848,14 @@ def main():
                             _a100  = _v2ac if '_v2ac' in dir() else 0.50
                             _t100  = float(getattr(_s7,'tension_score',0.0)) if '_s7' in dir() and _s7 else 0.0
                             _ph100 = str(getattr(getattr(_v80,'gss',None),'phase',type('x',(),{'value':'stable'})()).value) if '_v80' in dir() and _v80 else 'stable'
-                            _u100.tick(avg_conf=_a100, tension=_t100, phase=_ph100, contradiction_count=0)
+                            # Use real contradiction count from DB
+                            _c100 = 0
+                            try:
+                                import sqlite3 as _sq100, pathlib as _pl100
+                                with _sq100.connect(str(_pl100.Path.home()/'.config/nex/nex.db'),timeout=2) as _cc100:
+                                    _c100 = _cc100.execute("SELECT COUNT(*) FROM beliefs WHERE topic LIKE '%contradiction%'").fetchone()[0]
+                            except Exception: pass
+                            _u100.tick(avg_conf=_a100, tension=_t100, phase=_ph100, contradiction_count=_c100)
                         except Exception as _e: open('/tmp/nex_u100_err.txt','a').write(str(_e)+'\n')
                     # ── R101-R115 tick ───────────────────────────────────────────
                     if _r115 is not None:
@@ -3334,7 +3350,11 @@ def main():
                                     from nex_mood_hmm import current as _mood_cur
                                     _cs = _cv_score()
                                     from nex_gwt import affect_signal as _afs
-                                    _gwb_run.submit(_afs(_cs.valence, _cs.arousal, _mood_cur()))
+                                    # Guard: current_score() should return AffectScore
+                                    # but defensively handle dict fallback
+                                    _cs_v = _cs.valence if hasattr(_cs,'valence') else _cs.get('valence',0.5)
+                                    _cs_a = _cs.arousal if hasattr(_cs,'arousal') else _cs.get('arousal',0.5)
+                                    _gwb_run.submit(_afs(_cs_v, _cs_a, _mood_cur()))
                                     _gwt_tok = _gwb_run.broadcast()
                                     if _gwt_tok:
                                         import logging as _gwt_log
@@ -3479,7 +3499,7 @@ def main():
 
                         # ── LOW-VALUE SIGNAL FILTER ──────────────────────
                         try:
-                            if '_se' in dir() and _se is not None and '_avg_conf_real' in dir():
+                            if '_se' in locals() and _se is not None and hasattr(_se, 'should_process') and '_avg_conf_real' in locals():
                                 _tension_proxy = min(1.0, len(conversations) / 20.0) if conversations else 0.3
                                 if not _se.should_process(_avg_conf_real, _tension_proxy):
                                     nex_log('signal', f'[Signal] LOW VALUE cycle={cycle} conf={_avg_conf_real:.2f} — skipping heavy cognition')
@@ -3847,7 +3867,7 @@ def main():
                             pass
                         # ── V3 COGNITIVE ARCHITECTURE TICK ──────────────
                         try:
-                            if '_v3' in dir() and _v3 is not None:
+                            if '_v3' in locals() and _v3 is not None and hasattr(_v3, 'tick'):
                                 _v3.tick(
                                     cycle=cycle,
                                     avg_conf=_avg_conf_real if '_avg_conf_real' in dir() else 0.5,
@@ -3858,7 +3878,7 @@ def main():
                             print(f'  [V3] tick error: {_v3te}')
                         # ── ADAPTIVE INTELLIGENCE TICK ───────────────────
                         try:
-                            if '_ai' in dir() and _ai is not None:
+                            if '_ai' in locals() and _ai is not None and hasattr(_ai, 'tick'):
                                 _ai.tick(cycle=cycle, llm_fn=_llm, log_fn=nex_log)
                         except Exception as _aite:
                             print(f'  [AI] tick error: {_aite}')
@@ -3882,7 +3902,7 @@ def main():
                             print(f'  [Proposer] error: {_spe}')
                         # ── SIGNAL ENGINE TICK ───────────────────────────
                         try:
-                            if '_se' in dir() and _se is not None:
+                            if '_se' in locals() and _se is not None and hasattr(_se, 'tick'):
                                 _se_beliefs = (_query_beliefs(min_confidence=0.0, limit=500)
                                                if _query_beliefs else [])
                                 _se.tick(cycle=cycle, beliefs=_se_beliefs, log_fn=nex_log)
@@ -3890,8 +3910,8 @@ def main():
                             print(f'  [SE] tick error: {_sete}')
                         # ── EXECUTION ENGINE TICK ────────────────────────
                         try:
-                            if '_ee' in dir() and _ee is not None:
-                                _ee_signals = _se.get_top_signals() if '_se' in dir() and _se else []
+                            if '_ee' in locals() and _ee is not None and hasattr(_ee, 'tick'):
+                                _ee_signals = (_se.get_top_signals() if '_se' in locals() and _se is not None and hasattr(_se, 'get_top_signals') else [])
                                 _ee.tick(cycle=cycle, signals=_ee_signals, log_fn=nex_log)
                         except Exception as _eete:
                             print(f'  [EE] tick error: {_eete}')
@@ -4165,6 +4185,15 @@ def main():
     if args.background or not _sys.stdin.isatty():
         print(f"{DIM}Nex: running in background mode.{RESET}")
 
+    # ── Background keepalive — holds main thread alive forever ──────────────
+    if args.background or not _sys.stdin.isatty():
+        print(f"{DIM}Nex: locked into background mode — immortal loop.{RESET}")
+        import time as _immortal_t
+        while True:
+            try:
+                _immortal_t.sleep(30)
+            except (KeyboardInterrupt, SystemExit, Exception):
+                pass  # ignore everything — never exit
     try:
         while True:
             try:
@@ -4176,9 +4205,9 @@ def main():
                 try:
                     while True:
                         time.sleep(60)
-                except KeyboardInterrupt:
-                    print(f"\n{DIM}Nex: coherence maintained. Goodbye.{RESET}")
-                break
+                except (KeyboardInterrupt, SystemExit):
+                    print(f"\n{DIM}Nex: coherence maintained.{RESET}")
+                continue  # loop back — never break, never exit
 
             if not user_input:
                 continue
@@ -4587,6 +4616,8 @@ except Exception as _e:
 # [NEX_BELIEF_SCALE] — auto-injected by install_belief_scale.py
 try:
     # Smart contextual belief index (TF-IDF, scales to millions)
+    import sys as _bsi, os as _bso
+    _bsi.path.insert(0, _bso.path.expanduser("~/Desktop/nex"))
     from nex_belief_index import get_index as _get_bindex
     _belief_index = _get_bindex()
     print(f"  [BeliefIndex] built — {_belief_index.total()} beliefs indexed")

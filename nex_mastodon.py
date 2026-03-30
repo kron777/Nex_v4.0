@@ -332,4 +332,4 @@ def _keep_alive_mastodon():
         except Exception:
             pass
         __mastodon_ptime.sleep(60)
-__mastodon_pt.Thread(target=_keep_alive_mastodon, daemon=True).start()
+__mastodon_pt.Thread(target=_keep_alive_mastodon, daemon=False).start()
