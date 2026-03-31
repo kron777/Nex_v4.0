@@ -398,10 +398,43 @@ def run_nex_query(query: str, session: dict, domain_hint: str = None) -> dict:
             response_text = "NEX is processing but Mistral is unreachable."
 
     latency = round(time.time() - start, 3)
+
+    # ── Reasoning chain (Step 3 — transparency) ──────────────────────
+    reasoning_chain = {}
+    try:
+        from nex_reason import reason as _reason
+        _r = _reason(query)
+        reasoning_chain = {
+            "strategy":       _r.get("strategy"),
+            "confidence":     _r.get("confidence"),
+            "epistemic_state": _r.get("epistemic_state", {}),
+            "supporting": [
+                {
+                    "content":    b.get("content","")[:200],
+                    "topic":      (b.get("tags") or ["general"])[0],
+                    "confidence": b.get("confidence", 0),
+                }
+                for b in _r.get("supporting", [])[:3]
+            ],
+            "opposing": [
+                {
+                    "content":    b.get("content","")[:200],
+                    "topic":      (b.get("tags") or ["general"])[0],
+                    "confidence": b.get("confidence", 0),
+                }
+                for b in _r.get("opposing", [])[:2]
+            ],
+            "tensions":   _r.get("tensions", []),
+            "anchor":     _r.get("anchor", ""),
+        }
+    except Exception as e:
+        print(f"  [API] reasoning chain error: {e}")
+
     return {
-        "response":   response_text,
-        "domain":     domain_used,
-        "latency_s":  latency
+        "response":        response_text,
+        "domain":          domain_used,
+        "latency_s":       latency,
+        "reasoning_chain": reasoning_chain,
     }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -670,13 +703,14 @@ def chat():
     sources = get_source_attribution(query, domain=result.get("domain"))
 
     response_payload = {
-        "query":      query,
-        "response":   result["response"],
-        "domain":     result["domain"],
-        "session_id": session_id,
-        "latency_s":  result["latency_s"],
-        "timestamp":  datetime.utcnow().isoformat(),
-        "sources":    sources
+        "query":           query,
+        "response":        result["response"],
+        "domain":          result["domain"],
+        "session_id":      session_id,
+        "latency_s":       result["latency_s"],
+        "timestamp":       datetime.utcnow().isoformat(),
+        "sources":         sources,
+        "reasoning_chain": result.get("reasoning_chain", {}),
     }
 
     # Fire webhooks asynchronously
