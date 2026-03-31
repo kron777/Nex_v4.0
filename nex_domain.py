@@ -243,8 +243,14 @@ def _saturate_domain(domain: str, config: dict, target_beliefs: int = 500):
             results = ddg_search(f"{domain} {term} research findings")
 
             for result in results[:3]:
-                snippet = result.get("snippet", "")
-                url = result.get("url", "")
+                if isinstance(result, dict):
+                    snippet = result.get("snippet", "") or result.get("body", "")
+                    url = result.get("url", "") or result.get("href", "")
+                elif isinstance(result, str):
+                    snippet = result
+                    url = ""
+                else:
+                    continue
                 if len(snippet) < 30:
                     continue
 
