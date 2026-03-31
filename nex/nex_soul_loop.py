@@ -693,6 +693,14 @@ def reason(orient_result: dict) -> dict:
     except Exception:
         pass
 
+    # Build 3 — semantic boosts from FAISS index
+    _semantic = {}
+    try:
+        import nex_semantic_retrieval as _sr
+        _semantic = _sr.boost_map(orient_result.get("raw", ""), k=20)
+    except Exception:
+        pass
+
     scored = []
     for b in all_b:
         s = _score_belief(b, tokens)
@@ -701,6 +709,8 @@ def reason(orient_result: dict) -> dict:
             s += 2.5
         # Phase 6 — recency glow: recently activated beliefs surface faster
         s += _glow.get(b.get("id"), 0.0)
+        # Build 3 — semantic similarity boost
+        s += _semantic.get(b.get("id"), 0.0)
         if s > 0:
             scored.append((s, b))
     scored.sort(key=lambda x: -x[0])
