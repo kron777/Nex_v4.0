@@ -171,7 +171,8 @@ def consult_state() -> dict:
 
     # Affect
     try:
-        from nex.nex_affect_valence import snapshot as _snap
+        import nex_emotion_field as _ef
+        _snap = _ef.snapshot
         s = _snap()
         state["affect_label"] = s.get("label", "Contemplative").lower()
         state["valence"]      = s.get("valence", 0.0)
@@ -738,6 +739,12 @@ def reason(orient_result: dict) -> dict:
         # Store epistemic temperature for voice shaping
         orient_result["_epistemic_temp"] = _aresult.epistemic_temperature()
         orient_result["_voice_directive"] = _aresult.voice_directive()
+        # Phase 5 — update emotion field from live activation
+        try:
+            import nex_emotion_field as _ef
+            _ef.update(_aresult)
+        except Exception:
+            pass
     except Exception:
         pass
     # ─────────────────────────────────────────────────────────────────────
