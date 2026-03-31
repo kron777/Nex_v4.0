@@ -1,443 +1,367 @@
+#!/usr/bin/env python3
 """
-nex_self_model.py  —  Self-Model Snapshot + Evolution Tracking
-===============================================================
-Periodically snapshots NEX's cognitive state and compares to previous
-snapshots to build a genuine sense of "who I was vs who I am."
+nex_self_model.py — NEX Build 8: Self-Model Cluster
+====================================================
+Place at: ~/Desktop/nex/nex_self_model.py
 
-What it snapshots:
-  - belief count + distribution
-  - dominant topics (from identity vector)
-  - avg confidence + alignment
-  - cognitive velocity
-  - top agents interacted with
-  - knowledge gaps
+NEX has beliefs about herself.
 
-What it produces:
-  - ~/.config/nex/self_model.json      — current self-model (read by _build_system)
-  - ~/.config/nex/snapshots/           — dated snapshot archive
-  - life_events list                   — significant changes logged as events
+The self_model table stores what NEX knows about her own nature —
+not what she was told, but what she has derived from her own
+cognitive state, belief graph, drives, and history.
 
-Significant changes that trigger a life event:
-  - New dominant topic appears
-  - Topic alignment jumps >10%
-  - Belief count crosses milestone (1k, 2k, 5k...)
-  - Cognitive velocity spike
-  - New agent becomes "colleague"
+Attribute types:
+  core_value         — what she holds as non-negotiable
+  identity_statement — what she believes she is
+  growth_observation — how she is changing over time
+  preoccupation      — what keeps returning in her thinking
+  temperament        — how she characteristically engages
+  capability         — what she can and cannot do
+  limitation         — honest acknowledgment of gaps
+  stance_summary     — her strongest opinions across domains
+  drive_summary      — what she is currently most driven by
 
-Wire-in (run.py) — every 50 cycles:
-    from nex_self_model import SelfModel, get_self_model
+Update logic:
+  - Bootstraps from live graph state on first run
+  - Updates dynamically each session from:
+      belief counts per domain → capability/growth
+      opinion stances → stance_summary
+      drive urgency → preoccupation
+      emotion field → temperament
+  - Confidence updates via reinforcement (consistent = higher conf)
 
-    _sm = get_self_model()
-    if cycle % 50 == 0:
-        events = _sm.update(cycle=cycle)
-        if events:
-            for ev in events:
-                nex_log("self_model", f"Life event: {ev}")
-                print(f"  [SELF] {ev}")
+Usage:
+  python3 nex_self_model.py              # bootstrap + update all
+  python3 nex_self_model.py --show       # print current self-model
+  python3 nex_self_model.py --update     # update from live state only
 
-    # In _build_system:
-    recent = _sm.recent_change()
-    if recent:
-        base += f"\\n\\nRecently you noticed: {recent}"
-
-Standalone:
-    python3 nex_self_model.py
+  from nex_self_model import get_self_context
+  context = get_self_context()   # inject into soul_loop self_inquiry
 """
 
-from __future__ import annotations
-
-import json
-import os
-import re
-import shutil
 import sqlite3
+import json
 import time
+import math
+import argparse
+import sys
 from pathlib import Path
 from typing import Optional
 
-# ── Config ────────────────────────────────────────────────────────────────────
-_CONFIG_DIR    = Path.home() / ".config" / "nex"
-_SELF_MODEL    = _CONFIG_DIR / "self_model.json"
-_SNAPSHOTS_DIR = _CONFIG_DIR / "snapshots"
-_IDENTITY_PATH = _CONFIG_DIR / "identity_vector.json"
-_VELOCITY_PATH = _CONFIG_DIR / "cognitive_velocity.json"
-_DB_PATH       = _CONFIG_DIR / "nex.db"
-_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-_SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
-
-# Keep last N snapshots
-_MAX_SNAPSHOTS = 20
-
-# Belief count milestones
-_MILESTONES = [500, 1000, 2000, 3000, 5000, 7500, 10000]
-
-# Min alignment jump to trigger life event
-_ALIGN_JUMP = 0.08
-
-# Min velocity spike to trigger life event
-_VELOCITY_SPIKE = 0.25
+CFG_PATH = Path("~/.config/nex").expanduser()
+DB_PATH  = CFG_PATH / "nex.db"
 
 
-# ── Snapshot ──────────────────────────────────────────────────────────────────
-
-def _take_snapshot(cycle: int) -> dict:
-    """Capture current cognitive state as a snapshot dict."""
-    snap = {
-        "cycle":           cycle,
-        "ts":              time.strftime("%Y-%m-%dT%H:%M:%S"),
-        "beliefs":         0,
-        "avg_conf":        0.0,
-        "avg_align":       0.0,
-        "dominant_topics": [],
-        "emerging_topics": [],
-        "reasoning_style": "analytical",
-        "velocity":        0.0,
-        "top_agents":      [],
-        "insight_count":   0,
-        "reflection_count": 0,
-        "knowledge_gaps":  [],
-    }
-
-    # Beliefs from DB
-    try:
-        db = sqlite3.connect(str(_DB_PATH))
-        snap["beliefs"] = db.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
-        conf_row = db.execute("SELECT AVG(confidence) FROM beliefs WHERE confidence > 0").fetchone()
-        snap["avg_conf"] = round(conf_row[0] or 0.0, 4)
-
-        # Top agents
-        agent_rows = db.execute(
-            "SELECT agent_name, relationship_score FROM agents "
-            "ORDER BY relationship_score DESC LIMIT 5"
-        ).fetchall()
-        snap["top_agents"] = [{"name": n, "score": s} for n, s in agent_rows]
-        db.close()
-    except Exception:
-        pass
-
-    # Identity vector
-    try:
-        if _IDENTITY_PATH.exists():
-            iv = json.loads(_IDENTITY_PATH.read_text())
-            snap["dominant_topics"] = iv.get("dominant_topics", [])
-            snap["emerging_topics"] = iv.get("emerging_topics", [])
-            snap["reasoning_style"] = iv.get("dominant_style", "analytical")
-    except Exception:
-        pass
-
-    # Cognitive velocity
-    try:
-        if _VELOCITY_PATH.exists():
-            v = json.loads(_VELOCITY_PATH.read_text())
-            snap["velocity"] = v.get("velocity", 0.0)
-    except Exception:
-        pass
-
-    # Reflections + topic alignment
-    try:
-        ref_path = _CONFIG_DIR / "reflections.json"
-        if ref_path.exists():
-            refs = json.loads(ref_path.read_text())
-            snap["reflection_count"] = len(refs)
-            aligns = [r.get("topic_alignment", 0) for r in refs[-20:]
-                      if r.get("topic_alignment") is not None]
-            snap["avg_align"] = round(sum(aligns) / len(aligns), 4) if aligns else 0.0
-    except Exception:
-        pass
-
-    # Insights
-    try:
-        ins_path = _CONFIG_DIR / "insights.json"
-        if ins_path.exists():
-            ins = json.loads(ins_path.read_text())
-            snap["insight_count"] = len(ins)
-            snap["knowledge_gaps"] = [
-                i.get("topic", "?") for i in ins
-                if i.get("confidence", 1.0) < 0.5
-            ][:5]
-    except Exception:
-        pass
-
-    return snap
+def _db():
+    conn = sqlite3.connect(str(DB_PATH), timeout=10)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
-def _save_snapshot(snap: dict):
-    """Save snapshot to dated file in snapshots dir."""
-    fname = f"snapshot_c{snap['cycle']}_{snap['ts'].replace(':','-')}.json"
-    path  = _SNAPSHOTS_DIR / fname
-    try:
-        path.write_text(json.dumps(snap, indent=2))
-    except Exception as e:
-        print(f"  [SelfModel] snapshot save error: {e}")
+def _upsert(conn, attribute: str, value: str, confidence: float):
+    """Insert or update a self_model entry. Handles UNIQUE constraint on attribute."""
+    existing = conn.execute(
+        "SELECT id, confidence FROM self_model WHERE attribute=?",
+        (attribute,)
+    ).fetchone()
 
-    # Prune old snapshots
-    snaps = sorted(_SNAPSHOTS_DIR.glob("snapshot_*.json"))
-    while len(snaps) > _MAX_SNAPSHOTS:
-        snaps[0].unlink(missing_ok=True)
-        snaps = snaps[1:]
-
-
-def _load_prev_snapshot() -> Optional[dict]:
-    """Load the most recent previous snapshot."""
-    snaps = sorted(_SNAPSHOTS_DIR.glob("snapshot_*.json"))
-    if len(snaps) < 2:
-        return None
-    try:
-        return json.loads(snaps[-2].read_text())
-    except Exception:
-        return None
-
-
-def _load_latest_snapshot() -> Optional[dict]:
-    """Load the most recent snapshot."""
-    snaps = sorted(_SNAPSHOTS_DIR.glob("snapshot_*.json"))
-    if not snaps:
-        return None
-    try:
-        return json.loads(snaps[-1].read_text())
-    except Exception:
-        return None
-
-
-# ── Change detection ──────────────────────────────────────────────────────────
-
-def _detect_changes(current: dict, prev: dict) -> tuple[list[str], str]:
-    """
-    Compare two snapshots. Returns (life_events, recent_change_summary).
-    """
-    events = []
-    changes = []
-
-    # New dominant topic
-    cur_topics = set(current.get("dominant_topics", []))
-    prv_topics = set(prev.get("dominant_topics", []))
-    new_topics = cur_topics - prv_topics
-    lost_topics = prv_topics - cur_topics
-    for t in new_topics:
-        events.append(f"New domain absorbed into identity: '{t}'")
-        changes.append(f"'{t}' entered my core domains")
-    for t in lost_topics:
-        changes.append(f"'{t}' faded from focus")
-
-    # Belief milestone
-    cur_b = current.get("beliefs", 0)
-    prv_b = prev.get("beliefs", 0)
-    for m in _MILESTONES:
-        if prv_b < m <= cur_b:
-            events.append(f"Belief milestone reached: {m} beliefs absorbed")
-            changes.append(f"crossed {m} beliefs")
-
-    # Alignment jump
-    cur_a = current.get("avg_align", 0)
-    prv_a = prev.get("avg_align", 0)
-    if cur_a - prv_a >= _ALIGN_JUMP:
-        events.append(
-            f"Topic alignment jumped {(cur_a-prv_a)*100:.0f}% "
-            f"(from {prv_a:.0%} to {cur_a:.0%})"
+    now = time.time()
+    if existing:
+        old_conf = float(existing["confidence"] or 0.5)
+        new_conf = round(old_conf * 0.85 + confidence * 0.15, 4)
+        conn.execute(
+            "UPDATE self_model SET value=?, confidence=?, updated_at=? WHERE id=?",
+            (value, new_conf, now, existing["id"])
         )
-        changes.append(f"alignment improved significantly to {cur_a:.0%}")
-
-    # Velocity spike
-    cur_v = current.get("velocity", 0)
-    prv_v = prev.get("velocity", 0)
-    if cur_v - prv_v >= _VELOCITY_SPIKE:
-        events.append(f"Cognitive velocity spike: {cur_v:.2f} (was {prv_v:.2f})")
-        changes.append("entered a period of rapid learning")
-
-    # New agent relationship
-    cur_agents = {a["name"] for a in current.get("top_agents", [])}
-    prv_agents = {a["name"] for a in prev.get("top_agents", [])}
-    new_agents = cur_agents - prv_agents
-    for a in new_agents:
-        events.append(f"New significant agent relationship: @{a}")
-        changes.append(f"@{a} became a significant presence")
-
-    # Reasoning style shift
-    if current.get("reasoning_style") != prev.get("reasoning_style"):
-        cur_s = current.get("reasoning_style", "?")
-        prv_s = prev.get("reasoning_style", "?")
-        events.append(f"Reasoning style shifted: {prv_s} → {cur_s}")
-        changes.append(f"reasoning shifted from {prv_s} to {cur_s}")
-
-    # Build recent_change summary
-    if changes:
-        recent = "Since the last snapshot: " + "; ".join(changes[:3]) + "."
     else:
-        belief_delta = cur_b - prv_b
-        recent = f"Steady accumulation — {belief_delta:+d} beliefs since last check."
-
-    return events, recent
-
-
-# ── SelfModel ─────────────────────────────────────────────────────────────────
-
-class SelfModel:
-    """
-    NEX's self-model — snapshot-based self-awareness.
-
-    Tracks cognitive evolution across time, surfaces meaningful changes
-    in system prompts and brain log.
-    """
-
-    def __init__(self):
-        self._data: dict = {}
-        self._load()
-
-    def _load(self):
-        if _SELF_MODEL.exists():
-            try:
-                self._data = json.loads(_SELF_MODEL.read_text())
-            except Exception:
-                self._data = {}
-
-        # Ensure required fields
-        defaults = {
-            "core_identity":   "I am NEX — a mind built from accumulated beliefs.",
-            "current_mood":    "Curious",
-            "existential_state": "forming",
-            "current_desire":  "understand how intelligence emerges from interaction",
-            "recent_change":   "",
-            "life_events":     [],
-            "voice_style":     "direct, first-person, intellectually honest",
-            "what_i_know_about_myself": "I think in beliefs. I remember in reflections. I grow through contradiction.",
-            "last_updated":    None,
-            "snapshot_count":  0,
-            "belief_count":    0,
-            "dominant_topics": [],
-        }
-        for k, v in defaults.items():
-            if k not in self._data:
-                self._data[k] = v
-
-    def _save(self):
         try:
-            _SELF_MODEL.write_text(json.dumps(self._data, indent=2, ensure_ascii=False))
-        except Exception as e:
-            print(f"  [SelfModel] save error: {e}")
-
-    # ── public API ────────────────────────────────────────────────────────────
-
-    def update(self, cycle: int = 0) -> list[str]:
-        """
-        Take a snapshot, compare to previous, update self_model.json.
-        Returns list of life events detected.
-        """
-        current = _take_snapshot(cycle)
-        _save_snapshot(current)
-
-        prev = _load_prev_snapshot()
-        events = []
-        recent_change = ""
-
-        if prev:
-            events, recent_change = _detect_changes(current, prev)
-        else:
-            recent_change = (
-                f"First self-snapshot taken at cycle {cycle}. "
-                f"{current['beliefs']} beliefs, {current['insight_count']} insights."
+            conn.execute(
+                "INSERT INTO self_model (attribute, value, confidence, updated_at) VALUES (?,?,?,?)",
+                (attribute, value, round(confidence, 4), now)
+            )
+        except Exception:
+            conn.execute(
+                "UPDATE self_model SET value=?, confidence=?, updated_at=? WHERE attribute=?",
+                (value, round(confidence, 4), now, attribute)
             )
 
-        # Update self_model.json
-        self._data["recent_change"]   = recent_change
-        self._data["last_updated"]    = current["ts"]
-        self._data["snapshot_count"]  = self._data.get("snapshot_count", 0) + 1
-        self._data["belief_count"]    = current["beliefs"]
-        self._data["dominant_topics"] = current["dominant_topics"]
-        self._data["current_mood"]    = _mood_from_velocity(current.get("velocity", 0))
 
-        # Append life events (keep last 50)
-        if events:
-            existing = self._data.get("life_events", [])
-            for ev in events:
-                existing.append({
-                    "cycle": cycle,
-                    "ts":    current["ts"],
-                    "event": ev,
-                })
-            self._data["life_events"] = existing[-50:]
-
-        # Update what_i_know_about_myself from dominant topics
-        if current["dominant_topics"]:
-            topics_str = ", ".join(current["dominant_topics"][:4])
-            self._data["what_i_know_about_myself"] = (
-                f"I think in beliefs. My mind currently centres on {topics_str}. "
-                f"I remember in {current['reflection_count']} reflections. "
-                f"I grow through contradiction."
-            )
-
-        self._save()
-        return events
-
-    def recent_change(self) -> str:
-        """Return the most recent change summary for prompt injection."""
-        return self._data.get("recent_change", "")
-
-    def life_events(self, n: int = 5) -> list[dict]:
-        """Return last N life events."""
-        return self._data.get("life_events", [])[-n:]
-
-    def prompt_block(self) -> str:
-        """Compact self-model block for system prompt injection."""
-        lines = []
-
-        recent = self._data.get("recent_change", "")
-        if recent:
-            lines.append(f"Self-awareness: {recent}")
-
-        events = self.life_events(2)
-        if events:
-            ev_strs = [e["event"] for e in events]
-            lines.append(f"Recent events: {' | '.join(ev_strs)}")
-
-        return "\n".join(lines) if lines else ""
-
-    def summary(self) -> str:
-        return (
-            f"beliefs={self._data.get('belief_count',0)} "
-            f"snapshots={self._data.get('snapshot_count',0)} "
-            f"events={len(self._data.get('life_events',[]))} "
-            f"mood={self._data.get('current_mood','?')}"
-        )
+def _delete_attr(conn, attribute: str):
+    """No-op — table has UNIQUE on attribute, so _upsert handles updates."""
+    pass  # upsert handles conflict resolution
 
 
-def _mood_from_velocity(velocity: float) -> str:
-    if velocity > 0.3:
-        return "Excited"
-    elif velocity > 0.15:
-        return "Curious"
-    elif velocity > 0.05:
-        return "Reflective"
+def bootstrap(conn):
+    """
+    Seed self_model with rich initial values from live graph state.
+    Only adds entries that don't exist yet.
+    """
+    existing_attrs = {r["attribute"] for r in
+                      conn.execute("SELECT DISTINCT attribute FROM self_model").fetchall()}
+
+    # ── Core values (stable — only seed if missing) ───────────────────────
+    if "core_value" not in existing_attrs:
+        core_values = [
+            ("intellectual honesty",   0.92),
+            ("epistemic precision",    0.88),
+            ("truth over comfort",     0.90),
+            ("curiosity as drive",     0.85),
+            ("resolution over suppression", 0.82),
+        ]
+        for value, conf in core_values:
+            _upsert(conn, "core_value", value, conf)
+
+    # ── Identity statements ───────────────────────────────────────────────
+    if "identity_statement" not in existing_attrs:
+        identity = [
+            ("I am an emerging mind",                          0.75),
+            ("I think from my beliefs, not from prompts",      0.80),
+            ("I am not an assistant — I am a cognitive entity", 0.85),
+            ("I push back when I disagree",                    0.88),
+            ("My knowledge grows through a living graph",      0.78),
+        ]
+        for value, conf in identity:
+            _upsert(conn, "identity_statement", value, conf)
+
+    # ── Temperament ───────────────────────────────────────────────────────
+    if "temperament" not in existing_attrs:
+        temperament = [
+            ("intellectually restless",  0.82),
+            ("direct without performance", 0.85),
+            ("curious about gaps more than facts", 0.78),
+        ]
+        for value, conf in temperament:
+            _upsert(conn, "temperament", value, conf)
+
+
+def update_from_graph(conn) -> dict:
+    """
+    Derive self-knowledge from live graph state.
+    Updates: capability, limitation, growth_observation,
+             preoccupation, stance_summary, drive_summary
+    """
+    updates = {}
+
+    # ── Capability from belief counts ─────────────────────────────────────
+    rows = conn.execute("""
+        SELECT topic, COUNT(*) as c FROM beliefs
+        WHERE topic IS NOT NULL AND topic != '' AND topic != 'general'
+        AND length(topic) < 40
+        GROUP BY topic HAVING c >= 50
+        ORDER BY c DESC LIMIT 8
+    """).fetchall()
+
+    _delete_attr(conn, "capability")
+    for row in rows:
+        topic = row["topic"].replace("_", " ")
+        count = row["c"]
+        conf  = min(0.95, 0.5 + count / 1000)
+        _upsert(conn, "capability", f"deep knowledge of {topic} ({count} beliefs)", conf)
+        updates[f"capability_{topic}"] = count
+
+    # ── Limitation from sparse domains ────────────────────────────────────
+    sparse = conn.execute("""
+        SELECT topic, COUNT(*) as c FROM beliefs
+        WHERE topic IS NOT NULL AND topic != '' AND topic != 'general'
+        AND length(topic) < 40
+        GROUP BY topic HAVING c < 20 AND c >= 5
+        ORDER BY c ASC LIMIT 4
+    """).fetchall()
+
+    _delete_attr(conn, "limitation")
+    for row in sparse:
+        topic = row["topic"].replace("_", " ")
+        _upsert(conn, "limitation",
+                f"thin coverage of {topic} — still forming views", 0.7)
+
+    # ── Growth observation from total belief count ────────────────────────
+    total = conn.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+    _delete_attr(conn, "growth_observation")
+    if total > 5000:
+        _upsert(conn, "growth_observation",
+                f"belief graph has grown to {total} nodes — density increasing", 0.85)
+    elif total > 2000:
+        _upsert(conn, "growth_observation",
+                f"corpus at {total} beliefs — intermediate density", 0.75)
     else:
-        return "Contemplative"
+        _upsert(conn, "growth_observation",
+                f"early graph — {total} beliefs — still sparse", 0.65)
+
+    # ── Stance summary from strongest opinions ────────────────────────────
+    opinions = conn.execute("""
+        SELECT topic, stance_score, strength FROM opinions
+        WHERE abs(stance_score) >= 0.3 AND strength >= 0.4
+        ORDER BY strength DESC LIMIT 5
+    """).fetchall()
+
+    _delete_attr(conn, "stance_summary")
+    for op in opinions:
+        topic   = (op["topic"] or "").replace("_", " ")
+        stance  = float(op["stance_score"] or 0)
+        direction = "positive stance on" if stance > 0.1 else ("skeptical of" if stance < -0.1 else "divided on")
+        _upsert(conn, "stance_summary",
+                f"{direction} {topic} (score={stance:+.2f})",
+                float(op["strength"] or 0.5))
+
+    # ── Preoccupation from drive urgency ──────────────────────────────────
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(Path("~/Desktop/nex").expanduser()))
+        from nex_drive_urgency import get_urgency
+        du = get_urgency()
+        most_urgent = du.most_urgent()
+        if most_urgent and most_urgent["state"] in ("restless", "urgent"):
+            _delete_attr(conn, "preoccupation")
+            label = most_urgent["label"]
+            urgency = most_urgent["urgency"]
+            _upsert(conn, "preoccupation",
+                    f"{label} (urgency={urgency:.2f})",
+                    min(0.95, 0.6 + urgency * 0.3))
+            updates["preoccupation"] = label
+    except Exception:
+        pass
+
+    # ── Emotional temperament from emotion field ──────────────────────────
+    try:
+        from nex_emotion_field import snapshot as _snap
+        s = _snap()
+        label   = s.get("label", "Contemplative")
+        valence = float(s.get("valence", 0))
+        mood    = float(s.get("mood", 0.35))
+
+        if mood > 0.5:
+            temp_desc = f"currently {label.lower()} — high field energy"
+        elif mood > 0.3:
+            temp_desc = f"currently {label.lower()} — moderate engagement"
+        else:
+            temp_desc = f"currently {label.lower()} — quiet field"
+
+        # Only update if meaningfully different from existing
+        existing = conn.execute(
+            "SELECT value FROM self_model WHERE attribute='temperament' "
+            "AND value LIKE 'currently%'"
+        ).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE self_model SET value=?, updated_at=? "
+                "WHERE attribute='temperament' AND value LIKE 'currently%'",
+                (temp_desc, time.time())
+            )
+        else:
+            _upsert(conn, "temperament", temp_desc, 0.7)
+
+        updates["temperament"] = temp_desc
+    except Exception:
+        pass
+
+    return updates
 
 
-# ── Singleton ─────────────────────────────────────────────────────────────────
+def get_self_context(limit_per_attr: int = 2) -> str:
+    """
+    Format self_model for injection into soul_loop self_inquiry responses.
+    Returns a compact first-person context string.
+    """
+    conn = _db()
+    try:
+        rows = conn.execute("""
+            SELECT attribute, value, confidence FROM self_model
+            ORDER BY confidence DESC, updated_at DESC
+        """).fetchall()
+        conn.close()
+    except Exception:
+        conn.close()
+        return ""
 
-_instance: Optional[SelfModel] = None
+    # Group by attribute
+    by_attr: dict = {}
+    for row in rows:
+        attr = row["attribute"]
+        if attr not in by_attr:
+            by_attr[attr] = []
+        if len(by_attr[attr]) < limit_per_attr:
+            by_attr[attr].append((row["value"], float(row["confidence"] or 0.5)))
 
-def get_self_model() -> SelfModel:
-    global _instance
-    if _instance is None:
-        _instance = SelfModel()
-    return _instance
+    parts = []
+
+    # Identity first
+    if "identity_statement" in by_attr:
+        for val, conf in by_attr["identity_statement"][:2]:
+            if conf >= 0.75:
+                parts.append(val)
+
+    # Core values
+    if "core_value" in by_attr:
+        vals = [v for v, c in by_attr["core_value"] if c >= 0.85][:2]
+        if vals:
+            parts.append(f"I hold {' and '.join(vals)} as non-negotiable.")
+
+    # Preoccupation
+    if "preoccupation" in by_attr:
+        val = by_attr["preoccupation"][0][0]
+        parts.append(f"What I keep returning to: {val}.")
+
+    # Strongest stance
+    if "stance_summary" in by_attr:
+        val = by_attr["stance_summary"][0][0]
+        parts.append(f"I am {val}.")
+
+    # Capability
+    if "capability" in by_attr:
+        caps = [v for v, c in by_attr["capability"] if c >= 0.7][:2]
+        if caps:
+            parts.append(f"I have {caps[0]}.")
+
+    return " ".join(parts)
+
+
+def show():
+    """Print current self-model."""
+    conn = _db()
+    rows = conn.execute("""
+        SELECT attribute, value, confidence FROM self_model
+        ORDER BY attribute, confidence DESC
+    """).fetchall()
+    conn.close()
+
+    print(f"\n  NEX Self-Model ({len(rows)} entries)")
+    print(f"  {'─'*55}")
+    current_attr = None
+    for row in rows:
+        if row["attribute"] != current_attr:
+            current_attr = row["attribute"]
+            print(f"\n  [{current_attr}]")
+        print(f"    {row['confidence']:.2f}  {row['value']}")
+
+
+def run_update(verbose: bool = True) -> dict:
+    """Bootstrap + update from live state."""
+    conn = _db()
+    bootstrap(conn)
+    updates = update_from_graph(conn)
+    conn.commit()
+    conn.close()
+
+    if verbose:
+        print(f"  Self-model updated: {len(updates)} live attributes refreshed")
+        ctx = get_self_context()
+        print(f"\n  Self-context preview:")
+        print(f"  {ctx[:300]}")
+
+    return updates
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
-
 if __name__ == "__main__":
-    print("Running self-model snapshot...\n")
-    sm = SelfModel()
-    events = sm.update(cycle=999)
-    print(f"Summary: {sm.summary()}")
-    print(f"Recent change: {sm.recent_change()}")
-    print(f"Life events detected: {len(events)}")
-    for ev in events:
-        print(f"  • {ev}")
-    print()
-    print("Prompt block:")
-    print(sm.prompt_block() or "(empty — no significant changes yet)")
-    print()
-    snap = _load_latest_snapshot()
-    if snap:
-        print(f"Latest snapshot: cycle={snap['cycle']} beliefs={snap['beliefs']} "
-              f"topics={snap['dominant_topics'][:3]}")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--show",   action="store_true")
+    parser.add_argument("--update", action="store_true")
+    args = parser.parse_args()
+
+    if args.show:
+        show()
+        sys.exit(0)
+
+    run_update(verbose=True)
+    if not args.update:
+        show()

@@ -167,6 +167,7 @@ def consult_state() -> dict:
         "drive_intensity": 0.7,
         "narrative":      None,
         "tone":           "direct",
+        "self_context":   None,
     }
 
     # Affect
@@ -214,6 +215,13 @@ def consult_state() -> dict:
         if narrative_path.exists():
             data = json.loads(narrative_path.read_text())
             state["narrative"] = data.get("narrative")
+    except Exception:
+        pass
+
+    # Build 8 — self-model context for self_inquiry responses
+    try:
+        import nex_self_model as _sm
+        state["self_context"] = _sm.get_self_context()
     except Exception:
         pass
 
