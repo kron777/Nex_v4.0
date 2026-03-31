@@ -478,20 +478,32 @@ def _cross_domain_beliefs(top_beliefs: list, tokens: set, limit: int = 4) -> lis
         if not rows:
             return []
 
-        # Deduplicate by topic — one per cross-domain topic
+        # Score cross-domain by token overlap with query — must be relevant
+        import re as _re_cd
+        _STOP_CD = {"the","a","an","is","are","was","were","be","to","of","in",
+                    "on","at","by","for","with","as","that","this","it","but",
+                    "or","and","not","they","have","has","will","can","would"}
+        query_words = set(_re_cd.findall(r"[a-z]{4,}", " ".join(str(t) for t in tokens).lower())) - _STOP_CD
+
         seen = set()
         result = []
         for row in rows:
             t = (row["topic"] or "").lower().strip()
-            if t not in seen:
-                seen.add(t)
-                result.append({
-                    "id":            row["id"],
-                    "content":       row["content"] or "",
-                    "confidence":    row["confidence"],
-                    "topic":         row["topic"] or "",
-                    "_cross_domain": True,
-                })
+            if t in seen:
+                continue
+            content = (row["content"] or "").lower()
+            content_words = set(_re_cd.findall(r"[a-z]{4,}", content)) - _STOP_CD
+            # Must share at least 1 meaningful word with the query tokens
+            if query_words and not (query_words & content_words):
+                continue
+            seen.add(t)
+            result.append({
+                "id":            row["id"],
+                "content":       row["content"] or "",
+                "confidence":    row["confidence"],
+                "topic":         row["topic"] or "",
+                "_cross_domain": True,
+            })
             if len(result) >= limit:
                 break
         return result
