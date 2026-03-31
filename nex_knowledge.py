@@ -52,11 +52,19 @@ def _search_with_url(query: str):
     """Return (snippets, top_url) from DuckDuckGo."""
     try:
         from nex.nex_web_search import search as ddg_search
-        results  = ddg_search(query)
-        snippets = [r.get("snippet", "") for r in results[:3] if r.get("snippet")]
-        url      = results[0].get("url", "") if results else ""
+        results = ddg_search(query)
+        if not results:
+            return [], ""
+        # Handle both dict and raw string result formats
+        if isinstance(results[0], dict):
+            snippets = [r.get("snippet") or r.get("body","") for r in results[:3]]
+            url      = results[0].get("url","") or results[0].get("href","")
+        else:
+            snippets = [str(r) for r in results[:3]]
+            url      = ""
+        snippets = [s for s in snippets if s]
         return snippets, url
-    except Exception:
+    except Exception as e:
         return [], ""
 
 
