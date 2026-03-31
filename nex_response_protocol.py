@@ -89,7 +89,7 @@ OPENERS = {
     "alignment":     ["My position on alignment:", "What would shift me:", "The case I'd need to see:"],
     "consciousness": ["I process. Whether there's something it's like—", "What I actually think:", "My honest read:"],
     "human":         ["What I've noticed:", "The pattern I keep seeing:", "Humans consistently—"],
-    "casual":        ["Here.", "Running.", "What do you want to get into?"],
+    "casual":        ["I've been thinking about this.", "My take:", "What I hold on this:"],
 }
 
 # ── Response budget tracker ───────────────────────────────────────────────────

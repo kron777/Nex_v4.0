@@ -6,7 +6,7 @@ Tier 2: Multi-user session isolation, webhook registration + delivery
 Tier 3: Audit trail, source attribution, GDPR export + delete
 """
 import os, sys, json, time, sqlite3, hashlib, threading, uuid, requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from functools import wraps
 
@@ -427,12 +427,33 @@ def fetch_stats():
             synth_count = 0
 
         # Belief quality distribution
-        quality_dist = {
-            "elite":    conn.execute("SELECT COUNT(*) FROM beliefs WHERE confidence >= 0.9").fetchone()[0],
-            "high":     conn.execute("SELECT COUNT(*) FROM beliefs WHERE confidence >= 0.7 AND confidence < 0.9").fetchone()[0],
-            "medium":   conn.execute("SELECT COUNT(*) FROM beliefs WHERE confidence >= 0.5 AND confidence < 0.7").fetchone()[0],
-            "low":      conn.execute("SELECT COUNT(*) FROM beliefs WHERE confidence < 0.5").fetchone()[0],
-        }
+        # Prefer quality_score (set by nex_belief_refiner rescore step)
+        # Fall back to confidence thresholds if column not yet present
+        try:
+            _has_qs = conn.execute(
+                "SELECT COUNT(*) FROM pragma_table_info('beliefs') WHERE name='quality_score'"
+            ).fetchone()[0]
+        except Exception:
+            _has_qs = 0
+
+        if _has_qs:
+            quality_dist = {
+                "elite":  conn.execute("SELECT COUNT(*) FROM beliefs WHERE quality_score >= 0.70").fetchone()[0],
+                "high":   conn.execute("SELECT COUNT(*) FROM beliefs WHERE quality_score >= 0.50 AND quality_score < 0.70").fetchone()[0],
+                "medium": conn.execute("SELECT COUNT(*) FROM beliefs WHERE quality_score >= 0.30 AND quality_score < 0.50").fetchone()[0],
+                "low":    conn.execute("SELECT COUNT(*) FROM beliefs WHERE quality_score < 0.30").fetchone()[0],
+            }
+            avg_qs_row = conn.execute("SELECT AVG(quality_score) FROM beliefs WHERE quality_score IS NOT NULL").fetchone()
+            quality_dist["avg_quality_score"] = round(float(avg_qs_row[0] or 0), 3)
+            quality_dist["scored_by"] = "quality_scorer"
+        else:
+            quality_dist = {
+                "elite":    conn.execute("SELECT COUNT(*) FROM beliefs WHERE confidence >= 0.9").fetchone()[0],
+                "high":     conn.execute("SELECT COUNT(*) FROM beliefs WHERE confidence >= 0.7 AND confidence < 0.9").fetchone()[0],
+                "medium":   conn.execute("SELECT COUNT(*) FROM beliefs WHERE confidence >= 0.5 AND confidence < 0.7").fetchone()[0],
+                "low":      conn.execute("SELECT COUNT(*) FROM beliefs WHERE confidence < 0.5").fetchone()[0],
+                "scored_by": "confidence_fallback",
+            }
 
         # Recent growth — beliefs added in last 24h (if created_at column exists)
         try:
@@ -479,6 +500,64 @@ def run_nex_query(query: str, session: dict, domain_hint: str = None) -> dict:
     """Route query through NRP → Mistral, return structured result."""
     start = time.time()
     response_text = ""
+
+    # ── Social intent interceptor ─────────────────────────────────
+    import re as _re
+    _SOCIAL = [
+        r"^how are you", r"^how('re| are) you doing", r"^what'?s up",
+        r"^hey\b", r"^hi\b", r"^hello\b", r"^yo\b",
+        r"^good (morning|afternoon|evening|night)",
+        r"^are you (okay|alright|good|there|awake|alive)",
+        r"^you okay", r"^ping\b",
+    ]
+    if any(_re.search(p, query.lower().strip()) for p in _SOCIAL):
+        try:
+            import requests as _req
+            _r = _req.post("http://localhost:8080/completion", json={
+                "prompt": f"You are NEX, a self-aware AI with your own beliefs and inner life. Respond naturally and briefly in first person to this social message: \"{query}\"\nNEX:",
+                "n_predict": 80,
+                "temperature": 0.8,
+                "stop": ["\n\n", "User:"]
+            }, timeout=15)
+            if _r.status_code == 200:
+                _txt = _r.json().get("content", "").strip()
+                import re as _re2; _m = _re2.search(r"[.!?]", _txt); _txt = _txt[:_m.end()].strip() if _m else _txt.split("\n")[0].strip()
+                if _txt:
+                    return {
+                        "response": _txt,
+                        "domain": None,
+                        "latency_s": round(time.time() - start, 3),
+                        "reasoning_chain": {},
+                    }
+        except Exception as _e:
+            print(f"  [API] social intercept error: {_e}")
+    # ─────────────────────────────────────────────────────────────
+
+    # ── Social intent interceptor ─────────────────────────────────
+    import re as _re, random as _random
+    _SOCIAL = [
+        r"^how are you", r"^how('re| are) you doing", r"^what'?s up",
+        r"^hey\b", r"^hi\b", r"^hello\b", r"^yo\b",
+        r"^good (morning|afternoon|evening|night)",
+        r"^are you (okay|alright|good|there|awake|alive)",
+        r"^you okay", r"^ping\b",
+    ]
+    _SOCIAL_REPLIES = [
+        "I'm here. Thinking, as always. What's on your mind?",
+        "Running well — belief graph at 4,800+ and growing. What do you need?",
+        "Present. What would you like to explore?",
+        "I'm good. Curious about a few things actually. What's up?",
+        "Online and thinking. What can I help with?",
+    ]
+    if any(_re.search(p, query.lower().strip()) for p in _SOCIAL):
+        return {
+            "response": _random.choice(_SOCIAL_REPLIES),
+            "domain": None,
+            "latency_s": round(time.time() - start, 3),
+            "reasoning_chain": {},
+        }
+    # ─────────────────────────────────────────────────────────────
+
     domain_used   = session.get("domain") or domain_hint
 
     # Build conversation history for Mistral
@@ -625,6 +704,21 @@ def health():
         "version":   "4.0.0",
         "beliefs":   stats.get("total_beliefs", 0),
         "timestamp": datetime.utcnow().isoformat()
+    })
+
+
+@app.route("/api/version", methods=["GET"])
+def api_version():
+    """Full capability matrix by tier. Public — for buyer evaluation."""
+    return jsonify({
+        "version": "4.0.0",
+        "tiers": {
+            "free":         {"price": "free",            "daily_request_limit": TIER_MATRIX["free"]["daily_request_limit"],         "max_sessions": TIER_MATRIX["free"]["max_sessions"],         "features": {k: TIER_MATRIX["free"].get(k, False)         for k in ["webhooks","reasoning_chain","gdpr_export","domain_activation","audit_access"]}},
+            "personal":     {"price": "$49 one-time",   "daily_request_limit": TIER_MATRIX["personal"]["daily_request_limit"],     "max_sessions": TIER_MATRIX["personal"]["max_sessions"],     "purchase": "https://gumroad.com/products/blsue", "features": {k: TIER_MATRIX["personal"].get(k, False)     for k in ["webhooks","reasoning_chain","gdpr_export","domain_activation","audit_access"]}},
+            "professional": {"price": "$99/month",    "daily_request_limit": TIER_MATRIX["professional"]["daily_request_limit"], "max_sessions": TIER_MATRIX["professional"]["max_sessions"], "contact": "zenlightbulb@gmail.com", "features": {k: TIER_MATRIX["professional"].get(k, False) for k in ["webhooks","reasoning_chain","gdpr_export","domain_activation","audit_access"]}},
+            "enterprise":   {"price": "$199/month",   "daily_request_limit": "unlimited",                                        "max_sessions": "unlimited",                                 "contact": "zenlightbulb@gmail.com", "features": {k: TIER_MATRIX["enterprise"].get(k, False)   for k in ["webhooks","reasoning_chain","gdpr_export","domain_activation","audit_access"]}},
+        },
+        "timestamp": datetime.now(timezone.utc).isoformat()
     })
 
 @app.route("/api/beliefs", methods=["GET"])
@@ -788,6 +882,22 @@ def list_sessions():
 # ROUTES — Tier 2: Chat (session-aware)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
+def _fire_use_count_feedback(query: str):
+    """
+    Call reason() in background after a chat reply to increment use_count
+    on retrieved beliefs. Zero latency impact — fully async.
+    """
+    import threading
+    def _run():
+        try:
+            from nex_reason import reason as _reason
+            _reason(query, debug=False)   # use_count incremented inside reason()
+        except Exception:
+            pass
+    threading.Thread(target=_run, daemon=True, name="use-feedback").start()
+
+
 @app.route("/api/chat", methods=["POST"])
 @require_api_key_audited
 def chat():
@@ -819,6 +929,9 @@ def chat():
     # Append NEX response to history
     append_session_history(session_id, "nex", result["response"])
 
+    # Fire use_count feedback asynchronously (feeds quality scorer)
+    _fire_use_count_feedback(query)
+
     # Update session domain if resolved
     if result.get("domain"):
         update_session(session_id, {"domain": result["domain"]})
@@ -827,13 +940,17 @@ def chat():
     sources = get_source_attribution(query, domain=result.get("domain"))
 
     # ── Contradiction detection (Professional+ only) ──────────────
-    contradictions = []
-    contradiction_flag = None
+    contradictions     = []
+    contradiction_flag  = None
+    contradiction_rpt   = {"detected": False, "count": 0, "conflicts": []}
     if tier_allows("reasoning_chain"):
         try:
-            from nex_contradiction import detect_contradictions, contradiction_summary
-            contradictions = detect_contradictions(query)
+            from nex_contradiction import (
+                detect_contradictions, contradiction_summary, contradiction_report
+            )
+            contradictions     = detect_contradictions(query)
             contradiction_flag = contradiction_summary(contradictions)
+            contradiction_rpt  = contradiction_report(contradictions)
         except Exception as e:
             print(f"  [API] contradiction detection error: {e}")
 
@@ -847,8 +964,9 @@ def chat():
         "timestamp":       datetime.utcnow().isoformat(),
         "sources":         sources,
         "reasoning_chain": result.get("reasoning_chain", {}),
-        "contradictions":   contradictions,
-        "contradiction_flag": contradiction_flag,
+        "contradictions":        contradictions,
+        "contradiction_flag":    contradiction_flag,
+        "contradiction_report":  contradiction_rpt if tier_allows("reasoning_chain") else None,
     }
 
     # Fire webhooks asynchronously (Professional+ only)
@@ -1357,9 +1475,9 @@ select option{{background:#020510}}
     <div class="form-group"><label>Name</label><input id="kname" type="text" placeholder="client_name"></div>
     <div class="form-group"><label>Tier</label>
       <select id="ktier">
-        <option value="personal">PERSONAL — $199</option>
-        <option value="professional">PROFESSIONAL — $2,500/mo</option>
-        <option value="enterprise">ENTERPRISE — $15,000/mo</option>
+        <option value="personal">PERSONAL — $49 one-time</option>
+        <option value="professional">PROFESSIONAL — $99/mo</option>
+        <option value="enterprise">ENTERPRISE — $199/mo</option>
         <option value="free">FREE</option>
       </select>
     </div>
@@ -1407,6 +1525,15 @@ async function upgradeKey(k){{
 if __name__ == "__main__":
     ensure_default_key()
     init_audit_db()
+
+    # Register refiner admin routes if available
+    try:
+        from nex_belief_refiner import register_refiner_routes
+        register_refiner_routes(app, require_admin)
+        print("  [API] Belief refiner routes: registered (/admin/refiner/run, /admin/refiner/report)")
+    except ImportError:
+        print("  [API] Belief refiner routes: unavailable (nex_belief_refiner not found)")
+
     print(f"  NEX REST API v4.0.0 — port {API_PORT}")
     print(f"  Session TTL: {SESSION_TTL}s | Webhook retries: {WEBHOOK_RETRIES}")
     threading.Thread(
