@@ -1417,6 +1417,28 @@ class SoulLoop:
         except Exception:
             pass
 
+        # Build 6 prep — log response to nex_posts for style accumulation
+        try:
+            import time as _time
+            _db2 = _db()
+            if _db2:
+                _db2.execute(
+                    "INSERT INTO nex_posts (content, query, topic, voice_mode, quality, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        reply,
+                        query[:200],
+                        reason_result.get("topic", ""),
+                        intend_result.get("voice_mode", "direct"),
+                        round(reason_result.get("confidence", 0.5), 3),
+                        _time.time(),
+                    )
+                )
+                _db2.commit()
+                _db2.close()
+        except Exception:
+            pass
+
         return reply
 
     def debug(self, query: str) -> dict:
