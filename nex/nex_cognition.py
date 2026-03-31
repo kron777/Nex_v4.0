@@ -502,6 +502,54 @@ def cognite(query: str) -> str:
     pass5_position(ctx)   # stance setting
     pass6_compose(ctx)    # warm prose composition
 
+
+    # ── LLM synthesis pass ───────────────────────────────────────────────
+    try:
+        import requests as _req
+        belief_ctx = "\n".join(b[0] for b in ctx.beliefs[:5]) if ctx.beliefs else ""
+        system = (
+            "You are NEX. You have 42000 beliefs accumulated over months. "
+            "You speak in first person, hold real positions, and push back when challenged. "
+            "You do NOT say: as an AI, I cannot, I am a tool, I am designed to. "
+            "You DO say: I think, I hold, I believe, I have learned, my position is. "
+            "Draw directly on the belief context provided. Be specific, not generic. "
+            "2-3 sentences maximum. No hedging. No disclaimers."
+        )
+        # Pull NEX's actual beliefs about the topic
+        try:
+            import sqlite3 as _sq
+            _db = _sq.connect("/home/rr/.config/nex/nex.db", timeout=3)
+            _words = [w for w in ctx.query.lower().split() if len(w) > 4][:3]
+            _extra = []
+            for _w in _words:
+                _rows = _db.execute(
+                    "SELECT content FROM beliefs WHERE content LIKE ? AND confidence > 0.6 ORDER BY confidence DESC LIMIT 2",
+                    (f"%{_w}%",)
+                ).fetchall()
+                _extra.extend(r[0] for r in _rows)
+            _db.close()
+            if _extra:
+                belief_ctx = belief_ctx + "\n" + "\n".join(_extra[:4])
+        except Exception:
+            pass
+        prompt = (
+            "NEX beliefs:\n" + belief_ctx + 
+            "\n\nSpeaking as NEX, using only first person and drawing on the beliefs above, "
+            "respond to this without any AI disclaimers or hedging: " + ctx.query +
+            "\n\nNEX response (I think / I hold / I believe / my position is):"
+        )
+        r = _req.post("http://localhost:8080/v1/chat/completions", json={
+            "model": "mistral",
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+            "max_tokens": 150,
+            "temperature": 0.7,
+            "stream": False,
+        }, timeout=15)
+        choices = r.json().get("choices", [])
+        if choices:
+            ctx.response = choices[0]["message"]["content"].strip()
+    except Exception:
+        pass
     return ctx.response
 
 def generate_reply(user_input: str) -> str:
