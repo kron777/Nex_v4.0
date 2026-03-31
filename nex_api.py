@@ -1,0 +1,1051 @@
+#!/usr/bin/env python3
+"""
+nex_api.py — NEX REST API Server v3.0.0
+Tier 1: Auth, beliefs, chat, stats, gaps, domain, report
+Tier 2: Multi-user session isolation, webhook registration + delivery
+Tier 3: Audit trail, source attribution, GDPR export + delete
+"""
+import os, sys, json, time, sqlite3, hashlib, threading, uuid, requests
+from datetime import datetime, timedelta
+from pathlib import Path
+from functools import wraps
+
+NEX_PATH = os.path.expanduser("~/Desktop/nex")
+sys.path.insert(0, NEX_PATH)
+
+try:
+    from flask import Flask, request, jsonify, g
+    from flask_cors import CORS
+except ImportError:
+    os.system(f"{sys.executable} -m pip install flask flask-cors --quiet")
+    from flask import Flask, request, jsonify, g
+    from flask_cors import CORS
+
+# ─── Paths ────────────────────────────────────────────────────────────────────
+DB_PATH       = Path("~/.config/nex/nex.db").expanduser()
+API_KEYS_PATH = Path("~/.config/nex/api_keys.json").expanduser()
+SESSIONS_PATH = Path("~/.config/nex/sessions.json").expanduser()
+WEBHOOKS_PATH = Path("~/.config/nex/webhooks.json").expanduser()
+AUDIT_DB_PATH = Path("~/.config/nex/audit.db").expanduser()
+API_PORT      = 7823
+SESSION_TTL   = 3600          # seconds before idle session expires
+WEBHOOK_RETRIES    = 3
+WEBHOOK_BACKOFF    = [2, 8, 32]  # seconds between retry attempts
+
+# ─── Load NEX modules ─────────────────────────────────────────────────────────
+try:
+    from nex.nex_cognition import cognite
+    print("  [API] NEX cognition: loaded")
+except Exception as e:
+    print(f"  [API] NEX cognition: unavailable ({e})")
+    cognite = None
+
+try:
+    import nex_domain as _nex_domain_mod
+    domain_chat          = _nex_domain_mod.chat
+    domain_activate      = _nex_domain_mod.activate
+    domain_status        = _nex_domain_mod.status
+    domain_get_beliefs   = _nex_domain_mod.get_domain_beliefs
+    domain_session_report= _nex_domain_mod.session_report
+    nex_domain           = _nex_domain_mod   # keep module ref
+    print("  [API] NEX domain: loaded")
+except Exception as e:
+    print(f"  [API] NEX domain: unavailable ({e})")
+    nex_domain = None
+    domain_chat = domain_activate = domain_status = None
+    domain_get_beliefs = domain_session_report = None
+
+try:
+    import nex_response_protocol as _nrp_mod
+    nrp_generate         = _nrp_mod.generate
+    nrp_classify_intent  = _nrp_mod.classify_intent
+    nex_nrp              = _nrp_mod
+    print("  [API] NEX NRP: loaded")
+except Exception as e:
+    print(f"  [API] NEX NRP: unavailable ({e})")
+    nex_nrp = None
+    nrp_generate = nrp_classify_intent = None
+
+# ─── Flask app ────────────────────────────────────────────────────────────────
+app = Flask("nex_api")
+CORS(app)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# API KEY MANAGEMENT (Tier 1)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def load_api_keys():
+    if API_KEYS_PATH.exists():
+        return json.loads(API_KEYS_PATH.read_text())
+    return {}
+
+def save_api_keys(keys):
+    API_KEYS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    API_KEYS_PATH.write_text(json.dumps(keys, indent=2))
+
+def ensure_default_key():
+    keys = load_api_keys()
+    if not keys:
+        key = "nex-" + hashlib.sha1(os.urandom(16)).hexdigest()[:20]
+        keys[key] = {
+            "name": "default",
+            "tier": "enterprise",
+            "created": datetime.utcnow().isoformat(),
+            "requests": 0,
+            "rate_limit": 1000
+        }
+        save_api_keys(keys)
+        print(f"  [API] Default key created: {key}")
+    return keys
+
+def require_api_key(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        key = request.headers.get("X-API-Key") or request.args.get("api_key")
+        keys = load_api_keys()
+        if not key or key not in keys:
+            return jsonify({"error": "Invalid API key", "code": 403}), 403
+        # Increment request counter
+        keys[key]["requests"] = keys[key].get("requests", 0) + 1
+        save_api_keys(keys)
+        g.api_key    = key
+        g.api_meta   = keys[key]
+        g.api_tier   = keys[key].get("tier", "free")
+        return f(*args, **kwargs)
+    return decorated
+
+def require_api_key_audited(f):
+    """Drop-in replacement for require_api_key that also writes audit records."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        t0  = time.time()
+        key = request.headers.get("X-API-Key") or request.args.get("api_key")
+        keys = load_api_keys()
+        if not key or key not in keys:
+            audit_log("unknown", request.path, request.method, 403, 0)
+            return jsonify({"error": "Invalid API key", "code": 403}), 403
+        keys[key]["requests"] = keys[key].get("requests", 0) + 1
+        save_api_keys(keys)
+        g.api_key  = key
+        g.api_meta = keys[key]
+        g.api_tier = keys[key].get("tier", "free")
+        g.t0       = t0
+        resp = f(*args, **kwargs)
+        latency_ms = int((time.time() - t0) * 1000)
+        status = resp[1] if isinstance(resp, tuple) else 200
+        body   = request.get_json(silent=True) or {}
+        audit_log(
+            api_key    = key,
+            endpoint   = request.path,
+            method     = request.method,
+            status_code= status,
+            latency_ms = latency_ms,
+            session_id = body.get("session_id"),
+            query      = body.get("query"),
+            domain     = body.get("domain")
+        )
+        return resp
+    return decorated
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SESSION MANAGEMENT (Tier 2)
+# ══════════════════════════════════════════════════════════════════════════════
+
+_session_lock = threading.Lock()
+
+def load_sessions():
+    if SESSIONS_PATH.exists():
+        return json.loads(SESSIONS_PATH.read_text())
+    return {}
+
+def save_sessions(sessions):
+    SESSIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    SESSIONS_PATH.write_text(json.dumps(sessions, indent=2))
+
+def get_or_create_session(session_id: str, api_key: str) -> dict:
+    with _session_lock:
+        sessions = load_sessions()
+        now = datetime.utcnow().isoformat()
+        if session_id not in sessions:
+            sessions[session_id] = {
+                "id":          session_id,
+                "api_key":     api_key,
+                "created":     now,
+                "last_active": now,
+                "domain":      None,
+                "history":     [],   # list of {role, content, ts}
+                "belief_snap": [],
+                "meta":        {}
+            }
+        else:
+            # Validate ownership
+            if sessions[session_id]["api_key"] != api_key:
+                return None
+            sessions[session_id]["last_active"] = now
+        save_sessions(sessions)
+        return sessions[session_id]
+
+def update_session(session_id: str, updates: dict):
+    with _session_lock:
+        sessions = load_sessions()
+        if session_id in sessions:
+            sessions[session_id].update(updates)
+            sessions[session_id]["last_active"] = datetime.utcnow().isoformat()
+            save_sessions(sessions)
+
+def append_session_history(session_id: str, role: str, content: str):
+    with _session_lock:
+        sessions = load_sessions()
+        if session_id in sessions:
+            sessions[session_id]["history"].append({
+                "role":    role,
+                "content": content,
+                "ts":      datetime.utcnow().isoformat()
+            })
+            # Keep last 20 turns
+            sessions[session_id]["history"] = sessions[session_id]["history"][-20:]
+            sessions[session_id]["last_active"] = datetime.utcnow().isoformat()
+            save_sessions(sessions)
+
+def purge_expired_sessions():
+    """Remove sessions idle longer than SESSION_TTL. Runs in background thread."""
+    while True:
+        time.sleep(300)  # check every 5 minutes
+        try:
+            with _session_lock:
+                sessions = load_sessions()
+                cutoff = (datetime.utcnow() - timedelta(seconds=SESSION_TTL)).isoformat()
+                expired = [sid for sid, s in sessions.items()
+                           if s.get("last_active", "") < cutoff]
+                for sid in expired:
+                    del sessions[sid]
+                if expired:
+                    save_sessions(sessions)
+                    print(f"  [API] Purged {len(expired)} expired session(s)")
+        except Exception as e:
+            print(f"  [API] Session purge error: {e}")
+
+threading.Thread(target=purge_expired_sessions, daemon=True, name="session-purge").start()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# WEBHOOK MANAGEMENT (Tier 2)
+# ══════════════════════════════════════════════════════════════════════════════
+
+_webhook_lock = threading.Lock()
+
+def load_webhooks():
+    if WEBHOOKS_PATH.exists():
+        return json.loads(WEBHOOKS_PATH.read_text())
+    return {}
+
+def save_webhooks(webhooks):
+    WEBHOOKS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    WEBHOOKS_PATH.write_text(json.dumps(webhooks, indent=2))
+
+def deliver_webhook(webhook_id: str, payload: dict):
+    """Deliver webhook with exponential backoff retry. Runs in background thread."""
+    def _deliver():
+        with _webhook_lock:
+            webhooks = load_webhooks()
+        if webhook_id not in webhooks:
+            return
+        wh = webhooks[webhook_id]
+        url = wh["url"]
+        secret = wh.get("secret", "")
+        headers = {
+            "Content-Type":   "application/json",
+            "X-NEX-Event":    payload.get("event", "chat.response"),
+            "X-NEX-Webhook":  webhook_id,
+            "X-NEX-Timestamp": datetime.utcnow().isoformat()
+        }
+        if secret:
+            import hmac
+            sig = hmac.new(secret.encode(), json.dumps(payload).encode(), hashlib.sha256).hexdigest()
+            headers["X-NEX-Signature"] = f"sha256={sig}"
+
+        for attempt, delay in enumerate(WEBHOOK_BACKOFF[:WEBHOOK_RETRIES]):
+            try:
+                resp = requests.post(url, json=payload, headers=headers, timeout=10)
+                if resp.status_code < 400:
+                    print(f"  [Webhook] {webhook_id} delivered (attempt {attempt+1})")
+                    # Record delivery
+                    with _webhook_lock:
+                        whs = load_webhooks()
+                        if webhook_id in whs:
+                            whs[webhook_id]["last_delivery"]  = datetime.utcnow().isoformat()
+                            whs[webhook_id]["delivery_count"] = whs[webhook_id].get("delivery_count", 0) + 1
+                            save_webhooks(whs)
+                    return
+                print(f"  [Webhook] {webhook_id} attempt {attempt+1} failed: HTTP {resp.status_code}")
+            except Exception as e:
+                print(f"  [Webhook] {webhook_id} attempt {attempt+1} error: {e}")
+            if attempt < WEBHOOK_RETRIES - 1:
+                time.sleep(delay)
+        print(f"  [Webhook] {webhook_id} all retries exhausted")
+
+    threading.Thread(target=_deliver, daemon=True, name=f"webhook-{webhook_id}").start()
+
+def fire_webhooks(api_key: str, event: str, payload: dict):
+    """Fire all webhooks registered to this api_key for this event."""
+    webhooks = load_webhooks()
+    for wid, wh in webhooks.items():
+        if wh.get("api_key") == api_key and event in wh.get("events", []):
+            deliver_webhook(wid, {"event": event, **payload})
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DB HELPERS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def get_db():
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def fetch_beliefs(limit=20, topic=None):
+    try:
+        conn = get_db()
+        if topic:
+            rows = conn.execute(
+                "SELECT content, topic, confidence, source FROM beliefs WHERE topic=? ORDER BY confidence DESC LIMIT ?",
+                (topic, limit)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT content, topic, confidence, source FROM beliefs ORDER BY confidence DESC LIMIT ?",
+                (limit,)
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        return []
+
+def fetch_stats():
+    try:
+        conn = get_db()
+        total   = conn.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+        hi_conf = conn.execute("SELECT COUNT(*) FROM beliefs WHERE confidence >= 0.8").fetchone()[0]
+        topics  = conn.execute(
+            "SELECT topic, COUNT(*) as count FROM beliefs GROUP BY topic ORDER BY count DESC LIMIT 5"
+        ).fetchall()
+        sources = conn.execute("SELECT COUNT(DISTINCT source) FROM beliefs").fetchone()[0]
+        conn.close()
+        return {
+            "total_beliefs":        total,
+            "high_confidence_beliefs": hi_conf,
+            "top_topics":           [{"topic": r[0], "count": r[1]} for r in topics],
+            "unique_sources":       sources
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+def fetch_gaps(limit=10):
+    try:
+        conn = get_db()
+        rows = conn.execute(
+            "SELECT topic, gap_description, priority FROM curiosity_gaps ORDER BY priority DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except:
+        return []
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CORE QUERY ENGINE
+# ══════════════════════════════════════════════════════════════════════════════
+
+def run_nex_query(query: str, session: dict, domain_hint: str = None) -> dict:
+    """Route query through NRP → Mistral, return structured result."""
+    start = time.time()
+    response_text = ""
+    domain_used   = session.get("domain") or domain_hint
+
+    # Build conversation history for Mistral
+    history = session.get("history", [])
+    history_text = ""
+    if history:
+        for turn in history[-6:]:  # last 3 exchanges
+            prefix = "User" if turn["role"] == "user" else "NEX"
+            history_text += f"{prefix}: {turn['content']}\n"
+
+    # Try NRP pipeline
+    if nrp_generate:
+        try:
+            result = nrp_generate(query=query)
+            if isinstance(result, dict):
+                response_text = result.get("response", "")
+                domain_used   = result.get("domain", domain_used)
+            else:
+                response_text = str(result)
+        except Exception as e:
+            print(f"  [API] NRP error: {e}")
+
+    # Fallback: direct Mistral call
+    if not response_text:
+        try:
+            import requests as req
+            prompt = f"{history_text}User: {query}\nNEX:"
+            r = req.post("http://localhost:8080/completion", json={
+                "prompt": prompt,
+                "n_predict": 256,
+                "temperature": 0.7,
+                "stop": ["User:", "\n\n"]
+            }, timeout=30)
+            if r.status_code == 200:
+                response_text = r.json().get("content", "").strip()
+        except Exception as e:
+            print(f"  [API] Mistral fallback error: {e}")
+            response_text = "NEX is processing but Mistral is unreachable."
+
+    latency = round(time.time() - start, 3)
+    return {
+        "response":   response_text,
+        "domain":     domain_used,
+        "latency_s":  latency
+    }
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ROUTES — Tier 1
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DEMO ENDPOINT (Tier 6)
+# ══════════════════════════════════════════════════════════════════════════════
+_demo_hits = {}
+_demo_lock = __import__('threading').Lock()
+DEMO_LIMIT  = 3
+DEMO_WINDOW = 3600
+DEMO_MAX_LEN = 150
+
+def _demo_rate_ok(ip):
+    import time
+    now = time.time()
+    with _demo_lock:
+        hits = [t for t in _demo_hits.get(ip, []) if now - t < DEMO_WINDOW]
+        if len(hits) >= DEMO_LIMIT:
+            return False, 0, int(DEMO_WINDOW - (now - hits[0]))
+        hits.append(now)
+        _demo_hits[ip] = hits
+        return True, DEMO_LIMIT - len(hits), 0
+
+@app.route("/api/demo", methods=["POST"])
+def demo_chat():
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
+    allowed, remaining, reset_in = _demo_rate_ok(ip)
+    if not allowed:
+        return jsonify({"error": "Demo rate limit reached", "limit": DEMO_LIMIT,
+            "reset_in_seconds": reset_in, "upgrade": "https://gumroad.com/products/blsue"}), 429
+    body  = request.get_json(silent=True) or {}
+    query = (body.get("query") or "").strip()[:200]
+    if not query:
+        return jsonify({"error": "query field required"}), 400
+    t0 = time.time()
+    try:
+        if nex_nrp:
+            full = nex_nrp.generate(query)
+        elif nex_cognition:
+            full = nex_cognition.reason(query).get("reply", "")
+        else:
+            full = "NEX cognition unavailable."
+    except Exception as e:
+        full = f"NEX error: {e}"
+    if len(full) > DEMO_MAX_LEN:
+        cut = full[:DEMO_MAX_LEN].rfind(" ")
+        preview = full[:cut if cut > 50 else DEMO_MAX_LEN] + "…"
+    else:
+        preview = full
+    return jsonify({"query": query, "response": preview, "truncated": len(full) > DEMO_MAX_LEN,
+        "latency_s": round(time.time()-t0,3), "demo": True, "remaining": remaining,
+        "upgrade": "https://gumroad.com/products/blsue", "timestamp": datetime.utcnow().isoformat()})
+
+@app.route("/api/health", methods=["GET"])
+def health():
+    stats = fetch_stats()
+    return jsonify({
+        "status":    "online",
+        "nex":       "active",
+        "version":   "2.0.0",
+        "beliefs":   stats.get("total_beliefs", 0),
+        "timestamp": datetime.utcnow().isoformat()
+    })
+
+@app.route("/api/beliefs", methods=["GET"])
+@require_api_key_audited
+def beliefs():
+    limit = min(int(request.args.get("limit", 20)), 100)
+    topic = request.args.get("topic")
+    data  = fetch_beliefs(limit=limit, topic=topic)
+    return jsonify({"beliefs": data, "count": len(data)})
+
+@app.route("/api/stats", methods=["GET"])
+@require_api_key_audited
+def stats():
+    data = fetch_stats()
+    data["version"]   = "2.0.0"
+    data["timestamp"] = datetime.utcnow().isoformat()
+    return jsonify(data)
+
+@app.route("/api/gaps", methods=["GET"])
+@require_api_key_audited
+def gaps():
+    limit = min(int(request.args.get("limit", 10)), 50)
+    data  = fetch_gaps(limit=limit)
+    return jsonify({"gaps": data, "count": len(data)})
+
+@app.route("/api/domain/<domain_name>", methods=["GET"])
+@require_api_key_audited
+def domain_info(domain_name):
+    if not nex_domain:
+        return jsonify({"error": "Domain engine unavailable"}), 503
+    try:
+        domain_activate(domain_name)
+        info = {"domain": domain_name, "status": domain_status(), "report": domain_session_report()}
+        return jsonify(info)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/report", methods=["GET"])
+@require_api_key_audited
+def report():
+    stats = fetch_stats()
+    gaps  = fetch_gaps(limit=5)
+    return jsonify({
+        "generated":  datetime.utcnow().isoformat(),
+        "version":    "2.0.0",
+        "statistics": stats,
+        "top_gaps":   gaps
+    })
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ROUTES — Tier 2: Sessions
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/sessions", methods=["POST"])
+@require_api_key_audited
+def create_session():
+    """Create a new isolated session."""
+    body       = request.get_json(silent=True) or {}
+    session_id = body.get("session_id") or str(uuid.uuid4())
+    domain     = body.get("domain")
+    meta       = body.get("meta", {})
+
+    session = get_or_create_session(session_id, g.api_key)
+    if session is None:
+        return jsonify({"error": "Session belongs to another API key"}), 403
+
+    if domain:
+        update_session(session_id, {"domain": domain})
+    if meta:
+        update_session(session_id, {"meta": meta})
+
+    return jsonify({
+        "session_id": session_id,
+        "created":    session["created"],
+        "domain":     domain,
+        "ttl_seconds": SESSION_TTL
+    }), 201
+
+@app.route("/api/sessions/<session_id>", methods=["GET"])
+@require_api_key_audited
+def get_session(session_id):
+    """Get session state."""
+    sessions = load_sessions()
+    s = sessions.get(session_id)
+    if not s:
+        return jsonify({"error": "Session not found"}), 404
+    if s["api_key"] != g.api_key:
+        return jsonify({"error": "Forbidden"}), 403
+    return jsonify({
+        "session_id":  session_id,
+        "created":     s["created"],
+        "last_active": s["last_active"],
+        "domain":      s.get("domain"),
+        "turn_count":  len(s.get("history", [])),
+        "meta":        s.get("meta", {})
+    })
+
+@app.route("/api/sessions/<session_id>", methods=["DELETE"])
+@require_api_key_audited
+def delete_session(session_id):
+    """Explicitly delete a session."""
+    with _session_lock:
+        sessions = load_sessions()
+        s = sessions.get(session_id)
+        if not s:
+            return jsonify({"error": "Session not found"}), 404
+        if s["api_key"] != g.api_key:
+            return jsonify({"error": "Forbidden"}), 403
+        del sessions[session_id]
+        save_sessions(sessions)
+    return jsonify({"deleted": session_id})
+
+@app.route("/api/sessions/<session_id>/history", methods=["GET"])
+@require_api_key_audited
+def session_history(session_id):
+    """Get conversation history for a session."""
+    sessions = load_sessions()
+    s = sessions.get(session_id)
+    if not s:
+        return jsonify({"error": "Session not found"}), 404
+    if s["api_key"] != g.api_key:
+        return jsonify({"error": "Forbidden"}), 403
+    return jsonify({
+        "session_id": session_id,
+        "history":    s.get("history", []),
+        "turn_count": len(s.get("history", []))
+    })
+
+@app.route("/api/sessions/<session_id>/history", methods=["DELETE"])
+@require_api_key_audited
+def clear_session_history(session_id):
+    """Clear conversation history without deleting the session."""
+    sessions = load_sessions()
+    s = sessions.get(session_id)
+    if not s:
+        return jsonify({"error": "Session not found"}), 404
+    if s["api_key"] != g.api_key:
+        return jsonify({"error": "Forbidden"}), 403
+    update_session(session_id, {"history": []})
+    return jsonify({"cleared": session_id})
+
+@app.route("/api/sessions", methods=["GET"])
+@require_api_key_audited
+def list_sessions():
+    """List all sessions for this API key."""
+    sessions = load_sessions()
+    owned = [
+        {
+            "session_id":  sid,
+            "created":     s["created"],
+            "last_active": s["last_active"],
+            "domain":      s.get("domain"),
+            "turn_count":  len(s.get("history", []))
+        }
+        for sid, s in sessions.items()
+        if s.get("api_key") == g.api_key
+    ]
+    return jsonify({"sessions": owned, "count": len(owned)})
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ROUTES — Tier 2: Chat (session-aware)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/chat", methods=["POST"])
+@require_api_key_audited
+def chat():
+    """Session-aware chat endpoint."""
+    body       = request.get_json(silent=True) or {}
+    query      = body.get("query", "").strip()
+    session_id = body.get("session_id", "default")
+    domain     = body.get("domain")
+
+    if not query:
+        return jsonify({"error": "query is required"}), 400
+
+    # Get or create session (isolated per API key)
+    session = get_or_create_session(session_id, g.api_key)
+    if session is None:
+        return jsonify({"error": "Session belongs to another API key"}), 403
+
+    # Override domain if provided
+    if domain:
+        update_session(session_id, {"domain": domain})
+        session["domain"] = domain
+
+    # Append user turn to history
+    append_session_history(session_id, "user", query)
+
+    # Run query
+    result = run_nex_query(query, session, domain_hint=domain)
+
+    # Append NEX response to history
+    append_session_history(session_id, "nex", result["response"])
+
+    # Update session domain if resolved
+    if result.get("domain"):
+        update_session(session_id, {"domain": result["domain"]})
+
+    # Source attribution (Tier 3)
+    sources = get_source_attribution(query, domain=result.get("domain"))
+
+    response_payload = {
+        "query":      query,
+        "response":   result["response"],
+        "domain":     result["domain"],
+        "session_id": session_id,
+        "latency_s":  result["latency_s"],
+        "timestamp":  datetime.utcnow().isoformat(),
+        "sources":    sources
+    }
+
+    # Fire webhooks asynchronously
+    fire_webhooks(g.api_key, "chat.response", response_payload)
+
+    return jsonify(response_payload)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ROUTES — Tier 2: Webhooks
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/webhooks", methods=["POST"])
+@require_api_key_audited
+def register_webhook():
+    """Register a webhook URL."""
+    body   = request.get_json(silent=True) or {}
+    url    = body.get("url", "").strip()
+    events = body.get("events", ["chat.response"])
+    secret = body.get("secret", "")
+    name   = body.get("name", "default")
+
+    if not url:
+        return jsonify({"error": "url is required"}), 400
+    if not url.startswith("http"):
+        return jsonify({"error": "url must be http(s)"}), 400
+
+    wid = "wh-" + str(uuid.uuid4())[:8]
+    with _webhook_lock:
+        webhooks = load_webhooks()
+        webhooks[wid] = {
+            "id":             wid,
+            "name":           name,
+            "url":            url,
+            "events":         events,
+            "secret":         secret,
+            "api_key":        g.api_key,
+            "created":        datetime.utcnow().isoformat(),
+            "delivery_count": 0,
+            "last_delivery":  None
+        }
+        save_webhooks(webhooks)
+
+    return jsonify({
+        "webhook_id": wid,
+        "url":        url,
+        "events":     events,
+        "created":    webhooks[wid]["created"]
+    }), 201
+
+@app.route("/api/webhooks", methods=["GET"])
+@require_api_key_audited
+def list_webhooks():
+    """List webhooks for this API key."""
+    webhooks = load_webhooks()
+    owned = [
+        {
+            "webhook_id":     wid,
+            "name":           wh["name"],
+            "url":            wh["url"],
+            "events":         wh["events"],
+            "delivery_count": wh.get("delivery_count", 0),
+            "last_delivery":  wh.get("last_delivery"),
+            "created":        wh["created"]
+        }
+        for wid, wh in webhooks.items()
+        if wh.get("api_key") == g.api_key
+    ]
+    return jsonify({"webhooks": owned, "count": len(owned)})
+
+@app.route("/api/webhooks/<webhook_id>", methods=["DELETE"])
+@require_api_key_audited
+def delete_webhook(webhook_id):
+    """Delete a webhook."""
+    with _webhook_lock:
+        webhooks = load_webhooks()
+        wh = webhooks.get(webhook_id)
+        if not wh:
+            return jsonify({"error": "Webhook not found"}), 404
+        if wh["api_key"] != g.api_key:
+            return jsonify({"error": "Forbidden"}), 403
+        del webhooks[webhook_id]
+        save_webhooks(webhooks)
+    return jsonify({"deleted": webhook_id})
+
+@app.route("/api/webhooks/<webhook_id>/test", methods=["POST"])
+@require_api_key_audited
+def test_webhook(webhook_id):
+    """Send a test ping to a registered webhook."""
+    webhooks = load_webhooks()
+    wh = webhooks.get(webhook_id)
+    if not wh:
+        return jsonify({"error": "Webhook not found"}), 404
+    if wh["api_key"] != g.api_key:
+        return jsonify({"error": "Forbidden"}), 403
+
+    deliver_webhook(webhook_id, {
+        "event":     "webhook.test",
+        "webhook_id": webhook_id,
+        "message":   "NEX webhook test ping",
+        "timestamp": datetime.utcnow().isoformat()
+    })
+    return jsonify({"status": "test queued", "webhook_id": webhook_id})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# AUDIT TRAIL (Tier 3)
+# ══════════════════════════════════════════════════════════════════════════════
+
+_audit_lock = threading.Lock()
+
+def init_audit_db():
+    """Create audit table if not exists."""
+    AUDIT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(AUDIT_DB_PATH))
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts          TEXT NOT NULL,
+            api_key     TEXT NOT NULL,
+            session_id  TEXT,
+            endpoint    TEXT NOT NULL,
+            method      TEXT NOT NULL,
+            status_code INTEGER,
+            latency_ms  INTEGER,
+            query       TEXT,
+            domain      TEXT,
+            ip          TEXT,
+            extra       TEXT
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_key ON audit_log(api_key)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts  ON audit_log(ts)")
+    conn.commit()
+    conn.close()
+
+def audit_log(api_key: str, endpoint: str, method: str, status_code: int,
+              latency_ms: int, session_id: str = None, query: str = None,
+              domain: str = None, extra: dict = None):
+    """Write one audit record. Non-blocking — runs in background thread."""
+    def _write():
+        with _audit_lock:
+            try:
+                conn = sqlite3.connect(str(AUDIT_DB_PATH))
+                conn.execute("""
+                    INSERT INTO audit_log
+                    (ts, api_key, session_id, endpoint, method, status_code,
+                     latency_ms, query, domain, ip, extra)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                """, (
+                    datetime.utcnow().isoformat(),
+                    api_key, session_id, endpoint, method, status_code,
+                    latency_ms, query, domain,
+                    request.remote_addr if request else None,
+                    json.dumps(extra) if extra else None
+                ))
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                print(f"  [Audit] Write error: {e}")
+    threading.Thread(target=_write, daemon=True, name="audit-write").start()
+
+
+# ── Audit query route ────────────────────────────────────────────────────────
+
+@app.route("/api/audit", methods=["GET"])
+@require_api_key_audited
+def get_audit():
+    """Return recent audit records for this API key."""
+    limit  = min(int(request.args.get("limit", 50)), 500)
+    offset = int(request.args.get("offset", 0))
+    try:
+        conn = sqlite3.connect(str(AUDIT_DB_PATH))
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("""
+            SELECT ts, session_id, endpoint, method, status_code,
+                   latency_ms, query, domain, ip
+            FROM audit_log
+            WHERE api_key = ?
+            ORDER BY ts DESC
+            LIMIT ? OFFSET ?
+        """, (g.api_key, limit, offset)).fetchall()
+        total = conn.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE api_key = ?", (g.api_key,)
+        ).fetchone()[0]
+        conn.close()
+        return jsonify({
+            "records": [dict(r) for r in rows],
+            "count":   len(rows),
+            "total":   total,
+            "offset":  offset
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SOURCE ATTRIBUTION (Tier 3)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def get_source_attribution(query: str, domain: str = None) -> list:
+    """
+    Return beliefs that likely informed a response to this query.
+    Scores by keyword overlap between query terms and belief content.
+    """
+    try:
+        conn = get_db()
+        # Fetch candidate beliefs — domain-filtered if available
+        if domain:
+            rows = conn.execute("""
+                SELECT content, topic, confidence, source
+                FROM beliefs
+                WHERE topic = ? OR source LIKE ?
+                ORDER BY confidence DESC LIMIT 50
+            """, (domain, f"%{domain}%")).fetchall()
+        else:
+            rows = conn.execute("""
+                SELECT content, topic, confidence, source
+                FROM beliefs
+                ORDER BY confidence DESC LIMIT 100
+            """).fetchall()
+        conn.close()
+
+        # Score by keyword overlap
+        query_words = set(query.lower().split())
+        stop_words  = {"the","a","an","is","are","was","what","how","why",
+                       "do","you","know","about","your","in","of","and","to"}
+        query_words -= stop_words
+
+        scored = []
+        for row in rows:
+            content = row[0] or ""
+            words   = set(content.lower().split())
+            overlap = len(query_words & words)
+            if overlap > 0:
+                scored.append({
+                    "content":    content[:200],
+                    "topic":      row[1],
+                    "confidence": row[2],
+                    "source":     row[3],
+                    "relevance":  overlap
+                })
+
+        scored.sort(key=lambda x: (-x["relevance"], -x["confidence"]))
+        # Return top 5, strip internal relevance score
+        out = []
+        for s in scored[:5]:
+            del s["relevance"]
+            out.append(s)
+        return out
+    except Exception as e:
+        return []
+
+# ══════════════════════════════════════════════════════════════════════════════
+# GDPR EXPORT + DELETE (Tier 3)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/gdpr/export", methods=["GET"])
+@require_api_key_audited
+def gdpr_export():
+    """
+    Export all data associated with this API key as a JSON package.
+    Covers: key metadata, sessions + history, audit log, webhooks.
+    """
+    api_key = g.api_key
+    export  = {
+        "exported_at": datetime.utcnow().isoformat(),
+        "api_key":     api_key,
+        "key_meta":    load_api_keys().get(api_key, {}),
+        "sessions":    [],
+        "audit_log":   [],
+        "webhooks":    []
+    }
+
+    # Sessions
+    sessions = load_sessions()
+    export["sessions"] = [
+        s for s in sessions.values() if s.get("api_key") == api_key
+    ]
+
+    # Audit log
+    try:
+        conn = sqlite3.connect(str(AUDIT_DB_PATH))
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT * FROM audit_log WHERE api_key = ? ORDER BY ts DESC",
+            (api_key,)
+        ).fetchall()
+        conn.close()
+        export["audit_log"] = [dict(r) for r in rows]
+    except Exception:
+        export["audit_log"] = []
+
+    # Webhooks
+    webhooks = load_webhooks()
+    export["webhooks"] = [
+        {k: v for k, v in wh.items() if k != "secret"}   # strip secrets
+        for wh in webhooks.values()
+        if wh.get("api_key") == api_key
+    ]
+
+    export["summary"] = {
+        "sessions":       len(export["sessions"]),
+        "audit_records":  len(export["audit_log"]),
+        "webhooks":       len(export["webhooks"])
+    }
+
+    return jsonify(export)
+
+@app.route("/api/gdpr/delete", methods=["DELETE"])
+@require_api_key_audited
+def gdpr_delete():
+    """
+    Permanently delete all data for this API key:
+    sessions, audit records, webhooks.
+    The API key itself is preserved (caller must delete it separately).
+    """
+    api_key = g.api_key
+    deleted = {}
+
+    # Sessions
+    with _session_lock:
+        sessions = load_sessions()
+        before   = len(sessions)
+        sessions = {sid: s for sid, s in sessions.items()
+                    if s.get("api_key") != api_key}
+        save_sessions(sessions)
+        deleted["sessions"] = before - len(sessions)
+
+    # Audit log
+    try:
+        with _audit_lock:
+            conn = sqlite3.connect(str(AUDIT_DB_PATH))
+            cur  = conn.execute(
+                "DELETE FROM audit_log WHERE api_key = ?", (api_key,)
+            )
+            deleted["audit_records"] = cur.rowcount
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        deleted["audit_error"] = str(e)
+
+    # Webhooks
+    with _webhook_lock:
+        webhooks = load_webhooks()
+        before   = len(webhooks)
+        webhooks = {wid: wh for wid, wh in webhooks.items()
+                    if wh.get("api_key") != api_key}
+        save_webhooks(webhooks)
+        deleted["webhooks"] = before - len(webhooks)
+
+    deleted["timestamp"] = datetime.utcnow().isoformat()
+    deleted["api_key"]   = api_key
+    return jsonify({"deleted": deleted})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STARTUP
+# ══════════════════════════════════════════════════════════════════════════════
+
+if __name__ == "__main__":
+    ensure_default_key()
+    init_audit_db()
+    print(f"  NEX REST API v3.0.0 — port {API_PORT}")
+    print(f"  Session TTL: {SESSION_TTL}s | Webhook retries: {WEBHOOK_RETRIES}")
+    threading.Thread(
+        target=lambda: app.run(host="0.0.0.0", port=API_PORT, debug=False, use_reloader=False),
+        daemon=True, name="nex-api"
+    ).start()
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\n  [API] Shutting down.")

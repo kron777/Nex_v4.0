@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEX API Reference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #060810;
+  --surface:  #0c1020;
+  --surface2: #0a1528;
+  --border:   #1a2440;
+  --cyan:     #00e5ff;
+  --cyan-dim: #007a99;
+  --amber:    #ffaa00;
+  --green:    #00ff88;
+  --red:      #ff4466;
+  --white:    #e8edf8;
+  --muted:    #5a6a8a;
+  --font-mono: 'Share Tech Mono', monospace;
+  --font-sans: 'Syne', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--white);
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+  display: flex;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,229,255,0.012) 2px, rgba(0,229,255,0.012) 4px);
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* ── sidebar ── */
+.sidebar {
+  width: 260px;
+  min-height: 100vh;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  overflow-y: auto;
+  padding: 2rem 0;
+  z-index: 100;
+}
+
+.sidebar-logo {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  color: var(--cyan);
+  letter-spacing: 0.2em;
+  padding: 0 1.5rem 2rem;
+  border-bottom: 1px solid var(--border);
+  display: block;
+  text-decoration: none;
+}
+
+.sidebar-section {
+  padding: 1.2rem 1.5rem 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--muted);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.sidebar a {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 0.45rem 1.5rem;
+  border-left: 2px solid transparent;
+  transition: all 0.15s;
+}
+.sidebar a:hover, .sidebar a.active {
+  color: var(--cyan);
+  border-left-color: var(--cyan);
+  background: rgba(0,229,255,0.04);
+}
+
+/* ── main ── */
+.main {
+  margin-left: 260px;
+  flex: 1;
+  max-width: 860px;
+  padding: 3rem 3rem 6rem;
+}
+
+/* ── section headers ── */
+.main h1 {
+  font-size: 2.5rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+}
+.main .lead {
+  color: var(--muted);
+  font-size: 1rem;
+  margin-bottom: 3rem;
+  line-height: 1.7;
+}
+
+.endpoint-group { margin-bottom: 4rem; }
+
+.group-title {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--cyan);
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── endpoint card ── */
+.endpoint {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+}
+
+.endpoint-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.2rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.endpoint-header:hover { background: #0f1828; }
+
+.method {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.25rem 0.6rem;
+  border-radius: 2px;
+  letter-spacing: 0.08em;
+  min-width: 52px;
+  text-align: center;
+}
+.method.get  { background: rgba(0,255,136,0.15); color: var(--green); }
+.method.post { background: rgba(0,229,255,0.15); color: var(--cyan); }
+.method.del  { background: rgba(255,68,102,0.15); color: var(--red); }
+
+.endpoint-path {
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  color: var(--white);
+  flex: 1;
+}
+
+.endpoint-desc {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.endpoint-body {
+  border-top: 1px solid var(--border);
+  padding: 1.2rem;
+  display: none;
+}
+.endpoint.open .endpoint-body { display: block; }
+
+.endpoint-body p {
+  font-size: 0.88rem;
+  color: var(--muted);
+  margin-bottom: 1rem;
+  line-height: 1.65;
+}
+
+/* ── params table ── */
+.params-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  margin-bottom: 1.2rem;
+}
+.params-table th {
+  text-align: left;
+  color: var(--muted);
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.params-table td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid rgba(26,36,64,0.5);
+  vertical-align: top;
+  line-height: 1.5;
+}
+.params-table td:first-child { color: var(--amber); white-space: nowrap; }
+.params-table td:nth-child(2) { color: var(--cyan-dim); white-space: nowrap; }
+.params-table td:nth-child(3) { color: var(--muted); }
+.req { color: var(--red) !important; }
+
+/* ── code blocks ── */
+.code-label {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--muted);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: 0.4rem;
+}
+
+pre {
+  background: #060810;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  margin-bottom: 1rem;
+  color: #8ab4c8;
+}
+
+pre .key   { color: var(--cyan-dim); }
+pre .str   { color: #88cc88; }
+pre .num   { color: var(--amber); }
+pre .bool  { color: var(--red); }
+pre .comment { color: var(--muted); }
+pre .method-hl { color: var(--cyan); }
+
+/* ── auth box ── */
+.auth-box {
+  background: rgba(0,229,255,0.04);
+  border: 1px solid var(--cyan-dim);
+  border-radius: 3px;
+  padding: 1rem 1.2rem;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 2rem;
+}
+.auth-box strong { color: var(--cyan); }
+
+/* ── badge ── */
+.badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 2px;
+  letter-spacing: 0.08em;
+}
+.badge.auth-req { background: rgba(255,170,0,0.15); color: var(--amber); }
+.badge.public   { background: rgba(0,255,136,0.12); color: var(--green); }
+.badge.rate     { background: rgba(255,68,102,0.12); color: var(--red); }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <a href="index.html" class="sidebar-logo">← NEX_v4.0</a>
+
+  <div class="sidebar-section">Overview</div>
+  <a href="#auth">Authentication</a>
+  <a href="#errors">Error Codes</a>
+  <a href="#rate-limits">Rate Limits</a>
+
+  <div class="sidebar-section">Core</div>
+  <a href="#demo">POST /api/demo</a>
+  <a href="#chat">POST /api/chat</a>
+  <a href="#health">GET /api/health</a>
+  <a href="#stats">GET /api/stats</a>
+  <a href="#beliefs">GET /api/beliefs</a>
+  <a href="#gaps">GET /api/gaps</a>
+
+  <div class="sidebar-section">Sessions</div>
+  <a href="#sessions-create">POST /api/sessions</a>
+  <a href="#sessions-list">GET /api/sessions</a>
+  <a href="#sessions-get">GET /api/sessions/:id</a>
+  <a href="#sessions-history">GET /api/sessions/:id/history</a>
+  <a href="#sessions-delete">DELETE /api/sessions/:id</a>
+
+  <div class="sidebar-section">Webhooks</div>
+  <a href="#webhooks-create">POST /api/webhooks</a>
+  <a href="#webhooks-list">GET /api/webhooks</a>
+  <a href="#webhooks-delete">DELETE /api/webhooks/:id</a>
+  <a href="#webhooks-test">POST /api/webhooks/:id/test</a>
+
+  <div class="sidebar-section">Audit & GDPR</div>
+  <a href="#audit">GET /api/audit</a>
+  <a href="#gdpr-export">GET /api/gdpr/export</a>
+  <a href="#gdpr-delete">DELETE /api/gdpr/delete</a>
+
+  <div class="sidebar-section">Domain</div>
+  <a href="#domain-status">GET /api/domain/status</a>
+  <a href="#domain-activate">POST /api/domain/activate</a>
+  <a href="#domain-report">GET /api/report</a>
+
+  <div class="sidebar-section">Scheduler</div>
+  <a href="#export-beliefs">GET /export/beliefs</a>
+  <a href="#export-synthesis">GET /export/synthesis</a>
+  <a href="#scheduler-status">GET /scheduler/status</a>
+  <a href="#scheduler-trigger">POST /scheduler/trigger</a>
+</aside>
+
+<main class="main">
+  <h1>NEX API Reference</h1>
+  <p class="lead">REST API for the NEX Dynamic Intelligence Organism. Base URL: <code style="color:var(--cyan);font-family:var(--font-mono)">http://localhost:7823</code> — Scheduler API on port <code style="color:var(--cyan);font-family:var(--font-mono)">7825</code>.</p>
+
+  <!-- AUTH -->
+  <div class="endpoint-group" id="auth">
+    <p class="group-title">// Authentication</p>
+    <div class="auth-box">
+      <strong>X-API-Key</strong> header required on all endpoints except <code>/api/demo</code> and <code>/api/health</code>.<br><br>
+      Your key is stored at <code>~/.config/nex/api_keys.json</code>. The default key is created on first startup.<br><br>
+      Pass as: <code>-H "X-API-Key: nex-xxxxxxxxxxxxxxxxxxxxxxx"</code>
+    </div>
+  </div>
+
+  <!-- ERRORS -->
+  <div class="endpoint-group" id="errors">
+    <p class="group-title">// Error Codes</p>
+    <table class="params-table">
+      <tr><th>Code</th><th>Meaning</th></tr>
+      <tr><td>400</td><td>Bad request — missing or invalid parameters</td></tr>
+      <tr><td>403</td><td>Invalid or missing API key</td></tr>
+      <tr><td>404</td><td>Session or resource not found</td></tr>
+      <tr><td>429</td><td>Rate limit exceeded (demo endpoint)</td></tr>
+      <tr><td>500</td><td>Internal server error</td></tr>
+    </table>
+  </div>
+
+  <!-- DEMO -->
+  <div class="endpoint-group" id="demo">
+    <p class="group-title">// Core Endpoints</p>
+    <div class="endpoint open">
+      <div class="endpoint-header" onclick="toggle(this)">
+        <span class="method post">POST</span>
+        <span class="endpoint-path">/api/demo</span>
+        <span class="badge public">public</span>
+        <span class="badge rate">3 req/hr</span>
+      </div>
+      <div class="endpoint-body">
+        <p>Public demo endpoint — no API key required. Rate limited to 3 requests per hour per IP. Response truncated to 150 characters. Ideal for embedding in a landing page.</p>
+        <p class="code-label">Request body</p>
+        <pre>{
+  <span class="key">"query"</span>: <span class="str">"What do you think about consciousness?"</span>   <span class="comment">// required, max 200 chars</span>
+}</pre>
+        <p class="code-label">Response 200</p>
+        <pre>{
+  <span class="key">"query"</span>:     <span class="str">"What do you think about consciousness?"</span>,
+  <span class="key">"response"</span>:  <span class="str">"The direct experience of consciousness might be a crucial aspect..."</span>,
+  <span class="key">"truncated"</span>: <span class="bool">true</span>,
+  <span class="key">"latency_s"</span>: <span class="num">4.8</span>,
+  <span class="key">"demo"</span>:      <span class="bool">true</span>,
+  <span class="key">"remaining"</span>: <span class="num">2</span>,
+  <span class="key">"upgrade"</span>:   <span class="str">"https://gumroad.com/products/blsue"</span>,
+  <span class="key">"timestamp"</span>: <span class="str">"2026-03-31T08:00:00.000000"</span>
+}</pre>
+        <p class="code-label">Response 429 — rate limited</p>
+        <pre>{
+  <span class="key">"error"</span>:              <span class="str">"Demo rate limit reached"</span>,
+  <span class="key">"limit"</span>:              <span class="num">3</span>,
+  <span class="key">"reset_in_seconds"</span>:  <span class="num">2847</span>,
+  <span class="key">"upgrade"</span>:            <span class="str">"https://gumroad.com/products/blsue"</span>
+}</pre>
+      </div>
+    </div>
+
+    <!-- CHAT -->
+    <div class="endpoint" id="chat">
+      <div class="endpoint-header" onclick="toggle(this)">
+        <span class="method post">POST</span>
+        <span class="endpoint-path">/api/chat</span>
+        <span class="badge auth-req">auth required</span>
+      </div>
+      <div class="endpoint-body">
+        <p>Full chat endpoint with optional session context, domain routing, and source attribution. Routes through NRP → belief graph → Mistral fallback.</p>
+        <p class="code-label">Request body</p>
+        <pre>{
+  <span class="key">"query"</span>:      <span class="str">"Explain corrigibility in AI safety"</span>,   <span class="comment">// required</span>
+  <span class="key">"session_id"</span>: <span class="str">"my-session-1"</span>,                        <span class="comment">// optional</span>
+  <span class="key">"domain"</span>:     <span class="str">"ai"</span>                                   <span class="comment">// optional: ai|oncology|finance|legal|cardiology|climate|neuroscience</span>
+}</pre>
+        <p class="code-label">Response 200</p>
+        <pre>{
+  <span class="key">"query"</span>:      <span class="str">"Explain corrigibility in AI safety"</span>,
+  <span class="key">"response"</span>:  <span class="str">"Corrigibility refers to..."</span>,
+  <span class="key">"domain"</span>:    <span class="str">"ai"</span>,
+  <span class="key">"session_id"</span>:<span class="str">"my-session-1"</span>,
+  <span class="key">"latency_s"</span>: <span class="num">4.9</span>,
+  <span class="key">"sources"</span>: [
+    { <span class="key">"topic"</span>: <span class="str">"ai"</span>, <span class="key">"confidence"</span>: <span class="num">0.9</span>, <span class="key">"source"</span>: <span class="str">"arxiv"</span>, <span class="key">"snippet"</span>: <span class="str">"..."</span> }
+  ],
+  <span class="key">"timestamp"</span>: <span class="str">"2026-03-31T08:00:00.000000"</span>
+}</pre>
+      </div>
+    </div>
+
+    <!-- HEALTH -->
+    <div class="endpoint" id="health">
+      <div class="endpoint-header" onclick="toggle(this)">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/api/health</span>
+        <span class="badge public">public</span>
+      </div>
+      <div class="endpoint-body">
+        <p>Health check. Returns belief count, version, and status. No auth required.</p>
+        <p class="code-label">Response 200</p>
+        <pre>{
+  <span class="key">"status"</span>:    <span class="str">"online"</span>,
+  <span class="key">"nex"</span>:       <span class="str">"active"</span>,
+  <span class="key">"version"</span>:   <span class="str">"3.0.0"</span>,
+  <span class="key">"beliefs"</span>:   <span class="num">3711</span>,
+  <span class="key">"timestamp"</span>: <span class="str">"2026-03-31T08:00:00.000000"</span>
+}</pre>
+      </div>
+    </div>
+
+    <!-- STATS -->
+    <div class="endpoint" id="stats">
+      <div class="endpoint-header" onclick="toggle(this)">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/api/stats</span>
+        <span class="badge auth-req">auth required</span>
+      </div>
+      <div class="endpoint-body">
+        <p>Returns belief corpus statistics including high-confidence count and topic distribution.</p>
+        <p class="code-label">Response 200</p>
+        <pre>{
+  <span class="key">"total_beliefs"</span>:      <span class="num">3711</span>,
+  <span class="key">"high_confidence"</span>:    <span class="num">151</span>,
+  <span class="key">"unique_sources"</span>:     <span class="num">90</span>,
+  <span class="key">"top_topics"</span>: [
+    { <span class="key">"topic"</span>: <span class="str">"philosophy"</span>, <span class="key">"count"</span>: <span class="num">327</span> },
+    { <span class="key">"topic"</span>: <span class="str">"ai"</span>,         <span class="key">"count"</span>: <span class="num">311</span> }
+  ]
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- SESSIONS -->
+  <div class="endpoint-group" id="sessions-create">
+    <p class="group-title">// Session Management</p>
+
+    <div class="endpoint">
+      <div class="endpoint-header" onclick="toggle(this)">
+        <span class="method post">POST</span>
+        <span class="endpoint-path">/api/sessions</span>
+        <span class="badge auth-req">auth required</span>
+      </div>
+      <div class="endpoint-body">
+        <p>Create a named session. Sessions persist conversation history and domain context across calls. Auto-expire after 1 hour of inactivity.</p>
+        <p class="code-label">Request body</p>
+        <pre>{
+  <span class="key">"session_id"</span>: <span class="str">"my-session"</span>,   <span class="comment">// required</span>
+  <span class="key">"domain"</span>:     <span class="str">"ai"</span>,            <span class="comment">// optional</span>
+  <span class="key">"meta"</span>:       {}               <span class="comment">// optional arbitrary metadata</span>
+}</pre>
+        <p class="code-label">Response 200</p>
+        <pre>{
+  <span class="key">"session_id"</span>:  <span class="str">"my-session"</span>,
+  <span class="key">"domain"</span>:      <span class="str">"ai"</span>,
+  <span class="key">"created"</span>:     <span class="str">"2026-03-31T08:00:00.000000"</span>,
+  <span class="key">"ttl_seconds"</span>: <span class="num">3600</span>
+}</pre>
+      </div>
+    </div>
+
+    <div class="endpoint" id="sessions-history">
+      <div class="endpoint-header" onclick="toggle(this)">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/api/sessions/:id/history</span>
+        <span class="badge auth-req">auth required</span>
+      </div>
+      <div class="endpoint-body">
+        <p>Returns the full conversation history for a session. Last 20 turns stored.</p>
+        <p class="code-label">Response 200</p>
+        <pre>{
+  <span class="key">"session_id"</span>: <span class="str">"my-session"</span>,
+  <span class="key">"turn_count"</span>: <span class="num">4</span>,
+  <span class="key">"history"</span>: [
+    { <span class="key">"role"</span>: <span class="str">"user"</span>, <span class="key">"content"</span>: <span class="str">"..."</span>, <span class="key">"ts"</span>: <span class="str">"..."</span> },
+    { <span class="key">"role"</span>: <span class="str">"nex"</span>,  <span class="key">"content"</span>: <span class="str">"..."</span>, <span class="key">"ts"</span>: <span class="str">"..."</span> }
+  ]
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- WEBHOOKS -->
+  <div class="endpoint-group" id="webhooks-create">
+    <p class="group-title">// Webhooks</p>
+    <div class="endpoint">
+      <div class="endpoint-header" onclick="toggle(this)">
+        <span class="method post">POST</span>
+        <span class="endpoint-path">/api/webhooks</span>
+        <span class="badge auth-req">auth required</span>
+      </div>
+      <div class="endpoint-body">
+        <p>Register a webhook URL to receive NEX events. Delivery is async with 3 retries and exponential backoff (2/8/32s). HMAC-SHA256 signature included when secret is set.</p>
+        <p class="code-label">Request body</p>
+        <pre>{
+  <span class="key">"url"</span>:    <span class="str">"https://your-server.com/nex-hook"</span>,  <span class="comment">// required</span>
+  <span class="key">"events"</span>: [<span class="str">"chat.response"</span>, <span class="str">"belief.added"</span>],   <span class="comment">// optional, default: all</span>
+  <span class="key">"secret"</span>: <span class="str">"your-hmac-secret"</span>                   <span class="comment">// optional</span>
+}</pre>
+        <p class="code-label">Webhook payload</p>
+        <pre>{
+  <span class="key">"event"</span>:     <span class="str">"chat.response"</span>,
+  <span class="key">"api_key"</span>:   <span class="str">"nex-xxx..."</span>,
+  <span class="key">"timestamp"</span>: <span class="str">"2026-03-31T08:00:00.000000"</span>,
+  <span class="key">"data"</span>:      { <span class="comment">/* event-specific payload */</span> }
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUDIT -->
+  <div class="endpoint-group" id="audit">
+    <p class="group-title">// Audit & GDPR</p>
+    <div class="endpoint">
+      <div class="endpoint-header" onclick="toggle(this)">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/api/audit</span>
+        <span class="badge auth-req">auth required</span>
+      </div>
+      <div class="endpoint-body">
+        <p>Returns paginated audit log for your API key. Every authenticated request is logged.</p>
+        <p class="code-label">Query parameters</p>
+        <table class="params-table">
+          <tr><th>Param</th><th>Type</th><th>Description</th></tr>
+          <tr><td>limit</td><td>int</td><td>Max records to return (default: 50, max: 500)</td></tr>
+          <tr><td>offset</td><td>int</td><td>Pagination offset (default: 0)</td></tr>
+        </table>
+        <p class="code-label">Response 200</p>
+        <pre>{
+  <span class="key">"total"</span>:   <span class="num">142</span>,
+  <span class="key">"count"</span>:   <span class="num">50</span>,
+  <span class="key">"offset"</span>:  <span class="num">0</span>,
+  <span class="key">"records"</span>: [
+    {
+      <span class="key">"ts"</span>:         <span class="str">"2026-03-31T08:00:00.000000"</span>,
+      <span class="key">"endpoint"</span>:   <span class="str">"/api/chat"</span>,
+      <span class="key">"method"</span>:     <span class="str">"POST"</span>,
+      <span class="key">"status_code"</span>:<span class="num">200</span>,
+      <span class="key">"latency_ms"</span>: <span class="num">4857</span>,
+      <span class="key">"query"</span>:      <span class="str">"Explain corrigibility..."</span>,
+      <span class="key">"session_id"</span>: <span class="str">"my-session"</span>
+    }
+  ]
+}</pre>
+      </div>
+    </div>
+
+    <div class="endpoint" id="gdpr-export">
+      <div class="endpoint-header" onclick="toggle(this)">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/api/gdpr/export</span>
+        <span class="badge auth-req">auth required</span>
+      </div>
+      <div class="endpoint-body">
+        <p>Full GDPR data export for your API key — key metadata, all sessions and conversation history, audit log, webhook registrations (secrets stripped).</p>
+      </div>
+    </div>
+
+    <div class="endpoint" id="gdpr-delete">
+      <div class="endpoint-header" onclick="toggle(this)">
+        <span class="method del">DEL</span>
+        <span class="endpoint-path">/api/gdpr/delete</span>
+        <span class="badge auth-req">auth required</span>
+      </div>
+      <div class="endpoint-body">
+        <p>Permanently deletes all data associated with your API key: sessions, audit records, webhooks. Irreversible.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCHEDULER -->
+  <div class="endpoint-group" id="export-beliefs">
+    <p class="group-title">// Scheduler API — port 7825</p>
+    <div class="endpoint">
+      <div class="endpoint-header" onclick="toggle(this)">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/export/beliefs</span>
+        <span class="badge public">no auth</span>
+      </div>
+      <div class="endpoint-body">
+        <p>Export belief store as JSON or CSV with optional filters.</p>
+        <p class="code-label">Query parameters</p>
+        <table class="params-table">
+          <tr><th>Param</th><th>Type</th><th>Description</th></tr>
+          <tr><td>format</td><td>string</td><td>json or csv (default: json)</td></tr>
+          <tr><td>topic</td><td>string</td><td>Filter by exact topic</td></tr>
+          <tr><td>source</td><td>string</td><td>Filter by source (partial match)</td></tr>
+          <tr><td>min_conf</td><td>float</td><td>Minimum confidence (default: 0.0)</td></tr>
+          <tr><td>limit</td><td>int</td><td>Max records (default: all)</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="endpoint" id="scheduler-trigger">
+      <div class="endpoint-header" onclick="toggle(this)">
+        <span class="method post">POST</span>
+        <span class="endpoint-path">/scheduler/trigger</span>
+        <span class="badge public">no auth</span>
+      </div>
+      <div class="endpoint-body">
+        <p>Manually trigger a scheduler job without waiting for the schedule window.</p>
+        <p class="code-label">Request body</p>
+        <pre>{
+  <span class="key">"job"</span>: <span class="str">"synthesis"</span>   <span class="comment">// or "saturation"</span>
+}</pre>
+      </div>
+    </div>
+
+    <div class="endpoint" id="scheduler-status">
+      <div class="endpoint-header" onclick="toggle(this)">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/scheduler/status</span>
+        <span class="badge public">no auth</span>
+      </div>
+      <div class="endpoint-body">
+        <p>Returns domain belief counts, last run times, synthesis count, and scheduler config.</p>
+        <p class="code-label">Response 200</p>
+        <pre>{
+  <span class="key">"total_beliefs"</span>: <span class="num">3711</span>,
+  <span class="key">"jobs_run"</span>:      <span class="num">3</span>,
+  <span class="key">"status"</span>:        <span class="str">"idle"</span>,
+  <span class="key">"saturation"</span>: {
+    <span class="key">"domain_counts"</span>: { <span class="key">"ai"</span>: <span class="num">380</span>, <span class="key">"finance"</span>: <span class="num">0</span> },
+    <span class="key">"target"</span>: <span class="num">200</span>,
+    <span class="key">"window"</span>: <span class="str">"2:00–6:00"</span>
+  },
+  <span class="key">"synthesis"</span>: {
+    <span class="key">"total_synthesized"</span>: <span class="num">5</span>,
+    <span class="key">"interval_hours"</span>:   <span class="num">4</span>,
+    <span class="key">"last_run"</span>:         <span class="str">"2026-03-31T06:16:08.290756"</span>
+  }
+}</pre>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+function toggle(header) {
+  header.parentElement.classList.toggle('open');
+}
+</script>
+</body>
+</html>

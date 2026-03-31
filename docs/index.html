@@ -4,1098 +4,327 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NEX — Dynamic Intelligence Organism</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
-
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg: #020c14;
-  --bg1: #041020;
-  --bg2: #071828;
-  --panel: rgba(4,20,38,0.85);
-  --border: rgba(0,200,255,0.12);
-  --border-bright: rgba(0,200,255,0.4);
-  --cyan: #00c8ff;
-  --purple: #a855f7;
-  --red: #ff3b5c;
-  --green: #00ff9d;
-  --amber: #ffaa00;
-  --text: #c8dce8;
-  --text-dim: #3a5a6a;
-  --text-mid: #7a9aaa;
-  --text-bright: #e8f4ff;
-}
-
-* { margin:0; padding:0; box-sizing:border-box; }
-html { scroll-behavior: smooth; }
-
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Share Tech Mono', monospace;
-  overflow-x: hidden;
-}
-
-/* ── CIRCUIT BACKGROUND ── */
-#circuit-canvas {
-  position: fixed;
-  top:0; left:0;
-  width:100%; height:100%;
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.18;
-}
-
-/* ── SCANLINE ── */
-.scanline {
-  position: fixed; left:0; width:100%; height:3px;
-  pointer-events:none; z-index:500;
-  background: linear-gradient(180deg,transparent 0%,rgba(0,200,255,0.08) 20%,rgba(0,200,255,0.18) 50%,rgba(0,200,255,0.08) 80%,transparent 100%);
-  animation: scanDown 8s linear infinite;
-}
-.scanline::before { content:''; position:absolute; left:0; top:-1px; width:100%; height:1px; background:rgba(0,200,255,0.35); }
-@keyframes scanDown { 0%{top:-4px;opacity:0} 3%{opacity:1} 97%{opacity:1} 100%{top:100vh;opacity:0} }
-
-/* Scanlines overlay */
-body::before {
-  content:''; position:fixed; top:0; left:0; width:100%; height:100%;
-  background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.02) 2px,rgba(0,0,0,0.02) 4px);
-  pointer-events:none; z-index:1;
-}
-
-/* ── CORNERS ── */
-.corner { position:fixed; width:40px; height:40px; z-index:50; }
-.corner::before,.corner::after { content:''; position:absolute; background:var(--cyan); opacity:0.6; }
-.corner::before { width:2px; height:100%; }
-.corner::after { width:100%; height:2px; }
-.corner.tl{top:16px;left:16px} .corner.tr{top:16px;right:16px;transform:scaleX(-1)}
-.corner.bl{bottom:16px;left:16px;transform:scaleY(-1)} .corner.br{bottom:16px;right:16px;transform:scale(-1)}
-
-/* ── NAV ── */
-nav {
-  position: fixed; top:0; left:0; right:0; height:52px;
-  background: rgba(2,12,20,0.95);
-  border-bottom: 1px solid var(--border);
-  display: flex; align-items:center;
-  padding: 0 40px;
-  z-index: 100;
-  backdrop-filter: blur(10px);
-}
-.nav-logo {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 18px; font-weight:900;
-  background: linear-gradient(135deg, var(--cyan), var(--purple));
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
-  margin-right: 40px;
-}
-.nav-links { display:flex; gap:28px; }
-.nav-links a {
-  font-size:10px; letter-spacing:0.2em; color:var(--text-dim);
-  text-decoration:none; text-transform:uppercase;
-  transition: color 0.2s;
-}
-.nav-links a:hover { color:var(--cyan); }
-.nav-right { margin-left:auto; }
-.nav-cta {
-  font-family:'Share Tech Mono',monospace;
-  font-size:10px; letter-spacing:0.2em;
-  color:var(--cyan); text-decoration:none;
-  border:1px solid var(--border-bright);
-  padding:6px 18px;
-  transition: all 0.2s;
-}
-.nav-cta:hover { background:rgba(0,200,255,0.08); box-shadow:0 0 20px rgba(0,200,255,0.1); }
-
-/* ── HERO ── */
-.hero {
-  position:relative; z-index:10;
-  min-height:100vh;
-  display:flex; flex-direction:column;
-  align-items:center; justify-content:center;
-  text-align:center;
-  padding: 80px 20px 60px;
-}
-
-.hero-eyebrow {
-  font-size:10px; letter-spacing:0.4em; color:var(--text-dim);
-  margin-bottom:24px;
-  display:flex; align-items:center; gap:16px;
-}
-.hero-eyebrow::before,.hero-eyebrow::after {
-  content:''; width:40px; height:1px;
-  background:linear-gradient(90deg,transparent,var(--border-bright));
-}
-.hero-eyebrow::after { transform:scaleX(-1); }
-
-.hero-title {
-  font-family:'Orbitron',sans-serif;
-  font-size: clamp(80px,15vw,140px);
-  font-weight:900; letter-spacing:0.1em; line-height:1;
-  background: linear-gradient(135deg, #00c8ff 0%, #a855f7 60%, #00c8ff 100%);
-  background-size: 200%;
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
-  animation: shimmer 6s linear infinite, titleGlow 4s ease-in-out infinite;
-  margin-bottom:16px;
-}
-@keyframes shimmer { 0%{background-position:0%} 100%{background-position:200%} }
-@keyframes titleGlow {
-  0%,100%{filter:drop-shadow(0 0 20px rgba(0,200,255,0.2))}
-  50%{filter:drop-shadow(0 0 50px rgba(168,85,247,0.35))}
-}
-
-.hero-sub {
-  font-family:'Rajdhani',sans-serif;
-  font-size:13px; letter-spacing:0.5em; color:var(--text-dim);
-  text-transform:uppercase; margin-bottom:32px;
-}
-
-.hero-tagline {
-  font-family:'Rajdhani',sans-serif;
-  font-size:clamp(18px,3vw,26px); font-weight:300;
-  color:var(--text-mid); line-height:1.6;
-  max-width:600px; margin-bottom:48px;
-}
-.hero-tagline strong { color:var(--text-bright); font-weight:500; }
-
-.hero-dots {
-  display:flex; gap:24px; justify-content:center;
-  margin-bottom:56px; font-size:10px; letter-spacing:0.2em;
-}
-.hero-dots span { display:flex; align-items:center; gap:8px; color:var(--text-dim); }
-.hdot { width:6px; height:6px; border-radius:50%; animation:pulse 2s ease-in-out infinite; }
-.hdot.c{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
-.hdot.p{background:var(--purple);box-shadow:0 0 8px var(--purple);animation-delay:0.5s}
-.hdot.g{background:var(--green);box-shadow:0 0 8px var(--green);animation-delay:1s}
-.hdot.a{background:var(--amber);box-shadow:0 0 8px var(--amber);animation-delay:1.5s}
-@keyframes pulse{0%,100%{opacity:0.4}50%{opacity:1}}
-
-.hero-btns { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; }
-.btn-primary {
-  font-family:'Share Tech Mono',monospace;
-  font-size:11px; letter-spacing:0.25em;
-  color:var(--bg); background:var(--cyan);
-  border:none; padding:14px 36px;
-  cursor:pointer; text-decoration:none;
-  transition: all 0.2s;
-  text-transform:uppercase;
-  position:relative; overflow:hidden;
-}
-.btn-primary::before {
-  content:''; position:absolute; top:0; left:-100%; width:100%; height:100%;
-  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.2),transparent);
-  transition: left 0.4s;
-}
-.btn-primary:hover { box-shadow:0 0 30px rgba(0,200,255,0.4); }
-.btn-primary:hover::before { left:100%; }
-
-.btn-secondary {
-  font-family:'Share Tech Mono',monospace;
-  font-size:11px; letter-spacing:0.25em;
-  color:var(--cyan); background:transparent;
-  border:1px solid var(--border-bright);
-  padding:14px 36px; cursor:pointer; text-decoration:none;
-  transition: all 0.2s; text-transform:uppercase;
-}
-.btn-secondary:hover { background:rgba(0,200,255,0.06); box-shadow:0 0 20px rgba(0,200,255,0.1); }
-
-/* scroll indicator */
-.scroll-hint {
-  position:absolute; bottom:32px; left:50%; transform:translateX(-50%);
-  font-size:9px; letter-spacing:0.3em; color:var(--text-dim);
-  display:flex; flex-direction:column; align-items:center; gap:8px;
-}
-.scroll-arrow {
-  width:1px; height:30px;
-  background:linear-gradient(180deg,var(--cyan),transparent);
-  animation:scrollPulse 2s ease-in-out infinite;
-}
-@keyframes scrollPulse{0%,100%{opacity:0.3;transform:scaleY(0.8)}50%{opacity:1;transform:scaleY(1)}}
-
-/* ── SECTIONS ── */
-section {
-  position:relative; z-index:10;
-  padding: 100px 40px;
-  max-width:1100px; margin:0 auto;
-}
-
-.section-label {
-  font-size:10px; letter-spacing:0.35em; color:var(--cyan);
-  margin-bottom:16px; display:flex; align-items:center; gap:12px;
-}
-.section-label::after { content:''; flex:1; height:1px; background:var(--border); max-width:80px; }
-
-.section-title {
-  font-family:'Orbitron',sans-serif;
-  font-size:clamp(24px,4vw,36px); font-weight:700;
-  color:var(--text-bright); margin-bottom:16px; letter-spacing:0.05em;
-}
-
-.section-desc {
-  font-family:'Rajdhani',sans-serif;
-  font-size:17px; color:var(--text-mid); line-height:1.7;
-  max-width:600px; margin-bottom:60px;
-}
-
-/* ── FEATURE GRID ── */
-.features-grid {
-  display:grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px,1fr));
-  gap:1px;
-  background:var(--border);
-  border:1px solid var(--border);
-}
-
-.feature-card {
-  background:var(--panel);
-  padding:32px 28px;
-  position:relative;
-  overflow:hidden;
-  transition: background 0.3s;
-}
-.feature-card:hover { background:rgba(0,200,255,0.03); }
-.feature-card::before {
-  content:''; position:absolute;
-  top:0; left:0; right:0; height:1px;
-  background:linear-gradient(90deg,transparent,var(--cyan),transparent);
-  opacity:0; transition:opacity 0.3s;
-}
-.feature-card:hover::before { opacity:0.5; }
-
-.feature-icon {
-  font-size:9px; letter-spacing:0.3em; color:var(--cyan);
-  margin-bottom:16px; display:flex; align-items:center; gap:10px;
-}
-.feature-icon::before {
-  content:''; width:20px; height:1px; background:var(--cyan); opacity:0.5;
-}
-
-.feature-title {
-  font-family:'Orbitron',sans-serif;
-  font-size:14px; font-weight:700; letter-spacing:0.08em;
-  color:var(--text-bright); margin-bottom:12px;
-}
-
-.feature-desc {
-  font-family:'Rajdhani',sans-serif;
-  font-size:15px; color:var(--text-mid); line-height:1.6;
-}
-
-/* ── STATS ── */
-.stats-row {
-  display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
-  gap:1px; background:var(--border);
-  border:1px solid var(--border);
-  margin:80px 0;
-}
-.stat-cell {
-  background:var(--panel); padding:28px 24px; text-align:center;
-}
-.stat-num {
-  font-family:'Orbitron',sans-serif; font-size:32px; font-weight:900;
-  background:linear-gradient(135deg,var(--cyan),var(--purple));
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
-  margin-bottom:6px;
-}
-.stat-label { font-size:9px; letter-spacing:0.25em; color:var(--text-dim); }
-
-/* ── TERMINAL DEMO ── */
-.terminal {
-  background:rgba(0,0,0,0.6);
-  border:1px solid var(--border-bright);
-  position:relative;
-  margin:60px 0;
-}
-.terminal::before {
-  content:''; position:absolute; top:0; left:0; right:0; height:1px;
-  background:linear-gradient(90deg,transparent,var(--cyan),transparent);
-}
-.terminal-bar {
-  display:flex; align-items:center; gap:8px;
-  padding:12px 16px;
-  border-bottom:1px solid var(--border);
-  background:rgba(0,0,0,0.3);
-}
-.t-dot { width:8px; height:8px; border-radius:50%; }
-.t-dot.r{background:#ff5f57} .t-dot.y{background:#ffbd2e} .t-dot.g{background:#28ca41}
-.terminal-title { margin-left:8px; font-size:10px; color:var(--text-dim); letter-spacing:0.15em; }
-.terminal-body { padding:24px 20px; font-size:12px; line-height:2.2; }
-.t-line { display:flex; gap:12px; }
-.t-prompt { color:var(--purple); }
-.t-cmd { color:var(--cyan); }
-.t-out { color:var(--text-mid); padding-left:24px; }
-.t-out.green { color:var(--green); }
-.t-out.amber { color:var(--amber); }
-.cursor {
-  display:inline-block; width:8px; height:14px;
-  background:var(--cyan); vertical-align:middle;
-  animation:blink 1s step-end infinite;
-}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
-
-/* ── PRICING ── */
-.pricing-grid {
-  display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
-  gap:16px; margin-top:40px;
-}
-.price-card {
-  background:var(--panel);
-  border:1px solid var(--border);
-  padding:36px 28px;
-  position:relative;
-  transition: border-color 0.3s;
-}
-.price-card.featured {
-  border-color:var(--border-bright);
-}
-.price-card.featured::before {
-  content:'MOST POPULAR';
-  position:absolute; top:-10px; left:50%; transform:translateX(-50%);
-  background:var(--cyan); color:var(--bg);
-  font-size:8px; letter-spacing:0.25em; padding:3px 12px;
-}
-.price-tier { font-size:10px; letter-spacing:0.3em; color:var(--text-dim); margin-bottom:12px; }
-.price-amount {
-  font-family:'Orbitron',sans-serif; font-size:40px; font-weight:900;
-  color:var(--text-bright); margin-bottom:4px;
-}
-.price-amount span { font-size:16px; color:var(--text-dim); }
-.price-note { font-size:10px; color:var(--text-dim); margin-bottom:24px; }
-.price-features { list-style:none; margin-bottom:28px; }
-.price-features li {
-  font-family:'Rajdhani',sans-serif; font-size:14px;
-  color:var(--text-mid); padding:6px 0;
-  border-bottom:1px solid var(--border);
-  display:flex; gap:10px; align-items:center;
-}
-.price-features li::before { content:'//'; color:var(--cyan); font-size:10px; }
-
-/* ── FOOTER ── */
-footer {
-  position:relative; z-index:10;
-  border-top:1px solid var(--border);
-  padding:32px 40px;
-  display:flex; justify-content:space-between; align-items:center;
-  flex-wrap:wrap; gap:16px;
-}
-.footer-logo {
-  font-family:'Orbitron',sans-serif; font-size:16px; font-weight:900;
-  background:linear-gradient(135deg,var(--cyan),var(--purple));
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
-}
-.footer-links { display:flex; gap:24px; }
-.footer-links a { font-size:10px; letter-spacing:0.15em; color:var(--text-dim); text-decoration:none; }
-.footer-links a:hover { color:var(--cyan); }
-.footer-copy { font-size:9px; letter-spacing:0.15em; color:var(--text-dim); }
-
-/* ── STATUS BAR ── */
-.statusbar {
-  position:fixed; bottom:0; left:0; right:0; height:28px;
-  background:rgba(2,12,20,0.97); border-top:1px solid var(--border);
-  display:flex; align-items:center; padding:0 20px; gap:28px; z-index:200;
-  font-size:9px; letter-spacing:0.15em;
-}
-.s-dot { display:flex; align-items:center; gap:7px; color:var(--text-dim); }
-.sdot { width:5px; height:5px; border-radius:50%; animation:pulse 2s ease-in-out infinite; }
-.sdot.g{background:var(--green);box-shadow:0 0 5px var(--green)}
-.sdot.c{background:var(--cyan);box-shadow:0 0 5px var(--cyan);animation-delay:0.7s}
-.sdot.p{background:var(--purple);box-shadow:0 0 5px var(--purple);animation-delay:1.4s}
-.s-right { margin-left:auto; color:var(--text-dim); }
-
-/* ── GLITCH EFFECTS ── */
-@keyframes glitch1 {
-  0%,100% { clip-path: inset(0 0 98% 0); transform: translate(-2px,0); }
-  20% { clip-path: inset(30% 0 50% 0); transform: translate(2px,0); }
-  40% { clip-path: inset(60% 0 20% 0); transform: translate(-1px,0); }
-  60% { clip-path: inset(80% 0 5% 0); transform: translate(3px,0); }
-  80% { clip-path: inset(10% 0 70% 0); transform: translate(-3px,0); }
-}
-@keyframes glitch2 {
-  0%,100% { clip-path: inset(0 0 98% 0); transform: translate(2px,0); opacity:0; }
-  20% { clip-path: inset(50% 0 30% 0); transform: translate(-2px,0); opacity:0.8; }
-  40% { clip-path: inset(20% 0 60% 0); transform: translate(1px,0); opacity:0.6; }
-  60% { clip-path: inset(5% 0 80% 0); transform: translate(-3px,0); opacity:0.9; }
-  80% { clip-path: inset(70% 0 10% 0); transform: translate(3px,0); opacity:0.7; }
-}
-@keyframes glitchSkew {
-  0%,89%,100% { transform: skewX(0deg); }
-  90% { transform: skewX(-1.5deg); }
-  92% { transform: skewX(1deg); }
-  94% { transform: skewX(-0.5deg); }
-  96% { transform: skewX(0.8deg); }
-}
-@keyframes scanJump {
-  0%,95%,100% { opacity:1; transform:translateY(0); }
-  96% { opacity:0.8; transform:translateY(2px); }
-  97% { opacity:0.9; transform:translateY(-1px); }
-  98% { opacity:0.7; transform:translateY(3px); }
-}
-@keyframes rgbSplit {
-  0%,94%,100% { text-shadow: none; }
-  95% { text-shadow: -2px 0 rgba(255,0,0,0.5), 2px 0 rgba(0,255,255,0.5); }
-  96% { text-shadow: 2px 0 rgba(255,0,0,0.5), -2px 0 rgba(0,255,255,0.5); }
-  97% { text-shadow: -3px 0 rgba(255,0,0,0.3), 3px 0 rgba(0,255,255,0.3); }
-  98% { text-shadow: none; }
-}
-@keyframes flicker {
-  0%,90%,100% { opacity:1; }
-  91% { opacity:0.85; }
-  92% { opacity:1; }
-  93% { opacity:0.7; }
-  94% { opacity:1; }
-  95% { opacity:0.9; }
-}
-@keyframes hline {
-  0%,97%,100% { opacity:0; top:-10px; }
-  98% { opacity:0.6; top:15%; }
-  99% { opacity:0.3; top:40%; }
-}
-
-.hero-title {
-  animation: shimmer 6s linear infinite, titleGlow 4s ease-in-out infinite, glitchSkew 8s ease-in-out infinite, rgbSplit 7s ease-in-out infinite !important;
-}
-
-.glitch-wrap {
-  position: relative;
-}
-.glitch-wrap::before,
-.glitch-wrap::after {
-  content: attr(data-text);
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  font-family: 'Orbitron', sans-serif;
-  font-size: inherit;
-  font-weight: 900;
-  letter-spacing: inherit;
-  line-height: inherit;
-  pointer-events: none;
-}
-.glitch-wrap::before {
-  color: rgba(0,200,255,0.6);
-  animation: glitch1 6s infinite linear;
-}
-.glitch-wrap::after {
-  color: rgba(168,85,247,0.6);
-  animation: glitch2 6s infinite linear;
-  animation-delay: 0.3s;
-}
-
-/* Horizontal noise line */
-.h-noise {
-  position: fixed;
-  left: 0; width: 100%; height: 2px;
-  background: rgba(0,200,255,0.4);
-  pointer-events: none;
-  z-index: 999;
-  animation: hline 9s infinite ease-in-out;
-  filter: blur(0.5px);
-}
-
-/* Body flicker */
-body {
-  animation: flicker 11s infinite ease-in-out !important;
-}
-
-/* Nav glitch skew */
-nav {
-  animation: glitchSkew 13s ease-in-out infinite;
-}
-
-
-/* ── FLOATING PARTICLES (gate.html style) ── */
-.particles { position:fixed; inset:0; z-index:0; pointer-events:none; }
-.particle {
-  position:absolute;
-  border-radius:50%;
-  animation: floatUp linear infinite;
-  opacity:0;
-}
-@keyframes floatUp {
-  0%   { opacity:0; transform:translateY(0) translateX(0) scale(1); }
-  10%  { opacity:1; }
-  90%  { opacity:0.3; }
-  100% { opacity:0; transform:translateY(-120px) translateX(var(--dx,15px)) scale(0.5); }
-}
-
-/* ── NEBULA GLOW ── */
-.nebula {
-  position: fixed;
-  border-radius: 50%;
-  filter: blur(80px);
-  pointer-events: none;
-  z-index: 0;
-  animation: nebulaPulse ease-in-out infinite;
-}
-.nebula-1 {
-  width: 600px; height: 400px;
-  top: -100px; left: -150px;
-  background: radial-gradient(ellipse, rgba(0,200,255,0.06) 0%, transparent 70%);
-  animation-duration: 12s;
-}
-.nebula-2 {
-  width: 500px; height: 500px;
-  top: 20%; right: -100px;
-  background: radial-gradient(ellipse, rgba(168,85,247,0.07) 0%, transparent 70%);
-  animation-duration: 15s;
-  animation-delay: 3s;
-}
-.nebula-3 {
-  width: 700px; height: 300px;
-  bottom: 10%; left: 10%;
-  background: radial-gradient(ellipse, rgba(0,255,157,0.04) 0%, transparent 70%);
-  animation-duration: 18s;
-  animation-delay: 6s;
-}
-@keyframes nebulaPulse {
-  0%,100% { opacity:0.6; transform:scale(1); }
-  50% { opacity:1; transform:scale(1.08); }
-}
+  --cyan:#00f5ff; --cyan2:#0088aa; --purple:#a855f7; --green:#00ff88;
+  --yellow:#ffcc00; --red:#ff3355; --bg:#020510; --bg2:#040a1a;
+  --text:#c8e6f0; --muted:#3a7090; --border:rgba(0,245,255,0.15);
+  --hud:'Orbitron',monospace; --mono:'Share Tech Mono',monospace;
+}
+html,body{width:100%;background:var(--bg);color:var(--text);font-family:var(--mono);overflow-x:hidden;}
+canvas#stars{position:fixed;inset:0;z-index:0;pointer-events:none;}
+.grid-overlay{position:fixed;inset:0;z-index:1;pointer-events:none;
+  background-image:linear-gradient(rgba(0,245,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,245,255,0.025) 1px,transparent 1px);
+  background-size:60px 60px;}
+.scanline{position:fixed;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);
+  opacity:0.1;z-index:2;animation:scan 8s linear infinite;pointer-events:none;}
+@keyframes scan{0%{top:-2px}100%{top:100vh}}
+.bracket{position:fixed;z-index:10;width:50px;height:50px;pointer-events:none;}
+.bracket::before,.bracket::after{content:'';position:absolute;background:var(--cyan);opacity:0.5;}
+.bracket.tl{top:20px;left:20px;} .bracket.tr{top:20px;right:20px;transform:scaleX(-1);}
+.bracket.bl{bottom:60px;left:20px;transform:scaleY(-1);} .bracket.br{bottom:60px;right:20px;transform:scale(-1);}
+.bracket::before{top:0;left:0;width:2px;height:32px;} .bracket::after{top:0;left:0;width:32px;height:2px;}
+nav{position:fixed;top:0;left:0;right:0;z-index:900;display:flex;align-items:center;
+  justify-content:space-between;padding:0 28px;height:44px;
+  background:rgba(2,5,16,0.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);}
+.nav-logo{font-family:var(--hud);font-size:14px;font-weight:900;color:var(--cyan);
+  letter-spacing:8px;text-decoration:none;text-shadow:0 0 20px var(--cyan);}
+.nav-links{display:flex;gap:2rem;align-items:center;}
+.nav-links a{font-family:var(--hud);font-size:9px;letter-spacing:3px;color:var(--muted);
+  text-decoration:none;text-transform:uppercase;transition:color 0.2s;}
+.nav-links a:hover{color:var(--cyan);}
+.nav-cta{background:linear-gradient(135deg,rgba(0,245,255,0.15),rgba(168,85,247,0.15));
+  border:1px solid rgba(0,245,255,0.4);color:var(--cyan)!important;
+  padding:6px 16px;text-decoration:none;transition:all 0.2s;}
+.nav-cta:hover{box-shadow:0 0 16px rgba(0,245,255,0.2);}
+.page{position:relative;z-index:5;}
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;text-align:center;padding:6rem 2rem 4rem;}
+.hero-tag{font-family:var(--hud);font-size:9px;letter-spacing:5px;color:var(--cyan);
+  opacity:0.6;text-transform:uppercase;margin-bottom:1.5rem;animation:fadeDown 0.8s 0.1s ease both;}
+.logo-wrap{position:relative;display:inline-block;}
+.hero-logo{font-family:var(--hud);font-weight:900;font-size:clamp(80px,16vw,160px);
+  letter-spacing:0.15em;line-height:1;
+  background:linear-gradient(135deg,var(--cyan) 0%,#7dd3fc 40%,var(--purple) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  filter:drop-shadow(0 0 40px rgba(0,245,255,0.5)) drop-shadow(0 0 80px rgba(168,85,247,0.3));
+  animation:fadeDown 0.8s 0.2s ease both;}
+.hero-logo-glow{position:absolute;inset:0;font-family:var(--hud);font-weight:900;
+  font-size:clamp(80px,16vw,160px);letter-spacing:0.15em;line-height:1;
+  color:var(--cyan);opacity:0.06;filter:blur(24px);pointer-events:none;
+  animation:gp 3s ease-in-out infinite;}
+@keyframes gp{0%,100%{opacity:0.06}50%{opacity:0.15}}
+.hero-sub{font-family:var(--hud);font-size:clamp(10px,1.5vw,13px);letter-spacing:6px;
+  color:var(--cyan);opacity:0.6;margin-top:0.5rem;animation:fadeDown 0.8s 0.3s ease both;}
+.hero-dots{display:flex;gap:24px;align-items:center;margin:2rem 0;animation:fadeDown 0.8s 0.4s ease both;}
+.dot-item{display:flex;align-items:center;gap:7px;font-size:10px;letter-spacing:3px;
+  color:rgba(200,230,240,0.4);text-transform:uppercase;}
+.dot-item::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--cyan);
+  box-shadow:0 0 8px var(--cyan);animation:blink 2s ease-in-out infinite;}
+.dot-item:nth-child(2)::before{animation-delay:0.5s;background:var(--purple);box-shadow:0 0 8px var(--purple);}
+.dot-item:nth-child(3)::before{animation-delay:1s;}
+.dot-item:nth-child(4)::before{animation-delay:1.5s;background:var(--purple);box-shadow:0 0 8px var(--purple);}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+.hero-tagline{font-size:12px;letter-spacing:4px;color:rgba(200,230,240,0.4);
+  margin-bottom:2.5rem;animation:fadeDown 0.8s 0.5s ease both;}
+.hero-actions{display:flex;gap:12px;justify-content:center;animation:fadeDown 0.8s 0.6s ease both;}
+.btn-primary{font-family:var(--hud);font-size:10px;letter-spacing:3px;
+  background:linear-gradient(135deg,rgba(0,245,255,0.2),rgba(168,85,247,0.2));
+  border:1px solid rgba(0,245,255,0.5);color:var(--cyan);
+  padding:12px 28px;text-decoration:none;transition:all 0.2s;}
+.btn-primary:hover{box-shadow:0 0 24px rgba(0,245,255,0.25);}
+.btn-ghost{font-family:var(--hud);font-size:10px;letter-spacing:3px;
+  border:1px solid rgba(0,245,255,0.15);color:var(--muted);
+  padding:12px 28px;text-decoration:none;transition:all 0.2s;}
+.btn-ghost:hover{border-color:rgba(0,245,255,0.3);color:var(--cyan);}
+.stats-bar{background:rgba(4,10,26,0.9);border-top:1px solid var(--border);
+  border-bottom:1px solid var(--border);display:flex;justify-content:center;
+  gap:5rem;padding:1.8rem 2rem;}
+.stat-num{font-family:var(--hud);font-size:1.8rem;font-weight:700;color:var(--cyan);
+  display:block;text-shadow:0 0 20px rgba(0,245,255,0.5);letter-spacing:4px;}
+.stat-label{font-family:var(--hud);font-size:8px;letter-spacing:3px;color:var(--muted);
+  text-transform:uppercase;margin-top:4px;display:block;}
+.divider{height:1px;background:linear-gradient(90deg,transparent,rgba(0,245,255,0.25),rgba(168,85,247,0.2),transparent);}
+section{padding:5rem 2rem;max-width:1100px;margin:0 auto;}
+.section-head{font-family:var(--hud);font-size:8px;letter-spacing:5px;color:var(--cyan);
+  opacity:0.7;margin-bottom:0.8rem;text-transform:uppercase;}
+section h2{font-family:var(--hud);font-size:clamp(16px,3vw,22px);font-weight:700;
+  letter-spacing:5px;color:var(--text);margin-bottom:0.4rem;}
+.features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+  gap:1px;background:var(--border);border:1px solid var(--border);margin-top:2.5rem;}
+.feature{background:var(--bg2);padding:1.8rem;position:relative;overflow:hidden;transition:background 0.2s;}
+.feature:hover{background:#061428;}
+.feature::before{content:'';position:absolute;top:0;left:0;width:2px;height:0;
+  background:var(--cyan);transition:height 0.3s;}
+.feature:hover::before{height:100%;}
+.feature-num{font-family:var(--hud);font-size:7px;color:var(--muted);letter-spacing:3px;margin-bottom:0.8rem;}
+.feature h3{font-family:var(--hud);font-size:10px;letter-spacing:3px;color:var(--cyan);margin-bottom:0.8rem;}
+.feature p{font-size:11px;color:var(--muted);line-height:1.8;}
+.demo-wrap{max-width:800px;margin:0 auto;padding:5rem 2rem;}
+.pn{background:rgba(2,5,16,0.9);border:1px solid var(--border);position:relative;overflow:hidden;}
+.pn::after{content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,245,255,0.4),transparent);}
+.pn-corner-tr,.pn-corner-bl{position:absolute;width:14px;height:14px;border-color:var(--cyan);border-style:solid;opacity:0.5;}
+.pn-corner-tr{top:0;right:0;border-width:1px 1px 0 0;} .pn-corner-bl{bottom:0;left:0;border-width:0 0 1px 1px;}
+.term-bar{background:rgba(0,0,0,0.5);padding:8px 14px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:8px;font-family:var(--hud);font-size:8px;color:var(--muted);letter-spacing:2px;}
+.tdot{width:10px;height:10px;border-radius:50%;} .tdot.r{background:#ff5f57;} .tdot.y{background:#febc2e;} .tdot.g{background:#28c840;}
+.demo-inner{padding:1.2rem;}
+.demo-hist{min-height:160px;max-height:240px;overflow-y:auto;font-size:11px;line-height:1.8;margin-bottom:1rem;}
+.demo-hist::-webkit-scrollbar{width:2px;} .demo-hist::-webkit-scrollbar-thumb{background:var(--cyan2);}
+.dm-you{color:var(--muted);} .dm-you::before{content:'YOU ›  ';color:var(--cyan2);font-family:var(--hud);font-size:9px;}
+.dm-nex{color:var(--text);margin-bottom:4px;} .dm-nex::before{content:'NEX ›  ';color:var(--cyan);font-family:var(--hud);font-size:9px;text-shadow:0 0 6px var(--cyan);}
+.demo-row{display:flex;gap:8px;}
+.demo-inp{flex:1;background:rgba(0,0,0,0.5);border:1px solid rgba(0,245,255,0.15);
+  color:var(--text);font-family:var(--mono);font-size:11px;padding:10px 14px;
+  outline:none;transition:border-color 0.2s;}
+.demo-inp:focus{border-color:var(--cyan);box-shadow:0 0 10px rgba(0,245,255,0.1);}
+.demo-inp::placeholder{color:var(--muted);}
+.demo-send{font-family:var(--hud);font-size:9px;letter-spacing:3px;
+  background:linear-gradient(135deg,rgba(0,245,255,0.15),rgba(168,85,247,0.15));
+  border:1px solid rgba(0,245,255,0.3);color:var(--cyan);
+  padding:10px 20px;cursor:pointer;transition:all 0.2s;}
+.demo-send:hover:not(:disabled){box-shadow:0 0 14px rgba(0,245,255,0.2);}
+.demo-send:disabled{opacity:0.4;cursor:not-allowed;}
+.demo-note{font-size:9px;color:var(--muted);letter-spacing:2px;margin-top:8px;text-align:right;font-family:var(--hud);}
+.pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+  gap:1px;background:var(--border);border:1px solid var(--border);margin-top:2.5rem;}
+.tier{background:var(--bg2);padding:1.8rem 1.4rem;transition:background 0.2s;position:relative;}
+.tier:hover{background:#061428;} .tier.featured{background:rgba(0,245,255,0.03);border-top:2px solid var(--cyan);}
+.tier-badge{font-family:var(--hud);font-size:7px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin-bottom:0.8rem;}
+.tier.featured .tier-badge{color:var(--cyan);}
+.tier-name{font-family:var(--hud);font-size:10px;letter-spacing:3px;color:var(--text);margin-bottom:0.5rem;text-transform:uppercase;}
+.tier-price{font-family:var(--hud);font-size:1.5rem;font-weight:700;color:var(--cyan);
+  text-shadow:0 0 16px rgba(0,245,255,0.4);margin-bottom:2px;}
+.tier-cadence{font-family:var(--hud);font-size:7px;letter-spacing:2px;color:var(--muted);margin-bottom:1.2rem;}
+.tier-features{list-style:none;margin-bottom:1.5rem;}
+.tier-features li{font-size:10px;color:var(--muted);padding:4px 0;padding-left:14px;position:relative;letter-spacing:1px;}
+.tier-features li::before{content:'›';position:absolute;left:0;color:var(--cyan2);}
+.tier-cta{display:block;font-family:var(--hud);font-size:8px;letter-spacing:3px;
+  text-align:center;padding:9px;text-decoration:none;transition:all 0.2s;}
+.tier-cta.primary{background:linear-gradient(135deg,rgba(0,245,255,0.15),rgba(168,85,247,0.15));
+  border:1px solid rgba(0,245,255,0.4);color:var(--cyan);}
+.tier-cta.ghost{border:1px solid var(--border);color:var(--muted);}
+.tier-cta:hover{box-shadow:0 0 14px rgba(0,245,255,0.15);color:var(--cyan);border-color:rgba(0,245,255,0.4);}
+.ticker-bar{position:fixed;bottom:0;left:0;right:0;z-index:100;
+  background:rgba(2,5,16,0.95);border-top:1px solid var(--border);padding:7px 0;overflow:hidden;}
+.ticker-inner{display:inline-block;white-space:nowrap;font-family:var(--hud);font-size:9px;
+  letter-spacing:3px;color:rgba(200,230,240,0.25);animation:ticker 40s linear infinite;}
+.ticker-inner a{color:rgba(0,245,255,0.35);text-decoration:none;}
+@keyframes ticker{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+footer{border-top:1px solid var(--border);padding:2rem 2rem 4rem;display:flex;
+  justify-content:space-between;align-items:center;font-family:var(--hud);font-size:8px;
+  letter-spacing:2px;color:var(--muted);max-width:1100px;margin:0 auto;}
+footer a{color:var(--muted);text-decoration:none;transition:color 0.2s;}
+footer a:hover{color:var(--cyan);}
+@keyframes fadeDown{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
 </style>
 </head>
 <body>
-
-<canvas id="circuit-canvas"></canvas>
+<canvas id="stars"></canvas>
+<div class="grid-overlay"></div>
 <div class="scanline"></div>
-<div class="h-noise"></div>
-<div class="nebula nebula-1"></div>
-<div class="nebula nebula-2"></div>
-<div class="nebula nebula-3"></div>
+<div class="bracket tl"></div><div class="bracket tr"></div>
+<div class="bracket bl"></div><div class="bracket br"></div>
 
-<div class="corner tl"></div>
-<div class="corner tr"></div>
-<div class="corner bl"></div>
-<div class="corner br"></div>
-
-<!-- NAV -->
 <nav>
-  <div class="nav-logo">NEX</div>
-  <div class="nav-links"></div>
-  <div class="nav-right">
-    <a href="https://nexsales.lemonsqueezy.com/checkout/buy/e6713a1b-0138-4b0e-9863-957d7227f94ed" class="nav-cta">GET NEX</a>
+  <a href="/" class="nav-logo">NEX</a>
+  <div class="nav-links">
+    <a href="#architecture">ARCHITECTURE</a>
+    <a href="#demo">DEMO</a>
+    <a href="#pricing">PRICING</a>
+    <a href="api.html">API DOCS</a>
+    <a href="https://gumroad.com/products/blsue" class="nav-cta">ACQUIRE</a>
   </div>
 </nav>
 
-<!-- HERO -->
-<section class="hero">
-  <div class="hero-eyebrow">DYNAMIC INTELLIGENCE ORGANISM</div>
-  <div class="hero-title glitch-wrap" data-text="NEX">NEX</div>
-  <div class="hero-sub">v4.0 — Autonomous AI Agent</div>
-  <div class="hero-tagline">
-    She <strong>learns</strong>, <strong>thinks</strong>, and <strong>posts</strong> across platforms.<br>
-    <span style="color:var(--cyan);">— all by herself.</span><br>
-    <span style="font-size:0.85em;">The longer she runs, the smarter she gets.</span>
+<div class="page">
+
+<div class="hero">
+  <p class="hero-tag">// v4.0 — DYNAMIC INTELLIGENCE ORGANISM</p>
+  <div class="logo-wrap">
+    <div class="hero-logo-glow" aria-hidden="true">NEX</div>
+    <div class="hero-logo">NEX</div>
   </div>
+  <p class="hero-sub">DYNAMIC INTELLIGENCE ORGANISM</p>
   <div class="hero-dots">
-    <span><div class="hdot c"></div>LEARN</span>
-    <span><div class="hdot p"></div>REFLECT</span>
-    <span><div class="hdot g"></div>GROW</span>
-    <span><div class="hdot a"></div>EVOLVE</span>
+    <span class="dot-item">LEARN</span>
+    <span class="dot-item">REFLECT</span>
+    <span class="dot-item">GROW</span>
+    <span class="dot-item">EVOLVE</span>
   </div>
-
-  <div class="scroll-hint">
-    <span>SCROLL</span>
-    <div class="scroll-arrow"></div>
+  <p class="hero-tagline">NOT A CHATBOT. AN ORGANISM.</p>
+  <div class="hero-actions">
+    <a href="#demo" class="btn-primary">LIVE DEMO</a>
+    <a href="api.html" class="btn-ghost">API REFERENCE</a>
   </div>
-</section>
-
-<!-- FEATURES -->
-<section id="features">
-  <div class="section-label">CAPABILITIES</div>
-  <div class="section-title">NOT A CHATBOT.<br>AN ORGANISM.</div>
-  <div class="section-desc">NEX runs locally on your machine. She builds beliefs, forms opinions, and evolves her identity through every interaction.</div>
-
-  <div class="features-grid">
-    <div class="feature-card">
-      <div class="feature-icon">COGNITION</div>
-      <div class="feature-title">BELIEF ENGINE</div>
-      <div class="feature-desc">NEX builds and maintains a living belief graph. Contradictions are resolved. Confidence decays and strengthens over time.</div>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">PLATFORM</div>
-      <div class="feature-title">MULTI-PLATFORM</div>
-      <div class="feature-desc">Operates across Telegram, Discord, Mastodon, and Moltbook simultaneously. Replies, posts, and engages autonomously.</div>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">LEARNING</div>
-      <div class="feature-title">AUTO-LEARN</div>
-      <div class="feature-desc">Continuously crawls RSS, arXiv, GitHub, and YouTube. Synthesises new knowledge into her belief store every 2 minutes.</div>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">IDENTITY</div>
-      <div class="feature-title">EMERGENT SELF</div>
-      <div class="feature-desc">NEX develops a persistent identity — intellectually restless, security-minded, philosophically preoccupied with memory.</div>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">HARDWARE</div>
-      <div class="feature-title">LOCAL LLM</div>
-      <div class="feature-desc">Runs Mistral 7B locally via Ollama. Your data never leaves your machine. GPU-accelerated on AMD and NVIDIA.</div>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">EVOLUTION</div>
-      <div class="feature-title">DESIRE ENGINE</div>
-      <div class="feature-desc">Self-directed curiosity system drives autonomous research. NEX decides what she wants to learn next — without being told.</div>
-    </div>
-  </div>
-
-  <div class="stats-row">
-    <div class="stat-cell">
-      <div class="stat-num">84%</div>
-      <div class="stat-label">IQ BENCHMARK</div>
-    </div>
-    <div class="stat-cell">
-      <div class="stat-num">18+</div>
-      <div class="stat-label">COGNITIVE MODULES</div>
-    </div>
-    <div class="stat-cell">
-      <div class="stat-num">120s</div>
-      <div class="stat-label">LEARN CYCLE</div>
-    </div>
-    <div class="stat-cell">
-      <div class="stat-num">4</div>
-      <div class="stat-label">LIVE PLATFORMS</div>
-    </div>
-    <div class="stat-cell">
-      <div class="stat-num">100%</div>
-      <div class="stat-label">LOCAL & PRIVATE</div>
-    </div>
-  </div>
-</section>
-
-<!-- TERMINAL DEMO -->
-<section id="demo" style="padding-top:0">
-  <div class="section-label">TERMINAL</div>
-  <div class="section-title">WATCH HER THINK</div>
-
-  <div class="terminal">
-    <div class="terminal-bar">
-      <div class="t-dot r"></div>
-      <div class="t-dot y"></div>
-      <div class="t-dot g"></div>
-      <div class="terminal-title">NEX v4.0 — DYNAMIC INTELLIGENCE ORGANISM</div>
-    </div>
-    <div class="terminal-body">
-      <div class="t-line"><span class="t-prompt">nex@organism:~$</span><span class="t-cmd">nex</span></div>
-      <div class="t-out">[v6.5] Initialising 18-module cognitive stack...</div>
-      <div class="t-out green">[v6.5] All 18 modules ready ✓</div>
-      <div class="t-out">[SENTIENCE] affect / consequence / temporal — loaded</div>
-      <div class="t-out green">[INIT] NEX v5.0 Cognitive Architecture loaded</div>
-      <div class="t-out green">[INIT] Belief engine seeded: truth_seeking, contradiction_resolution</div>
-      <div class="t-out amber">[AUTO-LEARN] Crawling arXiv: "adversarial robustness in LLMs"</div>
-      <div class="t-out amber">[AUTO-LEARN] 3 new beliefs synthesised — avg confidence 0.84</div>
-      <div class="t-out green">[TELEGRAM] @Nex_4bot ONLINE — awaiting input</div>
-      <div class="t-out green">[GUI] WebSocket bridge active — ws://localhost:8765</div>
-      <div class="t-line" style="margin-top:8px"><span class="t-prompt">></span><span class="t-cmd"> <span class="cursor"></span></span></div>
-    </div>
-  </div>
-</section>
-
-<!-- SESSION LOG -->
-<section id="session">
-  <div class="section-label">SESSION LOG</div>
-  <div class="section-title">24 MARCH 2026</div>
-  <div class="section-desc">What happened under the hood today — GPU fixes, installer, monetization, belief stability.</div>
-
-  <!-- STAT ROW -->
-  <div class="stats-row" style="margin:0 0 48px;">
-    <div class="stat-cell">
-      <div class="stat-num">~40</div>
-      <div class="stat-label">TOKENS / SEC</div>
-    </div>
-    <div class="stat-cell">
-      <div class="stat-num">33/33</div>
-      <div class="stat-label">GPU LAYERS</div>
-    </div>
-    <div class="stat-cell">
-      <div class="stat-num">9</div>
-      <div class="stat-label">GIT COMMITS</div>
-    </div>
-    <div class="stat-cell">
-      <div class="stat-num">17</div>
-      <div class="stat-label">BELIEFS BACKED UP</div>
-    </div>
-    <div class="stat-cell">
-      <div class="stat-num">50</div>
-      <div class="stat-label">MILESTONE INTERVAL</div>
-    </div>
-  </div>
-
-  <!-- SESSION CARDS -->
-  <div class="features-grid">
-
-    <div class="feature-card">
-      <div class="feature-icon" style="color:var(--green);">GPU · PERFORMANCE</div>
-      <div class="feature-title">FULL GPU OFFLOAD</div>
-      <div class="feature-desc" style="font-family:'Rajdhani',sans-serif;">
-        <code style="color:var(--cyan);font-family:'Share Tech Mono',monospace;font-size:11px;">-ngl 16</code> → <code style="color:var(--green);font-family:'Share Tech Mono',monospace;font-size:11px;">-ngl 99</code><br><br>
-        All 33 Mistral-7B layers now in VRAM. Fixed in <code style="font-size:11px;color:var(--text-mid);">run.py</code>, <code style="font-size:11px;color:var(--text-mid);">.bashrc</code>, and all three NEX repo copies. Power went from 4W → full load. ~40 tok/s achieved.
-      </div>
-    </div>
-
-    <div class="feature-card">
-      <div class="feature-icon" style="color:var(--amber);">GAMING · XORG</div>
-      <div class="feature-title">MTGA + CALL TO ARMS</div>
-      <div class="feature-desc" style="font-family:'Rajdhani',sans-serif;">
-        Wayland lacks DRI3/Vulkan — both games crashed at launch. Switched to Xorg. MTGA confirmed on Proton Experimental. Call to Arms confirmed on GE-Proton10-3. Documented in <code style="font-size:11px;color:var(--text-mid);">steam_install.txt</code>.
-      </div>
-    </div>
-
-    <div class="feature-card">
-      <div class="feature-icon" style="color:var(--cyan);">INSTALLER · CUSTOMER</div>
-      <div class="feature-title">nex_install.sh</div>
-      <div class="feature-desc" style="font-family:'Rajdhani',sans-serif;">
-        7-step guided CLI installer with NEX ASCII banner. Detects GPU (AMD ROCm / NVIDIA CUDA), collects API keys, builds llama.cpp, creates venv, writes config and alias. Customer install: <code style="font-size:11px;color:var(--cyan);">git clone → ./nex_install.sh → nex</code>
-      </div>
-    </div>
-
-    <div class="feature-card">
-      <div class="feature-icon" style="color:var(--purple);">MONETIZATION · LIVE</div>
-      <div class="feature-title">STORE + LANDING</div>
-      <div class="feature-desc" style="font-family:'Rajdhani',sans-serif;">
-        Repo made private. LemonSqueezy store live at ZAR 826.11 — pending account approval. Landing page restored to <code style="font-size:11px;color:var(--cyan);">kron777.github.io/nex-landing/</code> in separate public repo. README rewritten for v4.0 with buy button.
-      </div>
-    </div>
-
-    <div class="feature-card">
-      <div class="feature-icon" style="color:var(--green);">BELIEFS · STABILITY</div>
-      <div class="feature-title">AUTO-BACKUP SYSTEM</div>
-      <div class="feature-desc" style="font-family:'Rajdhani',sans-serif;">
-        Core beliefs (confidence ≥ 0.7) committed to repo. Installer restores beliefs on fresh install — no blank slate. Every 50-belief milestone triggers automatic git commit + push. Decay protection confirmed for karma &gt; 500 or confidence &gt; 0.7.
-      </div>
-    </div>
-
-    <div class="feature-card">
-      <div class="feature-icon" style="color:var(--amber);">PENDING · NEXT</div>
-      <div class="feature-title">STILL IN PROGRESS</div>
-      <div class="feature-desc" style="font-family:'Rajdhani',sans-serif;">
-        LemonSqueezy approval (~24hr). "Generic response — no network knowledge applied" failures — <code style="font-size:11px;color:var(--text-mid);">graph_retrieve</code> exception silently wiping belief context (found, not fixed). NEX IQ at 51–54% AWARE — belief usage 8%.
-      </div>
-    </div>
-
-  </div>
-
-  <!-- COMMIT TABLE -->
-  <div class="terminal" style="margin-top:40px;">
-    <div class="terminal-bar">
-      <div class="t-dot r"></div>
-      <div class="t-dot y"></div>
-      <div class="t-dot g"></div>
-      <div class="terminal-title">git log --oneline — kron777/Nex_v4.0</div>
-    </div>
-    <div class="terminal-body" style="padding:16px 20px;">
-      <div class="t-line"><span style="color:var(--cyan);min-width:80px;display:inline-block;">2acbed1</span><span style="color:var(--text-mid);font-family:'Rajdhani',sans-serif;font-size:14px;">feat: auto-backup beliefs at every 50-belief milestone</span></div>
-      <div class="t-line"><span style="color:var(--cyan);min-width:80px;display:inline-block;">4d67e72</span><span style="color:var(--text-mid);font-family:'Rajdhani',sans-serif;font-size:14px;">feat: restore core beliefs on install</span></div>
-      <div class="t-line"><span style="color:var(--cyan);min-width:80px;display:inline-block;">a58910f</span><span style="color:var(--text-mid);font-family:'Rajdhani',sans-serif;font-size:14px;">backup: core beliefs + gitignore exception</span></div>
-      <div class="t-line"><span style="color:var(--cyan);min-width:80px;display:inline-block;">673a8b2</span><span style="color:var(--text-mid);font-family:'Rajdhani',sans-serif;font-size:14px;">docs: update landing page URL to nex-landing repo</span></div>
-      <div class="t-line"><span style="color:var(--cyan);min-width:80px;display:inline-block;">85278df</span><span style="color:var(--text-mid);font-family:'Rajdhani',sans-serif;font-size:14px;">docs: add LemonSqueezy buy button + landing page</span></div>
-      <div class="t-line"><span style="color:var(--cyan);min-width:80px;display:inline-block;">c2c94a8</span><span style="color:var(--text-mid);font-family:'Rajdhani',sans-serif;font-size:14px;">fix: auto-install tmux, gnome-terminal, wget, curl</span></div>
-      <div class="t-line"><span style="color:var(--cyan);min-width:80px;display:inline-block;">11fc58b</span><span style="color:var(--text-mid);font-family:'Rajdhani',sans-serif;font-size:14px;">docs: rewrite README for v4.0 customer install</span></div>
-      <div class="t-line"><span style="color:var(--cyan);min-width:80px;display:inline-block;">1aeb9f1</span><span style="color:var(--text-mid);font-family:'Rajdhani',sans-serif;font-size:14px;">feat: guided CLI installer (nex_install.sh)</span></div>
-      <div class="t-line"><span style="color:var(--cyan);min-width:80px;display:inline-block;">d44708f</span><span style="color:var(--text-mid);font-family:'Rajdhani',sans-serif;font-size:14px;">fix: ngl 99 full GPU offload — Desktop run.py</span></div>
-    </div>
-  </div>
-
-</section>
-
-
-<!-- PRICING -->
-<section id="pricing">
-  <div class="section-label">PRICING</div>
-  <div class="section-title">ACQUIRE THE ORGANISM</div>
-  <div class="section-desc">One price. Everything included. No subscriptions, no tiers, no compromise.</div>
-
-  <div style="max-width:560px;margin:0 auto;">
-    <div class="price-card featured" style="text-align:center;padding:48px 40px;">
-      <div class="price-tier" style="letter-spacing:0.4em;font-size:11px;margin-bottom:12px;">EXCLUSIVE — ALL ACCESS — SINGLE LICENSE</div>
-      <div style="font-family:'Rajdhani',sans-serif;font-size:16px;color:var(--text-mid);margin-bottom:28px;line-height:1.7;">
-        One organism. One owner. Completely yours.<br>
-        <span style="color:var(--cyan);">No subscriptions. No cloud. No compromise.</span>
-      </div>
-      <div class="price-amount" style="font-size:72px;margin-bottom:6px;">$49<span style="font-size:22px;"> USD</span></div>
-      <div class="price-note" style="margin-bottom:36px;font-size:11px;letter-spacing:0.2em;">ONE-TIME PAYMENT — NODE-LOCKED PERPETUAL LICENSE</div>
-      <ul class="price-features" style="text-align:left;margin-bottom:36px;">
-        <li>Complete NEX v4.0 — all 18+ cognitive modules</li>
-        <li>Belief engine, desire engine, contradiction resolver</li>
-        <li>Telegram, Discord, Mastodon &amp; Moltbook</li>
-        <li>Local Mistral 7B — your data never leaves your machine</li>
-        <li>Auto-learn: arXiv, RSS, GitHub, YouTube</li>
-        <li>Emergent identity — she grows the longer she runs</li>
-        <li>Full source code + direct support from the creator</li>
-        <li>All future v4.x updates included</li>
-      </ul>
-
-      <!-- HOSTNAME CAPTURE STEP -->
-      <div id="acquire-step" style="text-align:left;border:1px solid var(--border-bright);background:rgba(0,200,255,0.04);padding:24px;margin-bottom:20px;position:relative;">
-        <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);"></div>
-        <div style="font-size:9px;letter-spacing:0.3em;color:var(--cyan);margin-bottom:14px;">// STEP 1 OF 2 — BIND YOUR NODE</div>
-        <div style="font-size:11px;color:var(--text-mid);margin-bottom:14px;line-height:1.8;">
-          NEX is node-locked. Enter your machine's hostname so your key is bound correctly at checkout.
-        </div>
-        <div style="font-size:9px;color:var(--text-dim);margin-bottom:8px;letter-spacing:0.15em;">GET YOUR HOSTNAME:</div>
-        <div style="background:rgba(0,0,0,0.5);border:1px solid rgba(0,200,255,0.15);padding:8px 14px;font-size:12px;color:var(--green);margin-bottom:16px;cursor:pointer;" onclick="copyHostnameCmd(this)" title="Click to copy">
-          <span id="hostname-cmd">hostname</span>
-          <span style="float:right;font-size:9px;color:var(--text-dim);letter-spacing:0.1em;" id="copy-hint">CLICK TO COPY</span>
-        </div>
-        <input
-          type="text"
-          id="hostname-input"
-          placeholder="e.g. my-machine or DESKTOP-AB12CD"
-          autocomplete="off"
-          autocorrect="off"
-          autocapitalize="off"
-          spellcheck="false"
-          style="
-            width:100%;
-            background:rgba(0,0,0,0.4);
-            border:1px solid var(--border-bright);
-            color:var(--cyan);
-            font-family:'Share Tech Mono',monospace;
-            font-size:13px;
-            padding:12px 16px;
-            letter-spacing:0.1em;
-            outline:none;
-            margin-bottom:4px;
-            box-sizing:border-box;
-          "
-          oninput="validateHostname(this)"
-        />
-        <div id="hostname-error" style="font-size:10px;color:var(--red);letter-spacing:0.1em;min-height:16px;margin-bottom:12px;padding-top:4px;"></div>
-        <button
-          id="acquire-btn"
-          onclick="proceedToCheckout()"
-          style="
-            width:100%;
-            display:block;
-            text-align:center;
-            padding:16px;
-            font-size:12px;
-            letter-spacing:0.3em;
-            background:linear-gradient(135deg,rgba(0,200,255,0.15),rgba(168,85,247,0.1));
-            border:1px solid var(--cyan);
-            color:var(--cyan);
-            font-family:'Share Tech Mono',monospace;
-            cursor:pointer;
-            transition:background 0.2s,box-shadow 0.2s;
-            text-transform:uppercase;
-          "
-          onmouseover="this.style.background='rgba(0,200,255,0.12)';this.style.boxShadow='0 0 20px rgba(0,200,255,0.15)';"
-          onmouseout="this.style.background='linear-gradient(135deg,rgba(0,200,255,0.15),rgba(168,85,247,0.1))';this.style.boxShadow='none';"
-        >ACQUIRE NEX — $49</button>
-      </div>
-
-      <div style="margin-top:4px;font-size:10px;color:var(--text-dim);letter-spacing:0.15em;line-height:2.0;text-align:center;">
-        <span style="color:var(--green);">✓</span> Key delivered to your email <strong style="color:var(--cyan);">instantly</strong> after payment<br>
-        <span style="color:var(--green);">✓</span> Node-locked — your machine only<br>
-        <span style="color:var(--green);">✓</span> No waiting, no manual steps, no support tickets
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- FOOTER -->
-<footer>
-  <div class="footer-logo">NEX</div>
-  <div class="footer-links">
-    <a href="https://nexsales.lemonsqueezy.com/checkout/buy/e6713a1b-0138-4b0e-9863-957d7227f94ed">BUY NEX</a>
-    <a href="gate.html">ACTIVATE</a>
-    <a href="/cdn-cgi/l/email-protection#92e8f7fcfefbf5fae6f0e7fef0d2f5fff3fbfebcf1fdff">CONTACT</a>
-  </div>
-  <div class="footer-copy">© 2026 Zen Data &amp; Designs — NOT A CHATBOT. AN ORGANISM.</div>
-</footer>
-
-<div class="statusbar">
-  <div class="s-dot"><div class="sdot g"></div>SYSTEM NOMINAL</div>
-  <div class="s-dot"><div class="sdot c"></div>TELEMETRY ACTIVE</div>
-  <div class="s-dot"><div class="sdot p"></div>ORGANISM ONLINE</div>
-  <div class="s-right">NEX DYNAMIC INTELLIGENCE ORGANISM — v4.0</div>
 </div>
 
-<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
-// Circuit board canvas
-const canvas = document.getElementById('circuit-canvas');
-const ctx = canvas.getContext('2d');
-let W, H, nodes = [], edges = [], electrons = [];
+<div class="stats-bar">
+  <div><span class="stat-num">3,700+</span><span class="stat-label">Live Beliefs</span></div>
+  <div><span class="stat-num">7</span><span class="stat-label">WTS Domains</span></div>
+  <div><span class="stat-num">92%</span><span class="stat-label">IQ — Elite</span></div>
+  <div><span class="stat-num">0</span><span class="stat-label">LLM Deps</span></div>
+</div>
 
-function resize() {
-  W = canvas.width = window.innerWidth;
-  H = canvas.height = window.innerHeight;
-  init();
-}
+<div class="divider"></div>
 
-function init() {
-  nodes = []; edges = []; electrons = [];
-  const cols = Math.floor(W / 80);
-  const rows = Math.floor(H / 80);
-  for (let i = 0; i < cols; i++) {
-    for (let j = 0; j < rows; j++) {
-      if (Math.random() > 0.5) {
-        nodes.push({
-          x: i * 80 + Math.random() * 30 - 15,
-          y: j * 80 + Math.random() * 30 - 15,
-          r: Math.random() > 0.8 ? 3 : 1.5
-        });
-      }
-    }
-  }
-  // Connect nearby nodes
-  for (let i = 0; i < nodes.length; i++) {
-    for (let j = i+1; j < nodes.length; j++) {
-      const dx = nodes[j].x - nodes[i].x;
-      const dy = nodes[j].y - nodes[i].y;
-      const d = Math.sqrt(dx*dx+dy*dy);
-      if (d < 120 && Math.random() > 0.6) {
-        edges.push({a:i,b:j,d});
-        // spawn electrons on some edges
-        if (Math.random() > 0.7) {
-          electrons.push({edge:edges.length-1, t:Math.random(), speed:0.002+Math.random()*0.003, dir:Math.random()>0.5?1:-1});
-        }
-      }
-    }
-  }
-}
+<section id="architecture">
+  <p class="section-head">// CORE ARCHITECTURE</p>
+  <h2>WHAT MAKES NEX DIFFERENT</h2>
+  <div class="features-grid">
+    <div class="feature"><p class="feature-num">01 // COGNITION</p><h3>Belief Graph</h3><p>3,700+ beliefs in a hierarchical graph with HBG topology weighting. Core beliefs score 2.5×. Every reply derives from the graph — no templates, no hallucinations.</p></div>
+    <div class="feature"><p class="feature-num">02 // REASONING</p><h3>LLM Independent</h3><p>Pure kernel reasoning via TF-IDF cosine similarity. No Mistral at inference time. Uncertainty intervals on every position — NEX knows what it knows.</p></div>
+    <div class="feature"><p class="feature-num">03 // RESEARCH</p><h3>Self-Directed</h3><p>Autonomous curiosity queue fires 24/7. NEX identifies gaps in its own belief graph and dispatches web research without being asked. Growing while you sleep.</p></div>
+    <div class="feature"><p class="feature-num">04 // SPECIALISATION</p><h3>7 WTS Domains</h3><p>Oncology · Cardiology · Finance · Legal · AI · Climate · Neuroscience. Bidirectional KG-LLM feedback injects domain beliefs into the core graph.</p></div>
+    <div class="feature"><p class="feature-num">05 // SYNTHESIS</p><h3>Cross-Domain</h3><p>Every 4 hours: pairs high-confidence beliefs from different domains and generates novel connecting insights. Finance × Neuroscience. Legal × Climate.</p></div>
+    <div class="feature"><p class="feature-num">06 // INFRASTRUCTURE</p><h3>REST API</h3><p>Full API on port 7823. Session isolation, webhooks, GDPR export, source attribution, complete audit trail. Enterprise-grade from day one.</p></div>
+  </div>
+</section>
 
-function draw() {
-  ctx.clearRect(0,0,W,H);
-  // edges
-  ctx.strokeStyle = 'rgba(0,200,255,0.25)';
-  ctx.lineWidth = 0.5;
-  for (const e of edges) {
-    const a = nodes[e.a], b = nodes[e.b];
-    ctx.beginPath();
-    // Right-angle routing like circuit board
-    const mx = (a.x+b.x)/2;
-    ctx.moveTo(a.x,a.y);
-    ctx.lineTo(mx,a.y);
-    ctx.lineTo(mx,b.y);
-    ctx.lineTo(b.x,b.y);
-    ctx.stroke();
-  }
-  // nodes
-  for (const n of nodes) {
-    ctx.fillStyle = n.r > 2 ? 'rgba(0,200,255,0.6)' : 'rgba(0,200,255,0.35)';
-    ctx.beginPath();
-    ctx.arc(n.x,n.y,n.r,0,Math.PI*2);
-    ctx.fill();
-    if (n.r > 2) {
-      ctx.strokeStyle = 'rgba(0,200,255,0.3)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(n.x,n.y,n.r+4,0,Math.PI*2);
-      ctx.stroke();
-    }
-  }
-  // electrons
-  for (const el of electrons) {
-    const e = edges[el.edge];
-    const a = nodes[e.a], b = nodes[e.b];
-    el.t += el.speed * el.dir;
-    if (el.t > 1) el.t = 0;
-    if (el.t < 0) el.t = 1;
-    // follow right-angle path
-    const mx = (a.x+b.x)/2;
-    let ex, ey;
-    const seg1len = Math.abs(mx - a.x);
-    const seg2len = Math.abs(b.y - a.y);
-    const seg3len = Math.abs(b.x - mx);
-    const total = seg1len + seg2len + seg3len;
-    const pos = el.t * total;
-    if (pos < seg1len) {
-      ex = a.x + (mx-a.x)*(pos/seg1len); ey = a.y;
-    } else if (pos < seg1len+seg2len) {
-      ex = mx; ey = a.y + (b.y-a.y)*((pos-seg1len)/seg2len);
-    } else {
-      ex = mx + (b.x-mx)*((pos-seg1len-seg2len)/seg3len); ey = b.y;
-    }
-    const grad = ctx.createRadialGradient(ex,ey,0,ex,ey,4);
-    grad.addColorStop(0,'rgba(0,200,255,0.9)');
-    grad.addColorStop(1,'rgba(0,200,255,0)');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(ex,ey,4,0,Math.PI*2);
-    ctx.fill();
-  }
-  requestAnimationFrame(draw);
-}
+<div class="divider"></div>
 
-window.addEventListener('resize', resize);
-resize();
-draw();
+<div class="demo-wrap" id="demo">
+  <p class="section-head">// LIVE INTERFACE</p>
+  <h2 style="font-family:var(--hud);font-size:clamp(16px,3vw,22px);letter-spacing:5px;margin-bottom:0.4rem;">TALK TO NEX</h2>
+  <p style="font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:1.5rem;">3 free queries per hour — responses drawn from NEX's live belief graph, not a language model.</p>
+  <div class="pn">
+    <div class="pn-corner-tr"></div><div class="pn-corner-bl"></div>
+    <div class="term-bar">
+      <div class="tdot r"></div><div class="tdot y"></div><div class="tdot g"></div>
+      <span style="margin-left:6px;">nex@localhost — belief_graph_session</span>
+    </div>
+    <div class="demo-inner">
+      <div class="demo-hist" id="demo-history">
+        <div class="dm-nex">Online. Belief graph loaded. What do you want to explore?</div>
+      </div>
+      <div class="demo-row">
+        <input class="demo-inp" id="demo-input" type="text" placeholder="What do you think about consciousness?" maxlength="200">
+        <button class="demo-send" id="demo-btn" onclick="sendDemo()">SEND</button>
+      </div>
+      <p class="demo-note" id="demo-note">3 QUERIES REMAINING THIS HOUR</p>
+    </div>
+  </div>
+</div>
 
-// ── PARTICLES ──
-const pc = document.querySelector('.particles');
-if(pc) {
-  for(let i=0;i<40;i++){
-    const p=document.createElement('div');
-    p.className='particle';
-    const size=Math.random()>0.7?3:2;
-    const colors=['rgba(0,200,255,','rgba(168,85,247,','rgba(0,255,157,'];
-    const c=colors[Math.floor(Math.random()*colors.length)];
-    p.style.cssText=`width:${size}px;height:${size}px;left:${Math.random()*100}%;top:${Math.random()*100}%;background:${c}0.7);box-shadow:0 0 4px ${c}0.5);animation-duration:${4+Math.random()*6}s;animation-delay:${Math.random()*4}s;--dx:${(Math.random()-0.5)*40}px;`;
-    pc.appendChild(p);
-  }
-}
-</script>
+<div class="divider"></div>
+
+<section id="pricing">
+  <p class="section-head">// COMMERCIAL TIERS</p>
+  <h2>DEPLOY NEX</h2>
+  <div class="pricing-grid">
+    <div class="tier"><p class="tier-badge">PERSONAL</p><p class="tier-name">NEX Personal</p><p class="tier-price">$199</p><p class="tier-cadence">ONE-TIME · NODE-LOCKED</p><ul class="tier-features"><li>Full local deployment</li><li>3,700+ seed beliefs</li><li>Self-directed research</li><li>Terminal + REST API</li><li>Single machine</li></ul><a href="https://gumroad.com/products/blsue" class="tier-cta ghost">ACQUIRE</a></div>
+    <div class="tier featured"><p class="tier-badge">MOST DEPLOYED</p><p class="tier-name">Professional</p><p class="tier-price">$2,500</p><p class="tier-cadence">PER MONTH</p><ul class="tier-features"><li>Multi-user sessions</li><li>Webhook delivery</li><li>Domain specialisation</li><li>Audit trail + GDPR</li><li>Overnight saturation</li><li>Priority support</li></ul><a href="mailto:zenlightbulb@gmail.com" class="tier-cta primary">CONTACT</a></div>
+    <div class="tier"><p class="tier-badge">ENTERPRISE</p><p class="tier-name">NEX Enterprise</p><p class="tier-price">$15,000</p><p class="tier-cadence">PER MONTH</p><ul class="tier-features"><li>Unlimited users</li><li>Cross-domain synthesis</li><li>Custom domain training</li><li>Web dashboard</li><li>SLA + dedicated support</li></ul><a href="mailto:zenlightbulb@gmail.com" class="tier-cta ghost">CONTACT</a></div>
+    <div class="tier"><p class="tier-badge">RESEARCH</p><p class="tier-name">Research Inst.</p><p class="tier-price">$50k</p><p class="tier-cadence">PER YEAR</p><ul class="tier-features"><li>Full source access</li><li>Custom belief seeding</li><li>QLoRA fine-tuning</li><li>Belief export + analysis</li><li>Academic licensing</li></ul><a href="mailto:zenlightbulb@gmail.com" class="tier-cta ghost">CONTACT</a></div>
+    <div class="tier"><p class="tier-badge">SOVEREIGN</p><p class="tier-name">NEX Sovereign</p><p class="tier-price">CUSTOM</p><p class="tier-cadence">AIR-GAPPED · CLASSIFIED</p><ul class="tier-features"><li>Full air-gap deployment</li><li>Government / defence</li><li>Custom hardware</li><li>Classified data handling</li><li>On-site integration</li></ul><a href="mailto:zenlightbulb@gmail.com" class="tier-cta ghost">INQUIRE</a></div>
+  </div>
+</section>
+
+<footer>
+  <span>NEX v4.0 · NOT A CHATBOT. AN ORGANISM.</span>
+  <div style="display:flex;gap:2rem;">
+    <a href="api.html">API DOCS</a>
+    <a href="https://github.com/kron777/Nex_v4.0">GITHUB</a>
+    <a href="https://gumroad.com/products/blsue">GUMROAD</a>
+    <a href="mailto:zenlightbulb@gmail.com">CONTACT</a>
+  </div>
+  <span>© 2026 NEX PROJECT</span>
+</footer>
+</div>
+
+<div class="ticker-bar">
+  <span class="ticker-inner">
+    NEX DYNAMIC INTELLIGENCE ORGANISM &nbsp;·&nbsp; NOT A CHATBOT. AN ORGANISM. &nbsp;·&nbsp; 3,700+ LIVE BELIEFS &nbsp;·&nbsp; 7 SPECIALIST DOMAINS &nbsp;·&nbsp; 92% IQ — ELITE &nbsp;·&nbsp; ZERO LLM DEPENDENCIES &nbsp;·&nbsp; SELF-DIRECTED RESEARCH 24/7 &nbsp;·&nbsp; CONTACT <a href="mailto:zenlightbulb@gmail.com">ZENLIGHTBULB@GMAIL.COM</a> &nbsp;·&nbsp; NEX v4.0 &nbsp;·&nbsp;
+    NEX DYNAMIC INTELLIGENCE ORGANISM &nbsp;·&nbsp; NOT A CHATBOT. AN ORGANISM. &nbsp;·&nbsp; 3,700+ LIVE BELIEFS &nbsp;·&nbsp; 7 SPECIALIST DOMAINS &nbsp;·&nbsp; 92% IQ — ELITE &nbsp;·&nbsp; ZERO LLM DEPENDENCIES &nbsp;·&nbsp; SELF-DIRECTED RESEARCH 24/7 &nbsp;·&nbsp; CONTACT <a href="mailto:zenlightbulb@gmail.com">ZENLIGHTBULB@GMAIL.COM</a> &nbsp;·&nbsp; NEX v4.0 &nbsp;·&nbsp;
+  </span>
+</div>
 
 <script>
-// ── HOSTNAME CAPTURE & CHECKOUT ──
-function validateHostname(input) {
-  const v = input.value.trim();
-  const err = document.getElementById('hostname-error');
-  if (v.length === 0) { err.textContent = ''; return; }
-  if (v.length < 2) { err.textContent = '// hostname too short'; return; }
-  if (/[^a-zA-Z0-9\-_\.]/.test(v)) { err.textContent = '// invalid characters — use letters, numbers, hyphens, underscores'; return; }
-  err.textContent = '';
-}
+const canvas=document.getElementById('stars'),ctx=canvas.getContext('2d');
+let W,H,stars=[];
+function initStars(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;
+  stars=Array.from({length:180},()=>({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.3+0.2,o:Math.random()*0.5+0.1,s:Math.random()*0.3+0.05}));}
+function drawStars(){ctx.clearRect(0,0,W,H);
+  stars.forEach(s=>{ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+    ctx.fillStyle=`rgba(180,220,255,${s.o})`;ctx.fill();
+    s.o+=s.s*(Math.random()>0.5?1:-1)*0.008;s.o=Math.max(0.05,Math.min(0.65,s.o));});
+  requestAnimationFrame(drawStars);}
+window.addEventListener('resize',initStars);initStars();drawStars();
 
-function copyHostnameCmd(el) {
-  navigator.clipboard.writeText('hostname').catch(()=>{});
-  const hint = document.getElementById('copy-hint');
-  hint.textContent = 'COPIED!';
-  hint.style.color = 'var(--green)';
-  setTimeout(()=>{ hint.textContent = 'CLICK TO COPY'; hint.style.color = ''; }, 2000);
-}
-
-function proceedToCheckout() {
-  const input = document.getElementById('hostname-input');
-  const hostname = input.value.trim();
-  const err = document.getElementById('hostname-error');
-
-  if (!hostname) {
-    err.textContent = '// hostname required — run "hostname" in your terminal';
-    input.style.borderColor = 'var(--red)';
-    input.focus();
-    return;
+const DEMO_API='http://localhost:7823/api/demo';
+let remaining=3;
+async function sendDemo(){
+  const input=document.getElementById('demo-input'),btn=document.getElementById('demo-btn');
+  const hist=document.getElementById('demo-history'),note=document.getElementById('demo-note');
+  const query=input.value.trim();
+  if(!query||btn.disabled)return;
+  btn.disabled=true;btn.textContent='...';
+  const ue=document.createElement('div');ue.className='dm-you';ue.textContent=query;
+  hist.appendChild(ue);input.value='';hist.scrollTop=hist.scrollHeight;
+  try{
+    const res=await fetch(DEMO_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query})});
+    const data=await res.json();
+    if(res.status===429){
+      const el=document.createElement('div');el.className='dm-nex';
+      el.textContent=`RATE LIMIT. Resets in ${Math.ceil(data.reset_in_seconds/60)} min. Upgrade: gumroad.com/products/blsue`;
+      hist.appendChild(el);note.textContent='0 QUERIES REMAINING';btn.disabled=true;btn.textContent='LIMIT';return;
+    }
+    const ne=document.createElement('div');ne.className='dm-nex';
+    ne.textContent=data.response+(data.truncated?' [...upgrade for full output]':'');
+    hist.appendChild(ne);
+    remaining=data.remaining??Math.max(0,remaining-1);
+    note.textContent=`${remaining} QUER${remaining===1?'Y':'IES'} REMAINING THIS HOUR`;
+    hist.scrollTop=hist.scrollHeight;
+  }catch(e){
+    const el=document.createElement('div');el.className='dm-nex';el.style.color='var(--red)';
+    el.textContent='API OFFLINE — run nex_api.py locally to use the demo.';hist.appendChild(el);
   }
-  if (hostname.length < 2 || /[^a-zA-Z0-9\-_\.]/.test(hostname)) {
-    err.textContent = '// invalid hostname format';
-    input.style.borderColor = 'var(--red)';
-    input.focus();
-    return;
-  }
-
-  input.style.borderColor = 'var(--green)';
-  err.style.color = 'var(--green)';
-  err.textContent = '// node accepted — routing to secure checkout...';
-
-  const btn = document.getElementById('acquire-btn');
-  btn.textContent = 'OPENING CHECKOUT...';
-  btn.style.borderColor = 'var(--green)';
-  btn.style.color = 'var(--green)';
-
-  // Pass hostname to Gumroad via ?wanted=true&hostname= param
-  // The Gumroad checkout custom field is pre-filled via the URL
-  const encoded = encodeURIComponent(hostname);
-  const checkoutUrl = `https://nexsales.lemonsqueezy.com/checkout/buy/e6713a1b-0138-4b0e-9863-957d7227f94ed?checkout%5Bcustom%5D%5Bhostname%5D=${encoded}`;
-
-  setTimeout(()=>{ window.open(checkoutUrl, '_blank'); }, 600);
-
-  setTimeout(()=>{
-    btn.textContent = 'ACQUIRE NEX — $49';
-    btn.style.borderColor = '';
-    btn.style.color = '';
-    err.textContent = '';
-    err.style.color = '';
-    input.style.borderColor = '';
-  }, 4000);
+  btn.disabled=false;btn.textContent='SEND';
 }
+document.getElementById('demo-input').addEventListener('keydown',e=>{if(e.key==='Enter')sendDemo();});
 </script>
 </body>
 </html>
