@@ -1304,6 +1304,29 @@ def express(
     if not result:
         result = _r.choice(_OPENERS["honest_gap"]) + "I'd rather say I don't know than produce noise."
 
+    # Build 7 — template grammar: if result is short/weak, try template assembly
+    try:
+        if not result or len(result) < 80:
+            import nex_template_grammar as _tg
+            _stance = float((opinion or {}).get("stance_score", 0) or 0)
+            _ud = intend_result.get("urgent_drive") or {}
+            _cd = [{"content": b.get("content",""), "topic": b.get("topic","")}
+                   for b in reason_result.get("cross_domain", [])]
+            _tresult = _tg.get_grammar().auto_render(
+                beliefs=[b.get("content","") for b in beliefs[:3]],
+                cross_domain_beliefs=_cd or None,
+                intent_type=intent_type,
+                stance_score=_stance,
+                topic=topic,
+                drive_state=_ud.get("state", "active"),
+                drive_label=_ud.get("label", ""),
+                sparse=reason_result.get("sparse", False),
+            )
+            if _tresult and _tresult.text and len(_tresult.text) > 60:
+                result = _tresult.text
+    except Exception:
+        pass
+
     # Withdrawn tone only shortens
     if tone == "withdrawn":
         sentences = re.split(r'(?<=[.!?])\s+', result)
