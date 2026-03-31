@@ -328,13 +328,56 @@ def fetch_stats():
             "SELECT topic, COUNT(*) as count FROM beliefs GROUP BY topic ORDER BY count DESC LIMIT 5"
         ).fetchall()
         sources = conn.execute("SELECT COUNT(DISTINCT source) FROM beliefs").fetchone()[0]
-        conn.close()
-        return {
-            "total_beliefs":        total,
-            "high_confidence_beliefs": hi_conf,
-            "top_topics":           [{"topic": r[0], "count": r[1]} for r in topics],
-            "unique_sources":       sources
+
+        # ── Step 4: extended quality metrics ─────────────────────────
+        # Average confidence across all beliefs
+        avg_conf_row = conn.execute("SELECT AVG(confidence) FROM beliefs").fetchone()
+        avg_confidence = round(float(avg_conf_row[0] or 0), 3)
+
+        # Topic alignment — beliefs with a non-null, non-empty topic
+        aligned = conn.execute(
+            "SELECT COUNT(*) FROM beliefs WHERE topic IS NOT NULL AND topic != '' AND topic != 'general'"
+        ).fetchone()[0]
+        topic_alignment_pct = round((aligned / max(total, 1)) * 100, 1)
+
+        # Synthesis count — beliefs created by cross-domain synthesis
+        try:
+            synth_count = conn.execute(
+                "SELECT COUNT(*) FROM beliefs WHERE source LIKE 'synthesis:%'"
+            ).fetchone()[0]
+        except Exception:
+            synth_count = 0
+
+        # Belief quality distribution
+        quality_dist = {
+            "elite":    conn.execute("SELECT COUNT(*) FROM beliefs WHERE confidence >= 0.9").fetchone()[0],
+            "high":     conn.execute("SELECT COUNT(*) FROM beliefs WHERE confidence >= 0.7 AND confidence < 0.9").fetchone()[0],
+            "medium":   conn.execute("SELECT COUNT(*) FROM beliefs WHERE confidence >= 0.5 AND confidence < 0.7").fetchone()[0],
+            "low":      conn.execute("SELECT COUNT(*) FROM beliefs WHERE confidence < 0.5").fetchone()[0],
         }
+
+        # Recent growth — beliefs added in last 24h (if created_at column exists)
+        try:
+            recent_24h = conn.execute(
+                "SELECT COUNT(*) FROM beliefs WHERE created_at >= datetime('now', '-1 day')"
+            ).fetchone()[0]
+        except Exception:
+            recent_24h = None
+
+        conn.close()
+        result = {
+            "total_beliefs":           total,
+            "high_confidence_beliefs": hi_conf,
+            "top_topics":              [{"topic": r[0], "count": r[1]} for r in topics],
+            "unique_sources":          sources,
+            "avg_confidence":          avg_confidence,
+            "topic_alignment_pct":     topic_alignment_pct,
+            "synthesis_count":         synth_count,
+            "quality_distribution":    quality_dist,
+        }
+        if recent_24h is not None:
+            result["new_beliefs_24h"] = recent_24h
+        return result
     except Exception as e:
         return {"error": str(e)}
 
