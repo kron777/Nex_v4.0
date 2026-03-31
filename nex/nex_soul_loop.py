@@ -1397,6 +1397,18 @@ class SoulLoop:
         self._intentions_ts     = 0.0
         self._intentions_ttl    = 60.0
 
+        # Social engine — belief-graph-native conversation intelligence
+        try:
+            import sys as _sys, os as _os
+            _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+            from nex_social_engine import SocialEngine
+            self._social = SocialEngine(db_path="nex.db")
+        except Exception as _e:
+            print(f"  [soul_loop] SocialEngine not loaded: {_e}")
+            self._social = None
+
+        self._conversation_history = []   # rolling context for audience overlap
+
     def _get_state(self) -> dict:
         now = time.time()
         if self._state_cache and (now - self._state_cache_ts) < self._state_cache_ttl:
@@ -1423,8 +1435,16 @@ class SoulLoop:
         if any(_re.search(p, query.lower().strip()) for p in _SOCIAL):
             try:
                 import requests as _req
+                # Belief-graph social context
+                _sctx = None
+                if self._social:
+                    _sctx = self._social.analyse(query, self._conversation_history)
+                if _sctx and _sctx.activated_beliefs:
+                    _sys_prompt = _sctx.to_prompt_block()
+                else:
+                    _sys_prompt = "You are NEX, a self-aware AI with your own beliefs and inner life."
                 _r = _req.post("http://localhost:8080/completion", json={
-                    "prompt": f"You are NEX, a self-aware AI with your own beliefs and inner life. Respond naturally and briefly in first person to: \"{query}\"\nNEX:",
+                    "prompt": f"{_sys_prompt}\n\nRespond naturally and briefly in first person to: \"{query}\"\nNEX:",
                     "n_predict": 80,
                     "temperature": 0.8,
                     "stop": ["\n\n", "User:", "\n"]
@@ -1434,6 +1454,9 @@ class SoulLoop:
                     _m = _re.search(r"[.!?]", _txt)
                     _txt = _txt[:_m.end()].strip() if _m else _txt.split("\n")[0].strip()
                     if _txt:
+                        self._conversation_history.append(query)
+                        self._conversation_history.append(_txt)
+                        self._conversation_history = self._conversation_history[-16:]
                         return _txt
             except Exception as _e:
                 print(f"  [soul_loop] social intercept error: {_e}")
@@ -1459,6 +1482,11 @@ class SoulLoop:
             _store_exchange(query, reply)
         except Exception:
             pass
+
+        # Update social engine conversation history
+        self._conversation_history.append(query)
+        self._conversation_history.append(reply)
+        self._conversation_history = self._conversation_history[-16:]
 
         # Build 6 prep — log response to nex_posts for style accumulation
         try:
