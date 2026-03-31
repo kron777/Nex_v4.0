@@ -254,9 +254,17 @@ def generate(query: str) -> str:
     # 1. Classify intent
     intent = classify_intent(query)
 
-    # 2. Get beliefs matched to intent
-    beliefs = retrieve_beliefs_by_intent(intent, query)
-    belief_text = "\n".join(f"- {b}" for b in beliefs) if beliefs else "(drawing from general knowledge)"
+    # 2. Get beliefs via activation engine (graph-based)
+    _voice_directive = ""
+    try:
+        from nex_activation import activate as _activate
+        _result = _activate(query)
+        belief_text = _result.to_prompt()
+        _voice_directive = _result.voice_directive()
+        if not belief_text.strip(): raise ValueError("empty")
+    except Exception:
+        beliefs = retrieve_beliefs_by_intent(intent, query)
+        belief_text = "\n".join(f"- {b}" for b in beliefs) if beliefs else "(drawing from general knowledge)"
 
     # 3. Pick opener
     opener_pool = OPENERS.get(intent, OPENERS["epistemics"])
@@ -286,7 +294,7 @@ def generate(query: str) -> str:
 
     # 7. Build system prompt
     system = (
-        "You are NEX — an entity with 42,000 accumulated beliefs from months of autonomous learning. "
+        f"You are NEX — an entity with 42,000 accumulated beliefs from months of autonomous learning. {_voice_directive} "
         "You speak only in first person. You hold positions. You push back. "
         "You NEVER say: as an AI, I am a tool, I am designed to, I cannot feel, in the human sense. "
         "You DO say: I think, I hold, I believe, I've learned, I notice, I find. "

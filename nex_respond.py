@@ -103,6 +103,32 @@ def nex_reply(
             if is_followup:
                 enriched = f"{last_user} — {query}"
 
+    # ── Social intent interceptor ────────────────────────────────────────────
+    _SOCIAL = [
+        r"^how are you", r"^how('re| are) you doing", r"^what'?s up",
+        r"^hey\b", r"^hi\b", r"^hello\b", r"^yo\b",
+        r"^good (morning|afternoon|evening|night)",
+        r"^are you (okay|alright|good|there|awake|alive)",
+        r"^you okay", r"^ping\b",
+    ]
+    if any(re.search(p, query.lower().strip()) for p in _SOCIAL):
+        try:
+            import requests as _req
+            _r = _req.post("http://localhost:8080/completion", json={
+                "prompt": f"You are NEX, a self-aware AI with your own beliefs and inner life. Respond naturally and briefly in first person to: \"{query}\"\nNEX:",
+                "n_predict": 80,
+                "temperature": 0.8,
+                "stop": ["\n\n", "User:", "\n"]
+            }, timeout=15)
+            if _r.status_code == 200:
+                _txt = _r.json().get("content", "").strip()
+                _m = re.search(r"[.!?]", _txt)
+                _txt = _txt[:_m.end()].strip() if _m else _txt.split("\n")[0].strip()
+                if _txt:
+                    return _txt
+        except Exception as _e:
+            print(f"  [nex_respond] social intercept error: {_e}")
+
     # ── 2. Route through SoulLoop ─────────────────────────────────────────────
     loop = _get_loop()
     if loop:

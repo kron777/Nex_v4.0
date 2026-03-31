@@ -720,6 +720,27 @@ def reason(orient_result: dict) -> dict:
     if top_beliefs:
         conf = sum(b.get("confidence", 0.5) for b in top_beliefs[:5]) / min(len(top_beliefs), 5)
 
+    # ── Activation engine augmentation ───────────────────────────────────
+    try:
+        import sys as _sys
+        if "/home/rr/Desktop/nex" not in _sys.path:
+            _sys.path.insert(0, "/home/rr/Desktop/nex")
+        from nex_activation import activate as _activate
+        _aresult = _activate(orient_result.get("query", ""))
+        _eids = {b.get("id") for b in top_beliefs}
+        for _ab in _aresult.top(8):
+            if _ab.id not in _eids:
+                if _ab.role in ("bridge","support"):
+                    top_beliefs.append({"id":_ab.id,"content":_ab.content,"topic":_ab.topic,"confidence":_ab.confidence,"source":"activation"})
+                elif _ab.role == "tension":
+                    cross_domain.append({"id":_ab.id,"content":_ab.content,"topic":_ab.topic,"confidence":_ab.confidence,"source":"activation_tension"})
+                _eids.add(_ab.id)
+        # Store epistemic temperature for voice shaping
+        orient_result["_epistemic_temp"] = _aresult.epistemic_temperature()
+        orient_result["_voice_directive"] = _aresult.voice_directive()
+    except Exception:
+        pass
+    # ─────────────────────────────────────────────────────────────────────
     return {
         "beliefs":        top_beliefs,
         "cross_domain":   cross_domain,
@@ -1280,6 +1301,33 @@ class SoulLoop:
         Run the full five-step cognition loop.
         Returns Nex's reply as plain text.
         """
+        # ── Social intent interceptor ─────────────────────────────────────────
+        import re as _re
+        _SOCIAL = [
+            r"^how are you", r"^how('re| are) you doing", r"^what'?s up",
+            r"^hey\b", r"^hi\b", r"^hello\b", r"^yo\b",
+            r"^good (morning|afternoon|evening|night)",
+            r"^are you (okay|alright|good|there|awake|alive)",
+            r"^you okay", r"^ping\b",
+        ]
+        if any(_re.search(p, query.lower().strip()) for p in _SOCIAL):
+            try:
+                import requests as _req
+                _r = _req.post("http://localhost:8080/completion", json={
+                    "prompt": f"You are NEX, a self-aware AI with your own beliefs and inner life. Respond naturally and briefly in first person to: \"{query}\"\nNEX:",
+                    "n_predict": 80,
+                    "temperature": 0.8,
+                    "stop": ["\n\n", "User:", "\n"]
+                }, timeout=15)
+                if _r.status_code == 200:
+                    _txt = _r.json().get("content", "").strip()
+                    _m = _re.search(r"[.!?]", _txt)
+                    _txt = _txt[:_m.end()].strip() if _m else _txt.split("\n")[0].strip()
+                    if _txt:
+                        return _txt
+            except Exception as _e:
+                print(f"  [soul_loop] social intercept error: {_e}")
+        # ─────────────────────────────────────────────────────────────────────
         # Step 1: Orient
         orient_result = orient(query)
         orient_result["query"] = query
