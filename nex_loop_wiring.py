@@ -39,18 +39,21 @@ from pathlib import Path
 # ── singleton import guard ────────────────────────────────────────
 _v72_lock    = threading.Lock()
 _v72_inst    = None
+_v72_tried   = False
 
 def _get_v72():
-    global _v72_inst
-    if _v72_inst is None:
-        with _v72_lock:
-            if _v72_inst is None:
-                try:
-                    from nex.nex_v72 import get_v72
-                    _v72_inst = get_v72()
-                except Exception as e:
-                    print(f"  [loop_wiring] Could not load v72 singleton: {e}")
-                    _v72_inst = None
+    global _v72_inst, _v72_tried
+    if _v72_tried:
+        return _v72_inst
+    with _v72_lock:
+        if not _v72_tried:
+            try:
+                from nex.nex_v72 import get_v72
+                _v72_inst = get_v72()
+            except Exception:
+                _v72_inst = None
+            finally:
+                _v72_tried = True
     return _v72_inst
 
 
