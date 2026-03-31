@@ -160,6 +160,29 @@ def dash_sources():
     )
     return jsonify(rows)
 
+@app.route("/dash/webhooks")
+def dash_webhooks():
+    """Return webhook delivery stats from api_keys.json."""
+    try:
+        keys = json.loads(API_KEY_PATH.read_text()) if API_KEY_PATH.exists() else {}
+        webhooks_path = Path("~/.config/nex/webhooks.json").expanduser()
+        hooks = json.loads(webhooks_path.read_text()) if webhooks_path.exists() else {}
+        stats = []
+        for wid, w in hooks.items():
+            stats.append({
+                "id":           wid,
+                "url":          w.get("url","")[:60],
+                "events":       w.get("events", []),
+                "deliveries":   w.get("deliveries", 0),
+                "failures":     w.get("failures", 0),
+                "last_fired":   w.get("last_fired", "—"),
+                "api_key":      w.get("api_key","")[:12] + "...",
+            })
+        stats.sort(key=lambda x: -x["deliveries"])
+        return jsonify({"webhooks": stats, "count": len(stats)})
+    except Exception as e:
+        return jsonify({"webhooks": [], "count": 0, "error": str(e)})
+
 # ── Dashboard HTML ─────────────────────────────────────────────────────────────
 
 DASHBOARD_HTML = r"""<!DOCTYPE html>
@@ -842,6 +865,13 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     </div>
     <div class="audit-feed" id="auditFeed"></div>
   </div>
+  <div class="panel panel-full">
+    <div class="panel-header">
+      <div class="panel-title"><span>07</span>Webhook Delivery</div>
+      <div class="panel-badge" id="webhookBadge">delivery stats</div>
+    </div>
+    <div class="audit-feed" id="webhookFeed"></div>
+  </div>
 
 </div>
 
@@ -1056,16 +1086,38 @@ function renderAudit(rows) {
 // ── Fetch + refresh cycle ──────────────────────────────────────────────────
 const REFRESH_MS = 15000;
 
+function renderWebhooks(data) {
+  const feed = document.getElementById('webhookFeed');
+  if (!feed) return;
+  const hooks = data.webhooks || [];
+  document.getElementById('webhookBadge').textContent = hooks.length + ' registered';
+  if (!hooks.length) {
+    feed.innerHTML = '<div class="audit-row"><span style="color:var(--muted)">No webhooks registered</span></div>';
+    return;
+  }
+  feed.innerHTML = hooks.map(h => {
+    const rate = h.deliveries > 0 ? Math.round((1 - h.failures/h.deliveries)*100) : 100;
+    const col = rate >= 90 ? 'var(--g)' : rate >= 70 ? 'var(--y)' : 'var(--r)';
+    return `<div class="audit-row">
+      <span style="color:var(--p2)">${h.last_fired.slice(11,19)||'—'}</span>
+      <span style="color:var(--w)">${h.url}</span>
+      <span style="color:var(--tx2)">${h.events.join(', ')||'all'}</span>
+      <span style="color:${col}">${rate}% (${h.deliveries} sent / ${h.failures} failed)</span>
+    </div>`;
+  }).join('');
+}
+
 async function fetchAll() {
   try {
-    const [stats, topics, growth, gaps, domains, audit, sources] = await Promise.all([
+    const [stats, topics, growth, gaps, domains, audit, sources, webhooks] = await Promise.all([
       fetch('/dash/stats').then(r=>r.json()),
       fetch('/dash/topics').then(r=>r.json()),
       fetch('/dash/belief-growth').then(r=>r.json()),
       fetch('/dash/gaps').then(r=>r.json()),
       fetch('/dash/domain-activity').then(r=>r.json()),
       fetch('/dash/recent-audit').then(r=>r.json()),
-      fetch('/dash/sources').then(r=>r.json())
+      fetch('/dash/sources').then(r=>r.json()),
+      fetch('/dash/webhooks').then(r=>r.json())
     ]);
     renderStats(stats);
     renderTopics(topics);
@@ -1074,6 +1126,7 @@ async function fetchAll() {
     renderDomains(domains);
     renderAudit(audit);
     renderSources(sources);
+    renderWebhooks(webhooks);
   } catch(e) {
     console.error('Dashboard fetch error:', e);
   }
