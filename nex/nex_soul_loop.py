@@ -767,13 +767,36 @@ def reason(orient_result: dict) -> dict:
             scored.append((s, b))
     scored.sort(key=lambda x: -x[0])
     # Dedup near-identical beliefs before taking top N
+    # Use first 80 chars AND word-overlap to catch paraphrased duplicates
+    import re as _re_dd
     _seen_prefixes = set()
+    _seen_wordsets = []
     _deduped = []
+    _STOP_DD = {"the","a","an","is","are","was","were","be","to","of","in","on",
+                "at","by","for","with","as","that","this","it","but","or","and",
+                "not","they","have","has","will","can","would","could","should"}
     for _score, _b in scored:
-        _prefix = (_b.get("content") or "")[:120].lower().strip()
-        if _prefix and _prefix not in _seen_prefixes:
-            _seen_prefixes.add(_prefix)
-            _deduped.append((_score, _b))
+        _content = (_b.get("content") or "")
+        _prefix = _content[:80].lower().strip()
+        if not _prefix:
+            continue
+        # Skip exact prefix match
+        if _prefix in _seen_prefixes:
+            continue
+        # Skip if >60% word overlap with any already-accepted belief
+        _words = set(_re_dd.findall(r"[a-z]{4,}", _content.lower())) - _STOP_DD
+        _too_similar = False
+        for _sw in _seen_wordsets:
+            if _words and _sw:
+                _overlap = len(_words & _sw) / min(len(_words), len(_sw))
+                if _overlap > 0.6:
+                    _too_similar = True
+                    break
+        if _too_similar:
+            continue
+        _seen_prefixes.add(_prefix)
+        _seen_wordsets.append(_words)
+        _deduped.append((_score, _b))
     top_beliefs = [b for _, b in _deduped[:8]]
 
     # Derive primary topic from top belief
