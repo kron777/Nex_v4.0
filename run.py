@@ -1700,6 +1700,61 @@ def main():
                         except Exception as _dte:
                             nex_log("intent", f"[Drives] tick error: {_dte}")
 
+                    # ── BUILD 10 — FULL LOOP INTEGRATION ─────────────────────
+                    # Drive urgency tick
+                    try:
+                        import nex_drive_urgency as _du
+                        _active_topics = []
+                        if _drives:
+                            active = _drives.get("active", {})
+                            if active:
+                                _active_topics = active.get("tags", [])
+                        _du.tick(current_topics=_active_topics)
+                    except Exception as _b10_du:
+                        pass
+
+                    # Native opinions refresh (every 50 cycles)
+                    if cycle % 50 == 0:
+                        try:
+                            import nex_native_opinions as _no
+                            _no.update_all_opinions(verbose=False)
+                        except Exception:
+                            pass
+
+                    # Self-model update (every 100 cycles)
+                    if cycle % 100 == 0:
+                        try:
+                            import nex_self_model as _sm
+                            _sm.run_update(verbose=False)
+                        except Exception:
+                            pass
+
+                    # Bridge detector (every 200 cycles)
+                    if cycle % 200 == 0:
+                        try:
+                            import nex_bridge_detector as _bd
+                            _bd._ensure_bridge_table()
+                            _bridges = _bd.find_bridges(n=3)
+                            if _bridges:
+                                _bd.store_bridges(_bridges)
+                                nex_log("cognition", f"[Bridges] {len(_bridges)} new bridges found")
+                        except Exception:
+                            pass
+
+                    # LLM call rate monitor (every 20 cycles)
+                    if cycle % 20 == 0:
+                        try:
+                            import nex_graph_memory as _gm
+                            _mem = _gm.summary()
+                            nex_log("cognition",
+                                f"[Graph] trail={_mem['trail_size']} "
+                                f"glows={_mem['live_glows']} "
+                                f"hot={[t['topic'] for t in _mem['hot_topics'][:2]]}"
+                            )
+                        except Exception:
+                            pass
+                    # ─────────────────────────────────────────────────────────
+
                     if _desire_engine is not None:
                         try:
                             _de_result = _desire_engine.update(
