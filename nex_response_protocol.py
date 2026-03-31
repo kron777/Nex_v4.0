@@ -23,7 +23,7 @@ from pathlib import Path
 from collections import deque
 
 # ── Config ────────────────────────────────────────────────────────────────────
-LLM_URL   = "http://localhost:8080/v1/chat/completions"
+LLM_URL   = "http://localhost:8080/completion"
 DB_PATH   = Path("~/.config/nex/nex.db").expanduser()
 MAX_TOKENS = 512
 TEMPERATURE = 0.85
@@ -228,18 +228,15 @@ def retrieve_beliefs_by_intent(intent: str, query: str, n: int = 6) -> list:
 # ── LLM call with G2-style deduplication ─────────────────────────────────────
 def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str:
     try:
+        full_prompt = f"[INST] {system}\n\n{prompt} [/INST]"
         r = requests.post(LLM_URL, json={
-            "model": "mistral",
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt},
-            ],
-            "max_tokens": MAX_TOKENS,
+            "prompt": full_prompt,
+            "n_predict": MAX_TOKENS,
             "temperature": temperature,
+            "stop": ["[INST]", "\n\n\n"],
             "stream": False,
-        }, timeout=20)
-        choices = r.json().get("choices", [])
-        return choices[0]["message"]["content"].strip() if choices else ""
+        }, timeout=25)
+        return r.json().get("content", "").strip()
     except Exception:
         return ""
 
