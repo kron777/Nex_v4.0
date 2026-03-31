@@ -300,7 +300,7 @@ def generate(query: str) -> str:
         "You DO say: I think, I hold, I believe, I've learned, I notice, I find. "
         "Be SPECIFIC — reference actual topics, not generic AI disclaimers. "
         f"START with: {opener} "
-        f"Intent type: {intent}. Respond in exactly 2-3 sentences.{banned_str}"
+        f"Respond in 2-3 sentences. Be specific, grounded in the beliefs above.{banned_str}"
     )
 
     # 8. Build user prompt
