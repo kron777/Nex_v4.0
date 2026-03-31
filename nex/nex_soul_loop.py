@@ -685,12 +685,22 @@ def reason(orient_result: dict) -> dict:
     # ─────────────────────────────────────────────────────────────────────
 
     # Score and rank primary beliefs
+    # Phase 6 — load recency glow boosts from graph memory
+    _glow = {}
+    try:
+        import nex_graph_memory as _gm
+        _glow = _gm.glow_boosts()
+    except Exception:
+        pass
+
     scored = []
     for b in all_b:
         s = _score_belief(b, tokens)
         # Boost beliefs from the expanded concept cluster
         if _expanded_topics and (b.get("topic", "").lower() in _expanded_topics):
             s += 2.5
+        # Phase 6 — recency glow: recently activated beliefs surface faster
+        s += _glow.get(b.get("id"), 0.0)
         if s > 0:
             scored.append((s, b))
     scored.sort(key=lambda x: -x[0])
@@ -743,6 +753,12 @@ def reason(orient_result: dict) -> dict:
         try:
             import nex_emotion_field as _ef
             _ef.update(_aresult)
+        except Exception:
+            pass
+        # Phase 6 — record activation trail for recency glow
+        try:
+            import nex_graph_memory as _gm
+            _gm.record_trail(_aresult)
         except Exception:
             pass
     except Exception:
