@@ -826,6 +826,18 @@ def chat():
     # Source attribution (Tier 3)
     sources = get_source_attribution(query, domain=result.get("domain"))
 
+    # ── Contradiction detection (Professional+ only) ──────────────
+    contradictions = []
+    contradiction_flag = None
+    if tier_allows("reasoning_chain"):
+        try:
+            from nex_contradiction import detect_contradictions, contradiction_summary
+            contradictions = detect_contradictions(query)
+            contradiction_flag = contradiction_summary(contradictions)
+        except Exception as e:
+            print(f"  [API] contradiction detection error: {e}")
+
+
     response_payload = {
         "query":           query,
         "response":        result["response"],
@@ -835,6 +847,8 @@ def chat():
         "timestamp":       datetime.utcnow().isoformat(),
         "sources":         sources,
         "reasoning_chain": result.get("reasoning_chain", {}),
+        "contradictions":   contradictions,
+        "contradiction_flag": contradiction_flag,
     }
 
     # Fire webhooks asynchronously (Professional+ only)
