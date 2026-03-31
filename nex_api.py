@@ -147,6 +147,61 @@ def require_api_key_audited(f):
         return resp
     return decorated
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TIER ENFORCEMENT (Step 5)
+# ══════════════════════════════════════════════════════════════════════════════
+TIER_MATRIX = {
+    "personal": {
+        "daily_request_limit": 100,
+        "max_sessions":        1,
+        "webhooks":            False,
+        "reasoning_chain":     False,
+        "gdpr_export":         False,
+        "domain_activation":   False,
+        "audit_access":        False,
+    },
+    "professional": {
+        "daily_request_limit": 1000,
+        "max_sessions":        10,
+        "webhooks":            True,
+        "reasoning_chain":     True,
+        "gdpr_export":         True,
+        "domain_activation":   True,
+        "audit_access":        True,
+    },
+    "enterprise": {
+        "daily_request_limit": None,   # unlimited
+        "max_sessions":        None,
+        "webhooks":            True,
+        "reasoning_chain":     True,
+        "gdpr_export":         True,
+        "domain_activation":   True,
+        "audit_access":        True,
+    },
+    "free": {
+        "daily_request_limit": 10,
+        "max_sessions":        1,
+        "webhooks":            False,
+        "reasoning_chain":     False,
+        "gdpr_export":         False,
+        "domain_activation":   False,
+        "audit_access":        False,
+    },
+}
+
+def tier_allows(feature: str) -> bool:
+    """Check if the current request's tier allows a feature."""
+    tier = getattr(g, "api_tier", "free")
+    matrix = TIER_MATRIX.get(tier, TIER_MATRIX["free"])
+    return bool(matrix.get(feature, False))
+
+def tier_limit(feature: str):
+    """Return numeric limit for a tier feature (None = unlimited)."""
+    tier = getattr(g, "api_tier", "free")
+    matrix = TIER_MATRIX.get(tier, TIER_MATRIX["free"])
+    return matrix.get(feature)
+
 # ══════════════════════════════════════════════════════════════════════════════
 # SESSION MANAGEMENT (Tier 2)
 # ══════════════════════════════════════════════════════════════════════════════
@@ -442,9 +497,12 @@ def run_nex_query(query: str, session: dict, domain_hint: str = None) -> dict:
 
     latency = round(time.time() - start, 3)
 
-    # ── Reasoning chain (Step 3 — transparency) ──────────────────────
+    # ── Reasoning chain (Step 3 — transparency, Pro+ only) ──────────
     reasoning_chain = {}
     try:
+        if not tier_allows("reasoning_chain"):
+            reasoning_chain = {"error": "Upgrade to Professional or Enterprise to access reasoning chain"}
+            raise Exception("tier_blocked")
         from nex_reason import reason as _reason
         _r = _reason(query)
         reasoning_chain = {
@@ -756,8 +814,9 @@ def chat():
         "reasoning_chain": result.get("reasoning_chain", {}),
     }
 
-    # Fire webhooks asynchronously
-    fire_webhooks(g.api_key, "chat.response", response_payload)
+    # Fire webhooks asynchronously (Professional+ only)
+    if tier_allows("webhooks"):
+        fire_webhooks(g.api_key, "chat.response", response_payload)
 
     return jsonify(response_payload)
 
