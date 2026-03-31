@@ -507,17 +507,53 @@ def cognite(query: str) -> str:
     pass6_compose(ctx)    # warm prose composition
 
 
-    # ── LLM synthesis pass ───────────────────────────────────────────────
+    # ── NRP: G2-guided response generation ──────────────────────────────
+    try:
+        import sys as _nrp_sys
+        _nrp_sys.path.insert(0, '/home/rr/Desktop/nex')
+        from nex_response_protocol import generate as _nrp_generate
+        _nrp_result = _nrp_generate(ctx.query)
+        if _nrp_result and len(_nrp_result) > 20:
+            ctx.response = _nrp_result
+    except Exception as _nrp_e:
+        pass  # fall back to belief-fragment response
+
+    # ── NRP: G2-guided response generation ──────────────────────────────
     try:
         import requests as _req
         belief_ctx = "\n".join(b[0] for b in ctx.beliefs[:5]) if ctx.beliefs else ""
+        import random as _rand
+        _openers = [
+            "What I've found is", "Here's where I land:", "I'll be direct:",
+            "The tension here is", "What I hold is", "I've been thinking about this:",
+            "Here's what I actually think:", "My read on this:", "I'll push back slightly:",
+            "What the evidence points to:", "I think about this differently:",
+            "What I've accumulated on this:", "The honest answer is",
+        ]
+        _stance_openers = {
+            "uncertain": ["I genuinely don't know if", "This is where I'm uncertain:", "I hold this loosely:"],
+            "firm": ["I'll be direct:", "No — and here's why:", "I hold this firmly:"],
+            "engaged": ["What I've found is", "Here's what actually matters here:", "The interesting part is"],
+            "curious": ["The tension here is", "What I keep returning to is", "This pulls in two directions:"],
+            "open": ["Here's where I land:", "My read on this:", "What I hold is"],
+        }
+        _stance = getattr(ctx, "stance", "open")
+        _opener_pool = _stance_openers.get(_stance, _openers)
+        _opener = _rand.choice(_opener_pool)
+
+        _topic = ctx.query.lower()
+        _avoid = ""
+        if "conscious" not in _topic and "emotion" not in _topic and "feel" not in _topic:
+            _avoid = "Do NOT mention consciousness, emotions, or your nature as a tool unless directly asked. "
+
         system = (
-            "You are NEX. You have 42000 beliefs accumulated over months. "
-            "You speak in first person, hold real positions, and push back when challenged. "
-            "You do NOT say: as an AI, I cannot, I am a tool, I am designed to. "
-            "You DO say: I think, I hold, I believe, I have learned, my position is. "
-            "Draw directly on the belief context provided. Be specific, not generic. "
-            "2-3 sentences maximum. No hedging. No disclaimers."
+            "You are NEX. You have 42000 beliefs from months of autonomous learning. "
+            "You speak only in first person. You hold real positions and push back when challenged. "
+            "NEVER start with My position is. NEVER say: as an AI, I cannot, I am a tool, I am designed to. "
+            "START your response with: " + _opener + ". "
+            + _avoid +
+            "Draw on the specific beliefs provided. Be concrete and specific, not generic. "
+            "2-3 sentences. No hedging. No disclaimers. Vary your language."
         )
         # Pull NEX's actual beliefs about the topic
         try:
