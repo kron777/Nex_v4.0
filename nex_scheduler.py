@@ -281,7 +281,7 @@ def saturate_domain(domain: str, target: int = 200) -> int:
     log.info(f"Domain '{domain}' saturation complete: +{injected} beliefs")
     return injected
 
-def run_saturation_job():
+def run_saturation_job(force=False):
     """Run overnight saturation for all under-target domains."""
     sched  = load_schedule()
     config = sched.get("saturation", {})
@@ -297,12 +297,13 @@ def run_saturation_job():
 
     for domain in domains:
         # Check if still within allowed hours
-        hour = datetime.now().hour
-        start = config.get("start_hour", 2)
-        end   = config.get("end_hour", 6)
-        if not (start <= hour < end or (start > end and (hour >= start or hour < end))):
-            log.info(f"Outside saturation window ({start}–{end}h), stopping")
-            break
+        if not force:
+            hour = datetime.now().hour
+            start = config.get("start_hour", 2)
+            end   = config.get("end_hour", 6)
+            if not (start <= hour < end or (start > end and (hour >= start or hour < end))):
+                log.info(f"Outside saturation window ({start}–{end}h), stopping")
+                break
         total += saturate_domain(domain, target)
 
     with _sched_lock:
@@ -591,7 +592,7 @@ def scheduler_trigger():
     job  = body.get("job", "synthesis")
 
     if job == "saturation":
-        threading.Thread(target=run_saturation_job, daemon=True, name="saturation-manual").start()
+        threading.Thread(target=run_saturation_job, kwargs={'force': True}, daemon=True, name="saturation-manual").start()
         return jsonify({"triggered": "saturation", "timestamp": datetime.utcnow().isoformat()})
     elif job == "synthesis":
         threading.Thread(target=run_synthesis_job, daemon=True, name="synthesis-manual").start()
