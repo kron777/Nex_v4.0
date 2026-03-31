@@ -1155,6 +1155,19 @@ def express(
     intent_type   = orient_result["intent"]
     sparse        = reason_result["sparse"]
     tone          = state["tone"]
+    # ── Epistemic temperature from activation engine ───────────────────────
+    _etemp = orient_result.get("_epistemic_temp", 0.5)
+    _vdir  = orient_result.get("_voice_directive", "")
+    # Override tone based on field temperature
+    if _etemp < 0.2:
+        tone = "confident"
+    elif _etemp < 0.4:
+        tone = "measured"
+    elif _etemp < 0.65:
+        tone = "exploratory"
+    else:
+        tone = "uncertain"
+    # ─────────────────────────────────────────────────────────────────────
     cross_domain  = reason_result.get("cross_domain", [])
     common_thread = reason_result.get("common_thread", "")
     prior_exchange= reason_result.get("prior_exchange", "")

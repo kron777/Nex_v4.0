@@ -39,7 +39,7 @@ MIN_TEMPERATURE      = 0.05   # stop when cooled to this
 CLUSTER_SIZE         = 20     # beliefs per annealing cluster
 CONFIDENCE_BOOST     = 0.015  # boost for beliefs that survive tension
 CONFIDENCE_DECAY     = 0.012  # decay for beliefs that lose tension
-CRYSTALLISE_THRESHOLD = 0.78  # avg confidence to trigger crystallisation
+CRYSTALLISE_THRESHOLD = 0.65  # avg confidence to trigger crystallisation
 MAX_CRYSTAL_LENGTH   = 200    # max chars for crystallised belief
 
 
@@ -92,9 +92,10 @@ def anneal_cycle(conn, temperature: float, cycle_num: int) -> dict:
 
     # Load a random sample of beliefs weighted by topic diversity
     topics = [r[0] for r in conn.execute(
-        "SELECT DISTINCT topic FROM beliefs WHERE topic IS NOT NULL "
-        "ORDER BY RANDOM() LIMIT 30"
+        "SELECT topic, COUNT(*) as n FROM beliefs WHERE topic IS NOT NULL "
+        "GROUP BY topic HAVING n >= 3 ORDER BY RANDOM() LIMIT 50"
     ).fetchall()]
+    topics = [t[0] for t in topics] if topics and isinstance(topics[0], tuple) else topics
 
     if not topics:
         return stats
@@ -218,7 +219,7 @@ def run_annealing(n_cycles: int = 10, overnight: bool = False):
     while True:
         if overnight:
             hour = datetime.now().hour
-            if hour >= 6:
+            if False:  # window check disabled for manual runs — scheduler handles timing
                 print(f"\n  Overnight window ended at {datetime.now().strftime('%H:%M')}")
                 break
         else:
