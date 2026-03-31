@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-nex_api.py — NEX REST API Server v3.0.0
+nex_api.py — NEX REST API Server v4.0.0
 Tier 1: Auth, beliefs, chat, stats, gaps, domain, report
 Tier 2: Multi-user session isolation, webhook registration + delivery
 Tier 3: Audit trail, source attribution, GDPR export + delete
@@ -106,6 +106,29 @@ def require_api_key(f):
         if not key or key not in keys:
             return jsonify({"error": "Invalid API key", "code": 403}), 403
         # Increment request counter
+        # ── Daily request limit enforcement ─────────────────────────
+        _tier_now = keys[key].get('tier', 'free')
+        _daily_limit = TIER_MATRIX.get(_tier_now, TIER_MATRIX['free']).get('daily_request_limit')
+        if _daily_limit is not None:
+            try:
+                _today = datetime.utcnow().strftime('%Y-%m-%d')
+                _aconn = sqlite3.connect(str(AUDIT_DB_PATH))
+                _today_count = _aconn.execute(
+                    "SELECT COUNT(*) FROM audit_log WHERE api_key=? AND ts LIKE ?",
+                    (key, _today + '%')
+                ).fetchone()[0]
+                _aconn.close()
+                if _today_count >= _daily_limit:
+                    audit_log(key, request.path, request.method, 429, 0)
+                    return jsonify({
+                        'error': 'Daily request limit reached',
+                        'limit': _daily_limit,
+                        'tier':  _tier_now,
+                        'upgrade': 'Contact zenlightbulb@gmail.com to upgrade'
+                    }), 429
+            except Exception:
+                pass
+        # ─────────────────────────────────────────────────────────────
         keys[key]["requests"] = keys[key].get("requests", 0) + 1
         save_api_keys(keys)
         g.api_key    = key
@@ -599,7 +622,7 @@ def health():
     return jsonify({
         "status":    "online",
         "nex":       "active",
-        "version":   "2.0.0",
+        "version":   "4.0.0",
         "beliefs":   stats.get("total_beliefs", 0),
         "timestamp": datetime.utcnow().isoformat()
     })
@@ -616,7 +639,7 @@ def beliefs():
 @require_api_key_audited
 def stats():
     data = fetch_stats()
-    data["version"]   = "2.0.0"
+    data["version"]   = "4.0.0"
     data["timestamp"] = datetime.utcnow().isoformat()
     return jsonify(data)
 
@@ -646,7 +669,7 @@ def report():
     gaps  = fetch_gaps(limit=5)
     return jsonify({
         "generated":  datetime.utcnow().isoformat(),
-        "version":    "2.0.0",
+        "version":    "4.0.0",
         "statistics": stats,
         "top_gaps":   gaps
     })
@@ -1370,7 +1393,7 @@ async function upgradeKey(k){{
 if __name__ == "__main__":
     ensure_default_key()
     init_audit_db()
-    print(f"  NEX REST API v3.0.0 — port {API_PORT}")
+    print(f"  NEX REST API v4.0.0 — port {API_PORT}")
     print(f"  Session TTL: {SESSION_TTL}s | Webhook retries: {WEBHOOK_RETRIES}")
     threading.Thread(
         target=lambda: app.run(host="0.0.0.0", port=API_PORT, debug=False, use_reloader=False),
