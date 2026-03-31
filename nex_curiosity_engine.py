@@ -177,8 +177,22 @@ class CuriosityEngine:
 
     # ── TYPE A: Gap Fill ──────────────────────────────────────
     def type_a_gap_fill(self) -> dict | None:
-        """Ask: What is X? where X is NEX's lowest-confidence topic."""
-        topic = self._pick_low_confidence_topic()
+        """Ask: What is X? where X is NEX's lowest-confidence topic.
+        Graph-native: topic derived from belief graph negative space."""
+        # Graph-native gap selection — use graph curiosity if available
+        topic = None
+        try:
+            from nex_graph_curiosity import top_queries
+            graph_gaps = top_queries(n=3, gap_types=["THIN","DEPTH","CONTESTED"])
+            if graph_gaps:
+                import random
+                chosen = random.choice(graph_gaps[:3])
+                topic = chosen["topic"].replace("+", "_")
+                print(f"  [curiosity] TYPE A — graph gap: {chosen['reason'][:60]}")
+        except Exception:
+            pass
+        if not topic:
+            topic = self._pick_low_confidence_topic()
         if not topic:
             return None
         # LoadShare: only call LLM if it's a true gap
@@ -236,11 +250,29 @@ class CuriosityEngine:
     # ── TYPE C: Bridge Query ─────────────────────────────────
     def generate_bridge_query(self) -> dict | None:
         """
-        Core upgrade: Pick two high-confidence beliefs from different domains.
-        Ask: How does X connect to Y?
-        This is where genuine cross-domain understanding emerges.
+        Graph-native: use bridge_history for cross-domain queries.
+        Bridges are the highest-scoring unexpected connections
+        already detected by nex_bridge_detector.
+        Falls back to random belief pairs if no bridges available.
         """
         self.refresh()
+        # Try graph bridges first
+        try:
+            from nex_graph_curiosity import top_queries
+            bridge_gaps = top_queries(n=3, gap_types=["BRIDGE"])
+            if bridge_gaps:
+                import random
+                chosen = random.choice(bridge_gaps)
+                print(f"  [curiosity] BRIDGE — {chosen['reason'][:60]}")
+                return {
+                    "type":    "bridge",
+                    "query":   chosen["query"],
+                    "topic":   chosen["topic"],
+                    "source":  "graph_bridge",
+                }
+        except Exception:
+            pass
+        # Fallback: random belief pairs
         pair = self._pick_beliefs_by_domain(n=2)
         if len(pair) < 2:
             return self.type_a_gap_fill()
