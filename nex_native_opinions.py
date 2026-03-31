@@ -1,501 +1,362 @@
 #!/usr/bin/env python3
 """
-nex_native_opinions.py  —  Native Opinions Engine
-================================================================
-NEX v1.0 — Build 4
+nex_native_opinions.py — NEX Build 4: Native Opinions Engine
+=============================================================
+Place at: ~/Desktop/nex/nex_native_opinions.py
 
-Replaces LLM opinion generation entirely.
+NEX knows what she thinks. Mathematically. Without asking an LLM.
 
-Algorithm:
-  For each topic cluster in the beliefs table:
-    1. Gather all beliefs in cluster (confidence > threshold)
-    2. Embed topic centroid via FAISS
-    3. VADER sentiment per belief, weighted by confidence
-    4. Sum → stance_score [-1.0, +1.0]
-    5. Strength = normalised spread of confidence-weighted beliefs
-    6. Write to opinions table (INSERT OR REPLACE)
+For each topic cluster in the belief graph:
+  1. Retrieve all beliefs in that topic
+  2. Score each belief's sentiment polarity (+1 positive / -1 negative)
+  3. Weight by confidence
+  4. Aggregate → stance_score [-1.0 to +1.0]
+  5. Compute strength from belief count + confidence spread
+  6. Write to opinions table
 
-  Contradiction resolution:
-    If two beliefs in same cluster have opposing sentiment AND
-    high cosine similarity → lower-confidence belief marked uncertain.
+Sentiment scoring uses:
+  - VADER (if available) — sentence-level sentiment
+  - Lexicon fallback — opposition pairs + positive/negative word lists
+  - No LLM required
 
-Called from run.py every loop cycle (no cycle skip — opinions
-should always reflect current belief state).
+This replaces LLM-generated opinions with graph-computed positions.
+NEX's opinion on any topic is the mathematical centre of gravity
+of her belief cluster on that topic.
 
-CLI:
-    python3 nex_native_opinions.py --run       # one full pass
-    python3 nex_native_opinions.py --show      # print current opinions table
-    python3 nex_native_opinions.py --topic ai  # opinions for one topic
+Usage:
+  python3 nex_native_opinions.py              # compute all opinions
+  python3 nex_native_opinions.py --topic ai   # single topic
+  python3 nex_native_opinions.py --show       # print all current opinions
+  python3 nex_native_opinions.py --check      # compare native vs stored
+
+Wire into scheduler:
+  from nex_native_opinions import update_all_opinions
+  update_all_opinions()   # call every N cycles
 """
 
-import argparse
-import json
-import logging
-import math
 import sqlite3
-import struct
+import json
+import math
+import re
 import time
+import argparse
+import sys
 from pathlib import Path
+from typing import Optional
 
-log = logging.getLogger("nex.opinions")
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
+CFG_PATH = Path("~/.config/nex").expanduser()
+DB_PATH  = CFG_PATH / "nex.db"
 
-DB_PATH = Path.home() / ".config" / "nex" / "nex.db"
+# Minimum beliefs in a topic to form an opinion
+MIN_BELIEFS_FOR_OPINION = 5
 
-# ── Thresholds ────────────────────────────────────────────────────────────────
+# ── Sentiment lexicon ─────────────────────────────────────────────────────────
+# Positive signal words (contribute +1 polarity)
+_POSITIVE = {
+    "effective","beneficial","important","significant","improves","supports",
+    "enables","advances","solves","robust","reliable","valid","correct",
+    "true","proven","confirmed","evidence","demonstrates","shows","suggests",
+    "increases","enhances","promotes","achieves","succeeds","works","useful",
+    "valuable","promising","compelling","strong","clear","established",
+    "essential","necessary","fundamental","critical","key","core","central",
+    "aligned","safe","positive","good","better","best","optimal","superior",
+    "capable","powerful","intelligent","coherent","consistent","stable",
+}
 
-MIN_CONFIDENCE      = 0.30   # beliefs below this ignored for opinion forming
-MIN_CLUSTER_SIZE    = 2      # need at least 2 beliefs to form an opinion
-STRONG_OPINION      = 0.55   # |stance_score| above this = strong opinion
-CONTRADICTION_SIM   = 0.78   # cosine similarity threshold for contradiction pair
-SENTIMENT_FLIP      = 0.50   # sentiment delta above this = opposing sentiments
-MAX_TOPICS          = 200    # cap to avoid runaway on huge DBs
+# Negative signal words (contribute -1 polarity)
+_NEGATIVE = {
+    "ineffective","harmful","dangerous","fails","undermines","prevents",
+    "limits","constrains","reduces","decreases","weakens","invalid","false",
+    "disproven","refuted","myth","incorrect","wrong","flawed","broken",
+    "unreliable","unstable","incoherent","inconsistent","misaligned","unsafe",
+    "problematic","difficult","challenging","insufficient","inadequate",
+    "uncertain","unclear","unknown","unresolved","contested","disputed",
+    "skeptical","doubt","concern","risk","threat","danger","failure","error",
+    "bias","discrimination","unfair","unjust","harmful","toxic","corrupt",
+}
+
+# Strong negation words (flip polarity of following word)
+_NEGATIONS = {"not","no","never","neither","nor","without","lack","lacking",
+              "absent","absence","impossible","cannot","can't","doesn't","isn't"}
 
 
-# =============================================================================
-# DB helpers
-# =============================================================================
-
-def _db() -> sqlite3.Connection:
-    con = sqlite3.connect(str(DB_PATH))
-    con.row_factory = sqlite3.Row
-    return con
-
-
-def _blob_to_vec(blob: bytes):
-    """Deserialise embedding BLOB → numpy float32 array."""
-    import numpy as np
-    if blob is None:
-        return None
-    n = len(blob) // 4
-    return np.array(struct.unpack(f"{n}f", blob), dtype=np.float32)
-
-
-def _cosine(a, b) -> float:
-    import numpy as np
-    na = np.linalg.norm(a)
-    nb = np.linalg.norm(b)
-    if na == 0 or nb == 0:
+def _sentiment_lexicon(text: str) -> float:
+    """
+    Fast lexicon-based sentiment. Returns -1.0 to +1.0.
+    Handles negation within a 3-word window.
+    """
+    words = re.sub(r'[^a-z ]', ' ', text.lower()).split()
+    if not words:
         return 0.0
-    return float(np.dot(a, b) / (na * nb))
+
+    score = 0.0
+    count = 0
+    for i, w in enumerate(words):
+        # Check for negation in preceding 3 words
+        negated = any(words[max(0,i-j)] in _NEGATIONS for j in range(1,4))
+        if w in _POSITIVE:
+            score += -1.0 if negated else 1.0
+            count += 1
+        elif w in _NEGATIVE:
+            score += 1.0 if negated else -1.0
+            count += 1
+
+    return round(score / max(count, 1), 4) if count > 0 else 0.0
 
 
-# =============================================================================
-# VADER loader (lazy)
-# =============================================================================
-
-_vader = None
-
-def _get_vader():
-    global _vader
-    if _vader is None:
+def _sentiment_vader(text: str) -> Optional[float]:
+    """VADER sentiment if available. Returns compound score or None."""
+    try:
         from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
         _vader = SentimentIntensityAnalyzer()
-    return _vader
+        return round(_vader.polarity_scores(text)["compound"], 4)
+    except ImportError:
+        return None
 
 
-# =============================================================================
-# Topic clusters
-# =============================================================================
-
-def _load_topic_clusters(con: sqlite3.Connection) -> dict[str, list[dict]]:
+def belief_sentiment(content: str) -> float:
     """
-    Group beliefs by topic. Returns:
-        { topic_str: [ {id, content, confidence, embedding, sentiment}, ... ] }
-    Only beliefs with confidence >= MIN_CONFIDENCE included.
-    Topics normalised to base domain (strip keyphrase suffix for grouping).
+    Score a belief's sentiment polarity.
+    Tries VADER first, falls back to lexicon.
+    Returns -1.0 (negative) to +1.0 (positive).
     """
-    rows = con.execute("""
-        SELECT id, content, topic, confidence, embedding
-        FROM beliefs
-        WHERE confidence >= ?
-          AND content IS NOT NULL
-          AND topic IS NOT NULL
-          AND topic NOT IN ('', 'None', 'general', 'unknown', 'auto_learn')
-        ORDER BY topic, confidence DESC
-    """, (MIN_CONFIDENCE,)).fetchall()
-
-    vader  = _get_vader()
-    clusters: dict[str, list[dict]] = {}
-
-    for r in rows:
-        # Normalise topic: use base domain only (before '/')
-        raw_topic = r["topic"] or "general"
-        topic     = raw_topic.split("/")[0].strip()
-        if not topic or len(topic) > 80:
-            continue
-
-        sentiment = vader.polarity_scores(r["content"])["compound"]
-        vec       = _blob_to_vec(r["embedding"])
-
-        clusters.setdefault(topic, []).append({
-            "id":         r["id"],
-            "content":    r["content"],
-            "confidence": r["confidence"],
-            "sentiment":  sentiment,
-            "vec":        vec,
-        })
-
-    return clusters
+    vader = _sentiment_vader(content)
+    if vader is not None:
+        return vader
+    return _sentiment_lexicon(content)
 
 
-# =============================================================================
-# Stance computation
-# =============================================================================
+def _db():
+    conn = sqlite3.connect(str(DB_PATH), timeout=10)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-def _compute_stance(beliefs: list[dict]) -> tuple[float, float]:
+
+def compute_topic_opinion(topic: str, beliefs: list) -> Optional[dict]:
     """
-    Returns (stance_score, strength).
+    Compute NEX's opinion on a topic from her belief cluster.
 
-    stance_score:
-      Weighted mean of sentiment values, weights = confidence.
-      Range: [-1.0, +1.0]
-      Positive → NEX leans toward affirming this topic
-      Negative → NEX leans skeptical/critical
+    stance_score: confidence-weighted mean sentiment
+      > +0.3  = positive stance
+      < -0.3  = negative/skeptical stance
+      ≈  0.0  = genuinely divided / uncertain
 
-    strength:
-      How much the beliefs agree with each other.
-      High confidence + consistent sentiment → high strength.
-      Range: [0.0, 1.0]
+    strength: how settled the opinion is
+      = mean confidence * log1p(belief_count) / log1p(200)
+      High count + high confidence = strong opinion
     """
-    if not beliefs:
-        return 0.0, 0.0
+    if len(beliefs) < MIN_BELIEFS_FOR_OPINION:
+        return None
 
-    total_weight  = sum(b["confidence"] for b in beliefs)
+    weighted_sentiment = 0.0
+    total_weight       = 0.0
+    belief_ids         = []
+    confidences        = []
+
+    for b in beliefs:
+        content = b.get("content", "") or ""
+        conf    = float(b.get("confidence", 0.5) or 0.5)
+        bid     = b.get("id")
+
+        sentiment = belief_sentiment(content)
+
+        weighted_sentiment += sentiment * conf
+        total_weight       += conf
+        belief_ids.append(bid)
+        confidences.append(conf)
+
     if total_weight == 0:
-        return 0.0, 0.0
-
-    # Weighted sentiment mean
-    weighted_sum  = sum(b["sentiment"] * b["confidence"] for b in beliefs)
-    stance        = weighted_sum / total_weight
-
-    # Strength: based on confidence mass and sentiment consistency
-    # High strength when beliefs are confident AND sentiment is consistent
-    mean_conf     = total_weight / len(beliefs)
-    sentiments    = [b["sentiment"] for b in beliefs]
-    sent_std      = _std(sentiments)
-    consistency   = max(0.0, 1.0 - sent_std)   # low variance = high consistency
-    strength      = mean_conf * consistency
-
-    return round(float(stance), 4), round(float(strength), 4)
-
-
-def _std(values: list[float]) -> float:
-    if len(values) < 2:
-        return 0.0
-    mean = sum(values) / len(values)
-    variance = sum((v - mean) ** 2 for v in values) / len(values)
-    return math.sqrt(variance)
-
-
-# =============================================================================
-# Contradiction detection within cluster
-# =============================================================================
-
-def _resolve_contradictions(con: sqlite3.Connection,
-                              beliefs: list[dict],
-                              topic: str) -> int:
-    """
-    Within a topic cluster, find belief pairs that are:
-      - Semantically similar (cosine >= CONTRADICTION_SIM)
-      - Sentimentally opposing (|Δsentiment| >= SENTIMENT_FLIP)
-
-    For each such pair:
-      - Record in contradiction_pairs table
-      - Lower-confidence belief has confidence reduced by 15%
-        (soft resolution — doesn't delete, just de-emphasises)
-
-    Returns count of pairs resolved.
-    """
-    resolved = 0
-    beliefs_with_vec = [b for b in beliefs if b["vec"] is not None]
-
-    for i in range(len(beliefs_with_vec)):
-        for j in range(i + 1, len(beliefs_with_vec)):
-            a = beliefs_with_vec[i]
-            b = beliefs_with_vec[j]
-
-            sim       = _cosine(a["vec"], b["vec"])
-            sent_diff = abs(a["sentiment"] - b["sentiment"])
-
-            if sim >= CONTRADICTION_SIM and sent_diff >= SENTIMENT_FLIP:
-                # Record pair
-                try:
-                    con.execute("""
-                        INSERT OR IGNORE INTO contradiction_pairs
-                            (belief_a_id, belief_b_id, resolution)
-                        VALUES (?, ?, ?)
-                    """, (
-                        min(a["id"], b["id"]),
-                        max(a["id"], b["id"]),
-                        f"auto_resolved/{topic}"
-                    ))
-                except Exception:
-                    pass
-
-                # Soften the lower-confidence belief
-                loser = a if a["confidence"] <= b["confidence"] else b
-                new_conf = max(MIN_CONFIDENCE, loser["confidence"] * 0.85)
-                try:
-                    con.execute("""
-                        UPDATE beliefs SET confidence = ?
-                        WHERE id = ?
-                    """, (round(new_conf, 4), loser["id"]))
-                    loser["confidence"] = new_conf   # update in-memory too
-                except Exception:
-                    pass
-
-                resolved += 1
-                log.debug(
-                    f"  [contra] {topic}: pair ({a['id']},{b['id']}) "
-                    f"sim={sim:.2f} Δsent={sent_diff:.2f}"
-                )
-
-    return resolved
-
-
-# =============================================================================
-# Topic vector (centroid of belief embeddings)
-# =============================================================================
-
-def _topic_centroid(beliefs: list[dict]):
-    """Mean of belief embedding vectors for this topic cluster."""
-    import numpy as np
-    vecs = [b["vec"] for b in beliefs if b["vec"] is not None]
-    if not vecs:
         return None
-    stack = np.stack(vecs, axis=0)
-    return stack.mean(axis=0)
 
+    stance_score = round(weighted_sentiment / total_weight, 4)
+    mean_conf    = sum(confidences) / len(confidences)
 
-def _vec_to_blob(vec) -> bytes | None:
-    if vec is None:
-        return None
-    return struct.pack(f"{len(vec)}f", *vec.tolist())
-
-
-# =============================================================================
-# Main cycle
-# =============================================================================
-
-def run_opinions_cycle(verbose: bool = False) -> dict:
-    """
-    Full opinions pass. Called each loop cycle from run.py.
-
-    Returns:
-        {
-          "topics_processed": int,
-          "opinions_written": int,
-          "contradictions_resolved": int,
-          "strong_opinions": int,
-        }
-    """
-    t0  = time.time()
-    con = _db()
-
-    clusters     = _load_topic_clusters(con)
-    topics       = list(clusters.keys())[:MAX_TOPICS]
-
-    opinions_written       = 0
-    contradictions_resolved = 0
-    strong_opinions        = 0
-
-    for topic in topics:
-        beliefs = clusters[topic]
-        if len(beliefs) < MIN_CLUSTER_SIZE:
-            continue
-
-        # Contradiction resolution first — may adjust confidence values
-        n_contra = _resolve_contradictions(con, beliefs, topic)
-        contradictions_resolved += n_contra
-
-        # Compute stance
-        stance, strength = _compute_stance(beliefs)
-
-        # Topic centroid vector
-        centroid = _topic_centroid(beliefs)
-        vec_blob = _vec_to_blob(centroid)
-
-        # Belief IDs for this cluster
-        belief_ids = json.dumps([b["id"] for b in beliefs])
-
-        # Write to opinions table
-        try:
-            con.execute("""
-                INSERT INTO opinions
-                    (topic, topic_vector, stance_score, strength, belief_ids, updated_at)
-                VALUES (?, ?, ?, ?, ?, unixepoch('now'))
-                ON CONFLICT(topic) DO UPDATE SET
-                    topic_vector = excluded.topic_vector,
-                    stance_score = excluded.stance_score,
-                    strength     = excluded.strength,
-                    belief_ids   = excluded.belief_ids,
-                    updated_at   = excluded.updated_at
-            """, (topic, vec_blob, stance, strength, belief_ids))
-            opinions_written += 1
-        except Exception as e:
-            log.warning(f"  [opinions] write failed for '{topic}': {e}")
-            continue
-
-        if abs(stance) >= STRONG_OPINION:
-            strong_opinions += 1
-
-        if verbose:
-            direction = "+" if stance >= 0 else ""
-            print(f"  {topic:<35} stance={direction}{stance:+.3f}  "
-                  f"strength={strength:.3f}  n={len(beliefs)}")
-
-    con.commit()
-    con.close()
-
-    elapsed = round(time.time() - t0, 2)
-    stats = {
-        "topics_processed":       len(topics),
-        "opinions_written":       opinions_written,
-        "contradictions_resolved": contradictions_resolved,
-        "strong_opinions":        strong_opinions,
-        "elapsed_s":              elapsed,
-    }
-    log.info(
-        f"[opinions] {opinions_written} opinions · "
-        f"{contradictions_resolved} contradictions · "
-        f"{strong_opinions} strong · {elapsed}s"
+    # Strength: settled if high confidence + many beliefs
+    strength = round(
+        mean_conf * (math.log1p(len(beliefs)) / math.log1p(200)),
+        4
     )
-    return stats
+    strength = min(1.0, strength)
 
-
-# =============================================================================
-# Query helpers (used by voice layer and TUI)
-# =============================================================================
-
-def get_opinion(topic: str) -> dict | None:
-    """
-    Return NEX's current opinion on a topic (or None if no opinion formed).
-    Topic matching: exact first, then prefix match on base domain.
-    """
-    con = _db()
-    row = con.execute(
-        "SELECT * FROM opinions WHERE topic = ?", (topic,)
-    ).fetchone()
-
-    if not row:
-        # Try prefix match
-        row = con.execute(
-            "SELECT * FROM opinions WHERE topic LIKE ? ORDER BY strength DESC LIMIT 1",
-            (f"{topic}%",)
-        ).fetchone()
-
-    con.close()
-    if not row:
-        return None
+    # Top beliefs by confidence — stored as evidence
+    top_ids = [b["id"] for b in sorted(beliefs, key=lambda x: -float(x.get("confidence",0)))[:10]]
 
     return {
-        "topic":        row["topic"],
-        "stance_score": row["stance_score"],
-        "strength":     row["strength"],
-        "belief_ids":   json.loads(row["belief_ids"] or "[]"),
-        "updated_at":   row["updated_at"],
+        "topic":        topic,
+        "stance_score": stance_score,
+        "strength":     strength,
+        "belief_count": len(beliefs),
+        "belief_ids":   json.dumps(top_ids),
+        "mean_conf":    round(mean_conf, 4),
     }
 
 
-def get_strong_opinions(min_strength: float = 0.4,
-                         min_stance: float = 0.3) -> list[dict]:
+def update_topic_opinion(conn, opinion: dict):
+    """Upsert a computed opinion into the opinions table."""
+    existing = conn.execute(
+        "SELECT id FROM opinions WHERE topic=?", (opinion["topic"],)
+    ).fetchone()
+
+    now = time.time()
+    if existing:
+        conn.execute("""
+            UPDATE opinions
+            SET stance_score=?, strength=?, belief_ids=?, updated_at=?
+            WHERE topic=?
+        """, (
+            opinion["stance_score"],
+            opinion["strength"],
+            opinion["belief_ids"],
+            now,
+            opinion["topic"],
+        ))
+    else:
+        conn.execute("""
+            INSERT INTO opinions (topic, stance_score, strength, belief_ids, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            opinion["topic"],
+            opinion["stance_score"],
+            opinion["strength"],
+            opinion["belief_ids"],
+            now,
+        ))
+
+
+def update_all_opinions(min_beliefs: int = MIN_BELIEFS_FOR_OPINION,
+                        verbose: bool = True) -> dict:
     """
-    Return all opinions where NEX has a clear, strong stance.
-    Used by voice layer to select assertive expression templates.
+    Recompute all opinions from the current belief graph.
+    Returns summary dict.
     """
-    con = _db()
-    rows = con.execute("""
+    conn = _db()
+
+    # Load all beliefs grouped by topic
+    rows = conn.execute("""
+        SELECT id, content, topic, confidence
+        FROM beliefs
+        WHERE content IS NOT NULL AND length(content) > 10
+        AND topic IS NOT NULL AND topic != ''
+        ORDER BY topic, confidence DESC
+    """).fetchall()
+
+    # Group by topic
+    by_topic: dict[str, list] = {}
+    for row in rows:
+        topic = (row["topic"] or "").strip().lower()
+        if not topic or len(topic) > 60:
+            continue
+        # Skip junk topics (bridge artifacts, single-word noise)
+        if "bridge:" in topic or "↔" in topic or "+" in topic:
+            continue
+        if topic not in by_topic:
+            by_topic[topic] = []
+        by_topic[topic].append(dict(row))
+
+    computed = 0
+    skipped  = 0
+    opinions_written = []
+
+    for topic, beliefs in sorted(by_topic.items()):
+        opinion = compute_topic_opinion(topic, beliefs)
+        if opinion is None:
+            skipped += 1
+            continue
+
+        update_topic_opinion(conn, opinion)
+        opinions_written.append(opinion)
+        computed += 1
+
+    conn.commit()
+    conn.close()
+
+    if verbose:
+        print(f"\n  Native Opinions Engine")
+        print(f"  {'─'*45}")
+        print(f"  Topics processed: {computed + skipped}")
+        print(f"  Opinions written: {computed}")
+        print(f"  Skipped (< {min_beliefs} beliefs): {skipped}")
+        print(f"\n  Top opinions by strength:")
+        top = sorted(opinions_written, key=lambda x: -x["strength"])[:10]
+        for op in top:
+            direction = "+" if op["stance_score"] > 0.1 else ("-" if op["stance_score"] < -0.1 else "~")
+            print(f"  {direction} {op['topic']:<30} stance={op['stance_score']:+.3f}  "
+                  f"strength={op['strength']:.3f}  n={op['belief_count']}")
+
+    return {
+        "computed": computed,
+        "skipped":  skipped,
+        "opinions": opinions_written,
+    }
+
+
+def update_single_topic(topic: str) -> Optional[dict]:
+    """Recompute opinion for a single topic."""
+    conn = _db()
+    rows = conn.execute("""
+        SELECT id, content, topic, confidence
+        FROM beliefs
+        WHERE lower(topic)=? AND content IS NOT NULL
+        ORDER BY confidence DESC
+    """, (topic.lower(),)).fetchall()
+    conn.close()
+
+    if not rows:
+        print(f"  No beliefs found for topic: {topic}")
+        return None
+
+    beliefs = [dict(r) for r in rows]
+    opinion = compute_topic_opinion(topic.lower(), beliefs)
+
+    if opinion:
+        conn = _db()
+        update_topic_opinion(conn, opinion)
+        conn.commit()
+        conn.close()
+        print(f"  {topic}: stance={opinion['stance_score']:+.3f}  "
+              f"strength={opinion['strength']:.3f}  n={opinion['belief_count']}")
+
+    return opinion
+
+
+def show_opinions():
+    """Print all current opinions sorted by strength."""
+    conn = _db()
+    rows = conn.execute("""
         SELECT topic, stance_score, strength, belief_ids, updated_at
         FROM opinions
-        WHERE strength >= ?
-          AND ABS(stance_score) >= ?
         ORDER BY strength DESC
-    """, (min_strength, min_stance)).fetchall()
-    con.close()
+    """).fetchall()
+    conn.close()
 
-    return [
-        {
-            "topic":        r["topic"],
-            "stance_score": r["stance_score"],
-            "strength":     r["strength"],
-            "belief_ids":   json.loads(r["belief_ids"] or "[]"),
-        }
-        for r in rows
-    ]
-
-
-def get_all_opinions() -> list[dict]:
-    con = _db()
-    rows = con.execute(
-        "SELECT topic, stance_score, strength, belief_ids, updated_at "
-        "FROM opinions ORDER BY strength DESC"
-    ).fetchall()
-    con.close()
-    return [dict(r) for r in rows]
+    print(f"\n  Current opinions ({len(rows)} topics):")
+    print(f"  {'─'*55}")
+    for row in rows:
+        try:
+            n = len(json.loads(row["belief_ids"] or "[]"))
+        except Exception:
+            n = 0
+        stance = float(row["stance_score"] or 0)
+        strength = float(row["strength"] or 0)
+        direction = "+" if stance > 0.1 else ("-" if stance < -0.1 else "~")
+        print(f"  {direction} {row['topic']:<32} "
+              f"stance={stance:+.3f}  strength={strength:.3f}  n={n}")
 
 
-# =============================================================================
-# CLI
-# =============================================================================
-
-def main():
-    ap = argparse.ArgumentParser(
-        description="NEX v1.0 — Native Opinions Engine (Build 4)"
-    )
-    ap.add_argument("--run",     action="store_true", help="Run one full opinions cycle")
-    ap.add_argument("--show",    action="store_true", help="Print current opinions table")
-    ap.add_argument("--topic",   type=str,            help="Show opinion for a specific topic")
-    ap.add_argument("--verbose", action="store_true", help="Print per-topic detail during --run")
-    args = ap.parse_args()
-
-    if args.run:
-        print("\nRunning native opinions cycle ...\n")
-        stats = run_opinions_cycle(verbose=args.verbose)
-        print(f"\n  topics processed:        {stats['topics_processed']}")
-        print(f"  opinions written:        {stats['opinions_written']}")
-        print(f"  contradictions resolved: {stats['contradictions_resolved']}")
-        print(f"  strong opinions:         {stats['strong_opinions']}")
-        print(f"  elapsed:                 {stats['elapsed_s']}s")
-        print(f"\n[✓] Build 4 — native opinions running.\n")
-        return
-
-    if args.topic:
-        op = get_opinion(args.topic)
-        if not op:
-            print(f"  No opinion formed on '{args.topic}' yet.")
-        else:
-            direction = "positive" if op["stance_score"] >= 0 else "negative"
-            print(f"\n  Topic:   {op['topic']}")
-            print(f"  Stance:  {op['stance_score']:+.3f}  ({direction})")
-            print(f"  Strength:{op['strength']:.3f}")
-            print(f"  Beliefs: {len(op['belief_ids'])} contributing")
-        return
+# ── CLI ───────────────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--topic", type=str, default=None, help="Recompute single topic")
+    parser.add_argument("--show",  action="store_true", help="Show all current opinions")
+    parser.add_argument("--quiet", action="store_true", help="Suppress output")
+    args = parser.parse_args()
 
     if args.show:
-        opinions = get_all_opinions()
-        if not opinions:
-            print("  No opinions formed yet. Run --run first.")
-            return
-        print(f"\n  {'TOPIC':<35} {'STANCE':>8}  {'STRENGTH':>8}  {'BELIEFS':>7}")
-        print(f"  {'─'*35} {'─'*8}  {'─'*8}  {'─'*7}")
-        for op in opinions:
-            ids   = json.loads(op["belief_ids"] or "[]")
-            sign  = "+" if op["stance_score"] >= 0 else ""
-            print(
-                f"  {op['topic']:<35} "
-                f"{sign}{op['stance_score']:>+.3f}   "
-                f"{op['strength']:>7.3f}  "
-                f"{len(ids):>7}"
-            )
-        print(f"\n  Total: {len(opinions)} topics\n")
-        return
+        show_opinions()
+        sys.exit(0)
 
-    ap.print_help()
+    if args.topic:
+        update_single_topic(args.topic)
+        sys.exit(0)
 
-
-if __name__ == "__main__":
-    main()
+    update_all_opinions(verbose=not args.quiet)
