@@ -26,16 +26,17 @@ DB_PATH = Path("~/.config/nex/nex.db").expanduser()
 
 # ── Source authority weights ──────────────────────────────────────────────────
 SOURCE_WEIGHTS = {
-    "arxiv":          1.0,
-    "pubmed":         1.0,
-    "wikipedia":      0.85,
-    "auto_seeder":    0.70,
-    "self_research":  0.70,
-    "synthesis":      0.80,
-    "human":          0.95,
-    "groq":           0.65,
-    "web":            0.60,
-    "unknown":        0.50,
+    "arxiv":               1.0,
+    "pubmed":              1.0,
+    "wikipedia":           0.85,
+    "scheduler_saturation": 0.82,  # domain saturation — structured prompts
+    "self_research":       0.88,   # NEX's own research — academic quality
+    "synthesis":           0.80,
+    "auto_seeder":         0.70,
+    "human":               0.95,
+    "groq":                0.65,
+    "web":                 0.60,
+    "unknown":             0.50,
 }
 
 def _db():
