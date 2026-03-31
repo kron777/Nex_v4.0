@@ -719,10 +719,21 @@ def reason(orient_result: dict) -> dict:
         s += _glow.get(b.get("id"), 0.0)
         # Build 3 — semantic similarity boost
         s += _semantic.get(b.get("id"), 0.0)
+        # Penalise general/noise topic beliefs in scoring
+        if (b.get("topic") or "") in ("general", ""):
+            s *= 0.3
         if s > 0:
             scored.append((s, b))
     scored.sort(key=lambda x: -x[0])
-    top_beliefs = [b for _, b in scored[:8]]
+    # Dedup near-identical beliefs before taking top N
+    _seen_prefixes = set()
+    _deduped = []
+    for _score, _b in scored:
+        _prefix = (_b.get("content") or "")[:120].lower().strip()
+        if _prefix and _prefix not in _seen_prefixes:
+            _seen_prefixes.add(_prefix)
+            _deduped.append((_score, _b))
+    top_beliefs = [b for _, b in _deduped[:8]]
 
     # Derive primary topic from top belief
     topic = top_beliefs[0].get("topic", "") if top_beliefs else ""
@@ -1407,6 +1418,7 @@ class SoulLoop:
             r"^good (morning|afternoon|evening|night)",
             r"^are you (okay|alright|good|there|awake|alive)",
             r"^you okay", r"^ping\b",
+            r"^@\w+:?\s*(hey|hi|hello|how are|what'?s up|yo|ping)\b",
         ]
         if any(_re.search(p, query.lower().strip()) for p in _SOCIAL):
             try:

@@ -146,6 +146,25 @@ def clean_for_soulloop(prompt: str, task_type: str = "reply") -> str:
     if is_social_prompt(prompt):
         extracted = extract_social_query(prompt)
         if extracted and len(extracted.split()) >= 3:
+            # Detect greetings — pass through directly for social intercept
+            _greet = {"hey", "hi", "hello", "how are you", "how are", "good morning",
+                      "good afternoon", "good evening", "what's up", "yo", "ping"}
+            _ext_first = extracted.lower()[:40]
+            if any(g in _ext_first for g in _greet):
+                return extracted  # social intercept in soul_loop handles this
+            # Detect if the post contains a claim — trigger CHALLENGE intent
+            _claim_signals = [
+                "i think", "i believe", "i feel like", "in my opinion",
+                "don't you think", "isn't it", "surely", "obviously",
+                "if ", "therefore", "must be", "has to be",
+            ]
+            _ext_lower = extracted.lower()
+            _has_claim = any(s in _ext_lower for s in _claim_signals)
+            # If content has a claim, route as challenge using content only
+            if _has_claim and " — " in extracted:
+                content_part = extracted.split(" — ", 1)[1].strip()
+                if content_part and len(content_part.split()) >= 4:
+                    extracted = content_part  # just the claim, orient() will detect it
             return extracted
 
     # Not social or extraction failed — truncate cleanly at sentence boundary
