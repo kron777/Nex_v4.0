@@ -305,7 +305,14 @@ def saturate_domain(domain: str, target: int = 200) -> int:
         attempts   += 1
 
         result = llm(prompt, system=DOMAIN_SYSTEM, max_tokens=200, temperature=0.8)
-        if result and len(result) > 30:
+        # Guard: strip anything after a double newline (prompt echo / multi-response)
+        if result and '
+
+' in result:
+            result = result[:result.index('
+
+')].strip()
+        if result and len(result) > 30 and len(result) < 400:
             ok = inject_belief(
                 topic=domain,
                 content=result,

@@ -450,14 +450,28 @@ def _cross_domain_beliefs(top_beliefs: list, tokens: set, limit: int = 4) -> lis
         if not primary_topics:
             return []
 
-        placeholders = ",".join("?" * len(primary_topics))
+        # Topics blocked from cross-domain — either self-referential or too
+        # low-signal to add genuine insight to a substantive reply
+        _BLOCKED_CD_TOPICS = {
+            "truth_seeking", "truth seeking", "identity", "self_model",
+            "self", "nex", "values", "core_values", "drives", "general",
+            "stress", "boredom", "reputation", "boundaries", "learning",
+            "finance", "legal", "oncology", "cardiology", "gaming",
+            "romantic_relationships", "loneliness", "grief", "humour",
+            "cities", "silence", "information_overload",
+            "ethics", "morality", "trust", "honesty", "world",
+            "culture", "history", "art", "music", "nature",
+            "language", "geopolitics", "death", "future",
+        }
+        _excluded = list(primary_topics | _BLOCKED_CD_TOPICS)
+        placeholders = ",".join("?" * len(_excluded))
         rows = db.execute(
             f"SELECT id, content, confidence, topic FROM beliefs "
             f"WHERE topic IS NOT NULL AND topic != '' "
             f"AND lower(topic) NOT IN ({placeholders}) "
             f"AND content IS NOT NULL AND length(content) > 20 "
             f"ORDER BY confidence DESC LIMIT 50",
-            list(primary_topics)
+            _excluded
         ).fetchall()
         db.close()
 
@@ -526,8 +540,16 @@ def _find_common_thread(beliefs: list) -> str:
     if not key_concepts:
         return ""
 
+    # Don't announce — synthesise into an actual claim
     concept_str = " and ".join(key_concepts)
-    return f"What all of this points toward: the centrality of {concept_str} to this problem."
+    import random as _rct
+    _THREAD_FORMS = [
+        f"The deeper pattern across all of this is how {concept_str} keep pulling against each other.",
+        f"What keeps surfacing: {concept_str} — and they don't resolve cleanly.",
+        f"The tension that won't go away: {concept_str}, and what that implies.",
+        f"Underneath all of it, {concept_str} — that's the actual problem.",
+    ]
+    return _rct.choice(_THREAD_FORMS)
 
 
 def _store_exchange(query: str, reply: str):
@@ -648,7 +670,14 @@ def _socratic_pushback(query: str, beliefs: list, opinion: dict) -> str:
     if len(beliefs) > 1:
         second = _belief_to_sentence(beliefs[1].get("content", ""))
         if second:
-            result += f" Which means: {second}"
+            _SOCRATIC_BRIDGES = [
+                f" So: {second}",
+                f" That leads somewhere uncomfortable: {second}",
+                f" The implication is harder than it looks: {second}",
+                f" And if that holds — {second}",
+            ]
+            import random as _rs
+            result += _rs.choice(_SOCRATIC_BRIDGES)
 
     # Add directional close from opinion if strong
     if opinion and abs(float(opinion.get("stance_score", 0) or 0)) >= 0.4:
@@ -1058,16 +1087,32 @@ def _synthesise_beliefs(beliefs: list, max_beliefs: int = 5) -> str:
         return ""
     if len(cleaned) == 1:
         return cleaned[0]
-    _CONNECTORS = [
-        " What reinforces this: ",
-        " The evidence points further: ",
-        " Which connects to: ",
-        " And it goes deeper — ",
-        " The implication that follows: ",
+    # Prose transitions — beliefs flow into each other, not announced
+    _TRANSITIONS = [
+        " This runs deeper — ",
+        " And there's more to it: ",
+        " Which pulls toward something harder: ",
+        " The part that doesn't resolve easily: ",
+        " What I keep returning to: ",
+        " And it compounds — ",
+        " The uncomfortable implication: ",
     ]
+    import random as _rr
+    # Deduplicate — skip any belief that shares >40% words with what's already in result
+    import re as _re2
+    def _words(t):
+        return set(_re2.findall(r'[a-z]{4,}', t.lower()))
     result = cleaned[0]
+    result_words = _words(result)
     for i, c in enumerate(cleaned[1:], 0):
-        result += _CONNECTORS[i % len(_CONNECTORS)] + c
+        c_words = _words(c)
+        if not result_words or not c_words:
+            continue
+        overlap = len(result_words & c_words) / min(len(result_words), len(c_words))
+        if overlap > 0.45:
+            continue  # too similar — skip
+        result += _rr.choice(_TRANSITIONS) + c
+        result_words |= c_words
     return result
 
 
@@ -1143,13 +1188,17 @@ def _build_argument(
     if supporting:
         synthesis = _synthesise_beliefs(supporting, max_beliefs=3)
         if synthesis and synthesis not in claim:
-            _BRIDGES = [
-                "Why I hold this: ",
-                "The evidence I'm working from: ",
-                "What builds the case: ",
-                "The reasoning behind it: ",
-            ]
-            parts.append(_r.choice(_BRIDGES) + synthesis)
+            # No bridge headers — let the synthesis speak for itself
+            # Prepend a minimal thread word only when synthesis is short
+            if len(synthesis) < 60:
+                _THREADS = [
+                    "Which makes sense because ",
+                    "And this matters because ",
+                    "The reason I hold it: ",
+                ]
+                parts.append(_r.choice(_THREADS) + synthesis[0].lower() + synthesis[1:])
+            else:
+                parts.append(synthesis)
 
     # ── 4. CROSS-DOMAIN — surprising adjacent connection ─────────────────────
     if cross_domain:
@@ -1158,10 +1207,10 @@ def _build_argument(
         cd_topic   = cd.get("topic", "").replace("_", " ")
         if cd_content and cd_topic and cd_content not in "".join(parts):
             _CD_BRIDGES = [
-                f"What's less obvious — from {cd_topic}: ",
-                f"This connects to something in {cd_topic}: ",
-                f"An unexpected implication from {cd_topic}: ",
-                f"What makes this harder to dismiss — from {cd_topic}: ",
+                f"There's something adjacent in {cd_topic} that complicates this: ",
+                f"From {cd_topic}, something relevant — ",
+                f"This connects unexpectedly to {cd_topic}: ",
+                f"What {cd_topic} adds to this picture: ",
             ]
             parts.append(_r.choice(_CD_BRIDGES) + cd_content)
 
