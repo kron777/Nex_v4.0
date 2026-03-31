@@ -315,6 +315,20 @@ def run_saturation_job(force=False):
 
     log.info(f"=== Saturation complete: +{total} beliefs total ===")
 
+    # ── Auto-refine corpus after saturation ─────────────────────
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).parent))
+        from nex_belief_refiner import refine_corpus
+        _ref = refine_corpus(dry_run=False, verbose=False)
+        log.info(f"[refiner] dedup={_ref['dedup']['deduped']} "
+                 f"boost={_ref['boost']['boosted']} "
+                 f"decay={_ref['decay']['decayed']} "
+                 f"retopic={_ref['retopic']['retopiced']}")
+    except Exception as _re:
+        log.warning(f'[refiner] auto-refine failed: {_re}')
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # CROSS-DOMAIN SYNTHESIS
 # ══════════════════════════════════════════════════════════════════════════════
