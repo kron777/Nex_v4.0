@@ -1167,6 +1167,202 @@ def gdpr_delete():
     return jsonify({"deleted": deleted})
 
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ADMIN — Key Management (Step 9)
+# ══════════════════════════════════════════════════════════════════════════════
+import os as _os
+ADMIN_SECRET = _os.environ.get("NEX_ADMIN_SECRET", "nex-admin-2026")
+
+def require_admin(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        secret = (request.headers.get("X-Admin-Secret")
+                  or request.args.get("admin_secret")
+                  or (request.get_json(silent=True) or {}).get("admin_secret"))
+        if secret != ADMIN_SECRET:
+            return jsonify({"error": "Admin access denied"}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route("/admin/keys", methods=["GET"])
+@require_admin
+def admin_list_keys():
+    keys = load_api_keys()
+    out = []
+    for k, v in keys.items():
+        out.append({
+            "key":        k,
+            "name":       v.get("name"),
+            "tier":       v.get("tier", "free"),
+            "requests":   v.get("requests", 0),
+            "rate_limit": v.get("rate_limit"),
+            "created":    v.get("created"),
+        })
+    return jsonify({"keys": out, "count": len(out)})
+
+@app.route("/admin/keys", methods=["POST"])
+@require_admin
+def admin_create_key():
+    body = request.get_json(silent=True) or {}
+    name = body.get("name", "unnamed")
+    tier = body.get("tier", "personal")
+    if tier not in TIER_MATRIX:
+        return jsonify({"error": f"Invalid tier. Choose: {list(TIER_MATRIX.keys())}"}), 400
+    limits = {"personal": 100, "professional": 1000, "enterprise": 10000, "free": 10}
+    new_key = "nex-" + hashlib.sha1(_os.urandom(16)).hexdigest()[:20]
+    keys = load_api_keys()
+    keys[new_key] = {
+        "name":       name,
+        "tier":       tier,
+        "created":    datetime.utcnow().isoformat(),
+        "requests":   0,
+        "rate_limit": limits.get(tier, 100),
+    }
+    save_api_keys(keys)
+    return jsonify({"key": new_key, "name": name, "tier": tier}), 201
+
+@app.route("/admin/keys/<key_id>", methods=["PATCH"])
+@require_admin
+def admin_update_key(key_id):
+    keys = load_api_keys()
+    if key_id not in keys:
+        return jsonify({"error": "Key not found"}), 404
+    body = request.get_json(silent=True) or {}
+    if "tier" in body:
+        if body["tier"] not in TIER_MATRIX:
+            return jsonify({"error": "Invalid tier"}), 400
+        keys[key_id]["tier"] = body["tier"]
+    if "name" in body:
+        keys[key_id]["name"] = body["name"]
+    if "rate_limit" in body:
+        keys[key_id]["rate_limit"] = int(body["rate_limit"])
+    save_api_keys(keys)
+    return jsonify({"updated": key_id, "key": keys[key_id]})
+
+@app.route("/admin/keys/<key_id>", methods=["DELETE"])
+@require_admin
+def admin_delete_key(key_id):
+    keys = load_api_keys()
+    if key_id not in keys:
+        return jsonify({"error": "Key not found"}), 404
+    deleted = keys.pop(key_id)
+    save_api_keys(keys)
+    return jsonify({"deleted": key_id, "name": deleted.get("name")})
+
+@app.route("/admin", methods=["GET"])
+@require_admin
+def admin_ui():
+    """Simple admin dashboard UI."""
+    keys = load_api_keys()
+    rows = ""
+    for k, v in keys.items():
+        rows += f"""
+        <tr>
+          <td><code>{k}</code></td>
+          <td>{v.get("name","")}</td>
+          <td><span class="tier tier-{v.get("tier","free")}">{v.get("tier","free").upper()}</span></td>
+          <td>{v.get("requests",0)}</td>
+          <td>{v.get("rate_limit","—")}</td>
+          <td>{v.get("created","")[:10]}</td>
+          <td>
+            <button onclick="upgradeKey('{k}')" class="btn-sm">Upgrade</button>
+            <button onclick="revokeKey('{k}')" class="btn-sm btn-danger">Revoke</button>
+          </td>
+        </tr>"""
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+<title>NEX Admin — Key Management</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+:root{{--bg:#020510;--cyan:#00f5ff;--purple:#a855f7;--green:#00ff88;--red:#ff3355;--text:#c8e6f0;--muted:#3a7090;--border:rgba(0,245,255,0.15);--surface:#040a1a}}
+body{{background:var(--bg);color:var(--text);font-family:'Share Tech Mono',monospace;padding:2rem}}
+body::before{{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,245,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(0,245,255,0.02) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}}
+.page{{position:relative;z-index:1;max-width:1100px;margin:0 auto}}
+h1{{font-family:'Orbitron',monospace;font-size:1.4rem;color:var(--cyan);letter-spacing:8px;margin-bottom:0.3rem;text-shadow:0 0 20px var(--cyan)}}
+.sub{{font-size:11px;color:var(--muted);letter-spacing:3px;margin-bottom:2rem}}
+table{{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border)}}
+th{{font-family:'Orbitron',monospace;font-size:8px;letter-spacing:3px;color:var(--cyan);padding:0.8rem 1rem;border-bottom:1px solid var(--border);text-align:left;text-transform:uppercase}}
+td{{padding:0.7rem 1rem;border-bottom:1px solid rgba(0,245,255,0.05);font-size:11px;color:var(--muted)}}
+td code{{color:var(--cyan);font-size:10px}}
+tr:hover td{{background:rgba(0,245,255,0.02)}}
+.tier{{font-family:'Orbitron',monospace;font-size:8px;letter-spacing:2px;padding:2px 8px;border-radius:2px}}
+.tier-personal{{background:rgba(0,245,255,0.1);color:var(--cyan)}}
+.tier-professional{{background:rgba(168,85,247,0.15);color:var(--purple)}}
+.tier-enterprise{{background:rgba(0,255,136,0.12);color:var(--green)}}
+.tier-free{{background:rgba(255,51,85,0.1);color:var(--red)}}
+.btn-sm{{font-family:'Orbitron',monospace;font-size:7px;letter-spacing:2px;border:1px solid rgba(0,245,255,0.3);background:rgba(0,245,255,0.08);color:var(--cyan);padding:4px 10px;cursor:pointer;transition:all 0.2s;margin-right:4px}}
+.btn-sm:hover{{box-shadow:0 0 8px rgba(0,245,255,0.2)}}
+.btn-danger{{border-color:rgba(255,51,85,0.3);background:rgba(255,51,85,0.08);color:var(--red)}}
+.create-form{{background:var(--surface);border:1px solid var(--border);padding:1.5rem;margin-bottom:1.5rem}}
+.create-form h2{{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:4px;color:var(--cyan);margin-bottom:1rem}}
+.form-row{{display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap}}
+.form-group{{display:flex;flex-direction:column;gap:4px}}
+label{{font-size:9px;color:var(--muted);letter-spacing:2px;text-transform:uppercase}}
+input,select{{background:rgba(0,0,0,0.4);border:1px solid rgba(0,245,255,0.2);color:var(--text);font-family:'Share Tech Mono',monospace;font-size:11px;padding:8px 12px;outline:none}}
+input:focus,select:focus{{border-color:var(--cyan)}}
+select option{{background:#020510}}
+.btn-create{{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:3px;background:linear-gradient(135deg,rgba(0,245,255,0.15),rgba(168,85,247,0.15));border:1px solid rgba(0,245,255,0.4);color:var(--cyan);padding:10px 20px;cursor:pointer;transition:all 0.2s}}
+.btn-create:hover{{box-shadow:0 0 14px rgba(0,245,255,0.2)}}
+.msg{{font-size:11px;margin-top:0.5rem;min-height:20px}}
+.msg.ok{{color:var(--green)}} .msg.err{{color:var(--red)}}
+</style>
+</head>
+<body>
+<div class="page">
+<h1>NEX ADMIN</h1>
+<p class="sub">// KEY MANAGEMENT — PROTECTED ENDPOINT</p>
+<div class="create-form">
+  <h2>CREATE NEW KEY</h2>
+  <div class="form-row">
+    <div class="form-group"><label>Name</label><input id="kname" type="text" placeholder="client_name"></div>
+    <div class="form-group"><label>Tier</label>
+      <select id="ktier">
+        <option value="personal">PERSONAL — $199</option>
+        <option value="professional">PROFESSIONAL — $2,500/mo</option>
+        <option value="enterprise">ENTERPRISE — $15,000/mo</option>
+        <option value="free">FREE</option>
+      </select>
+    </div>
+    <button class="btn-create" onclick="createKey()">CREATE KEY</button>
+  </div>
+  <div class="msg" id="create-msg"></div>
+</div>
+<table>
+<thead><tr><th>API Key</th><th>Name</th><th>Tier</th><th>Requests</th><th>Rate Limit</th><th>Created</th><th>Actions</th></tr></thead>
+<tbody id="key-table">{rows}</tbody>
+</table>
+</div>
+<script>
+const ADMIN = '{ADMIN_SECRET}';
+async function createKey(){{
+  const name=document.getElementById('kname').value.trim()||'unnamed';
+  const tier=document.getElementById('ktier').value;
+  const msg=document.getElementById('create-msg');
+  const r=await fetch('/admin/keys',{{method:'POST',headers:{{'Content-Type':'application/json','X-Admin-Secret':ADMIN}},body:JSON.stringify({{name,tier,admin_secret:ADMIN}})}});
+  const d=await r.json();
+  if(r.ok){{msg.className='msg ok';msg.textContent='Created: '+d.key;setTimeout(()=>location.reload(),1500);}}
+  else{{msg.className='msg err';msg.textContent=d.error;}}
+}}
+async function revokeKey(k){{
+  if(!confirm('Revoke key '+k+'?'))return;
+  const r=await fetch('/admin/keys/'+k,{{method:'DELETE',headers:{{'X-Admin-Secret':ADMIN}}}});
+  if(r.ok)location.reload();
+}}
+async function upgradeKey(k){{
+  const t=prompt('New tier (personal/professional/enterprise/free):');
+  if(!t)return;
+  const r=await fetch('/admin/keys/'+k,{{method:'PATCH',headers:{{'Content-Type':'application/json','X-Admin-Secret':ADMIN}},body:JSON.stringify({{tier:t,admin_secret:ADMIN}})}});
+  if(r.ok)location.reload();
+  else alert('Failed: '+(await r.json()).error);
+}}
+</script>
+</body>
+</html>"""
+    return html
+
 # ══════════════════════════════════════════════════════════════════════════════
 # STARTUP
 # ══════════════════════════════════════════════════════════════════════════════
