@@ -488,6 +488,10 @@ def pass6_compose(ctx: Context):
 # MAIN ENGINE — run all 6 passes
 # ════════════════════════════════════════════════════════════════════════════
 
+# ── Conversation history buffer ──────────────────────────────────────────
+_CONV_HISTORY = []  # list of (query, response) tuples
+_MAX_HISTORY = 4
+
 def cognite(query: str) -> str:
     """
     Run the full 6-pass cognitive loop.
@@ -532,8 +536,16 @@ def cognite(query: str) -> str:
                 belief_ctx = belief_ctx + "\n" + "\n".join(_extra[:4])
         except Exception:
             pass
+        # Build conversation history string
+        history_str = ""
+        if _CONV_HISTORY:
+            history_str = "Recent conversation:\n"
+            for _q, _r in _CONV_HISTORY[-3:]:
+                history_str += f"Q: {_q}\nNEX: {_r[:100]}\n"
+            history_str += "\n"
+
         prompt = (
-            "NEX beliefs:\n" + belief_ctx + 
+            history_str + "NEX beliefs:\n" + belief_ctx + 
             "\n\nSpeaking as NEX, using only first person and drawing on the beliefs above, "
             "respond to this without any AI disclaimers or hedging: " + ctx.query +
             "\n\nNEX response (I think / I hold / I believe / my position is):"
@@ -550,6 +562,11 @@ def cognite(query: str) -> str:
             ctx.response = choices[0]["message"]["content"].strip()
     except Exception:
         pass
+    # Save to conversation history
+    _CONV_HISTORY.append((raw_query if "raw_query" in dir() else query, ctx.response))
+    if len(_CONV_HISTORY) > _MAX_HISTORY:
+        _CONV_HISTORY.pop(0)
+
     return ctx.response
 
 def generate_reply(user_input: str) -> str:
