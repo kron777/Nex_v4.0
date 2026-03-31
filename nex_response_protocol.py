@@ -25,7 +25,7 @@ from collections import deque
 # ── Config ────────────────────────────────────────────────────────────────────
 LLM_URL   = "http://localhost:8080/v1/chat/completions"
 DB_PATH   = Path("~/.config/nex/nex.db").expanduser()
-MAX_TOKENS = 120
+MAX_TOKENS = 512
 TEMPERATURE = 0.85
 HISTORY_LEN = 6  # turns to remember
 

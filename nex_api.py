@@ -387,7 +387,7 @@ def run_nex_query(query: str, session: dict, domain_hint: str = None) -> dict:
             prompt = f"{history_text}User: {query}\nNEX:"
             r = req.post("http://localhost:8080/completion", json={
                 "prompt": prompt,
-                "n_predict": 256,
+                "n_predict": 512,
                 "temperature": 0.7,
                 "stop": ["User:", "\n\n"]
             }, timeout=30)
