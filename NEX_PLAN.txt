@@ -1,231 +1,219 @@
 NEX v4.0 — Master Plan & Carryover Document
 ============================================
-Date: 2026-04-01
+Date: 2026-04-01 (updated)
 Repo: github.com/kron777/Nex_v4.0
 Pages: kron777.github.io/Nex_v4.0/
 Gumroad: gumroad.com/products/blsue
 Contact: zenlightbulb@gmail.com
 API Key: nex-72ea474306ea0d1dfbefeda3
+Admin:   localhost:7823/admin?admin_secret=nex-admin-2026
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SYSTEM STATE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Beliefs:     ~3,700+ (growing overnight via scheduler)
-IQ Score:    92% ELITE
-Topic align: 40.3% (climbing)
-LLM:         Mistral-7B-Instruct Q4_K_M via llama-server (ROCm, port 8080)
-DB:          ~/.config/nex/nex.db
-Log:         /tmp/nex_brain.log
+Beliefs:         ~5,700+ and growing
+IQ Score:        92% ELITE
+Avg confidence:  0.614
+Topic alignment: 99.6%
+Quality dist:    104 elite / 698 high / 3,090 medium / 518 low
+Synthesis count: 10 cross-domain beliefs
+LLM:             Mistral-7B-Instruct Q4_K_M via llama-server (ROCm, port 8080)
+DB:              ~/.config/nex/nex.db
+Log:             /tmp/nex_brain.log
 
 Running processes (all nohup):
-  nex_api.py        → localhost:7823
-  nex_dashboard.py  → localhost:7824
-  nex_scheduler.py  → localhost:7825
-  llama-server      → localhost:8080
+  nex_api.py        -> localhost:7823
+  nex_dashboard.py  -> localhost:7824
+  nex_scheduler.py  -> localhost:7825
+  llama-server      -> localhost:8080
 
-Domain belief counts (as of session end):
-  ai            380   ✅
-  neuroscience   21   (low)
-  oncology        0   ← saturation target tonight
-  cardiology      0   ← saturation target tonight
-  finance         0   ← saturation target tonight
-  legal           0   ← saturation target tonight
-  climate         0   ← saturation target tonight
+Domain belief counts (last checked):
+  ai            200   DONE - target hit
+  finance        97   saturation running
+  neuroscience   17   low
+  oncology        0   pending
+  cardiology      0   pending
+  legal           0   pending
+  climate         0   pending
   Saturation runs: 02:00-06:00 local, target 200/domain
+  Manual trigger: POST localhost:7825/scheduler/trigger {"job":"saturation"}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-WHAT HAS BEEN BUILT — COMPLETE
+COMPLETED STEPS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-TIER 1 — REST API (nex_api.py v3.0.0)
-  ✅ Flask API on port 7823
-  ✅ API key auth (X-API-Key header)
-  ✅ /api/chat — full belief-graph chat
-  ✅ /api/health — public health check
-  ✅ /api/beliefs — belief count + topics
-  ✅ /api/stats — corpus statistics
-  ✅ /api/gaps — curiosity gaps
+STEP 1 - Response length fix [DONE]
+  n_predict 256->512 in nex_api.py
+  MAX_TOKENS 120->512 in nex_response_protocol.py
+  Full coherent responses, no mid-sentence cutoff
 
-TIER 2 — Sessions + Webhooks
-  ✅ Per-user session isolation
-  ✅ Session TTL (1hr), auto-purge
-  ✅ Conversation history (last 20 turns)
-  ✅ POST /api/sessions + GET/DELETE
-  ✅ Webhook registration + delivery
-  ✅ HMAC-SHA256 signatures
-  ✅ 3 retries, exponential backoff (2/8/32s)
+STEP 2 - Loop wiring [DONE]
+  PCC/DQS loop wired into run.py at line 2562
+  Fires after every primary reply via record_reply_outcome()
 
-TIER 3 — Audit + Source Attribution + GDPR
-  ✅ All 20 routes logging via require_api_key_audited
-  ✅ Audit DB at ~/.config/nex/audit.db
-  ✅ GET /api/audit — paginated log
-  ✅ sources[] array on every /api/chat response
-  ✅ GET /api/gdpr/export — full data dump
-  ✅ DELETE /api/gdpr/delete — wipe by key
+STEP 3 - Reasoning transparency [DONE]
+  reasoning_chain field in every /api/chat response
+  Contains: strategy, confidence, epistemic_state,
+            supporting[], opposing[], tensions[], anchor
+  Gated: Professional+ tier only
 
-TIER 4 — Web Dashboard (nex_dashboard.py)
-  ✅ Live dashboard on port 7824
-  ✅ Belief growth chart
-  ✅ Domain heatmap
-  ✅ Topic distribution (top 12)
-  ✅ Curiosity gaps table
-  ✅ Top sources panel
-  ✅ API audit feed
-  ✅ Auto-refresh every 15 seconds
+STEP 4 - Extended /api/stats metrics [DONE]
+  Added: avg_confidence, topic_alignment_pct, synthesis_count,
+         quality_distribution (elite/high/medium/low), new_beliefs_24h
 
-TIER 5 — Scheduler (nex_scheduler.py)
-  ✅ Overnight domain saturation (02:00-06:00)
-  ✅ Cross-domain synthesis (every 4 hours)
-  ✅ GET /export/beliefs — filtered JSON/CSV export
-  ✅ GET /export/synthesis — synthesis beliefs only
-  ✅ GET /scheduler/status — live domain counts
-  ✅ POST /scheduler/trigger — manual job trigger
-  ✅ Running via nohup — survives terminal close
+STEP 5 - Tier enforcement [DONE]
+  TIER_MATRIX defined in nex_api.py
+  Tiers: personal / professional / enterprise / free
+  reasoning_chain gated to professional+
+  webhooks gated to professional+
+  tier_allows() and tier_limit() helpers available
 
-TIER 6 — Commercial Front End
-  ✅ POST /api/demo — public, 3 req/hr, 150 char cap
-  ✅ docs/index.html — landing page (live on GitHub Pages)
-  ✅ docs/api.html — full API reference
-  ✅ GitHub Pages live: kron777.github.io/Nex_v4.0/
-  ✅ Design matches existing NEX aesthetic (Orbitron, HUD panels,
-      starfield, corner brackets, scanline, ticker, cyan/purple palette)
+STEP 6 - Session persistence [DONE]
+  Already implemented - sessions.json at ~/.config/nex/sessions.json
+  Survives API restarts
 
-REASONING UPGRADES
-  ✅ nex_reason.py v2.0 — TF-IDF cosine replaces token overlap
-  ✅ HBG topology weighting (core 2.5x, cluster 1.6x, node 1.0x)
-  ✅ belief_links one-hop graph expansion
-  ✅ Uncertainty intervals on every result (mean, variance, settled)
-  ✅ Relevance gate at 0.12 cosine sim
-  ✅ nex_knowledge.py v2.0 — Mistral dependency removed
-  ✅ Pure extractive synthesis from DDG snippets
-  ✅ Web search pipeline fixed (raw string format handled)
-  ✅ nex_loop_wiring.py — PCC/DQS loop closure
-  ✅ Loop wired into primary reply compositor in run.py (line 2562)
+STEP 7 - v72 singleton warning fix [DONE]
+  _v72_tried sentinel in nex_loop_wiring.py
+  Warning fires once maximum, silent on all subsequent calls
 
-RESPONSE QUALITY FIXES
-  ✅ n_predict bumped 256→512 in nex_api.py
-  ✅ MAX_TOKENS bumped 120→512 in nex_response_protocol.py
-  ✅ Full coherent responses — no more mid-sentence cutoff
+STEP 8 - QLoRA fine-tune pipeline [PENDING]
+  Blocked on: domain corpus quality
+  Requirement: all 7 domains at 200+ beliefs with avg confidence > 0.65
+  Target model: Qwen2.5-3B
+  Target hardware: RunPod A100
+  Protocol: ~/Desktop/nex/TRAINING_PROTOCOL.md
+  Next action: check domain counts, trigger saturation if needed,
+               then build nex_finetune.py
+
+STEP 9 - Admin key management UI [DONE]
+  Routes: GET/POST /admin/keys, PATCH/DELETE /admin/keys/:id
+  UI: localhost:7823/admin?admin_secret=nex-admin-2026
+  Protected by NEX_ADMIN_SECRET env var (default: nex-admin-2026)
+  Supports: create, list, upgrade tier, revoke
+
+STEP 10 - Webhook delivery dashboard panel [DONE]
+  Route: GET /dash/webhooks
+  Panel 07 added to dashboard at localhost:7824
+  Shows: URL, events, delivery count, failure count, success rate
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-WHAT IS STILL TO BUILD — IN PRIORITY ORDER
+PAYMENT -> KEY DELIVERY FLOW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Personal $199 (Gumroad):
+  Purchase -> webhook fires on port 7777 -> nex_keygen.py generates key
+  -> emailed automatically via nex_webhook_server.py
+
+Professional/Enterprise (manual):
+  Payment confirmed -> open localhost:7823/admin?admin_secret=nex-admin-2026
+  -> CREATE KEY with correct tier -> copy key -> email to buyer
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WHAT IS STILL TO BUILD
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-STEP 3 — Reasoning Transparency in API responses
-  Goal: Every /api/chat response includes a readable belief chain
-        showing HOW NEX arrived at its answer, not just WHAT it said.
-  Files: nex_api.py, nex_reason.py
-  Output: Add "reasoning_chain" field to chat response JSON
-          [{belief, topic, confidence, role: "supporting"|"opposing"}]
-  Value: Enterprise buyers need auditability. This is the thing that
-         separates NEX from a black-box LLM.
+STEP 8 - QLoRA Fine-Tune Pipeline (NEXT PRIORITY)
+  When: once all 7 domains hit 200+ beliefs
+  Files: new nex_finetune.py
+  Steps:
+    1. Export high-confidence beliefs as JSONL training set
+       curl "localhost:7825/export/beliefs?format=json&min_conf=0.7" > train.json
+    2. Convert to instruction format (belief -> question/answer pairs)
+    3. Upload to RunPod A100
+    4. QLoRA 4-bit fine-tune on Qwen2.5-3B
+    5. Export adapter weights
+    6. Merge and quantize to GGUF
+    7. Replace Mistral fallback with fine-tuned model
+  Protocol: ~/Desktop/nex/TRAINING_PROTOCOL.md
+  Value: Model trained on NEX's own beliefs -- unreplicable moat
 
-STEP 4 — Topic Alignment + Belief Quality Metrics in /api/stats
-  Goal: /api/stats returns metrics that prove NEX improves over time.
-  Files: nex_api.py, nex_belief_quality.py
-  Add to stats response:
-    - topic_alignment_pct (currently ~40.3%, should climb)
-    - avg_confidence_trend (weekly)
-    - belief_quality_score (from nex_belief_quality.py)
-    - synthesis_count (from scheduler)
-  Value: The "gets smarter over time" claim needs to be measurable
-         and visible in the API. This is the sales metric.
-
-STEP 5 — Tier Enforcement (Personal/Pro/Enterprise behave differently)
-  Goal: API key tiers actually enforce different capabilities.
-  Files: nex_api.py, ~/.config/nex/api_keys.json
-  Personal ($199):
-    - 100 requests/day cap
-    - No webhooks
-    - No GDPR export
-    - Single session only
-  Professional ($2,500/mo):
-    - 1,000 requests/day
-    - Webhooks enabled
-    - Full audit trail
-    - Up to 10 sessions
-  Enterprise ($15,000/mo):
-    - Unlimited requests
-    - All features
-    - reasoning_chain enabled
-    - Domain activation
-  Value: Required before any real commercial sales. Currently all
-         keys have enterprise-level access regardless of tier.
-
-STEP 6 — Session Persistence Across Restarts
-  Goal: Sessions survive API restart. Currently in-memory only.
-  Files: nex_api.py
-  Method: Write sessions to ~/.config/nex/sessions.json on update,
-          load on startup. Same pattern as api_keys.json.
-  Value: Enterprise requirement. Buyers cannot lose conversation
-         context every time the server restarts.
-
-STEP 7 — nex_v72 Singleton Resolution
-  Goal: Remove "[loop_wiring] Could not load v72 singleton" warning.
-  Files: nex_loop_wiring.py
-  Method: Read actual nex_loop_wiring.py, find what it tries to
-          import from nex.nex_v72, either create the stub or
-          remove the dependency cleanly.
-  Value: Professional — no warnings in production logs.
-
-STEP 8 — QLoRA Fine-Tune Pipeline
-  Goal: Fine-tune Qwen2.5-3B on NEX's own belief corpus.
-  Prerequisite: Domain corpus quality — need 200+ beliefs per domain
-                with confidence > 0.7 before training is worthwhile.
-  Files: New — nex_finetune.py
-  Target hardware: RunPod A100 (see TRAINING_PROTOCOL.md)
-  Protocol: Kill llama-server first, HSA_OVERRIDE_GFX_VERSION=10.3.0,
-            HIP_VISIBLE_DEVICES=0, dtype=torch.float16,
-            device_map={"":0}, t.join() after t.start(),
-            no BitsAndBytes, PyTorch 2.5.1+rocm6.2
-  Value: This is the moat. A model trained on NEX's own beliefs
-         cannot be replicated. Pushes NEX from "interesting agent"
-         to "proprietary intelligence asset."
-
-STEP 9 — Multi-Tenant Key Management UI
-  Goal: Web UI for managing API keys, viewing usage, upgrading tier.
-  Files: New page in docs/ or new Flask blueprint in nex_api.py
-  Value: Self-serve commercial onboarding. Required to scale beyond
-         manual key creation.
-
-STEP 10 — Webhook Delivery Dashboard Panel
-  Goal: Show webhook delivery stats in nex_dashboard.py
-  Files: nex_dashboard.py, nex_api.py
-  Add: Delivery success rate, retry count, last fired timestamp
-  Value: Enterprise buyers need to monitor their integrations.
+NEXT COMMERCIAL STEPS (in priority order)
+  1. Bump API version string to v4.0.0 to match repo name
+  2. Add /api/version endpoint returning full capability list by tier
+  3. Enforce daily_request_limit from TIER_MATRIX at route level
+     (defined but not checked -- add counter in require_api_key_audited)
+  4. Belief quality improvement pipeline
+     3,090 medium + 518 low quality beliefs need refinement
+     Build nex_belief_refiner.py -- re-score and consolidate weak beliefs
+  5. Contradiction detection
+     NEX flags when query conflicts with held beliefs
+     High enterprise value -- shows epistemic integrity
+  6. Email delivery for new keys
+     Professional/Enterprise key creation auto-emails buyer
+     Use existing Gmail setup (zenlightbulb@gmail.com)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COMMERCIAL PRICING
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 NEX Personal          $199        one-time, node-locked
-NEX Professional      $2,500/mo   multi-user, webhooks, audit
-NEX Enterprise        $15,000/mo  unlimited, reasoning chain, domains
+NEX Professional      $2,500/mo   multi-user, webhooks, audit, reasoning chain
+NEX Enterprise        $15,000/mo  unlimited, all features, domain activation
 NEX Research          $50,000/yr  source access, QLoRA pipeline
 NEX Sovereign         custom      air-gapped, classified
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-KEY ENGINEERING RULES (do not break these)
+API QUICK REFERENCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Port 7823 - Main API
+  POST /api/demo              Public demo, 3/hr, 150 char
+  POST /api/chat              Full chat + reasoning_chain
+  GET  /api/health            Public
+  GET  /api/stats             Extended metrics
+  GET  /api/beliefs           Belief count + topics
+  GET  /api/gaps              Curiosity gaps
+  POST /api/sessions          Create session
+  GET  /api/sessions          List sessions
+  GET  /api/sessions/:id/history
+  POST /api/webhooks          Register webhook
+  GET  /api/audit             Paginated audit log
+  GET  /api/gdpr/export       Full data dump
+  DEL  /api/gdpr/delete       Wipe by key
+  GET  /admin/keys            List all keys (admin)
+  POST /admin/keys            Create key (admin)
+  PATCH /admin/keys/:id       Update tier/name (admin)
+  DEL  /admin/keys/:id        Revoke key (admin)
+  GET  /admin                 Admin UI
+
+Port 7824 - Dashboard
+  GET  /dash/stats            Live stats
+  GET  /dash/topics           Topic distribution
+  GET  /dash/belief-growth    Growth chart data
+  GET  /dash/gaps             Curiosity gaps
+  GET  /dash/domain-activity  Domain belief counts
+  GET  /dash/recent-audit     Last 20 API calls
+  GET  /dash/sources          Top sources
+  GET  /dash/webhooks         Webhook delivery stats
+
+Port 7825 - Scheduler
+  GET  /export/beliefs        Filtered export JSON/CSV
+  GET  /export/synthesis      Cross-domain beliefs
+  GET  /scheduler/status      Domain counts + last run
+  POST /scheduler/trigger     Manual trigger {job: saturation|synthesis}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KEY ENGINEERING RULES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1. Always read actual current source before proposing changes
 2. Never work from assumptions or prior session memory of file contents
-3. One change at a time — verify syntax before moving on
+3. One change at a time -- verify syntax before moving on
 4. Test with curl before committing
 5. Commit and push after each verified step
-6. No patches on patches — if a file needs restructuring, restructure it
-7. NEX must not use pre-programmed template responses
-8. All replies must derive from belief graph, not hardcoded text
-9. Script responses: show inline + save to ~/Downloads/ + give run command
-10. Training protocol: see ~/Desktop/nex/TRAINING_PROTOCOL.md
+6. No patches on patches -- restructure if needed
+7. NEX replies must derive from belief graph, not templates
+8. Script responses: show inline + save to ~/Downloads/ + give run command
+9. Training protocol: ~/Desktop/nex/TRAINING_PROTOCOL.md
+10. Watch for unicode dash chars in source -- use line-number patching
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 KEY FILE LOCATIONS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-~/Desktop/nex/          Main project directory
-~/.config/nex/nex.db    Belief store (SQLite)
-~/.config/nex/audit.db  Audit trail
-~/.config/nex/api_keys.json  API keys + tiers
-/tmp/nex_brain.log      Cognitive loop log
-/tmp/nex_scheduler.log  Scheduler log
-/tmp/nex_dashboard.log  Dashboard log
-/tmp/llama-server.log   LLM server log
+~/Desktop/nex/              Main project directory
+~/.config/nex/nex.db        Belief store (SQLite)
+~/.config/nex/audit.db      Audit trail
+~/.config/nex/api_keys.json API keys + tiers
+~/.config/nex/sessions.json Session store
+~/.config/nex/webhooks.json Webhook registrations
+/tmp/nex_brain.log          Cognitive loop log
+/tmp/nex_scheduler.log      Scheduler log
+/tmp/nex_dashboard.log      Dashboard log
+/tmp/llama-server.log       LLM server log
 ~/Desktop/nex/TRAINING_PROTOCOL.md  QLoRA training protocol
