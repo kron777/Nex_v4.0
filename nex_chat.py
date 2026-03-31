@@ -46,6 +46,13 @@ def show_header():
     console.rule(style="dim green")
     console.print()
 
+# ── Domain specialization ────────────────────────────────────────────────
+try:
+    import nex_domain as _domain
+    _DOMAIN_OK = True
+except Exception as _de:
+    _DOMAIN_OK = False
+
 def ask_nex(question: str) -> str:
     if not NEX_OK:
         return f"[brain not loaded: {NEX_ERR}]"
@@ -198,6 +205,20 @@ if __name__ == "__main__":
             console.print(f"  [dim]?[/dim]\n")
         else:
             with console.status("", spinner="dots"):
+                # Domain commands
+            if raw.startswith('/domain ') and _DOMAIN_OK:
+                domain = raw.split(' ', 1)[1].strip()
+                result = _domain.activate(domain)
+                reply = f"Domain '{result['domain']}' activated. {result['beliefs_before']} existing beliefs. Saturating in background..."
+            elif raw == '/domain off' and _DOMAIN_OK:
+                report = _domain.deactivate()
+                reply = f"Domain deactivated. Session: {report['beliefs_injected']} beliefs injected, {report['gaps_detected']} gaps found."
+            elif raw == '/domain status' and _DOMAIN_OK:
+                reply = _domain.status()
+            elif _DOMAIN_OK and _domain._active_domain:
+                domain_reply = _domain.chat(raw)
+                reply = domain_reply if domain_reply else ask_nex(raw)
+            else:
                 reply = ask_nex(raw)
             show_reply(raw, reply)
             console.print()
