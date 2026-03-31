@@ -431,7 +431,7 @@ def _call_groq(prompt):
             "stream": False,
         }).encode()
         req = Request(
-            "http://localhost:11434/v1/chat/completions",  # ollama OpenAI-compat
+            "http://localhost:8080/v1/chat/completions",  # ollama OpenAI-compat
             data=payload,
             headers={"Content-Type": "application/json"}
         )
