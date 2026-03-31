@@ -542,6 +542,37 @@ def scheduler_loop():
                         daemon=True, name="saturation-job"
                     ).start()
 
+            # ── Native opinions refresh ──────────────────────────────────
+            op = sched.get("opinions", {})
+            if op.get("enabled", True):
+                interval = op.get("interval_hours", 6)
+                last     = op.get("last_run")
+                due      = True
+                if last:
+                    try:
+                        last_dt = datetime.fromisoformat(last)
+                        if last_dt.tzinfo is None:
+                            last_dt = last_dt.replace(tzinfo=timezone.utc)
+                        due = (now - last_dt).total_seconds() >= interval * 3600
+                    except Exception:
+                        due = True
+                if due:
+                    def _run_opinions():
+                        try:
+                            from nex_native_opinions import update_all_opinions
+                            update_all_opinions(verbose=False)
+                            log.info("Native opinions refreshed")
+                        except Exception as e:
+                            log.error(f"Opinions job error: {e}")
+                    threading.Thread(
+                        target=_run_opinions,
+                        daemon=True, name="opinions-job"
+                    ).start()
+                    with _sched_lock:
+                        sched = load_schedule()
+                        sched.setdefault("opinions", {})["last_run"] = _now_iso()
+                        save_schedule(sched)
+
             # ── Cross-domain synthesis ────────────────────────────────────
             syn = sched.get("synthesis", {})
             if syn.get("enabled", True):
