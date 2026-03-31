@@ -888,12 +888,33 @@ def intend(orient_result: dict, reason_result: dict) -> dict:
     elif orient_result["demands_position"]:
         voice_mode = "position"
 
+    # Build 5 — drive urgency: surface most urgent drive + satisfy engaged topics
+    urgent_drive = None
+    try:
+        import nex_drive_urgency as _du
+        # Satisfy drives whose topics appear in this query
+        topic = reason_result.get("topic", "")
+        query_topics = list(orient_result.get("tokens", set()))
+        if topic:
+            query_topics.append(topic)
+        _du.satisfy(query_topics)
+        # Get most urgent drive for injection into intention
+        _ud = _du.most_urgent()
+        if _ud and _ud["state"] in ("restless", "urgent"):
+            urgent_drive = _ud
+            # Urgent drive overrides to driven voice if not already pushback/authentic
+            if _ud["state"] == "urgent" and voice_mode == "direct":
+                voice_mode = "driven"
+    except Exception:
+        pass
+
     return {
         "intention":     best_intention,
         "active_values": active_values[:3],
         "identity":      identity,
         "values_all":    values,
         "voice_mode":    voice_mode,
+        "urgent_drive":  urgent_drive,
     }
 
 
