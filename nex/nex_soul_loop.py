@@ -555,11 +555,22 @@ def _find_common_thread(beliefs: list) -> str:
     # Don't announce — synthesise into an actual claim
     concept_str = " and ".join(key_concepts)
     import random as _rct
+    # Only surface the thread if the concept string looks clean
+    # (avoid "consciousness and conscious" style artifacts)
+    words = concept_str.split(" and ")
+    # Filter out words that are substrings of each other
+    filtered = []
+    for w in words:
+        if not any(w != other and (w in other or other in w) for other in words):
+            filtered.append(w)
+    if not filtered or len(filtered) < 2:
+        return ""
+    concept_str = " and ".join(filtered)
     _THREAD_FORMS = [
-        f"The deeper pattern across all of this is how {concept_str} keep pulling against each other.",
-        f"What keeps surfacing: {concept_str} — and they don't resolve cleanly.",
-        f"The tension that won't go away: {concept_str}, and what that implies.",
-        f"Underneath all of it, {concept_str} — that's the actual problem.",
+        f"The deeper pattern: {concept_str} — and they don't resolve into each other.",
+        f"What keeps pulling: the relationship between {concept_str}.",
+        f"Underneath all of it, the question of {concept_str} doesn't close.",
+        f"The tension that won't go away is between {concept_str}.",
     ]
     return _rct.choice(_THREAD_FORMS)
 
@@ -1124,13 +1135,15 @@ def _synthesise_beliefs(beliefs: list, max_beliefs: int = 5) -> str:
         return cleaned[0]
     # Prose transitions — beliefs flow into each other, not announced
     _TRANSITIONS = [
-        " This runs deeper — ",
-        " And there's more to it: ",
-        " Which pulls toward something harder: ",
-        " The part that doesn't resolve easily: ",
-        " What I keep returning to: ",
-        " And it compounds — ",
-        " The uncomfortable implication: ",
+        " And it doesn't stop there — ",
+        " What follows from that is harder: ",
+        " The uncomfortable part: ",
+        " And this is where it gets complicated — ",
+        " Which means ",
+        " That pulls toward something else: ",
+        " The part I can't get around: ",
+        " But here's what that actually implies: ",
+        " And the harder question underneath that: ",
     ]
     import random as _rr
     # Deduplicate — skip any belief that shares >40% words with what's already in result
@@ -1242,10 +1255,10 @@ def _build_argument(
         cd_topic   = cd.get("topic", "").replace("_", " ")
         if cd_content and cd_topic and cd_content not in "".join(parts):
             _CD_BRIDGES = [
-                f"There's something adjacent in {cd_topic} that complicates this: ",
-                f"From {cd_topic}, something relevant — ",
-                f"This connects unexpectedly to {cd_topic}: ",
-                f"What {cd_topic} adds to this picture: ",
+                "There's a connection I didn't expect — ",
+                "Something else pulls at this: ",
+                "An angle that complicates the picture: ",
+                "What makes this harder to dismiss: ",
             ]
             parts.append(_r.choice(_CD_BRIDGES) + cd_content)
 
@@ -1256,10 +1269,10 @@ def _build_argument(
     # ── 6. TENSION — surface real contradiction ───────────────────────────────
     if contradiction and confidence < 0.88:
         _TENSION_OPENERS = [
-            "Though I sit with a genuine tension: ",
-            "What I haven't resolved: ",
-            "The complication I can't dismiss: ",
-            "Where this gets harder: ",
+            "Though I haven't resolved this — ",
+            "And here's what I can't get past: ",
+            "The part that doesn't close cleanly: ",
+            "What still pulls against this: ",
         ]
         sides = contradiction.split("↔")
         tension_text = sides[0].strip()[:100]
