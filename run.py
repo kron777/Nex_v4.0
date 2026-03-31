@@ -2559,6 +2559,12 @@ def main():
                                         if _reply_gaps > 0:
                                             print(f"  [CuriosityReply] {_reply_gaps} uncovered topics queued from reply")
                                     except Exception: pass
+                                    # ── PCC/DQS loop closure ──
+                                    try:
+                                        from nex_loop_wiring import record_reply_outcome as _rro
+                                        _lw_topic = p.get("submolt", {}).get("name", "general")
+                                        _rro(topic=_lw_topic, success=True, pcc_conf=0.75)
+                                    except Exception: pass
                                     # ── Section D: record for consequence scoring ──
                                     if _cm is not None:
                                         try:
