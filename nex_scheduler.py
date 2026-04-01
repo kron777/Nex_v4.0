@@ -167,7 +167,7 @@ DEFAULT_SCHEDULE = {
         "start_hour":        2,
         "end_hour":          6,
         "target_per_domain": 200,
-        "domains": ["finance","legal","climate","cardiology","oncology","neuroscience","free_will","machine_learning","ai"],
+        "domains": ["finance","legal","climate","cardiology","oncology","neuroscience","free_will","machine_learning","alignment","ai"],
         "last_run":          None
     },
     "synthesis": {
@@ -279,6 +279,18 @@ DOMAIN_PROMPTS = {
         "Explain how the Libet experiments challenged our understanding of voluntary action.",
         "What is agent causation theory and how does it differ from event causation?",
     ],
+    "alignment": [
+        "Explain a key concept in AI alignment and corrigibility.",
+        "What is the control problem in AI safety and why is it hard?",
+        "Describe an important insight about value alignment in AI systems.",
+        "What is inner alignment and how does it differ from outer alignment?",
+        "Explain the role of interpretability in AI alignment research.",
+        "What is mesa-optimisation and why does it matter for AI safety?",
+        "Describe the orthogonality thesis and its implications for AI.",
+        "What is the instrumental convergence thesis?",
+        "Explain how RLHF attempts to solve the alignment problem.",
+        "What is deceptive alignment and why is it a concern?",
+    ],
     "machine_learning": [
         "Explain the bias-variance tradeoff in machine learning models.",
         "Describe the key principles behind gradient descent optimisation.",
@@ -329,13 +341,9 @@ def saturate_domain(domain: str, target: int = 200, force: bool = False) -> int:
         attempts   += 1
 
         result = llm(prompt, system=DOMAIN_SYSTEM, max_tokens=200, temperature=0.8)
-        # Guard: strip anything after a double newline (prompt echo / multi-response)
-        if result and '
-
-' in result:
-            result = result[:result.index('
-
-')].strip()
+        # Guard: strip anything after a double newline
+        if result and chr(10)+chr(10) in result:
+            result = result[:result.index(chr(10)+chr(10))].strip()
         if result and len(result) > 30 and len(result) < 400:
             ok = inject_belief(
                 topic=domain,
