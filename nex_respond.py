@@ -140,6 +140,12 @@ def nex_reply(
                 reply = loop.respond(enriched)
 
             if reply and len(reply.strip()) > 15:
+                # Fire feedback loop
+                try:
+                    from nex_loop_wiring import record_reply_outcome as _rro
+                    _rro(topic="general", success=True, pcc_conf=0.65)
+                except Exception:
+                    pass
                 return reply.strip()
         except Exception as e:
             print(f"  [nex_respond] SoulLoop error: {e}")

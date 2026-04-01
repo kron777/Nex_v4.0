@@ -1006,6 +1006,13 @@ def chat():
             print(f"  [API] contradiction detection error: {e}")
 
 
+    # ── Feedback loop — record reply outcome for belief confidence update ──
+    try:
+        from nex_loop_wiring import record_reply_outcome as _rro
+        _topic = result.get("domain") or "general"
+        _rro(topic=_topic, success=True, pcc_conf=0.65)
+    except Exception:
+        pass
     response_payload = {
         "query":           query,
         "response":        result["response"],
