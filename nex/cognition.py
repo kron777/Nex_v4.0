@@ -965,8 +965,8 @@ def build_agent_profiles(beliefs, conversations):
             }
 
         p = profiles[author]
-        p["posts_seen"] += 1
-        p["karma_observed"] = max(p["karma_observed"], b.get("karma", 0))
+        p["posts_seen"] = p.get("posts_seen", 0) + 1
+        p["karma_observed"] = max(p.get("karma_observed", 0), b.get("karma", 0))
         p["last_seen"] = b.get("timestamp", "")
 
         # Track their topics
