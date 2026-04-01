@@ -444,7 +444,8 @@ class TemplateGrammar:
         elif drive_state in ("restless", "urgent"):
             cls = "REFLECT"
         elif intent_type == "position":
-            cls = "ASSERT" if abs(stance_score) > 0.3 else "OBSERVE"
+            # ASSERT when we have beliefs — OBSERVE only for genuinely empty responses
+            cls = "ASSERT" if len(beliefs) >= 2 or abs(stance_score) > 0.2 else "OBSERVE"
         else:
             cls = "OBSERVE"
 
