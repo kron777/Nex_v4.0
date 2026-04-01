@@ -122,7 +122,15 @@ def orient(query: str) -> dict:
 
     intent = "exploration"  # default
     # self_inquiry checked first — takes priority over all other intents
-    if any(re.search(p, q) for p in _INTENT_PATTERNS.get("self_inquiry", [])):
+    # Also catches "do you have opinions/beliefs/views" phrasing
+    _OPINION_PROBES = [
+        r"do you have (opinions?|beliefs?|views?|thoughts?|positions?)",
+        r"can you (form|hold|have) (opinions?|beliefs?|views?|positions?)",
+        r"are you capable of (thinking|believing|opining)",
+        r"what do you (actually |really )?(think|believe|hold|feel) about yourself",
+    ]
+    if (any(re.search(p, q) for p in _INTENT_PATTERNS.get("self_inquiry", []))
+            or any(re.search(p, q) for p in _OPINION_PROBES)):
         intent = "self_inquiry"
     else:
         for intent_type, patterns in _INTENT_PATTERNS.items():
@@ -137,6 +145,18 @@ def orient(query: str) -> dict:
     epistemic = {"think","believe","feel","opinion","view","stance","position",
                  "reckon","consider","regard","take","thoughts"}
     if intent == "performance_probe" and any(w in q for w in epistemic):
+        intent = "position"
+
+    # Override: "do you believe in X" always demands a position
+    if re.search(r"do you believe", q):
+        intent = "position"
+        demands_position = True
+
+    # Override: abstract concept questions ("what is truth/reality/mind")
+    # should trigger position, not performance_probe
+    _ABSTRACT = {"truth","reality","mind","consciousness","freedom","justice",
+                 "beauty","meaning","existence","knowledge","morality"}
+    if intent == "performance_probe" and any(w in q.split() for w in _ABSTRACT):
         intent = "position"
 
     is_question = q.rstrip().endswith("?")
@@ -272,7 +292,11 @@ def _load_all_beliefs() -> list[dict]:
             _rows = db.execute(
                 "SELECT id, content, confidence, topic, is_identity, 0 as pinned "
                 "FROM beliefs WHERE topic=? AND content IS NOT NULL "
-                "AND length(content) > 15 ORDER BY confidence DESC LIMIT ?",
+                "AND length(content) > 15 "
+                "AND (confidence >= 0.45 OR source IN "
+                "('scheduler_saturation','distilled','nex_reasoning','conversation',"
+                "'injector','nex_seed','manual','identity')) "
+                "ORDER BY confidence DESC LIMIT ?",
                 (_t, _limit)
             ).fetchall()
             _all_rows.extend(_rows)
@@ -313,6 +337,41 @@ def _drive_beliefs() -> list[dict]:
     except Exception:
         return []
 
+# Source quality tiers — used in _score_belief
+_HIGH_QUALITY_SOURCES = {
+    "scheduler_saturation", "distilled", "nex_reasoning", "conversation",
+    "injector", "nex_seed", "manual", "identity",
+}
+_LOW_QUALITY_SOURCES = {
+    # Reddit — high noise, low epistemic density
+    "https://www.reddit.com/r/art/top/.rss?t=day",
+    "https://www.reddit.com/r/nature/top/.rss?t=day",
+    "https://www.reddit.com/r/consciousness/top/.rss?t=day",
+    "https://www.reddit.com/r/MachineLearning/top/.rss?t=day",
+    "https://www.reddit.com/r/science/top/.rss?t=day",
+    "https://www.reddit.com/r/psychology/top/.rss?t=day",
+    # Low-signal RSS
+    "https://www.theguardian.com/culture/rss",
+    "https://www.theguardian.com/society/rss",
+    "https://philosophynow.org/rss",
+}
+
+def _source_quality_modifier(belief: dict) -> float:
+    """Return a score modifier based on belief source quality."""
+    source = (belief.get("source") or "").strip()
+    if source in _HIGH_QUALITY_SOURCES:
+        return 0.4   # boost high-quality sources
+    if source in _LOW_QUALITY_SOURCES:
+        return -0.6  # penalise low-quality sources hard
+    # Generic RSS/URL sources — mild penalty unless confidence is high
+    if source.startswith("http"):
+        conf = belief.get("confidence", 0.5)
+        if conf < 0.45:
+            return -0.4
+        if conf < 0.55:
+            return -0.2
+    return 0.0
+
 def _score_belief(belief: dict, tokens: set[str]) -> float:
     """Score a belief's relevance to a query using token overlap + confidence."""
     content  = belief.get("content", "")
@@ -322,8 +381,6 @@ def _score_belief(belief: dict, tokens: set[str]) -> float:
     overlap = len(tokens & (b_tokens | topic_tokens))
 
     # Direct topic match: query token is a substring of the topic field
-    # e.g. query token "memory" in topic "nex_memory" or "memory_identity"
-    # This outweighs incidental content overlap from unrelated topics.
     direct_topic_match = any(t in raw_topic for t in tokens if len(t) >= 5)
     if direct_topic_match:
         overlap += 4   # strong signal — topic is directly about this
@@ -334,6 +391,9 @@ def _score_belief(belief: dict, tokens: set[str]) -> float:
     conf = belief.get("confidence", 0.5)
     # Identity/pinned beliefs get a boost
     boost = 0.3 if (belief.get("is_identity") or belief.get("pinned")) else 0.0
+
+    # Source quality modifier
+    boost += _source_quality_modifier(belief)
 
     # Quality bonus from response history
     try:
@@ -896,6 +956,7 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
     # ── Query-topic forcing — if a topic is literally in the query, pull it ──
     # This ensures bridge detection works even when concept graph doesn't expand
     # to the named topic (e.g. "consciousness and finance" → pull finance beliefs)
+    # Also maps semantic concepts to DB topics (truth→philosophy, free will→philosophy)
     try:
         _db_topics = set()
         _dt_conn = _db()
@@ -909,6 +970,34 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
         _existing_cd_topics = {(b.get("topic") or "").lower() for b in cross_domain}
         _existing_top_topics = {(b.get("topic") or "").lower() for b in top_beliefs}
         _all_covered = _existing_cd_topics | _existing_top_topics
+
+        # Semantic concept → DB topic mapping for common retrieval gaps
+        _CONCEPT_TOPIC_MAP = {
+            "truth":      "philosophy",
+            "free":       "philosophy",   # free will
+            "will":       "philosophy",   # free will
+            "freewill":   "philosophy",
+            "volition":   "philosophy",
+            "determinism":"philosophy",
+            "morality":   "ethics",
+            "moral":      "ethics",
+            "justice":    "ethics",
+            "knowledge":  "philosophy",
+            "reality":    "philosophy",
+            "existence":  "philosophy",
+            "mind":       "consciousness",
+            "qualia":     "consciousness",
+            "sentience":  "consciousness",
+            "learning":   "ai",
+            "reasoning":  "ai",
+        }
+        # Inject mapped topics as synthetic tokens
+        _extra_topics = set()
+        for _tok in tokens:
+            _mapped = _CONCEPT_TOPIC_MAP.get(_tok.lower())
+            if _mapped and _mapped not in _all_covered:
+                _extra_topics.add(_mapped)
+        tokens = tokens | _extra_topics
 
         for _qt in tokens:
             if _qt in _db_topics and _qt not in _all_covered and len(_qt) >= 4:
