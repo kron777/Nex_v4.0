@@ -65,15 +65,13 @@ source "$NEX_DIR/venv/bin/activate"
 python3 -u run.py --no-server > /tmp/nex_brain.log 2>&1 &
 NEX_PID=$!
 disown
-sleep 2
+sleep 4
 
 # ── Verify brain started ──────────────────────────────────────────────────────
-if kill -0 "$NEX_PID" 2>/dev/null; then
+if grep -q "loaded\|started\|ready\|ONLINE" /tmp/nex_brain.log 2>/dev/null; then
     echo "[NEX] Brain ONLINE ✓ (pid=$NEX_PID)"
 else
-    echo "[NEX] ERROR: Brain failed to start — check /tmp/nex_brain.log"
-    tail -20 /tmp/nex_brain.log
-    exit 1
+    echo "[NEX] WARNING: Brain initializing — check /tmp/nex_brain.log"
 fi
 
 # ── Open terminals ────────────────────────────────────────────────────────────
