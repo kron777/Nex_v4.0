@@ -987,9 +987,9 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
         from nex_belief_reasoner import derive_and_store as _derive
         _inferred_beliefs = _derive(top_beliefs, tokens)
         if _inferred_beliefs:
-            # Inject at position 2 — after top belief but before supporting evidence
-            # so express() can weave it in as part of the argument
-            top_beliefs = top_beliefs[:1] + _inferred_beliefs + top_beliefs[1:]
+            # Inject at position 3 — after top 2 beliefs so seeded/high-confidence
+            # beliefs always lead. Inferred belief adds to argument, doesn't displace.
+            top_beliefs = top_beliefs[:2] + _inferred_beliefs + top_beliefs[2:]
     except Exception as _e1:
         print(f"  [soul_loop] reasoner error: {_e1}")
     # ─────────────────────────────────────────────────────────────────────
@@ -1888,7 +1888,17 @@ def express(
         import nex_bridge_detector as _bd
         import nex_template_grammar as _tg
         _current_topic = (reason_result.get("topic") or "").lower()
-        if intent_type != "challenge" and (confidence < 0.6 or intent_type == "wonder"):
+        # WONDER fires only when: not a direct position query, AND low confidence
+        # OR explicitly a wonder/exploration intent. Never on challenge or position.
+        _wonder_eligible = (
+            intent_type not in ("challenge", "position") and
+            (
+                confidence < 0.55 or
+                intent_type in ("wonder", "exploration") or
+                sparse
+            )
+        )
+        if intent_type != "challenge" and _wonder_eligible:
             _bridges = _bd.get_recent_bridges(n=3)
             _matched = None
             for _br in _bridges:
@@ -1901,7 +1911,10 @@ def express(
                     _matched = _br
                     break
             # Fallback: cross_domain beliefs — only when topics are relevant to query
-            if not _matched and cross_domain and len(cross_domain) >= 2:
+            # AND we are in exploration/wonder mode (not position)
+            if (not _matched and cross_domain and len(cross_domain) >= 2
+                    and intent_type in ("exploration", "wonder", "self_inquiry")
+                    and voice_mode not in ("position", "pushback")):
                 _SKIP = {
                     "what","the","a","an","is","are","do","does","about","but","and",
                     "or","so","me","you","i","it","that","this","how","why","where",
