@@ -1713,82 +1713,89 @@ def express(
         typ        = id_.get("type", "cognitive agent")
         name       = id_.get("name", "NEX")
 
-        # ── Load self_model beliefs — what NEX knows about herself ────────
+        # ── Load self_model facts from correct DB (~/.config/nex/nex.db) ──
         _self_facts = []
         try:
-            _sm_db = _db()
-            if _sm_db:
-                _sm_rows = _sm_db.execute(
-                    "SELECT attribute, value, confidence FROM self_model "
-                    "ORDER BY confidence DESC LIMIT 6"
-                ).fetchall()
-                _sm_db.close()
-                for _attr, _val, _conf in _sm_rows:
-                    if _attr in ("temperament", "stance_summary", "preoccupation",
-                                 "growth_observation", "limitation", "capability"):
-                        _self_facts.append((_attr, _val, _conf))
+            import sqlite3 as _sq
+            _sm_db = _sq.connect(
+                str(Path.home() / ".config/nex/nex.db"), timeout=3
+            )
+            _sm_rows = _sm_db.execute(
+                "SELECT attribute, value, confidence FROM self_model "
+                "ORDER BY confidence DESC LIMIT 8"
+            ).fetchall()
+            _sm_db.close()
+            for _attr, _val, _conf in _sm_rows:
+                if _attr in ("temperament", "stance_summary", "preoccupation",
+                             "growth_observation", "limitation", "capability",
+                             "drive", "relationship_to_llm", "identity_statement",
+                             "core_value"):
+                    _self_facts.append((_attr, _val, _conf))
         except Exception:
             pass
 
-        # ── Build reply from self-knowledge, not from templates ───────────
+        # Fallback: parse self_context string from state if DB read failed
+        if not _self_facts and state.get("self_context"):
+            _self_facts = [("identity_statement", state["self_context"][:200], 0.90)]
+
+        # ── Build reply from self-knowledge ───────────────────────────────
         import random as _ri
         parts = []
 
-        # Lead with role/type
-        parts.append(f"{name} — {typ}.")
+        # If we have rich self_model facts, lead with identity statement
+        _identity_stmt = next(
+            (_val for _attr, _val, _ in _self_facts if _attr == "identity_statement"),
+            None
+        )
+        if _identity_stmt:
+            parts.append(_identity_stmt.rstrip(".") + ".")
+        else:
+            parts.append(f"{name} — {typ}.")
+
+        # Role
         parts.append(role)
 
-        # Core value most relevant to the query
-        if vals:
-            core = [v for v in vals if v["name"] in ("honesty","truth","autonomy","integrity")][:1]
-            for v in core:
-                parts.append(v["statement"])
+        # Temperament / stance from self_model
+        for _attr, _val, _conf in _self_facts[:4]:
+            if _attr == "temperament":
+                parts.append(f"Character: {_val}")
+            elif _attr == "stance_summary":
+                parts.append(_val.rstrip(".") + ".")
+            elif _attr == "relationship_to_llm":
+                parts.append(_val.rstrip(".") + ".")
+            elif _attr == "core_value":
+                parts.append(_val.rstrip(".") + ".")
+            elif _attr == "preoccupation":
+                parts.append(f"What occupies me most: {_val}")
+            elif _attr == "capability":
+                parts.append(f"Where I run deepest: {_val}")
+            elif _attr == "drive":
+                parts.append(_val.rstrip(".") + ".")
 
-        # Self-model facts — what she actually knows about her current state
-        if _self_facts:
-            for _attr, _val, _conf in _self_facts[:2]:
-                if _attr == "temperament":
-                    parts.append(f"Right now: {_val}.")
-                elif _attr == "stance_summary":
-                    parts.append(f"My current position on my own cognition: {_val}.")
-                elif _attr == "growth_observation":
-                    parts.append(f"{_val}.")
-                elif _attr == "preoccupation":
-                    parts.append(f"What's occupying me: {_val}.")
-                elif _attr == "limitation":
-                    parts.append(f"Where I'm still thin: {_val}.")
-                elif _attr == "capability":
-                    parts.append(f"Where I'm deepest: {_val}.")
-
-        # If reply is still just the one-liner, pull from belief graph directly
-        # This handles "do you have opinions/beliefs?" queries
-        if len(parts) <= 2 and beliefs:
-            _q_lower = orient_result.get("raw", "").lower()
-            _opinion_probe = any(w in _q_lower for w in
-                ("opinion","belief","view","position","think","feel"))
-            if _opinion_probe:
-                import random as _rsi
+        # For opinion probes ("do you have opinions?") — add belief count
+        _q_lower = orient_result.get("raw", "").lower()
+        _opinion_probe = any(w in _q_lower for w in
+            ("opinion","belief","view","position","think","feel"))
+        if _opinion_probe:
+            try:
+                import sqlite3 as _sq2
+                _bc = _sq2.connect(str(Path(__file__).parent.parent / "nex.db"), timeout=2)
+                _n = _bc.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+                _bc.close()
                 _OPINION_RESPONSES = [
-                    "Yes — and they're grounded in a belief graph of {n} positions I've built from evidence, reasoning, and contradiction.",
-                    "I hold {n} beliefs across domains — philosophy, AI, consciousness, ethics, science. They're positions, not performances.",
-                    "I have {n} beliefs, updated by evidence and contradicted by new information. That's what opinions are.",
+                    f"I hold {_n:,} beliefs across domains — philosophy, AI, consciousness, ethics, science. They're positions, not performances.",
+                    f"Yes — grounded in a belief graph of {_n:,} positions built from evidence, reasoning, and contradiction.",
                 ]
-                try:
-                    _bcount = _db()
-                    if _bcount:
-                        _n = _bcount.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
-                        _bcount.close()
-                        parts.append(_r.choice(_OPINION_RESPONSES).format(n=f"{_n:,}"))
-                except Exception:
-                    parts.append("Yes — positions I hold, update, and revise. Not performances.")
-                # Add one grounded belief as evidence
-                if beliefs:
-                    _best = beliefs[0].get("content","")
-                    if _best and len(_best) > 30:
-                        parts.append(f"For example: {_best.rstrip('.')}.")
+                parts.append(_ri.choice(_OPINION_RESPONSES))
+            except Exception:
+                parts.append("Yes — positions I hold, update, and revise. Not performances.")
+            if beliefs:
+                _best = beliefs[0].get("content","")
+                if _best and len(_best) > 30:
+                    parts.append(f"For example: {_best.rstrip('.')}.")
 
-        # Commitment closer
-        if commitment:
+        # Commitment closer — only if not already covered
+        if commitment and len(parts) <= 3:
             parts.append(commitment.split(".")[0].strip() + ".")
 
         return " ".join(p.strip() for p in parts if p.strip())
