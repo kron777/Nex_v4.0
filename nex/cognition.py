@@ -564,7 +564,7 @@ def promote_insights_to_beliefs(insights, min_confidence=0.65, min_beliefs=20):
             if _clean.startswith("Across "):
                 _parts = _clean.split(".")
                 _clean = ". ".join(_parts[1:]).strip() if len(_parts) > 1 else _clean
-            belief_content = f"[Synthesized insight on {topic}] {_clean}"
+            belief_content = _clean  # clean — no prefix marker
             _add_belief(
                 belief_content,
                 confidence=min(conf * 1.1, 0.92),

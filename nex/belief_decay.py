@@ -387,7 +387,7 @@ def promote_insights_to_beliefs(insights, min_confidence=0.75, min_beliefs=50):
                 continue
             if not summary or summary.startswith("Across ") or len(summary) < 40:
                 continue
-            belief_content = f"[Synthesized insight on {topic}] {summary}"
+            belief_content = summary  # clean — no prefix marker
             _add_belief(
                 belief_content,
                 confidence=min(conf * 1.1, 0.92),
