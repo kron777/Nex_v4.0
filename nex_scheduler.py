@@ -279,6 +279,13 @@ DOMAIN_PROMPTS = {
         "Explain how the Libet experiments challenged our understanding of voluntary action.",
         "What is agent causation theory and how does it differ from event causation?",
     ],
+    "paradox": [
+        "What is a fundamental paradox in the nature of consciousness or self-awareness?",
+        "Describe a paradox that arises at the intersection of free will and determinism.",
+        "What is a key paradox in the relationship between observer and observed?",
+        "Describe a paradox in the concept of identity — how can something change and remain the same?",
+        "What is the paradox of emergence — how does the whole exceed the sum of its parts?",
+    ],
     "alignment": [
         "Explain a key concept in AI alignment and corrigibility.",
         "What is the control problem in AI safety and why is it hard?",
