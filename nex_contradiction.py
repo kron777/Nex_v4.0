@@ -94,7 +94,7 @@ def _load_beliefs(limit: int = 2000) -> list:
     try:
         conn = _db()
         rows = conn.execute("""
-            SELECT id, content, confidence, topic, reinforce_count
+            SELECT id, content, confidence, topic, 0 as reinforce_count
             FROM beliefs
             WHERE content IS NOT NULL AND length(content) > 15
               AND confidence >= 0.50
@@ -210,6 +210,102 @@ def _confidence_weight(confidence: float, reinforce_count: int) -> float:
     return 1.0 + (confidence - 0.5) * 0.5 + rc_factor
 
 
+
+# ── Query expansion for better TF-IDF retrieval ──────────────────────────────
+_QUERY_EXPAND = {
+    "free will":     "free will determinism agency choice autonomy",
+    "consciousness": "consciousness qualia subjective experience awareness",
+    "alignment":     "alignment safety corrigible values objective",
+    "emergence":     "emergence complexity systems properties",
+    "determinism":   "determinism free will causality necessity",
+    "intelligence":  "intelligence cognition reasoning learning",
+    "qualia":        "qualia subjective experience phenomenal consciousness",
+    "self":          "self identity consciousness subjective experience",
+    "belief":        "belief epistemics confidence certainty knowledge",
+    "wonder":        "wonder curiosity uncertainty mystery unknown",
+}
+
+def _expand_query(query: str) -> str:
+    """Expand query with semantic keywords for better belief retrieval."""
+    ql = query.lower()
+    extras = []
+    for key, expansion in _QUERY_EXPAND.items():
+        if key in ql:
+            extras.append(expansion)
+    return query + " " + " ".join(extras) if extras else query
+
+
+# ── Topic-aware contradiction retrieval ──────────────────────────────────────
+_TOPIC_MAP = {
+    "free will":     ["free_will", "philosophy", "consciousness"],
+    "determinism":   ["free_will", "philosophy", "science"],
+    "consciousness": ["consciousness", "neuroscience", "philosophy"],
+    "alignment":     ["ai", "ethics", "future"],
+    "emergence":     ["consciousness", "philosophy", "science"],
+    "qualia":        ["consciousness", "neuroscience", "philosophy"],
+    "intelligence":  ["ai", "neuroscience", "science"],
+    "self":          ["consciousness", "psychology", "philosophy"],
+    "belief":        ["philosophy", "psychology", "ai"],
+    "agi":           ["ai", "future", "ethics"],
+}
+
+def _topic_contradictions(query: str, limit: int = 6) -> list:
+    """Pull high-confidence beliefs from relevant topics, find negation pairs."""
+    from pathlib import Path
+    import sqlite3, re
+    ql = query.lower()
+    topics = []
+    for key, t in _TOPIC_MAP.items():
+        if key in ql:
+            topics.extend(t)
+    if not topics:
+        return []
+    topics = list(set(topics))
+    try:
+        DB = Path.home() / "Desktop" / "nex" / "nex.db"
+        conn = sqlite3.connect(str(DB), timeout=5)
+        placeholders = ",".join("?" * len(topics))
+        rows = conn.execute(f"""
+            SELECT id, content, topic, confidence
+            FROM beliefs
+            WHERE topic IN ({placeholders})
+              AND confidence > 0.65
+              AND content IS NOT NULL
+            ORDER BY RANDOM()
+            LIMIT 50
+        """, topics).fetchall()
+        conn.close()
+    except Exception:
+        return []
+    # Find beliefs that contain negation of query terms
+    query_words = set(re.findall(r'\b[a-z]{4,}\b', ql)) - {
+        "what", "does", "that", "this", "with", "from", "have",
+        "your", "believe", "think", "feel", "about"
+    }
+    results = []
+    neg_pattern = re.compile(
+        r'\b(not|never|cannot|impossible|unlikely|false|myth|disproven)\b',
+        re.IGNORECASE
+    )
+    for row in rows:
+        content = row[1] or ""
+        cl = content.lower()
+        # Must share query words AND have negation
+        shared = query_words & set(re.findall(r'\b[a-z]{4,}\b', cl))
+        if neg_pattern.search(cl) and (len(shared) >= 1 or len(query_words) == 0):
+            severity = min(0.25 + len(shared) * 0.05 + float(row[3]) * 0.1, 0.5)
+            results.append({
+                "belief_id": row[0],
+                "content": content,
+                "topic": row[2],
+                "confidence": row[3],
+                "severity": severity,
+                "relevance": len(shared) / max(len(query_words), 1),
+                "reason": f"negation in topic-matched belief (shared: {shared})"
+            })
+    results.sort(key=lambda x: -x["severity"])
+    return results[:limit]
+
 def detect_contradictions(
     query: str,
     n_candidates: int = 2000,
@@ -238,12 +334,15 @@ def detect_contradictions(
     if not query or len(query.strip()) < 4:
         return []
 
+    topic_results = _topic_contradictions(query)
+    if topic_results:
+        return topic_results
     beliefs  = _load_beliefs(limit=n_candidates)
     if not beliefs:
         return []
 
     # Step 1: TF-IDF retrieval — find relevant beliefs first
-    relevant = _tfidf_retrieve(query, beliefs,
+    relevant = _tfidf_retrieve(_expand_query(query), beliefs,
                                top_n=top_relevant, floor=relevance_floor)
     if not relevant:
         return []
