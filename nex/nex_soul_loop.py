@@ -974,6 +974,24 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
     else:
         top_beliefs = [b for _, b in _deduped[:8]]
 
+    # ── Lead belief guard — promote Tier 1 sources to front ──────────────
+    # nex_reasoning inferred beliefs should never displace seeded/high-quality
+    # beliefs at position 0. Stable sort: T1 first, T2 second, T3+ after.
+    _LEAD_TIER1 = {"nex_seed", "injector", "manual", "identity", "scheduler_saturation"}
+    _LEAD_TIER2 = {"conversation", "distilled"}
+    def _lead_priority(b):
+        src = (b.get("source") or "").strip()
+        if src in _LEAD_TIER1:   return 0
+        if src in _LEAD_TIER2:   return 1
+        if src == "nex_reasoning": return 3  # never leads
+        return 2
+    # Only reorder if position 0 is nex_reasoning and a better source exists
+    if top_beliefs and (top_beliefs[0].get("source") or "") == "nex_reasoning":
+        _has_better = any(_lead_priority(b) < 3 for b in top_beliefs[1:])
+        if _has_better:
+            top_beliefs = sorted(top_beliefs, key=_lead_priority)
+    # ─────────────────────────────────────────────────────────────────────
+
     # Derive primary topic from top belief
     topic = top_beliefs[0].get("topic", "") if top_beliefs else ""
 
