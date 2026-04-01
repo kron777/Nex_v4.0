@@ -1107,7 +1107,18 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
             if _mapped and _mapped not in _all_covered:
                 _extra_topics.add(_mapped)
 
+        # Block generic English words from topic forcing — they match too broadly
+        _FORCE_BLOCKLIST = {
+            "change", "world", "future", "general", "system", "process",
+            "result", "think", "about", "people", "things", "level",
+            "based", "given", "model", "point", "sense", "place",
+            "time", "life", "part", "work", "well", "just", "make",
+            "take", "give", "come", "look", "back", "down", "over",
+            "view", "case", "form", "side", "type", "kind", "move",
+        }
         for _qt in tokens:
+            if _qt in _FORCE_BLOCKLIST:
+                continue
             if _qt in _db_topics and _qt not in _all_covered and len(_qt) >= 4:
                 # Pull top 2 beliefs from this topic and inject into cross_domain
                 _qt_conn = _db()
