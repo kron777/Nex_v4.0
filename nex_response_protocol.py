@@ -309,6 +309,18 @@ def generate(query: str) -> str:
                 belief_text = belief_text + tension_note if belief_text else tension_note
     except Exception:
         pass
+    # 2c. Belief reasoning — derive inference from retrieved beliefs
+    try:
+        import sys as _sys
+        if '/home/rr/Desktop/nex' not in _sys.path:
+            _sys.path.insert(0, '/home/rr/Desktop/nex')
+        from nex_belief_reasoner import infer_and_store
+        _raw_beliefs = [b.strip("- ").strip() for b in belief_text.split("\n") if b.strip("- ").strip()]
+        _inference = infer_and_store(_raw_beliefs, query=query, topic=intent)
+        if _inference:
+            belief_text = belief_text + f"\n- [MY INFERENCE] {_inference}"
+    except Exception:
+        pass
     # 3. Pick opener
     opener_pool = OPENERS.get(intent, OPENERS["epistemics"])
     used_openers = list(_budget.used_openers)
