@@ -715,6 +715,14 @@ def demo_chat():
         preview = full[:cut if cut > 50 else DEMO_MAX_LEN] + "…"
     else:
         preview = full
+        # Conversation-to-belief pipeline (Improvement 5)
+        try:
+            from nex_conversation_pipeline import extract_and_store as _cap
+            _sid = data.get('session_id', 'default') if 'data' in dir() else 'default'
+            _topic = data.get('topic', 'general') if 'data' in dir() else 'general'
+            _cap(response, _topic, _sid)
+        except Exception:
+            pass
     return jsonify({"query": query, "response": preview, "truncated": len(full) > DEMO_MAX_LEN,
         "latency_s": round(time.time()-t0,3), "demo": True, "remaining": remaining,
         "upgrade": "https://gumroad.com/products/blsue", "timestamp": datetime.utcnow().isoformat()})
