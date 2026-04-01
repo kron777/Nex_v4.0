@@ -309,6 +309,16 @@ def generate(query: str) -> str:
                 belief_text = belief_text + tension_note if belief_text else tension_note
     except Exception:
         pass
+    # 2b2. Live bridge firing — inject cross-domain surprise if relevant
+    try:
+        from nex_live_bridge import get_live_bridge, bridge_to_belief_text
+        _bridge = get_live_bridge(query, intent=intent)
+        if _bridge:
+            _bridge_text = bridge_to_belief_text(_bridge)
+            if _bridge_text and len(_bridge_text) > 30:
+                belief_text = belief_text + f"\n- {_bridge_text[:200]}"
+    except Exception:
+        pass
     # 2c. Belief reasoning — derive inference from retrieved beliefs
     try:
         import sys as _sys
