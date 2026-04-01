@@ -191,7 +191,7 @@ def anneal_cycle(conn, temperature: float, cycle_num: int) -> dict:
 
                 if not exists:
                     conn.execute(
-                        "INSERT INTO beliefs (topic, content, confidence, source, origin) "
+                        "INSERT OR IGNORE INTO beliefs (topic, content, confidence, source, origin) "
                         "VALUES (?, ?, ?, ?, ?)",
                         (topic, crystal_content, 0.82,
                          "annealing_crystal", "annealing")

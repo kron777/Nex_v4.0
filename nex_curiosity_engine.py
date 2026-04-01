@@ -82,7 +82,7 @@ def _save_bridge_belief(belief: dict):
         db_path = _P.home() / '.config' / 'nex' / 'nex.db'
         db = sqlite3.connect(str(db_path))
         db.execute("""
-            INSERT INTO beliefs (content, confidence, source, author, topic, tags, timestamp)
+            INSERT OR IGNORE INTO beliefs (content, confidence, source, author, topic, tags, timestamp)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
             belief.get("content", "")[:500],

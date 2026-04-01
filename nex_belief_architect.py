@@ -364,7 +364,7 @@ class BeliefArchitect:
                     avg_conf = sum(b["confidence"] for b in beliefs) / len(beliefs)
                     new_conf = min(0.85, avg_conf + 0.2)
                     conn.execute(
-                        "INSERT INTO beliefs (content, topic, confidence, source) VALUES (?, ?, ?, ?)",
+                        "INSERT OR IGNORE INTO beliefs (content, topic, confidence, source) VALUES (?, ?, ?, ?)",
                         (merged, topic, new_conf, "architect_compression")
                     )
                     compressed += 1

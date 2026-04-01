@@ -417,7 +417,7 @@ def promote_bridge(bridge_id: int = None) -> Optional[dict]:
 
     # Insert as belief
     conn.execute("""
-        INSERT INTO beliefs (content, topic, confidence, source, created_at)
+        INSERT OR IGNORE INTO beliefs (content, topic, confidence, source, created_at)
         VALUES (?, ?, ?, 'bridge_detector', ?)
     """, (bridge_text, topic, round(row["bridge_score"] * 0.8, 3), time.time()))
 

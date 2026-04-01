@@ -216,7 +216,7 @@ def insert_beliefs(db_path, beliefs):
     for content, topic, confidence in beliefs:
         try:
             con.execute(
-                "INSERT INTO beliefs (content, topic, confidence, source) VALUES (?,?,?,?)",
+                "INSERT OR IGNORE INTO beliefs (content, topic, confidence, source) VALUES (?,?,?,?)",
                 (content.strip(), topic.strip(), float(confidence), "depth_injector")
             )
             added += 1
