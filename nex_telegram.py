@@ -899,6 +899,11 @@ def main():
     app.add_handler(CommandHandler("pipe_claude", cmd_pipe_claude))
     app.add_handler(CommandHandler("discord", cmd_discord))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    try:
+        from nex_telegram_commands import register_commands
+        register_commands(app)
+    except Exception as _e:
+        print(f"  [telegram] control commands not loaded: {_e}")
 
     print(f"  Status: ONLINE")
     _emit_feed("platform", "telegram", "LIVE")

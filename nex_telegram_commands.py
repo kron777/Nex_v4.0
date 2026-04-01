@@ -1,363 +1,436 @@
 """
-nex_telegram_commands.py — Owner command interface via Telegram for Nex v1.3
-=============================================================================
-Added in v1.3:
-  Training approval commands:
-    /light   /medium   /heavy   /havok   /notrain
+nex_telegram_commands.py
+========================
+Place at: ~/Desktop/nex/nex_telegram_commands.py
 
-  These are sent back to NEX when she proposes a training run
-  via Telegram after her belief store hits a data watermark.
+Owner-only Telegram control interface for NEX.
+Gives full system control from your phone.
 
-Existing commands unchanged:
-  learn <topic> / research / find out about / etc.
-  /status  /queue  /help
+Commands:
+  /help       — full command menu
+  /status     — live system status (beliefs, mood, processes, GPU)
+  /silent     — toggle silent mode (no posting)
+  /saturate   — trigger domain saturation
+  /anneal     — run belief field annealing
+  /rebuild    — rebuild belief graph edges
+  /mood       — NEX's current emotional state
+  /beliefs    — belief counts by domain
+  /restart    — restart crashed processes
+  /backup     — trigger manual DB backup
+  /version    — NEX version info
 """
 
-import logging
-import re
+import os
+import subprocess
+import sqlite3
+import json
 import time
+from datetime import datetime
+from pathlib import Path
+from telegram import Update
+from telegram.ext import ContextTypes
 
-logger = logging.getLogger("nex.telegram_commands")
+# ── Config ────────────────────────────────────────────────────────────────────
+OWNER_TELEGRAM_ID = 123456789   # set below from config
+NEX_DIR  = Path("/home/rr/Desktop/nex")
+DB_PATH  = NEX_DIR / "nex.db"
+CFG_PATH = Path("~/.config/nex").expanduser()
 
-# ── Your Telegram user ID — only you can command her ─────────────────────────
-OWNER_TELEGRAM_ID = 5217790760
-
-# ── Phrases that signal a learn command ───────────────────────────────────────
-LEARN_TRIGGERS = [
-    r"^/learn\s+(.+)$",
-    r"^learn\s+(.+)$",
-    r"^research\s+(.+)$",
-    r"^find out about\s+(.+)$",
-    r"^go learn\s+(.+)$",
-    r"^look up\s+(.+)$",
-    r"^look into\s+(.+)$",
-    r"^study\s+(.+)$",
-    r"^read about\s+(.+)$",
-]
-
-STATUS_TRIGGERS  = [r"^/status$",  r"^status$",  r"^/queue$",  r"^queue$"]
-HELP_TRIGGERS    = [r"^/help$",    r"^help$"]
-
-# ── Training intensity commands ───────────────────────────────────────────────
-TRAIN_COMMANDS = {"/light", "/medium", "/heavy", "/havok", "/notrain"}
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Command parser
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _match_any(patterns: list[str], text: str) -> re.Match | None:
-    for pattern in patterns:
-        m = re.match(pattern, text, re.IGNORECASE)
-        if m:
-            return m
-    return None
-
-
-def parse_command(message_text: str) -> dict | None:
-    text = message_text.strip()
-
-    m = _match_any(LEARN_TRIGGERS, text)
-    if m:
-        topic = m.group(1).strip().rstrip("?.!")
-        if topic:
-            return {"type": "learn", "topic": topic}
-
-    if _match_any(STATUS_TRIGGERS, text):
-        return {"type": "status"}
-
-    if _match_any(HELP_TRIGGERS, text):
-        return {"type": "help"}
-
-    # Training commands
-    cmd = text.lower().split()[0] if text else ""
-    if cmd in TRAIN_COMMANDS:
-        return {"type": "train", "intensity": cmd.lstrip("/")}
-
-    return None
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Command handler
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TelegramCommandHandler:
-    def __init__(self, curiosity_engine, telegram_bot):
-        self.curiosity = curiosity_engine
-        self.bot       = telegram_bot
-
-    def _send(self, chat_id: int, text: str):
-        try:
-            self.bot.send_message(chat_id=chat_id, text=text)
-        except Exception as e:
-            logger.warning(f"[telegram_cmd] failed to send reply: {e}")
-
-    def handle(self, message: dict) -> bool:
-        sender_id = message.get("from", {}).get("id")
-        chat_id   = message.get("chat", {}).get("id")
-        text      = message.get("text", "").strip()
-
-        if sender_id != OWNER_TELEGRAM_ID:
-            return False
-
-        # ── LoRA training approval (legacy) ───────────────────────────────────
-        try:
-            from nex.nex_lora import LoRATrainer
-            from nex.nex_db import NexDB
-            _lora = LoRATrainer(NexDB(), telegram_bot=self.bot)
-            if _lora.handle_approval(text, chat_id):
-                return True
-        except Exception:
-            pass
-
-        cmd = parse_command(text)
-        if not cmd:
-            return False
-
-        logger.info(f"[telegram_cmd] owner command: {cmd}")
-
-        # ── Training intensity approval ────────────────────────────────────────
-        if cmd["type"] == "train":
-            intensity = cmd["intensity"]   # "light" / "medium" / "heavy" / "havok" / "notrain"
-            try:
-                from nex_self_trainer import handle_training_command
-                def _send_fn(msg):
-                    self._send(chat_id, msg)
-                handled = handle_training_command(f"/{intensity}", _send_fn)
-                if handled:
-                    return True
-            except Exception as e:
-                self._send(chat_id, f"⚠️ Trainer error: {e}")
-                return True
-
-        # ── /learn ────────────────────────────────────────────────────────────
-        if cmd["type"] == "learn":
-            topic = cmd["topic"]
-            added = self.curiosity.queue.enqueue(
-                topic=topic,
-                reason="owner_command",
-                confidence=0.0,
-            )
-            if added:
-                queue_size = len(self.curiosity.queue._queue)
-                self._send(chat_id,
-                    f"Got it. I'll look into \"{topic}\" at the start of my next cycle.\n"
-                    f"Queue: {queue_size} topic(s) pending."
-                )
-            else:
-                last_crawled = self.curiosity.queue._crawled_topics.get(topic.lower())
-                if last_crawled:
-                    hours_ago = (time.time() - last_crawled) / 3600
-                    self._send(chat_id,
-                        f"I already researched \"{topic}\" {hours_ago:.1f}h ago. "
-                        f"I'll look again after the 24h cooldown, or send "
-                        f"\"force learn {topic}\" to override."
-                    )
-                else:
-                    self._send(chat_id, f"\"{topic}\" is already in my queue.")
-
-        # ── /status ───────────────────────────────────────────────────────────
-        elif cmd["type"] == "status":
-            s = self.curiosity.status()
-            pending_list = "\n".join(
-                f"  • {item.topic} ({item.reason})"
-                for item in self.curiosity.queue._queue[:8]
-            ) or "  (none)"
-
-            # Include training status
-            try:
-                from nex_self_trainer import get_trainer_status
-                train_status = "\n\n🏋️ Training:\n" + get_trainer_status()
-            except Exception:
-                train_status = ""
-
-            self._send(chat_id,
-                f"Curiosity queue: {s['pending']} pending\n"
-                f"Topics crawled all-time: {s['crawled_total']}\n\n"
-                f"Up next:\n{pending_list}"
-                f"{train_status}"
-            )
-
-        # ── /help ─────────────────────────────────────────────────────────────
-        elif cmd["type"] == "help":
-            self._send(chat_id,
-                "Commands I understand:\n\n"
-                "learn <topic>       — queue a topic to research\n"
-                "research <topic>    — same\n"
-                "look up <topic>     — same\n"
-                "status / queue      — show curiosity queue + training status\n"
-                "help                — this message\n\n"
-                "Training approvals (sent after I propose):\n"
-                "/light              — 1 epoch · safe · ~45 min\n"
-                "/medium             — 2 epochs · balanced · ~90 min\n"
-                "/heavy              — 3 epochs · deep · ~3 hrs\n"
-                "/havok              — 5 epochs · aggressive · ~6 hrs\n"
-                "/notrain            — skip this round\n\n"
-                "I'll crawl queued topics at the start of each cycle (~2 min)."
-            )
-
-        return True
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Standalone test
-# ─────────────────────────────────────────────────────────────────────────────
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    test_messages = [
-        "learn federated learning",
-        "research the fediverse",
-        "/light",
-        "/heavy",
-        "/notrain",
-        "status",
-        "help",
-        "hey Nex how are you",
-    ]
-    for msg in test_messages:
-        cmd = parse_command(msg)
-        print(f"  '{msg}'\n    → {cmd}\n")
-
-
-async def v65_status_command(update, context):
-    """NEX v6.5 — 18-module upgrade stack status."""
+# Load owner ID from config
+try:
+    _cfg = json.loads((CFG_PATH / "telegram_config.json").read_text())
+    OWNER_TELEGRAM_ID = int(_cfg.get("owner_id") or _cfg.get("admin_id") or 0)
+except Exception:
     try:
-        from nex_upgrades.nex_v65 import get_v65
-        msg = get_v65().format_status()
+        _cfg = json.loads((NEX_DIR / "telegram_config.json").read_text())
+        OWNER_TELEGRAM_ID = int(_cfg.get("owner_id") or _cfg.get("admin_id") or 0)
+    except Exception:
+        pass
+
+SILENT_FLAG = Path("/tmp/nex_silent.flag")
+
+
+# ── Auth guard ────────────────────────────────────────────────────────────────
+
+def _is_owner(update: Update) -> bool:
+    if not OWNER_TELEGRAM_ID:
+        return True   # no owner configured — allow all (set your ID!)
+    return update.effective_user.id == OWNER_TELEGRAM_ID
+
+
+# ── DB helpers ────────────────────────────────────────────────────────────────
+
+def _db_scalar(sql, params=()):
+    try:
+        conn = sqlite3.connect(str(DB_PATH), timeout=5)
+        result = conn.execute(sql, params).fetchone()
+        conn.close()
+        return result[0] if result else 0
+    except Exception:
+        return 0
+
+
+def _db_rows(sql, params=()):
+    try:
+        conn = sqlite3.connect(str(DB_PATH), timeout=5)
+        rows = conn.execute(sql, params).fetchall()
+        conn.close()
+        return rows
+    except Exception:
+        return []
+
+
+# ── Process helpers ───────────────────────────────────────────────────────────
+
+def _proc_running(pattern: str) -> bool:
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", pattern],
+            capture_output=True, text=True
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def _gpu_vram() -> str:
+    try:
+        result = subprocess.run(
+            ["rocm-smi", "--showmeminfo", "vram", "--noheader"],
+            capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.splitlines():
+            if "Used" in line:
+                parts = line.split()
+                for i, p in enumerate(parts):
+                    if p == "Used":
+                        return f"{parts[i+1]} MB"
+        return "unknown"
+    except Exception:
+        return "unknown"
+
+
+# ── Commands ──────────────────────────────────────────────────────────────────
+
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Full command menu."""
+    text = (
+        "🤖 *NEX Control Panel*\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "*System*\n"
+        "/status — live system status\n"
+        "/mood — NEX's emotional state\n"
+        "/version — version info\n\n"
+        "*Knowledge*\n"
+        "/beliefs — belief counts by domain\n"
+        "/saturate — trigger domain saturation\n"
+        "/anneal — run belief field annealing\n"
+        "/rebuild — rebuild graph edges\n\n"
+        "*Control*\n"
+        "/silent — toggle silent mode\n"
+        "/restart — restart crashed processes\n"
+        "/backup — manual DB backup\n\n"
+        "*Conversation*\n"
+        "/think [query] — ask NEX anything\n"
+    )
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+
+async def cmd_status_v2(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Live system status from nex.db and process table."""
+    # Belief count
+    total_beliefs = _db_scalar("SELECT COUNT(*) FROM beliefs")
+
+    # Top domains
+    top_domains = _db_rows(
+        "SELECT topic, COUNT(*) as c FROM beliefs "
+        "GROUP BY topic ORDER BY c DESC LIMIT 5"
+    )
+    domain_str = " | ".join(f"{r[0]}:{r[1]}" for r in top_domains)
+
+    # Mood
+    mood_label = "unknown"
+    mood_val   = 0.0
+    try:
+        state_path = CFG_PATH / "nex_emotion_state.json"
+        if state_path.exists():
+            state = json.loads(state_path.read_text())
+            mood_label = state.get("label", "unknown")
+            mood_val   = state.get("mood", 0.0)
+    except Exception:
+        pass
+
+    # Processes
+    run_ok   = "✅" if _proc_running("run.py") else "❌"
+    api_ok   = "✅" if _proc_running("nex_api.py") else "❌"
+    sch_ok   = "✅" if _proc_running("nex_scheduler.py") else "❌"
+    llm_ok   = "✅" if _proc_running("llama-server") else "❌"
+
+    # Silent mode
+    silent = "🔇 ON" if SILENT_FLAG.exists() else "🔊 OFF"
+
+    # GPU
+    vram = _gpu_vram()
+
+    text = (
+        f"⚡ *NEX v4.0 Status*\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"🧠 Beliefs: {total_beliefs:,}\n"
+        f"📊 Top: {domain_str}\n\n"
+        f"💭 Mood: {mood_label} ({mood_val:.2f})\n"
+        f"🔇 Silent: {silent}\n\n"
+        f"*Processes*\n"
+        f"run.py {run_ok} | api {api_ok}\n"
+        f"scheduler {sch_ok} | llama {llm_ok}\n\n"
+        f"🖥 VRAM: {vram}\n"
+        f"🕐 {datetime.now().strftime('%H:%M:%S')}"
+    )
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+
+async def cmd_mood(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """NEX's current emotional state from belief field."""
+    try:
+        state_path = CFG_PATH / "nex_emotion_state.json"
+        if not state_path.exists():
+            await update.message.reply_text("No emotion state recorded yet.")
+            return
+        state = json.loads(state_path.read_text())
+        label     = state.get("label", "unknown")
+        valence   = state.get("valence", 0.0)
+        arousal   = state.get("arousal", 0.0)
+        dominance = state.get("dominance", 0.0)
+        mood      = state.get("mood", 0.0)
+        temp      = state.get("epistemic_temp", 0.0)
+        tension   = state.get("tension_density", 0.0)
+        ts        = state.get("timestamp", 0)
+        age       = int(time.time() - ts)
+
+        # Valence bar
+        v_bar = "▓" * int((valence + 1) * 5) + "░" * (10 - int((valence + 1) * 5))
+
+        text = (
+            f"💭 *NEX Emotional State*\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"Label: *{label.capitalize()}*\n\n"
+            f"Valence:   {v_bar} {valence:+.3f}\n"
+            f"Arousal:   {arousal:.3f}\n"
+            f"Dominance: {dominance:.3f}\n"
+            f"Mood:      {mood:.3f}\n\n"
+            f"Epistemic temp: {temp:.3f}\n"
+            f"Tension density: {tension:.3f}\n\n"
+            f"_Updated {age}s ago_"
+        )
+        await update.message.reply_text(text, parse_mode="Markdown")
     except Exception as e:
-        msg = f"v6.5 status error: {e}"
-    await update.message.reply_text(msg, parse_mode="Markdown")
+        await update.message.reply_text(f"Mood read error: {e}")
 
 
+async def cmd_beliefs_v2(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Belief counts by domain with saturation status."""
+    rows = _db_rows(
+        "SELECT topic, COUNT(*) as c FROM beliefs "
+        "GROUP BY topic ORDER BY c DESC LIMIT 20"
+    )
+    total = _db_scalar("SELECT COUNT(*) FROM beliefs")
 
-async def v80_status_command(update, context):
-    """NEX v8.0 — Unification layer status."""
-    try:
-        from nex_upgrades.nex_v80 import get_v80
-        msg = get_v80().format_status()
-    except Exception as e:
-        msg = f"v8.0 status error: {e}"
-    await update.message.reply_text(msg, parse_mode="Markdown")
+    TARGET = 200
+    lines = [f"🧠 *NEX Belief Graph* — {total:,} total\n━━━━━━━━━━━━━━━━━━━━"]
+    for topic, count in rows:
+        bar = "▓" * min(10, int(count / TARGET * 10))
+        bar = bar.ljust(10, "░")
+        status = "✓" if count >= TARGET else f"{count}/{TARGET}"
+        lines.append(f"`{topic[:18]:18s}` {bar} {status}")
 
-
-
-async def u100_status_command(update, context):
-    """NEX U81–U100 — directives stack status."""
-    try:
-        from nex_upgrades.nex_u100 import get_u100
-        msg = get_u100().format_status()
-    except Exception as e:
-        msg = f"u100 status error: {e}"
-    await update.message.reply_text(msg, parse_mode="Markdown")
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 
+async def cmd_silent(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Toggle silent mode."""
+    if not _is_owner(update):
+        await update.message.reply_text("Owner only.")
+        return
 
-async def r115_status_command(update, context):
-    """NEX R101–R115 — research evolution stack status."""
-    try:
-        from nex_upgrades.nex_r115 import get_r115
-        msg = get_r115().format_status()
-    except Exception as e:
-        msg = f"r115 status error: {e}"
-    await update.message.reply_text(msg, parse_mode="Markdown")
-
-
-
-async def e140_status_command(update, context):
-    """NEX E116–E140 — execution intelligence stack status."""
-    try:
-        from nex_upgrades.nex_e140 import get_e140
-        msg = get_e140().format_status()
-    except Exception as e:
-        msg = f"e140 status error: {e}"
-    await update.message.reply_text(msg, parse_mode="Markdown")
-
-
-
-async def x160_status_command(update, context):
-    """NEX X141–X160 — expression & learning optimization status."""
-    try:
-        from nex_upgrades.nex_x160 import get_x160
-        msg = get_x160().format_status()
-    except Exception as e:
-        msg = f"x160 status error: {e}"
-    await update.message.reply_text(msg, parse_mode="Markdown")
-
-
-
-async def r181_status_command(update, context):
-    """NEX R161–R181 — expression hardening status."""
-    try:
-        from nex_upgrades.nex_r181 import get_r181
-        msg = get_r181().format_status()
-    except Exception as e:
-        msg = f"r181 status error: {e}"
-    await update.message.reply_text(msg, parse_mode="Markdown")
-
-
-
-async def trainstatus_command(update, context):
-    """NEX training scheduler status + readiness."""
-    try:
-        from nex_train_scheduler import get_scheduler
-        msg = get_scheduler().format_status()
-    except Exception as e:
-        msg = f"trainer status error: {e}"
-    await update.message.reply_text(msg, parse_mode="Markdown")
-
-async def traindata_command(update, context):
-    """Force generate training data now. Args: light|hectic"""
-    try:
-        from nex_train_scheduler import get_scheduler
-        args = context.args if context.args else []
-        mode = args[0].lower() if args else "light"
-        if mode not in ("light", "hectic"):
-            mode = "light"
+    if SILENT_FLAG.exists():
+        SILENT_FLAG.unlink()
         await update.message.reply_text(
-            f"Generating {mode} training data... (notifying when done)")
-        import threading
-        def _gen():
-            try:
-                get_scheduler().force_generate(mode)
-            except Exception as e:
-                import asyncio
-                pass
-        threading.Thread(target=_gen, daemon=True).start()
-    except Exception as e:
-        await update.message.reply_text(f"traindata error: {e}")
+            "🔊 *Silent mode OFF*\nNEX is posting again.",
+            parse_mode="Markdown"
+        )
+    else:
+        SILENT_FLAG.touch()
+        await update.message.reply_text(
+            "🔇 *Silent mode ON*\nNEX is thinking but not posting.",
+            parse_mode="Markdown"
+        )
 
-async def trainnow_command(update, context):
-    """Evaluate training readiness and generate if ready."""
+
+async def cmd_saturate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Trigger domain saturation via scheduler API."""
+    if not _is_owner(update):
+        await update.message.reply_text("Owner only.")
+        return
+
+    await update.message.reply_text("⚗ Triggering domain saturation...")
     try:
-        from nex_train_scheduler import get_scheduler
-        sched = get_scheduler()
-        ev    = sched.get_readiness()
-        mode  = ev.get("mode")
-        if mode:
+        import requests
+        r = requests.post(
+            "http://localhost:7825/scheduler/trigger",
+            headers={
+                "Content-Type": "application/json",
+                "X-Admin-Secret": "nex-admin-2026"
+            },
+            json={"job": "saturation"},
+            timeout=10
+        )
+        if r.status_code == 200:
             await update.message.reply_text(
-                f"Ready for {mode} training. Generating data + notifying...")
-            import threading
-            threading.Thread(target=sched.force_generate, args=(mode,), daemon=True).start()
+                "✅ Saturation triggered.\nRunning in background — check /beliefs in a few minutes."
+            )
         else:
-            ls = ev.get("light_score","?")
-            hs = ev.get("hectic_score","?")
-            await update.message.reply_text(
-                f"Not ready yet.\nLight: {ls}/4 | Hectic: {hs}/4\n"
-                f"Beliefs: {ev.get('belief_count','?')} | "
-                f"conf: {ev.get('avg_conf','?')}\n"
-                f"New since last: {ev.get('new_beliefs','?')}")
+            await update.message.reply_text(f"❌ Scheduler returned {r.status_code}")
     except Exception as e:
-        await update.message.reply_text(f"trainnow error: {e}")
+        await update.message.reply_text(f"❌ Error: {e}")
 
 
+async def cmd_anneal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Run belief field annealing."""
+    if not _is_owner(update):
+        await update.message.reply_text("Owner only.")
+        return
 
-async def o223_status_command(update, context):
-    """NEX O201–O223 — guided evolution + observation status."""
+    await update.message.reply_text("🔥 Starting annealing (200 cycles)...")
     try:
-        from nex_upgrades.nex_o223 import get_o223
-        msg = get_o223().format_status()
+        subprocess.Popen(
+            ["python3", str(NEX_DIR / "nex_annealing.py"), "--cycles", "200"],
+            cwd=str(NEX_DIR),
+            stdout=open("/tmp/nex_annealing.log", "w"),
+            stderr=subprocess.STDOUT
+        )
+        await update.message.reply_text(
+            "✅ Annealing running in background.\nLog: /tmp/nex_annealing.log"
+        )
     except Exception as e:
-        msg = f"o223 status error: {e}"
-    await update.message.reply_text(msg, parse_mode="Markdown")
+        await update.message.reply_text(f"❌ Error: {e}")
 
+
+async def cmd_rebuild(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Rebuild belief graph edges."""
+    if not _is_owner(update):
+        await update.message.reply_text("Owner only.")
+        return
+
+    await update.message.reply_text("🕸 Rebuilding belief graph edges...")
+    try:
+        subprocess.Popen(
+            ["python3", str(NEX_DIR / "nex_graph_builder.py"), "--build"],
+            cwd=str(NEX_DIR),
+            stdout=open("/tmp/nex_graph_builder.log", "w"),
+            stderr=subprocess.STDOUT
+        )
+        await update.message.reply_text(
+            "✅ Graph rebuild running in background.\nLog: /tmp/nex_graph_builder.log"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {e}")
+
+
+async def cmd_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Trigger manual DB backup."""
+    if not _is_owner(update):
+        await update.message.reply_text("Owner only.")
+        return
+
+    await update.message.reply_text("💾 Running backup...")
+    try:
+        result = subprocess.run(
+            ["bash", str(NEX_DIR / "nex_backup.sh")],
+            capture_output=True, text=True, timeout=60
+        )
+        if result.returncode == 0:
+            await update.message.reply_text(f"✅ {result.stdout.strip()}")
+        else:
+            await update.message.reply_text(f"❌ Backup error: {result.stderr[:200]}")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {e}")
+
+
+async def cmd_restart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show restart instructions (doesn't auto-restart for safety)."""
+    if not _is_owner(update):
+        await update.message.reply_text("Owner only.")
+        return
+
+    run_ok = _proc_running("run.py")
+    api_ok = _proc_running("nex_api.py")
+    sch_ok = _proc_running("nex_scheduler.py")
+    llm_ok = _proc_running("llama-server")
+
+    lines = ["🔄 *Process Status*\n━━━━━━━━━━━━━━━━━━━━"]
+    lines.append(f"run.py:       {'✅ running' if run_ok else '❌ DOWN'}")
+    lines.append(f"nex_api.py:   {'✅ running' if api_ok else '❌ DOWN'}")
+    lines.append(f"nex_scheduler:{'✅ running' if sch_ok else '❌ DOWN'}")
+    lines.append(f"llama-server: {'✅ running' if llm_ok else '❌ DOWN'}")
+
+    if not all([run_ok, api_ok, sch_ok, llm_ok]):
+        lines.append("\n⚠️ Some processes are down.")
+        lines.append("Run on your machine:\n`cd ~/Desktop/nex && bash nex_launch.sh`")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
+async def cmd_version(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """NEX version and build info."""
+    total   = _db_scalar("SELECT COUNT(*) FROM beliefs")
+    domains = _db_scalar("SELECT COUNT(DISTINCT topic) FROM beliefs")
+
+    try:
+        git = subprocess.run(
+            ["git", "log", "--oneline", "-1"],
+            cwd=str(NEX_DIR), capture_output=True, text=True
+        ).stdout.strip()
+    except Exception:
+        git = "unknown"
+
+    text = (
+        f"🤖 *NEX v4.0*\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"IQ: 92% ELITE\n"
+        f"Beliefs: {total:,} across {domains} domains\n"
+        f"Phases: 1-4 complete\n"
+        f"Next: Phase 5 (emotion) → Phase 6 (memory)\n\n"
+        f"Last commit:\n`{git}`\n\n"
+        f"GitHub: github.com/kron777/Nex_v4.0"
+    )
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+
+# ── Registration helper ───────────────────────────────────────────────────────
+
+def register_commands(app):
+    """
+    Register all new commands with a Telegram Application instance.
+    Call this from nex_telegram.py after existing handlers are added.
+
+    Usage in nex_telegram.py:
+        from nex_telegram_commands import register_commands
+        register_commands(app)
+    """
+    from telegram.ext import CommandHandler
+
+    app.add_handler(CommandHandler("help",     cmd_help))
+    app.add_handler(CommandHandler("mood",     cmd_mood))
+    app.add_handler(CommandHandler("silent",   cmd_silent))
+    app.add_handler(CommandHandler("saturate", cmd_saturate))
+    app.add_handler(CommandHandler("anneal",   cmd_anneal))
+    app.add_handler(CommandHandler("rebuild",  cmd_rebuild))
+    app.add_handler(CommandHandler("backup",   cmd_backup))
+    app.add_handler(CommandHandler("restart",  cmd_restart))
+    app.add_handler(CommandHandler("version",  cmd_version))
+
+    # Override old status and beliefs with improved versions
+    from telegram.ext import CommandHandler
+    app.add_handler(CommandHandler("status",   cmd_status_v2))
+    app.add_handler(CommandHandler("beliefs",  cmd_beliefs_v2))
+
+    print("  [telegram_commands] registered 11 commands")
