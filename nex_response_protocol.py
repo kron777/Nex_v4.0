@@ -282,6 +282,20 @@ def generate(query: str) -> str:
         beliefs = retrieve_beliefs_by_intent(intent, query)
         belief_text = "\n".join(f"- {b}" for b in beliefs) if beliefs else "(drawing from general knowledge)"
 
+    # 2b. Contradiction check — override intent if genuine tension detected
+    try:
+        from nex_contradiction import detect_contradictions
+        _contradictions = detect_contradictions(query)
+        if _contradictions:
+            top = _contradictions[0]
+            if top.get("severity", 0) >= 0.25:
+                # Genuine tension — route to gaps/wonder, inject tension into belief text
+                intent = "gaps"
+                tension_belief = top.get("content", "")[:200]
+                tension_note = f"\n- [TENSION] I hold this but it creates tension: {tension_belief}"
+                belief_text = belief_text + tension_note if belief_text else tension_note
+    except Exception:
+        pass
     # 3. Pick opener
     opener_pool = OPENERS.get(intent, OPENERS["epistemics"])
     used_openers = list(_budget.used_openers)
