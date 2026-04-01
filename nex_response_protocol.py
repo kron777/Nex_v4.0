@@ -244,11 +244,14 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
             "prompt": full_prompt,
             "n_predict": MAX_TOKENS,
             "temperature": temperature,
-            "stop": ["[INST]", "[/INST]", "\n\n\n", "User:", "Question:", "NEX response", "Respond in", "Be specific"],
+            "stop": ["[INST]", "[/INST]", "\n\n\n", "User:", "Question:", "NEX response", "Respond in 2"],
             "stream": False,
         }, timeout=25)
         raw = r.json().get("content", "").strip()
         raw = raw.split("[/INST]")[0].split("[INST]")[0].strip()
+        # Strip any remaining instruction tokens
+        import re as _rei
+        raw = _rei.sub(r"\s*\[/?INST\].*$", "", raw, flags=_rei.DOTALL).strip()
         # Remove repeated sentences
         sentences = [s.strip() for s in raw.replace("  ", " ").split(".") if s.strip()]
         seen_s = set()
