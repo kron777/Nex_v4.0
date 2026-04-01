@@ -60,6 +60,14 @@ def _inject_belief(content: str, topic: str, confidence: float,
     """Write a single belief to nex.db. Returns True if inserted."""
     if not content or len(content) < 20 or len(content) > 400:
         return False
+    # Quality gate — reject garbage beliefs
+    try:
+        from nex_belief_quality_gate import is_quality_belief
+        ok, reason = is_quality_belief(content, topic)
+        if not ok:
+            return False
+    except Exception:
+        pass
 
     # Clean content
     content = content.strip()

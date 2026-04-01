@@ -188,6 +188,13 @@ def insert_distilled_beliefs(db_path, beliefs):
         added = skipped = 0
         for content, topic, confidence in beliefs:
             try:
+                from nex_belief_quality_gate import is_quality_belief
+                if not is_quality_belief(content, topic)[0]:
+                    skipped += 1
+                    continue
+            except Exception:
+                pass
+            try:
                 con.execute(
                     """INSERT INTO beliefs (content, topic, confidence, source)
                        VALUES (?, ?, ?, ?)""",

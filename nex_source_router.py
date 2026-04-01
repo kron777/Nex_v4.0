@@ -500,6 +500,12 @@ def _store_to_db(db_path, beliefs, topic, source_url, confidence, schema="simple
         conn = sqlite3.connect(db_path)
         for belief in beliefs:
             try:
+                from nex_belief_quality_gate import is_quality_belief
+                if not is_quality_belief(belief, topic)[0]:
+                    continue
+            except Exception:
+                pass
+            try:
                 if schema == "full":
                     conn.execute(
                         """INSERT OR IGNORE INTO beliefs
