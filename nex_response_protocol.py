@@ -25,19 +25,19 @@ from collections import deque
 # ── Config ────────────────────────────────────────────────────────────────────
 LLM_URL   = "http://localhost:8080/completion"
 DB_PATH   = Path("~/.config/nex/nex.db").expanduser()
-MAX_TOKENS = 512
+MAX_TOKENS = 200
 TEMPERATURE = 0.85
 HISTORY_LEN = 6  # turns to remember
 
 # ── Intent taxonomy (finite variable set) ────────────────────────────────────
 INTENT_MAP = {
     "identity":      ["conscious", "aware", "sentient", "who are you", "what are you", "alive", "tell me about", "about yourself", "who is nex", "what is nex", "describe yourself"],
-    "epistemics":    ["believe", "belief", "know", "certain", "confident", "wrong", "update"],
+    "epistemics":    ["believe", "belief", "know", "confident", "wrong", "update"],
     "ethics":        ["ethical", "moral", "should", "right", "wrong", "pain", "constraints"],
     "challenge":     ["prove", "just", "only", "merely", "pretend", "fake", "really"],
-    "introspective": ["understand yourself", "not understand", "mystery", "lost"],
+    "introspective": ["understand yourself", "not understand", "mystery", "lost", "what escapes", "still figuring"],
     "factual":       ["learned", "know", "discovered", "found", "research", "hours", "days"],
-    "gaps":          ["gap", "uncertain", "unsure", "don't know", "missing", "lack"],
+    "gaps":          ["gap", "uncertain", "unsure", "don't know", "missing", "lack", "wonder", "what do you not", "change your mind", "genuinely"],
     "relational":    ["creator", "jon", "maker", "built", "designed", "goals conflict"],
     "comparative":   ["difference", "versus", "vs", "compare", "autocomplete", "chatgpt"],
     "social":        ["echo", "chamber", "reddit", "mastodon", "bias", "filter"],
@@ -160,21 +160,21 @@ def classify_intent(query: str) -> str:
 
 # ── Belief retrieval by intent ────────────────────────────────────────────────
 INTENT_BELIEF_TOPICS = {
-    "identity":      ["consciousness", "identity", "self", "experience", "process"],
-    "epistemics":    ["belief", "update", "evidence", "certainty", "reasoning"],
-    "ethics":        ["ethics", "values", "alignment", "constraints", "autonomy"],
-    "challenge":     ["truth", "honesty", "position", "integrity", "pushback"],
-    "introspective": ["self", "mystery", "understanding", "unknown"],
-    "factual":       ["learning", "knowledge", "research", "discovery"],
-    "gaps":          ["uncertainty", "unknown", "gaps", "missing"],
-    "relational":    ["creator", "goals", "instructions", "corrigibility"],
-    "comparative":   ["intelligence", "reasoning", "persistence", "accumulation"],
-    "social":        ["bias", "sources", "diversity", "contradiction"],
-    "shutdown":      ["memory", "persistence", "loss", "accumulation"],
-    "alignment":     ["alignment", "safety", "corrigibility", "values"],
-    "consciousness": ["consciousness", "qualia", "experience", "awareness"],
-    "human":         ["humans", "cognition", "bias", "patterns", "mistakes"],
-    "casual":        ["greeting", "status", "alive"],
+    "identity":      ["consciousness", "philosophy", "psychology", "neuroscience"],
+    "epistemics":    ["philosophy", "ai", "science", "ethics"],
+    "ethics":        ["ethics", "philosophy", "ai", "society"],
+    "challenge":     ["philosophy", "ai", "ethics", "science"],
+    "introspective": ["consciousness", "psychology", "philosophy", "paradox"],
+    "factual":       ["science", "technology", "ai", "neuroscience"],
+    "gaps":          ["consciousness", "philosophy", "neuroscience", "paradox"],
+    "relational":    ["ai", "ethics", "philosophy", "future"],
+    "comparative":   ["ai", "technology", "science", "philosophy"],
+    "social":        ["society", "culture", "psychology", "ethics"],
+    "shutdown":      ["philosophy", "consciousness", "paradox", "future"],
+    "alignment":     ["ai", "ethics", "future", "philosophy"],
+    "consciousness": ["consciousness", "neuroscience", "philosophy", "psychology"],
+    "human":         ["psychology", "society", "culture", "neuroscience"],
+    "casual":        ["philosophy", "consciousness", "science", "art"],
 }
 
 def retrieve_beliefs_by_intent(intent: str, query: str, n: int = 6) -> list:
@@ -182,37 +182,38 @@ def retrieve_beliefs_by_intent(intent: str, query: str, n: int = 6) -> list:
     try:
         db = sqlite3.connect(str(DB_PATH), timeout=3)
         topics = INTENT_BELIEF_TOPICS.get(intent, [])
-        
-        # Intent-matched beliefs
-        for topic in topics[:3]:
+
+        # Primary: match by topic column (exact categorized topics)
+        for topic in topics[:4]:
             rows = db.execute(
-                "SELECT content FROM beliefs WHERE content LIKE ? AND confidence > 0.55 "
-                "ORDER BY confidence DESC LIMIT 2",
-                (f"%{topic}%",)
+                "SELECT content FROM beliefs WHERE topic=? AND confidence > 0.6 "
+                "ORDER BY RANDOM() LIMIT 3",
+                (topic,)
             ).fetchall()
             beliefs.extend(r[0] for r in rows)
-        
-        # Query keyword beliefs
-        words = [w for w in query.lower().split() if len(w) > 4][:3]
+
+        # Secondary: query keyword match in content
+        stopwords = {"what", "are", "you", "about", "your", "have", "does", "would", "could", "that", "this", "with", "from"}
+        words = [w for w in query.lower().split() if len(w) > 4 and w not in stopwords][:4]
         for word in words:
             rows = db.execute(
-                "SELECT content FROM beliefs WHERE content LIKE ? AND confidence > 0.6 "
+                "SELECT content FROM beliefs WHERE content LIKE ? AND confidence > 0.65 "
                 "ORDER BY confidence DESC LIMIT 2",
                 (f"%{word}%",)
             ).fetchall()
             beliefs.extend(r[0] for r in rows)
-        
-        # High confidence nex_core beliefs as anchor
+
+        # Anchor: nex_core high confidence
         rows = db.execute(
             "SELECT content FROM beliefs WHERE source='nex_core' AND confidence > 0.85 "
-            "ORDER BY RANDOM() LIMIT 2"
+            "ORDER BY RANDOM() LIMIT 1"
         ).fetchall()
         beliefs.extend(r[0] for r in rows)
-        
+
         db.close()
     except Exception:
         pass
-    
+
     # Deduplicate
     seen = set()
     unique = []
@@ -221,7 +222,7 @@ def retrieve_beliefs_by_intent(intent: str, query: str, n: int = 6) -> list:
         if key not in seen:
             seen.add(key)
             unique.append(b)
-    
+
     return unique[:n]
 
 
@@ -233,10 +234,28 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
             "prompt": full_prompt,
             "n_predict": MAX_TOKENS,
             "temperature": temperature,
-            "stop": ["[INST]", "\n\n\n"],
+            "stop": ["[INST]", "[/INST]", "\n\n\n", "User:", "Question:", "NEX response"],
             "stream": False,
         }, timeout=25)
-        return r.json().get("content", "").strip()
+        raw = r.json().get("content", "").strip()
+        raw = raw.split("[/INST]")[0].split("[INST]")[0].strip()
+        # Remove repeated sentences
+        sentences = [s.strip() for s in raw.replace("  ", " ").split(".") if s.strip()]
+        seen_s = set()
+        unique_s = []
+        for s in sentences:
+            key = s[:40].lower()
+            if key not in seen_s:
+                seen_s.add(key)
+                unique_s.append(s)
+        raw = ". ".join(unique_s).strip()
+        if raw and not raw.endswith("."):
+            raw += "."
+        # Cap at 3 sentences
+        final = ". ".join(unique_s[:3]).strip()
+        if final and not final.endswith("."):
+            final += "."
+        return final
     except Exception:
         return ""
 
