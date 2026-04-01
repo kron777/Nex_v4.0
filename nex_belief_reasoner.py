@@ -71,9 +71,10 @@ _TWO_BELIEF_TEMPLATES = [
 ]
 
 _THREE_BELIEF_TEMPLATES = [
-    lambda a, b, c: f"Across these: {a.lower().rstrip('.')}, {b.lower().rstrip('.')}, and {c.lower().rstrip('.')} — the common load-bearing element is that none of them resolve cleanly in isolation.",
-    lambda a, b, c: f"What {a.lower().rstrip('.')}, {b.lower().rstrip('.')}, and {c.lower().rstrip('.')} share: each is a local truth that becomes a different kind of claim at scale.",
-    lambda a, b, c: f"The synthesis: {a.lower().rstrip('.')} creates the conditions under which {b.lower().rstrip('.')} — and {c.lower().rstrip('.')} is the consequence neither side fully owns.",
+    lambda a, b, c: f"None of these resolve in isolation: {a.rstrip('.')}. {b.rstrip('.')}. {c.rstrip('.')}. Each is a local truth that becomes a different kind of claim when held together.",
+    lambda a, b, c: f"The common structure across all three: the relationship between substrate, model, and emergence is not additive — it is constitutive.",
+    lambda a, b, c: f"Taken together, these point at something none states directly: the boundary conditions matter more than the content they bound.",
+    lambda a, b, c: f"What holds when all three are true simultaneously: the system cannot be understood from any single level of description.",
 ]
 
 
@@ -105,7 +106,7 @@ def _already_exists(db: sqlite3.Connection, inference: str) -> bool:
 def _write_belief(db: sqlite3.Connection, content: str, topic: str) -> Optional[int]:
     """Insert an inferred belief into the DB. Returns row id or None."""
     try:
-        from datetime import datetime as _dt
+        from datetime import datetime as _dt, timezone as _tz
         cur = db.execute(
             "INSERT INTO beliefs (content, confidence, topic, source, created_at, "
             "is_identity) VALUES (?, ?, ?, ?, ?, ?)",
@@ -114,7 +115,7 @@ def _write_belief(db: sqlite3.Connection, content: str, topic: str) -> Optional[
                 0.6,
                 topic,
                 "nex_reasoning",
-                _dt.utcnow().isoformat(),
+                _dt.now(_tz.utc).isoformat(),
                 0,
             )
         )

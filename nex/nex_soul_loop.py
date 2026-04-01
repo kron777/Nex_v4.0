@@ -938,14 +938,14 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
                 _live_bridge = True
                 _ta, _tb = list(_pair)
                 # Find a belief from each side to seed the WONDER
-                _ba = next((b for b in top_beliefs + cross_domain
-                            if (_b.get("topic") or "").lower() == _ta), None)
-                _bb = next((b for b in top_beliefs + cross_domain
-                            if (_b.get("topic") or "").lower() == _tb), None)
+                _ba = next((_bx for _bx in top_beliefs + cross_domain
+                            if (_bx.get("topic") or "").lower() == _ta), None)
+                _bb = next((_bx for _bx in top_beliefs + cross_domain
+                            if (_bx.get("topic") or "").lower() == _tb), None)
                 if _ba and _bb:
                     _bridge_payload = {
-                        "content_a": _ba.get("content", ""),
-                        "content_b": _bb.get("content", ""),
+                        "content_a": _ba.get("content", "") if isinstance(_ba, dict) else "",
+                        "content_b": _bb.get("content", "") if isinstance(_bb, dict) else "",
                         "topic_a":   _ta,
                         "topic_b":   _tb,
                     }
