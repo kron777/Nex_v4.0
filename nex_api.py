@@ -646,6 +646,30 @@ def run_nex_query(query: str, session: dict, domain_hint: str = None) -> dict:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# HOURLY RATE LIMITER — /api/chat (sliding window, per API key)
+# ══════════════════════════════════════════════════════════════════════════════
+_rate_window: dict = {}          # {api_key: [timestamp, ...]}
+_rate_lock   = threading.Lock()
+RATE_LIMIT   = 60                # requests per hour per key
+RATE_WINDOW  = 3600              # seconds
+
+def _check_hourly_rate(api_key: str) -> tuple:
+    """
+    Sliding-window check. Cleans up expired timestamps on every call.
+    Returns (allowed: bool, reset_in_seconds: int).
+    """
+    now = time.time()
+    with _rate_lock:
+        hits = [t for t in _rate_window.get(api_key, []) if now - t < RATE_WINDOW]
+        if len(hits) >= RATE_LIMIT:
+            reset_in = int(RATE_WINDOW - (now - hits[0]))
+            _rate_window[api_key] = hits
+            return False, reset_in
+        hits.append(now)
+        _rate_window[api_key] = hits
+        return True, 0
+
+# ══════════════════════════════════════════════════════════════════════════════
 # DEMO ENDPOINT (Tier 6)
 # ══════════════════════════════════════════════════════════════════════════════
 _demo_hits = {}
@@ -709,17 +733,35 @@ def health():
 
 @app.route("/api/version", methods=["GET"])
 def api_version():
-    """Full capability matrix by tier. Public — for buyer evaluation."""
-    return jsonify({
-        "version": "4.0.0",
-        "tiers": {
-            "free":         {"price": "free",            "daily_request_limit": TIER_MATRIX["free"]["daily_request_limit"],         "max_sessions": TIER_MATRIX["free"]["max_sessions"],         "features": {k: TIER_MATRIX["free"].get(k, False)         for k in ["webhooks","reasoning_chain","gdpr_export","domain_activation","audit_access"]}},
-            "personal":     {"price": "$49 one-time",   "daily_request_limit": TIER_MATRIX["personal"]["daily_request_limit"],     "max_sessions": TIER_MATRIX["personal"]["max_sessions"],     "purchase": "https://gumroad.com/products/blsue", "features": {k: TIER_MATRIX["personal"].get(k, False)     for k in ["webhooks","reasoning_chain","gdpr_export","domain_activation","audit_access"]}},
-            "professional": {"price": "$99/month",    "daily_request_limit": TIER_MATRIX["professional"]["daily_request_limit"], "max_sessions": TIER_MATRIX["professional"]["max_sessions"], "contact": "zenlightbulb@gmail.com", "features": {k: TIER_MATRIX["professional"].get(k, False) for k in ["webhooks","reasoning_chain","gdpr_export","domain_activation","audit_access"]}},
-            "enterprise":   {"price": "$199/month",   "daily_request_limit": "unlimited",                                        "max_sessions": "unlimited",                                 "contact": "zenlightbulb@gmail.com", "features": {k: TIER_MATRIX["enterprise"].get(k, False)   for k in ["webhooks","reasoning_chain","gdpr_export","domain_activation","audit_access"]}},
-        },
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    })
+    """Public status endpoint — no auth required."""
+    # Belief count from main DB
+    beliefs = 0
+    try:
+        _main_db = sqlite3.connect("/home/rr/Desktop/nex/nex.db", timeout=5)
+        beliefs  = _main_db.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+        _main_db.close()
+    except Exception:
+        pass
+
+    # IQ score from status file if available
+    iq = None
+    try:
+        _status_path = Path("~/.config/nex/nex_status.json").expanduser()
+        if _status_path.exists():
+            _s = json.loads(_status_path.read_text())
+            iq = _s.get("iq_score") or _s.get("iq")
+    except Exception:
+        pass
+
+    result = {
+        "version": "4.0",
+        "build":   "2026-04-01",
+        "status":  "online",
+        "beliefs": beliefs,
+    }
+    if iq is not None:
+        result["iq"] = iq
+    return jsonify(result)
 
 @app.route("/api/beliefs", methods=["GET"])
 @require_api_key_audited
@@ -906,6 +948,15 @@ def chat():
     query      = body.get("query", "").strip()
     session_id = body.get("session_id", "default")
     domain     = body.get("domain")
+
+    # ── Hourly rate limit (60 req/hr per key, sliding window) ────────────
+    _allowed, _reset_in = _check_hourly_rate(g.api_key)
+    if not _allowed:
+        return jsonify({
+            "error":             "rate_limit_exceeded",
+            "reset_in_seconds":  _reset_in,
+        }), 429
+    # ─────────────────────────────────────────────────────────────────────
 
     if not query:
         return jsonify({"error": "query is required"}), 400
