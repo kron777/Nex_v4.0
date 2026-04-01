@@ -92,5 +92,7 @@ gnome-terminal --title="NEX AUTO CHECK" -- bash -c "
     sleep 7 && python3 auto_check.py
     exec bash" &
 
+nohup python3 $NEX_DIR/nex_ingest.py --loop --interval 30 > /tmp/nex_ingest.log 2>&1 &
+echo "[NEX] Ingest pipeline: PID $!"
 echo "[NEX] All systems live."
 echo "[NEX] To stop cleanly: bash $NEX_DIR/nex_exit.sh"
