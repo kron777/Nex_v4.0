@@ -162,7 +162,7 @@ def _identity_anchor(query: str) -> str:
     """Last resort: pull from her identity/values DB."""
     try:
         import sqlite3
-        db = sqlite3.connect(str(CFG / "nex.db"))
+        db = sqlite3.connect(str(Path.home() / "Desktop" / "nex" / "nex.db"))
         db.row_factory = sqlite3.Row
         # Try to find a relevant value statement
         row = db.execute(

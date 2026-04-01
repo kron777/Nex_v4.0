@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Optional
 from collections import defaultdict
 
-DB_PATH = Path.home() / ".config/nex/nex.db"
+DB_PATH = Path.home() / "Desktop" / "nex" / "nex.db"
 
 # Activation parameters
 SEED_THRESHOLD      = 0.08   # min TF score to seed activation

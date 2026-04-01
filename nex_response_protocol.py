@@ -24,7 +24,7 @@ from collections import deque
 
 # ── Config ────────────────────────────────────────────────────────────────────
 LLM_URL   = "http://localhost:8080/completion"
-DB_PATH   = Path("~/.config/nex/nex.db").expanduser()
+DB_PATH   = Path.home() / "Desktop" / "nex" / "nex.db"
 MAX_TOKENS = 200
 TEMPERATURE = 0.85
 HISTORY_LEN = 6  # turns to remember

@@ -46,7 +46,7 @@ from collections import defaultdict
 log = logging.getLogger("nex.character")
 
 CFG          = Path.home() / ".config" / "nex"
-DB_PATH      = CFG / "nex.db"
+DB_PATH      = Path.home() / "Desktop" / "nex" / "nex.db"
 PROFILE_PATH = CFG / "nex_style_profile.json"
 BRIDGE_PATH  = CFG / "bridge_history.json"
 

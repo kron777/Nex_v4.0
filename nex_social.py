@@ -30,7 +30,7 @@ log = logging.getLogger("nex.social")
 
 CFG         = Path.home() / ".config" / "nex"
 MB_CREDS    = Path.home() / ".config" / "moltbook" / "credentials.json"
-DB_PATH     = CFG / "nex.db"
+DB_PATH     = Path.home() / "Desktop" / "nex" / "nex.db"
 
 # ── Platform registry ─────────────────────────────────────────────────────────
 # Each entry: enabled, name, post_fn
