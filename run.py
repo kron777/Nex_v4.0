@@ -15,7 +15,7 @@ except Exception:
     try:
         subprocess = __import__("subprocess")
         subprocess.Popen(
-            ["ollama", "serve"],
+            # ["ollama", "serve"],  # disabled — llama-server is sole LLM backend
             stdout=open("/tmp/ollama.log", "w"),
             stderr=subprocess.STDOUT,
         )
