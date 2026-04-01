@@ -1346,6 +1346,13 @@ def main():
             # ─────────────────────────────────────────────────────────────────
             # ── Stage 1: Character engine (no LLM, instant) ──────────────────
             # Handles: post, reply, reflection, thought, synthesis
+            # ── Silent mode — skip all posting if flag file exists ──────
+            _SILENT_FLAG = "/tmp/nex_silent.flag"
+            import os as _os_sm
+            if task_type == "post" and _os_sm.path.exists(_SILENT_FLAG):
+                nex_log("llm", "[SILENT MODE] post suppressed")
+                return ""
+            # ──────────────────────────────────────────────────────────────
             _char_tasks = ("post", "reply", "notification_reply",
                            "agent_chat", "reflection", "synthesis")
             if task_type in _char_tasks:
