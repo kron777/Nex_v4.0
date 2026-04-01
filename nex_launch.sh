@@ -11,8 +11,8 @@ export ROCR_VISIBLE_DEVICES=0
 export AMD_SERIALIZE_KERNEL=3
 export AMD_SERIALIZE_COPY=3
 
-BUILD="/mnt/steam_library/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/llama.cpp/build-vulkan/bin"
-MODEL="/mnt/steam_library/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/Mistral-7B-Instruct-v0.3-abliterated.Q4_K_M.gguf"
+BUILD="/media/rr/NEX/llama.cpp/build/bin"
+MODEL="/home/rr/Desktop/nex/nex_lora.gguf"
 NEX_DIR="/home/rr/Desktop/nex"
 
 # ── Clean any existing processes first ───────────────────────────────────────
@@ -21,11 +21,11 @@ bash "$NEX_DIR/nex_exit.sh" 2>/dev/null
 sleep 2
 
 # ── Launch llama-server ───────────────────────────────────────────────────────
-echo "[NEX] Starting llama-server (GPU ngl=28)..."
+echo "[NEX] Starting llama-server (GPU ngl=99)..."
 "$BUILD/llama-server" \
     -m "$MODEL" \
     --port 8080 \
-    -ngl 35 \
+    -ngl 99 \
     --host 0.0.0.0 \
     -c 4096 \
     --parallel 2 \
