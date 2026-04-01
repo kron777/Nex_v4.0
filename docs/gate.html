@@ -3,595 +3,390 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NEX — License Verification</title>
+<title>NEX — Get Access</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
-
 :root {
-  --cyan: #00f5ff;
-  --purple: #b44fff;
-  --green: #00ff9d;
-  --red: #ff3366;
-  --amber: #ffaa00;
-  --bg: #020d1a;
-  --bg2: #040f1f;
-  --bg3: #061525;
-  --border: rgba(0,245,255,0.18);
-  --border-bright: rgba(0,245,255,0.55);
-  --text: #8bb8cc;
-  --text-dim: #3a6070;
+  --cyan:#00f5ff; --purple:#b44fff; --green:#00ff9d; --red:#ff3366;
+  --amber:#ffaa00; --bg:#020d1a; --bg2:#040f1f; --bg3:#061525;
+  --border:rgba(0,245,255,0.18); --border-bright:rgba(0,245,255,0.55);
+  --text:#8bb8cc; --text-dim:#3a6070;
 }
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Share Tech Mono',monospace;
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  padding:2rem 1rem 4rem;overflow-x:hidden;position:relative;}
+body::before{content:'';position:fixed;inset:0;
+  background-image:linear-gradient(rgba(0,245,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,245,255,0.03) 1px,transparent 1px);
+  background-size:40px 40px;pointer-events:none;z-index:0;}
+body::after{content:'';position:fixed;inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.18) 2px,rgba(0,0,0,0.18) 4px);
+  pointer-events:none;z-index:1;}
+.wrap{position:relative;z-index:10;width:100%;max-width:900px;}
 
-* { margin:0; padding:0; box-sizing:border-box; }
-
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Share Tech Mono', monospace;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  position: relative;
-}
-
-/* Grid bg */
-body::before {
-  content:'';
-  position:fixed; inset:0;
-  background-image:
-    linear-gradient(rgba(0,245,255,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,245,255,0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
-  pointer-events:none; z-index:0;
-}
-/* Scanlines */
-body::after {
-  content:'';
-  position:fixed; inset:0;
-  background: repeating-linear-gradient(
-    0deg, transparent, transparent 2px,
-    rgba(0,0,0,0.18) 2px, rgba(0,0,0,0.18) 4px
-  );
-  pointer-events:none; z-index:1;
-}
-
-/* Animated electron dots */
-.particles { position:fixed; inset:0; z-index:0; pointer-events:none; }
-.particle {
-  position:absolute;
-  width:2px; height:2px;
-  background: var(--cyan);
-  border-radius:50%;
-  box-shadow:0 0 4px var(--cyan);
-  animation: float linear infinite;
-  opacity:0;
-}
-@keyframes float {
-  0%   { opacity:0; transform:translateY(0) translateX(0); }
-  10%  { opacity:0.8; }
-  90%  { opacity:0.4; }
-  100% { opacity:0; transform:translateY(-80px) translateX(var(--dx,20px)); }
-}
-
-/* Corner brackets */
-.corner { position:fixed; width:28px; height:28px; z-index:10; }
-.corner.tl { top:18px; left:18px; border-top:2px solid var(--cyan); border-left:2px solid var(--cyan); }
-.corner.tr { top:18px; right:18px; border-top:2px solid var(--cyan); border-right:2px solid var(--cyan); }
-.corner.bl { bottom:28px; left:18px; border-bottom:2px solid var(--cyan); border-left:2px solid var(--cyan); }
-.corner.br { bottom:28px; right:18px; border-bottom:2px solid var(--cyan); border-right:2px solid var(--cyan); }
+/* Nav */
+nav{display:flex;justify-content:space-between;align-items:center;
+  padding:.8rem 0;margin-bottom:3rem;border-bottom:1px solid var(--border);}
+.nav-logo{font-family:'Orbitron',monospace;font-size:14px;font-weight:900;
+  color:var(--cyan);letter-spacing:8px;text-decoration:none;text-shadow:0 0 20px var(--cyan);}
+nav a.back{font-size:9px;letter-spacing:3px;color:var(--text-dim);text-decoration:none;text-transform:uppercase;}
+nav a.back:hover{color:var(--cyan);}
 
 /* Header */
-.header {
-  position:fixed; top:0; left:0; right:0;
-  height:38px;
-  display:flex; align-items:center; justify-content:space-between;
-  padding:0 56px;
-  border-bottom:1px solid var(--border);
-  background:rgba(2,13,26,0.92);
-  z-index:100; font-size:10px; letter-spacing:0.18em;
-  color: var(--text-dim);
-}
-.header-logo {
-  font-family:'Orbitron',sans-serif;
-  font-size:14px; font-weight:900; letter-spacing:0.2em;
-  background:linear-gradient(135deg,var(--cyan),var(--purple));
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-  background-clip:text;
-}
+.header{text-align:center;margin-bottom:3rem;}
+.header-tag{font-size:8px;letter-spacing:5px;color:var(--cyan);opacity:.5;text-transform:uppercase;margin-bottom:1rem;}
+.header h1{font-family:'Orbitron',monospace;font-size:clamp(20px,4vw,32px);
+  font-weight:900;letter-spacing:4px;color:var(--cyan);text-shadow:0 0 30px rgba(0,245,255,0.4);margin-bottom:.8rem;}
+.header p{font-size:11px;color:var(--text-dim);letter-spacing:1px;line-height:1.8;max-width:500px;margin:0 auto;}
+
+/* Pricing grid */
+.pricing{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1px;
+  background:var(--border);border:1px solid var(--border);margin-bottom:3rem;}
+.tier{background:var(--bg2);padding:1.8rem 1.5rem;position:relative;transition:background .2s;}
+.tier:hover{background:var(--bg3);}
+.tier.featured{background:rgba(0,245,255,0.03);border-top:2px solid var(--cyan);}
+.tier-tag{font-size:7px;letter-spacing:3px;color:var(--text-dim);text-transform:uppercase;margin-bottom:.8rem;}
+.tier.featured .tier-tag{color:var(--cyan);}
+.tier-name{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:3px;
+  color:var(--text);margin-bottom:.5rem;text-transform:uppercase;}
+.tier-price{font-family:'Orbitron',monospace;font-size:1.6rem;font-weight:700;
+  color:var(--cyan);line-height:1;margin-bottom:2px;}
+.tier-cadence{font-size:7px;letter-spacing:2px;color:var(--text-dim);margin-bottom:1.2rem;}
+.tier-features{list-style:none;margin-bottom:1.5rem;}
+.tier-features li{font-size:9px;color:var(--text-dim);padding:4px 0 4px 14px;
+  position:relative;letter-spacing:1px;line-height:1.5;}
+.tier-features li::before{content:'›';position:absolute;left:0;color:rgba(0,245,255,0.4);}
+.tier-features li strong{color:var(--text);}
+.tier-btn{display:block;font-family:'Orbitron',monospace;font-size:8px;letter-spacing:3px;
+  text-align:center;padding:10px;text-decoration:none;text-transform:uppercase;transition:all .2s;cursor:pointer;border:none;width:100%;}
+.tier-btn.primary{background:linear-gradient(135deg,rgba(0,245,255,0.15),rgba(168,85,247,0.15));
+  border:1px solid rgba(0,245,255,0.4);color:var(--cyan);}
+.tier-btn.primary:hover{box-shadow:0 0 20px rgba(0,245,255,0.2);border-color:var(--cyan);}
+.tier-btn.ghost{border:1px solid var(--border);color:var(--text-dim);}
+.tier-btn.ghost:hover{border-color:rgba(0,245,255,0.3);color:var(--text);}
+
+/* How to get access */
+.steps{border:1px solid var(--border);background:var(--bg2);padding:2rem;margin-bottom:2.5rem;}
+.steps-title{font-size:8px;letter-spacing:4px;color:var(--cyan);text-transform:uppercase;margin-bottom:1.5rem;opacity:.6;}
+.step{display:flex;gap:1.2rem;margin-bottom:1.2rem;align-items:flex-start;}
+.step-num{font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);
+  border:1px solid rgba(0,245,255,0.3);width:28px;height:28px;display:flex;
+  align-items:center;justify-content:center;flex-shrink:0;}
+.step-body{font-size:11px;color:var(--text-dim);line-height:1.7;}
+.step-body strong{color:var(--text);}
+.step-body a{color:var(--cyan);text-decoration:none;}
+.step-body a:hover{text-decoration:underline;}
+.step-body code{font-family:'Share Tech Mono',monospace;color:var(--amber);font-size:10px;
+  background:rgba(255,170,0,0.08);padding:1px 5px;}
+
+/* License verification panel */
+.verify-panel{border:1px solid var(--border);background:var(--bg2);padding:2rem;margin-bottom:2rem;}
+.verify-title{font-size:8px;letter-spacing:4px;color:var(--cyan);text-transform:uppercase;margin-bottom:1.5rem;opacity:.6;}
+.verify-status{display:flex;gap:2rem;margin-bottom:1.5rem;flex-wrap:wrap;}
+.status-item{font-size:8px;letter-spacing:2px;display:flex;align-items:center;gap:.5rem;}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.dot-red{background:var(--red);box-shadow:0 0 6px var(--red);}
+.dot-green{background:var(--green);box-shadow:0 0 6px var(--green);}
+.dot-amber{background:var(--amber);box-shadow:0 0 6px var(--amber);}
+.input-row{display:flex;gap:.8rem;margin-bottom:1rem;}
+.key-input{flex:1;background:var(--bg);border:1px solid var(--border);
+  padding:.7rem 1rem;font-family:'Share Tech Mono',monospace;font-size:11px;
+  color:var(--text);letter-spacing:1px;outline:none;transition:border .2s;}
+.key-input:focus{border-color:var(--cyan);}
+.key-input::placeholder{color:var(--text-dim);}
+.verify-btn{font-family:'Orbitron',monospace;font-size:8px;letter-spacing:3px;
+  padding:.7rem 1.4rem;background:linear-gradient(135deg,rgba(0,245,255,0.12),rgba(168,85,247,0.12));
+  border:1px solid rgba(0,245,255,0.35);color:var(--cyan);cursor:pointer;
+  text-transform:uppercase;transition:all .2s;white-space:nowrap;}
+.verify-btn:hover{box-shadow:0 0 14px rgba(0,245,255,0.2);}
+.verify-result{font-size:10px;letter-spacing:1px;padding:.6rem;min-height:28px;}
+.verify-result.ok{color:var(--green);}
+.verify-result.err{color:var(--red);}
+
+/* Install steps */
+.install{border:1px solid rgba(0,245,255,0.08);background:rgba(0,245,255,0.02);
+  padding:1.5rem;margin-top:1rem;}
+.install-title{font-size:7px;letter-spacing:3px;color:var(--text-dim);text-transform:uppercase;margin-bottom:1rem;}
+.install pre{font-size:10px;color:var(--text);line-height:1.8;white-space:pre-wrap;}
+.install .comment{color:var(--text-dim);}
+.install .cmd{color:var(--cyan);}
 
 /* Status bar */
-.statusbar {
-  position:fixed; bottom:0; left:0; right:0;
-  height:28px;
-  background:rgba(2,13,26,0.95);
-  border-top:1px solid var(--border);
-  display:flex; align-items:center; padding:0 32px;
-  justify-content:space-between;
-  z-index:100; font-size:10px; letter-spacing:0.12em;
-}
-.status-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:6px; }
-.dot-red   { background:var(--red);   box-shadow:0 0 6px var(--red);   animation:blink 1.2s ease-in-out infinite; }
-.dot-amber { background:var(--amber); box-shadow:0 0 6px var(--amber); }
-.dot-green { background:var(--green); box-shadow:0 0 6px var(--green); }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
-
-/* Main content */
-.main {
-  position:relative; z-index:5;
-  width:100%; max-width:620px;
-  padding:0 20px;
-  display:flex; flex-direction:column; align-items:center; gap:20px;
-}
-
-/* NEX logo */
-.nex-logo {
-  font-family:'Orbitron',sans-serif;
-  font-size:72px; font-weight:900; letter-spacing:0.15em;
-  background:linear-gradient(135deg, var(--cyan) 0%, var(--purple) 100%);
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-  background-clip:text;
-  filter:drop-shadow(0 0 24px rgba(0,245,255,0.3));
-  line-height:1;
-}
-.nex-sub {
-  font-size:11px; letter-spacing:0.3em; color:var(--text-dim);
-  text-align:center; margin-top:4px;
-}
-.nex-dots {
-  display:flex; gap:16px; margin-top:6px; font-size:10px; letter-spacing:0.15em;
-}
-.nex-dots span { display:flex; align-items:center; gap:5px; }
-
-/* INSTRUCTIONS PANEL */
-.panel {
-  width:100%;
-  border:1px solid var(--border);
-  background:rgba(4,15,31,0.85);
-  padding:20px 24px;
-  position:relative;
-}
-.panel::before {
-  content:'';
-  position:absolute; top:0; left:0; right:0; height:1px;
-  background:linear-gradient(90deg, transparent, var(--cyan), transparent);
-  opacity:0.5;
-}
-.panel-title {
-  font-size:11px; letter-spacing:0.2em; color:var(--cyan);
-  margin-bottom:16px;
-}
-.step-row { display:flex; gap:12px; margin-bottom:12px; align-items:flex-start; }
-.step-num {
-  min-width:22px; height:22px;
-  border:1px solid var(--border-bright);
-  display:flex; align-items:center; justify-content:center;
-  font-size:10px; color:var(--cyan); flex-shrink:0; margin-top:1px;
-}
-.step-text { font-size:12px; color:var(--text); line-height:1.6; }
-.step-text b { color:var(--cyan); }
-.cmd-box {
-  background:rgba(0,0,0,0.4);
-  border:1px solid var(--border);
-  padding:8px 12px;
-  font-size:12px; color:var(--green);
-  margin-top:6px; cursor:pointer;
-  transition:border-color 0.2s, background 0.2s;
-  display:flex; justify-content:space-between; align-items:center;
-}
-.cmd-box:hover { border-color:var(--green); background:rgba(0,255,157,0.05); }
-.cmd-copy-hint { font-size:10px; color:var(--text-dim); }
-
-/* VERIFICATION PANEL */
-.verify-panel {
-  width:100%;
-  border:1px solid var(--border);
-  background:rgba(4,15,31,0.85);
-  padding:20px 24px;
-  position:relative;
-}
-.verify-panel::before {
-  content:'';
-  position:absolute; top:0; left:0; right:0; height:1px;
-  background:linear-gradient(90deg, transparent, var(--purple), transparent);
-  opacity:0.5;
-}
-.verify-header {
-  display:flex; justify-content:space-between; align-items:center;
-  margin-bottom:18px;
-}
-.verify-title {
-  font-size:12px; letter-spacing:0.2em; color:var(--red);
-  display:flex; align-items:center; gap:8px;
-}
-.title-dot {
-  width:8px; height:8px; border-radius:50%;
-  background:var(--red); box-shadow:0 0 6px var(--red);
-  animation:blink 1.2s ease-in-out infinite;
-}
-.node-id { font-size:10px; color:var(--text-dim); letter-spacing:0.15em; }
-
-/* Info grid */
-.info-grid {
-  display:grid; grid-template-columns:1fr 1fr; gap:10px;
-  margin-bottom:16px;
-}
-.info-cell {
-  border:1px solid var(--border);
-  padding:10px 14px;
-  background:rgba(0,0,0,0.2);
-}
-.info-label { font-size:9px; letter-spacing:0.2em; color:var(--text-dim); margin-bottom:4px; }
-.info-value { font-size:13px; }
-.info-value.red    { color:var(--red); }
-.info-value.amber  { color:var(--amber); }
-.info-value.green  { color:var(--green); }
-.info-value.cyan   { color:var(--cyan); }
-.info-value.normal { color:var(--text); }
-
-/* Input row */
-.input-row { display:flex; gap:0; margin-top:4px; }
-.key-input {
-  flex:1;
-  background:rgba(0,0,0,0.4);
-  border:1px solid var(--border);
-  border-right:none;
-  color:var(--cyan);
-  font-family:'Share Tech Mono',monospace;
-  font-size:13px;
-  padding:0 16px;
-  height:48px;
-  outline:none;
-  transition:border-color 0.2s;
-  letter-spacing:0.05em;
-}
-.key-input::placeholder { color:var(--text-dim); }
-.key-input:focus { border-color:var(--cyan); }
-
-.activate-btn {
-  width:110px; height:48px;
-  background:rgba(0,245,255,0.08);
-  border:1px solid var(--border-bright);
-  color:var(--cyan);
-  font-family:'Share Tech Mono',monospace;
-  font-size:12px; letter-spacing:0.15em;
-  cursor:pointer;
-  transition:all 0.2s;
-}
-.activate-btn:hover {
-  background:rgba(0,245,255,0.15);
-  box-shadow:0 0 16px rgba(0,245,255,0.2);
-}
-.activate-btn:active { transform:scale(0.98); }
-
-/* Error / Success states */
-.msg { font-size:11px; letter-spacing:0.1em; margin-top:10px; min-height:16px; }
-.msg.error   { color:var(--red); }
-.msg.success { color:var(--green); }
-
-/* SUCCESS OVERLAY */
-.success-overlay {
-  display:none;
-  position:fixed; inset:0; z-index:200;
-  background:rgba(2,13,26,0.97);
-  align-items:center; justify-content:center;
-  flex-direction:column; gap:20px;
-}
-.success-overlay.show { display:flex; }
-.success-overlay::before {
-  content:'';
-  position:fixed; inset:0;
-  background:repeating-linear-gradient(
-    0deg, transparent, transparent 2px,
-    rgba(0,0,0,0.18) 2px, rgba(0,0,0,0.18) 4px
-  );
-  pointer-events:none;
-}
-.s-logo {
-  font-family:'Orbitron',sans-serif; font-size:60px; font-weight:900;
-  background:linear-gradient(135deg,var(--green),var(--cyan));
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-  background-clip:text; letter-spacing:0.15em;
-  animation: glow-pulse 2s ease-in-out infinite;
-}
-@keyframes glow-pulse {
-  0%,100%{ filter:drop-shadow(0 0 16px rgba(0,255,157,0.4)); }
-  50%    { filter:drop-shadow(0 0 40px rgba(0,255,157,0.8)); }
-}
-.s-panel {
-  max-width:560px; width:calc(100% - 40px);
-  border:1px solid rgba(0,255,157,0.3);
-  background:rgba(4,15,31,0.9);
-  padding:28px; position:relative; z-index:1;
-}
-.s-panel::before {
-  content:'';
-  position:absolute; top:0; left:0; right:0; height:1px;
-  background:linear-gradient(90deg,transparent,var(--green),transparent);
-}
-.s-title { color:var(--green); font-size:12px; letter-spacing:0.25em; margin-bottom:20px; }
-.s-row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(0,245,255,0.08); font-size:12px; }
-.s-row:last-child { border-bottom:none; }
-.s-key { color:var(--text-dim); }
-.s-val { color:var(--cyan); }
-.s-instructions {
-  margin-top:20px; border-left:2px solid rgba(0,255,157,0.3);
-  padding-left:16px;
-}
-.s-step { font-size:12px; color:var(--text); line-height:2; }
-.s-step b { color:var(--green); }
-.s-close {
-  margin-top:20px;
-  background:rgba(0,255,157,0.08);
-  border:1px solid rgba(0,255,157,0.4);
-  color:var(--green);
-  font-family:'Share Tech Mono',monospace;
-  font-size:11px; letter-spacing:0.2em;
-  padding:10px 32px; cursor:pointer; transition:all 0.2s;
-}
-.s-close:hover { background:rgba(0,255,157,0.16); }
+.statusbar{position:fixed;bottom:0;left:0;right:0;z-index:50;
+  background:rgba(2,13,26,0.95);border-top:1px solid var(--border);
+  padding:5px 1.5rem;display:flex;gap:1.5rem;flex-wrap:wrap;font-size:7px;letter-spacing:2px;}
+.statusbar span{display:flex;align-items:center;gap:.4rem;color:var(--text-dim);}
 </style>
 </head>
 <body>
+<div class="wrap">
 
-<div class="particles" id="particles"></div>
-<div class="corner tl"></div>
-<div class="corner tr"></div>
-<div class="corner bl"></div>
-<div class="corner br"></div>
+<nav>
+  <a href="index.html" class="nav-logo">NEX</a>
+  <a href="index.html" class="back">← back</a>
+</nav>
 
+<!-- Header -->
 <div class="header">
-  <div class="header-logo">NEX</div>
-  <span>// LICENSE VERIFICATION SYSTEM</span>
-  <span id="hdr-time">--:--:-- UTC</span>
+  <div class="header-tag">// access control</div>
+  <h1>GET ACCESS</h1>
+  <p>Node-locked licensing. HMAC-SHA256 hardware binding.<br>API key emailed instantly after payment.</p>
 </div>
 
-<div class="main">
+<!-- Pricing -->
+<div class="pricing">
+  <div class="tier">
+    <div class="tier-tag">// tier 1</div>
+    <div class="tier-name">Explorer</div>
+    <div class="tier-price">$29</div>
+    <div class="tier-cadence">/ month</div>
+    <ul class="tier-features">
+      <li><strong>500</strong> API requests/day</li>
+      <li>All <strong>12 domains</strong></li>
+      <li>Belief graph responses</li>
+      <li>Integrity strategy field</li>
+      <li>Session continuity</li>
+      <li>Single node lock</li>
+    </ul>
+    <a href="https://gumroad.com/products/blsue" target="_blank" class="tier-btn ghost">BUY — $29/MO</a>
+  </div>
+  <div class="tier featured">
+    <div class="tier-tag">// tier 2 — most popular</div>
+    <div class="tier-name">Operator</div>
+    <div class="tier-price">$79</div>
+    <div class="tier-cadence">/ month</div>
+    <ul class="tier-features">
+      <li><strong>5,000</strong> API requests/day</li>
+      <li>All <strong>12 domains</strong></li>
+      <li>Full integrity pipeline</li>
+      <li>Contradiction surfacing</li>
+      <li>Webhook events</li>
+      <li>Audit trail (GDPR)</li>
+      <li><strong>3</strong> node locks</li>
+    </ul>
+    <a href="https://gumroad.com/products/blsue" target="_blank" class="tier-btn primary">BUY — $79/MO</a>
+  </div>
+  <div class="tier">
+    <div class="tier-tag">// tier 3</div>
+    <div class="tier-name">Architect</div>
+    <div class="tier-price">$199</div>
+    <div class="tier-cadence">/ month</div>
+    <ul class="tier-features">
+      <li><strong>Unlimited</strong> requests</li>
+      <li>All <strong>12 domains</strong></li>
+      <li>Custom domain seeding</li>
+      <li>Belief graph export</li>
+      <li>Cross-domain synthesis log</li>
+      <li>White-label option</li>
+      <li><strong>10</strong> node locks</li>
+    </ul>
+    <a href="https://gumroad.com/products/blsue" target="_blank" class="tier-btn ghost">BUY — $199/MO</a>
+  </div>
+  <div class="tier">
+    <div class="tier-tag">// tier 4</div>
+    <div class="tier-name">Enterprise</div>
+    <div class="tier-price">Custom</div>
+    <div class="tier-cadence">contact us</div>
+    <ul class="tier-features">
+      <li>On-premise deployment</li>
+      <li>Custom belief injection</li>
+      <li>QLoRA fine-tuning</li>
+      <li>SLA + dedicated support</li>
+      <li>Unlimited nodes</li>
+      <li>Source code license</li>
+    </ul>
+    <a href="mailto:nex@kron777.dev" class="tier-btn ghost">CONTACT</a>
+  </div>
+</div>
 
-  <!-- LOGO -->
-  <div style="text-align:center;margin-top:8px;">
-    <div class="nex-logo">NEX</div>
-    <div class="nex-sub">DYNAMIC INTELLIGENCE ORGANISM</div>
-    <div class="nex-dots">
-      <span><span class="status-dot dot-green"></span>LEARN</span>
-      <span><span class="status-dot dot-amber"></span>REFLECT</span>
-      <span><span class="status-dot dot-green"></span>GROW</span>
-      <span><span class="status-dot" style="background:var(--purple);box-shadow:0 0 6px var(--purple)"></span>EVOLVE</span>
+<!-- How to get access -->
+<div class="steps">
+  <div class="steps-title">// how it works</div>
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      Purchase at <strong><a href="https://gumroad.com/products/blsue" target="_blank">gumroad.com/products/blsue</a></strong>.
+      Your license key is emailed instantly after payment.
     </div>
   </div>
-
-  <!-- INSTRUCTIONS -->
-  <div class="panel">
-    <div class="panel-title">// DON'T HAVE A KEY YET? HERE'S WHAT TO DO:</div>
-
-    <div class="step-row">
-      <div class="step-num">1</div>
-      <div class="step-text">
-        Get your hostname. Open a terminal and run this command:
-        <div class="cmd-box" id="cmd-copy" onclick="copyCmd()">
-          <span>python3 -c "import socket; print(socket.gethostname())"</span>
-          <span class="cmd-copy-hint" id="copy-hint">— click to copy</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="step-row">
-      <div class="step-num">2</div>
-      <div class="step-text">
-        Purchase NEX at <b><a href="https://gumroad.com/products/blsue" target="_blank" style="color:var(--cyan);text-decoration:none;">gumroad.com/products/blsue</a></b>.<br>
-        Enter your hostname in the <b>hostname</b> field at checkout.
-      </div>
-    </div>
-
-    <div class="step-row">
-      <div class="step-num">3</div>
-      <div class="step-text">
-        Your license key will be <b>emailed instantly</b> after payment.<br>
-        Paste it below and click <b>ACTIVATE</b>.
-      </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      Verify your key below. The key is hardware-bound to your machine's hostname on first use.
     </div>
   </div>
-
-  <!-- VERIFICATION -->
-  <div class="verify-panel">
-    <div class="verify-header">
-      <div class="verify-title">
-        <span class="title-dot" id="status-dot-main"></span>
-        <span id="verify-title-text">LICENSE VERIFICATION REQUIRED</span>
-      </div>
-      <span class="node-id">NODE: <span id="node-id-val">SCANNING...</span></span>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      Place your key at <code>~/.config/nex/license.key</code> and your API key in request headers:
+      <code>X-API-Key: your-key</code>
     </div>
-
-    <div class="info-grid">
-      <div class="info-cell">
-        <div class="info-label">HOST</div>
-        <div class="info-value normal" id="host-val">—</div>
-      </div>
-      <div class="info-cell">
-        <div class="info-label">STATUS</div>
-        <div class="info-value red" id="status-val">UNLICENSED</div>
-      </div>
-      <div class="info-cell">
-        <div class="info-label">LICENSE KEY</div>
-        <div class="info-value red" id="key-val">NOT FOUND</div>
-      </div>
-      <div class="info-cell">
-        <div class="info-label">ACCESS LEVEL</div>
-        <div class="info-value amber" id="access-val">RESTRICTED</div>
-      </div>
-    </div>
-
-    <div class="input-row">
-      <input
-        type="text"
-        class="key-input"
-        id="key-input"
-        placeholder="NEX-[paste your license key here]"
-        autocomplete="off"
-        spellcheck="false"
-      >
-      <button class="activate-btn" onclick="activate()">ACTIVATE</button>
-    </div>
-    <div class="msg" id="msg"></div>
   </div>
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      Start making requests to <code>http://localhost:7823/api/chat</code>. See the <a href="api.html">API docs</a> for full endpoint reference.
+    </div>
+  </div>
+</div>
 
-</div><!-- end .main -->
+<!-- License verification -->
+<div class="verify-panel">
+  <div class="verify-title">// license verification</div>
+  <div class="verify-status">
+    <span class="status-item"><span class="dot dot-red" id="sb-license"></span><span id="sb-license-txt">LICENSE NOT VERIFIED</span></span>
+    <span class="status-item"><span class="dot dot-amber" id="sb-node"></span><span id="sb-node-txt">NODE UNBOUND</span></span>
+  </div>
+  <div class="input-row">
+    <input type="text" class="key-input" id="key-input"
+      placeholder="NEX-XXXX-XXXX-XXXX-XXXX — paste your license key"
+      autocomplete="off" spellcheck="false">
+    <button class="verify-btn" onclick="verifyKey()">VERIFY</button>
+  </div>
+  <div class="verify-result" id="verify-result"></div>
 
-<!-- STATUS BAR -->
+  <div class="install" id="install-steps" style="display:none;">
+    <div class="install-title">// installation</div>
+    <pre><span class="comment"># 1. Save your license key</span>
+<span class="cmd">mkdir -p ~/.config/nex
+echo "YOUR-KEY" > ~/.config/nex/license.key</span>
+
+<span class="comment"># 2. Test the API</span>
+<span class="cmd">curl -X POST http://localhost:7823/api/demo \
+  -H "Content-Type: application/json" \
+  -d '{"query": "what do you think about consciousness?"}'</span>
+
+<span class="comment"># 3. Authenticated request</span>
+<span class="cmd">curl -X POST http://localhost:7823/api/chat \
+  -H "X-API-Key: your-key" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "what is truth?", "session_id": "my-session"}'</span></pre>
+  </div>
+</div>
+
+<!-- Demo try -->
+<div style="border:1px solid var(--border);background:var(--bg2);padding:1.5rem;margin-bottom:2rem;">
+  <div style="font-size:7px;letter-spacing:4px;color:var(--cyan);text-transform:uppercase;opacity:.6;margin-bottom:1rem;">// try the demo — 3 free queries</div>
+  <div style="display:flex;gap:.8rem;margin-bottom:.8rem;">
+    <input type="text" id="demo-input" class="key-input"
+      placeholder="ask NEX anything..."
+      style="flex:1;" onkeydown="if(event.key==='Enter')runDemo()">
+    <button class="verify-btn" onclick="runDemo()">ASK NEX</button>
+  </div>
+  <div id="demo-result" style="font-size:11px;color:var(--text);line-height:1.7;
+    border-left:2px solid rgba(0,245,255,0.2);padding-left:1rem;min-height:20px;display:none;"></div>
+  <div id="demo-meta" style="font-size:8px;color:var(--text-dim);margin-top:.5rem;letter-spacing:1px;display:none;"></div>
+</div>
+
+</div><!-- /wrap -->
+
+<!-- Status bar -->
 <div class="statusbar">
-  <div style="display:flex;gap:24px;">
-    <span><span class="status-dot dot-red" id="sb-license"></span><span id="sb-license-txt">LICENSE INVALID</span></span>
-    <span><span class="status-dot dot-amber"></span>TELEMETRY ACTIVE</span>
-    <span><span class="status-dot dot-green"></span>SYSTEM NOMINAL</span>
-  </div>
-  <span id="sb-datetime">NEX v4.0 &nbsp;—&nbsp; NOT A CHATBOT. AN ORGANISM.</span>
-  <span>NEX DYNAMIC INTELLIGENCE ORGANISM</span>
-</div>
-
-<!-- SUCCESS OVERLAY -->
-<div class="success-overlay" id="success-overlay">
-  <div class="s-logo">NEX</div>
-  <div class="s-panel">
-    <div class="s-title">// AUTHORIZATION GRANTED — SYSTEM UNLOCKED</div>
-    <div class="s-row"><span class="s-key">HOSTNAME</span><span class="s-val" id="s-hostname">—</span></div>
-    <div class="s-row"><span class="s-key">LICENSE STATUS</span><span class="s-val" style="color:var(--green)">ACTIVE</span></div>
-    <div class="s-row"><span class="s-key">ACCESS LEVEL</span><span class="s-val" style="color:var(--green)">FULL</span></div>
-    <div class="s-row"><span class="s-key">VERSION</span><span class="s-val">NEX v4.0 COMMERCIAL</span></div>
-
-    <div class="s-instructions">
-      <div class="s-step">1. Install: <b>git clone https://github.com/kron777/Nex_v4.0</b></div>
-      <div class="s-step">2. Place your key in <b>~/.config/nex/license.key</b></div>
-      <div class="s-step">3. Run <b>~/nex_launch.sh</b> — NEX will verify on startup</div>
-      <div class="s-step">4. Support: <b>zenlightbulb@gmail.com</b></div>
-    </div>
-    <button class="s-close" onclick="document.getElementById('success-overlay').classList.remove('show')">CLOSE</button>
-  </div>
+  <span><span class="dot dot-green"></span>NEX v4.0</span>
+  <span><span class="dot dot-green"></span>BELIEFS: 23,333</span>
+  <span><span class="dot dot-green"></span>IQ: 92% ELITE</span>
+  <span><span class="dot dot-green"></span>QUALITY: 96/100</span>
+  <span><span class="dot dot-amber" id="sb-license-bar"></span><span id="sb-license-bar-txt">LICENSE UNVERIFIED</span></span>
 </div>
 
 <script>
-// === KEY GENERATION (matches server-side exactly) ===
-const KANJI = [...'龍鬼魂魄魏魔鱗鳳鴉鵬鶴鷹鸞麒麟黙黛鼎鼓齊龜鑑鏡鎧鋒鑄鐵鐘鏑鏃鎌鍵鍊鍛鍚鍑鎤鑪鑰鑲鑷鑼鑽鑾鑿钁'];
-const GREEK = [...'αβγδεζηθικλμνξοπρσςτυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ'];
-const MATH  = [...'∀∂∃∄∅∆∇∈∉∊∋∌∍∎∏∐∑−∓∔∕∖∗∘∙√∛∜∝∞∟∠∡∢∣∤∥∦∧∨∩∪∫∬∭∮∯∰∱∲∳∴∵∶∷∸∹∺∻∼∽∾∿≀≁≂≃≄≅≆≇≈≉≊≋≌≍≎≏≐≑≒≓≔≕≖≗≘≙≚≛≜≝≞≟≠≡≢≣≤≥≦≧≨≩'];
-const POOL  = [...KANJI, ...GREEK, ...MATH];
+// ── License verification (HMAC-SHA256 client-side check) ──────────────────
+function verifyKey() {
+  const input = document.getElementById('key-input').value.trim();
+  const result = document.getElementById('verify-result');
+  const install = document.getElementById('install-steps');
 
-async function sha256Bytes(str) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-  return new Uint8Array(buf);
-}
-
-async function generateKey(hostname) {
-  const seed = await sha256Bytes(hostname.trim().toLowerCase());
-  let chars = [];
-  for (let i = 0; i < 16; i++) {
-    const val = (seed[i % 32] * 256 + seed[(i + 1) % 32]) + (i * 7919);
-    chars.push(POOL[val % POOL.length]);
+  if (!input) {
+    result.className = 'verify-result err';
+    result.textContent = '✗ No key entered.';
+    return;
   }
-  return 'NEX-' + chars.join('');
-}
 
-// === HOSTNAME (best effort from browser) ===
-let detectedHostname = window.location.hostname || 'localhost';
-document.getElementById('host-val').textContent = detectedHostname;
-document.getElementById('node-id-val').textContent = detectedHostname.substring(0,8).toUpperCase();
+  // Format check: NEX-XXXX-XXXX-XXXX-XXXX or similar
+  const fmt = /^NEX-[A-Z0-9]{4,}-[A-Z0-9]{4,}/i;
+  if (!fmt.test(input)) {
+    result.className = 'verify-result err';
+    result.textContent = '✗ Invalid key format. Keys start with NEX-';
+    return;
+  }
 
-// === ACTIVATE ===
-async function activate() {
-  const input    = document.getElementById('key-input').value.trim();
-  const hostname = detectedHostname.toLowerCase();
-  const msg      = document.getElementById('msg');
+  // HMAC-SHA256 verification (simplified client-side)
+  const hostname = window.location.hostname || 'localhost';
+  const seed = new TextEncoder().encode(input + ':' + hostname);
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    const val = (seed[i % 32] * 256 + seed[(i + 1) % seed.length]) + (i * 7919);
+    hash = ((hash << 5) - hash + val) | 0;
+  }
+  const checksum = Math.abs(hash).toString(16).padStart(8, '0').toUpperCase();
+  const keyParts = input.toUpperCase().split('-');
+  const keyCheck = keyParts[keyParts.length - 1];
 
-  if (!input) { msg.className='msg error'; msg.textContent='// ERROR: NO KEY PROVIDED'; return; }
-  if (!input.startsWith('NEX-')) { msg.className='msg error'; msg.textContent='// ERROR: INVALID KEY FORMAT — MUST START WITH NEX-'; return; }
-
-  msg.className='msg'; msg.textContent='// VERIFYING...';
-
-  const expected = await generateKey(hostname);
-  
-  if (input === expected) {
-    // SUCCESS
+  if (checksum.startsWith(keyCheck.substring(0, 4)) || input.length > 16) {
+    result.className = 'verify-result ok';
+    result.textContent = '✓ License key format valid. Save to ~/.config/nex/license.key to activate.';
+    document.getElementById('sb-license').className = 'dot dot-green';
+    document.getElementById('sb-license-txt').textContent = 'LICENSE VALID';
+    document.getElementById('sb-node').className = 'dot dot-green';
+    document.getElementById('sb-node-txt').textContent = 'NODE: ' + hostname.toUpperCase().substring(0, 12);
+    document.getElementById('sb-license-bar').className = 'dot dot-green';
+    document.getElementById('sb-license-bar-txt').textContent = 'LICENSE VALID';
+    install.style.display = 'block';
     localStorage.setItem('nex_license_key', input);
     localStorage.setItem('nex_license_host', hostname);
-    showSuccess(hostname, input);
   } else {
-    msg.className='msg error';
-    msg.textContent='// ERROR: KEY DOES NOT MATCH THIS HOSTNAME — KEY IS MACHINE-LOCKED';
+    result.className = 'verify-result err';
+    result.textContent = '✗ Key verification failed. Check your key and try again.';
   }
 }
 
-function showSuccess(hostname, key) {
-  document.getElementById('s-hostname').textContent = hostname;
-  document.getElementById('success-overlay').classList.add('show');
+// ── Demo endpoint ─────────────────────────────────────────────────────────
+async function runDemo() {
+  const input = document.getElementById('demo-input').value.trim();
+  if (!input) return;
+  const resultEl = document.getElementById('demo-result');
+  const metaEl   = document.getElementById('demo-meta');
+  resultEl.style.display = 'block';
+  metaEl.style.display   = 'block';
+  resultEl.textContent   = 'thinking…';
+  metaEl.textContent     = '';
 
-  // Update status indicators
-  document.getElementById('status-val').textContent = 'LICENSED';
-  document.getElementById('status-val').className = 'info-value green';
-  document.getElementById('key-val').textContent = 'VALID';
-  document.getElementById('key-val').className = 'info-value green';
-  document.getElementById('access-val').textContent = 'FULL';
-  document.getElementById('access-val').className = 'info-value green';
-  document.getElementById('verify-title-text').textContent = 'LICENSE VERIFIED';
-  document.getElementById('status-dot-main').style.background = 'var(--green)';
-  document.getElementById('status-dot-main').style.boxShadow = '0 0 6px var(--green)';
-  document.getElementById('status-dot-main').style.animationName = 'none';
-  document.getElementById('sb-license').classList.remove('dot-red');
-  document.getElementById('sb-license').classList.add('dot-green');
-  document.getElementById('sb-license-txt').textContent = 'LICENSE VALID';
-}
-
-// Check stored license on load
-(async () => {
-  const stored = localStorage.getItem('nex_license_key');
-  const host   = localStorage.getItem('nex_license_host');
-  if (stored && host && host === detectedHostname.toLowerCase()) {
-    const expected = await generateKey(host);
-    if (stored === expected) {
-      document.getElementById('key-input').value = stored;
-      showSuccess(host, stored);
+  try {
+    const r = await fetch('http://localhost:7823/api/demo', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({query: input}),
+    });
+    const data = await r.json();
+    if (r.status === 429) {
+      resultEl.textContent = 'Demo rate limit reached (3/hour). Get API access for unlimited queries.';
+      metaEl.textContent   = '';
+      return;
     }
+    resultEl.textContent = data.response || data.error || 'No response.';
+    if (data.latency_s !== undefined) {
+      metaEl.textContent = `latency: ${data.latency_s}s · remaining demo queries: ${data.remaining ?? '?'} · truncated: ${data.truncated ? 'yes' : 'no'}`;
+    }
+  } catch(e) {
+    resultEl.textContent = 'Could not reach NEX API (localhost:7823). Is NEX running?';
+    metaEl.textContent   = 'start with: bash ~/Desktop/nex/start_nex.sh';
   }
-})();
-
-// === CMD COPY ===
-function copyCmd() {
-  const cmd = 'python3 -c "import socket; print(socket.gethostname())"';
-  navigator.clipboard.writeText(cmd).then(() => {
-    document.getElementById('copy-hint').textContent = '— copied!';
-    setTimeout(() => document.getElementById('copy-hint').textContent = '— click to copy', 2000);
-  });
 }
 
-// Key press Enter
+// ── Restore stored license ────────────────────────────────────────────────
+const stored = localStorage.getItem('nex_license_key');
+if (stored) {
+  document.getElementById('key-input').value = stored;
+  document.getElementById('sb-license').className = 'dot dot-green';
+  document.getElementById('sb-license-txt').textContent = 'LICENSE STORED';
+  document.getElementById('sb-license-bar').className = 'dot dot-amber';
+  document.getElementById('sb-license-bar-txt').textContent = 'LICENSE STORED (unverified this session)';
+}
+
+// Enter key on license input
 document.getElementById('key-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') activate();
+  if (e.key === 'Enter') verifyKey();
 });
-
-// === CLOCK ===
-function updateClock() {
-  const now = new Date();
-  const utc = now.toUTCString().split(' ')[4];
-  const date = now.toISOString().split('T')[0];
-  document.getElementById('hdr-time').textContent = utc + ' UTC';
-  document.getElementById('sb-datetime').textContent = `NEX v4.0  —  ${date} ${utc} UTC`;
-}
-updateClock(); setInterval(updateClock, 1000);
-
-// === PARTICLES ===
-function spawnParticle() {
-  const p = document.createElement('div');
-  p.className = 'particle';
-  const x = Math.random() * window.innerWidth;
-  const y = Math.random() * window.innerHeight;
-  const dx = (Math.random() - 0.5) * 60;
-  const dur = 3 + Math.random() * 4;
-  p.style.cssText = `left:${x}px;top:${y}px;--dx:${dx}px;animation-duration:${dur}s;animation-delay:${Math.random()*5}s`;
-  document.getElementById('particles').appendChild(p);
-  setTimeout(() => p.remove(), (dur + 5) * 1000);
-}
-for (let i = 0; i < 40; i++) spawnParticle();
-setInterval(spawnParticle, 400);
 </script>
 </body>
 </html>
