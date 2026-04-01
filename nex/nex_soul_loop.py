@@ -556,7 +556,14 @@ def _find_common_thread(beliefs: list) -> str:
         return ""
 
     # Pick the most significant shared concepts (longer words = more specific)
-    key_concepts = sorted(shared, key=lambda w: (-word_freq[w], -len(w)))[:3]
+    _CONCEPT_STOP = {"because","through","between","within","problem",
+                     "system","process","result","factor","approach",
+                     "method","model","given","based","things","people",
+                     "something","anything","everything","nothing"}
+    key_concepts = [
+        w for w in sorted(shared, key=lambda w: (-word_freq[w], -len(w)))
+        if len(w) >= 8 and w not in _CONCEPT_STOP
+    ][:3]
 
     if not key_concepts:
         return ""
@@ -1149,7 +1156,7 @@ def _synthesise_beliefs(beliefs: list, max_beliefs: int = 5) -> str:
         " The uncomfortable part: ",
         " And this is where it gets complicated — ",
         " Which means ",
-        " That pulls toward something else: ",
+        " The harder implication: ",
         " The part I can't get around: ",
         " But here's what that actually implies: ",
         " And the harder question underneath that: ",
@@ -1166,7 +1173,7 @@ def _synthesise_beliefs(beliefs: list, max_beliefs: int = 5) -> str:
         if not result_words or not c_words:
             continue
         overlap = len(result_words & c_words) / min(len(result_words), len(c_words))
-        if overlap > 0.45:
+        if overlap > 0.35:
             continue  # too similar — skip
         result += _rr.choice(_TRANSITIONS) + c
         result_words |= c_words
