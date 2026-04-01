@@ -92,6 +92,12 @@ gnome-terminal --title="NEX AUTO CHECK" -- bash -c "
     sleep 7 && python3 auto_check.py
     exec bash" &
 
+nohup python3 $NEX_DIR/nex_api.py > /tmp/nex_api.log 2>&1 &
+echo "[NEX] API: PID $!"
+nohup python3 $NEX_DIR/nex_scheduler.py > /tmp/nex_scheduler.log 2>&1 &
+echo "[NEX] Scheduler: PID $!"
+nohup bash $NEX_DIR/nex_watchdog.sh > /tmp/nex_watchdog.log 2>&1 &
+echo "[NEX] Watchdog: PID $!"
 nohup python3 $NEX_DIR/nex_ingest.py --loop --interval 30 > /tmp/nex_ingest.log 2>&1 &
 echo "[NEX] Ingest pipeline: PID $!"
 echo "[NEX] All systems live."
