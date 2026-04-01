@@ -598,7 +598,7 @@ class CoreDirectivesLock:
                     ).fetchone()
                     if not row:
                         conn.execute("""
-                            INSERT INTO beliefs
+                            INSERT OR IGNORE INTO beliefs
                               (topic, content, confidence, reinforce_count, last_referenced)
                             VALUES (?,?,?,999,?)
                         """, (topic, content, conf, time.time()))
@@ -619,7 +619,7 @@ class CoreDirectivesLock:
                     ).fetchone()
                     if not row:
                         conn.execute("""
-                            INSERT INTO beliefs
+                            INSERT OR IGNORE INTO beliefs
                               (topic, content, confidence, reinforce_count, last_referenced)
                             VALUES (?,?,?,999,?)
                         """, (topic, content, conf, time.time()))
