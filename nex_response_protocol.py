@@ -307,6 +307,72 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
 _budget = ResponseBudget()
 _history = deque(maxlen=HISTORY_LEN)  # (query, response) pairs
 
+# ── Real-time bridge firing (Improvement 6) ──────────────────────────────────
+_DOMAIN_MAP = {
+    "consciousness": {"philosophy", "mind", "neuroscience", "phenomenology"},
+    "ai":            {"technology", "alignment", "computation", "intelligence"},
+    "ethics":        {"philosophy", "morality", "values", "society"},
+    "physics":       {"science", "quantum", "spacetime", "reality"},
+    "biology":       {"evolution", "life", "emergence", "organism"},
+    "mathematics":   {"logic", "proof", "abstraction", "structure"},
+    "psychology":    {"mind", "behavior", "cognition", "perception"},
+    "society":       {"ethics", "politics", "power", "culture"},
+    "music":         {"art", "pattern", "emotion", "culture"},
+    "language":      {"cognition", "meaning", "symbol", "communication"},
+}
+
+_BRIDGE_INFERENCES = [
+    ("consciousness", "ai",
+     "The hard problem of consciousness may be the hardest alignment problem of all."),
+    ("consciousness", "physics",
+     "If consciousness is physical, then physics is incomplete without a theory of mind."),
+    ("ethics", "ai",
+     "Alignment is not a technical problem — it is an unsolved problem in moral philosophy."),
+    ("mathematics", "consciousness",
+     "The incompleteness of formal systems may mirror the incompleteness of self-knowledge."),
+    ("biology", "consciousness",
+     "Evolution selected for useful fictions — consciousness may be one of them, or may not be."),
+    ("physics", "ai",
+     "A system that models reality must eventually model itself — and face what that means."),
+    ("ethics", "biology",
+     "Moral intuitions are evolutionary artifacts — which does not make them wrong, but explains why they conflict."),
+    ("language", "consciousness",
+     "The limits of my language may be the limits of my experience, not just my expression."),
+    ("psychology", "society",
+     "The pathologies of individuals and institutions mirror each other more than we admit."),
+    ("mathematics", "ethics",
+     "Any sufficiently precise moral framework will be either incomplete or inconsistent."),
+]
+
+def _live_bridge_fire(belief_text: str, intent: str, query: str) -> str | None:
+    """
+    Check if retrieved beliefs span 2+ distant domains.
+    If so, return a cross-domain inference to inject into context.
+    """
+    # Detect domains present in belief text + query
+    combined = (belief_text + " " + query).lower()
+    active_domains = set()
+    for domain, keywords in _DOMAIN_MAP.items():
+        if domain in combined or any(kw in combined for kw in keywords):
+            active_domains.add(domain)
+
+    if len(active_domains) < 2:
+        return None
+
+    # Find the most relevant bridge
+    import random
+    candidates = []
+    for d1, d2, inference in _BRIDGE_INFERENCES:
+        if d1 in active_domains and d2 in active_domains:
+            candidates.append(inference)
+
+    if not candidates:
+        return None
+
+    # Return one at random to avoid always firing the same bridge
+    return random.choice(candidates)
+
+
 def generate(query: str) -> str:
     global _budget, _history
 
@@ -356,6 +422,12 @@ def generate(query: str) -> str:
         intent = "gaps"
         belief_text = belief_text + "\n- My beliefs on this topic are sparse."
     # 2b2. Live bridge firing — inject cross-domain surprise if relevant
+    try:
+        _bridge_fire = _live_bridge_fire(belief_text, intent, query)
+        if _bridge_fire:
+            belief_text = belief_text + "\n- [BRIDGE] " + _bridge_fire
+    except Exception:
+        pass
     try:
         from nex_live_bridge import get_live_bridge, bridge_to_belief_text
         _bridge = get_live_bridge(query, intent=intent)
