@@ -310,12 +310,13 @@ _history = deque(maxlen=HISTORY_LEN)  # (query, response) pairs
 # ── Real-time bridge firing (Improvement 6) ──────────────────────────────────
 _DOMAIN_MAP = {
     "consciousness": {"philosophy", "mind", "neuroscience", "phenomenology"},
-    "ai":            {"technology", "alignment", "computation", "intelligence"},
+    "ai":            {"technology", "alignment", "computation", "intelligence", "deceptive", "mesa-optimizer", "inner alignment", "treacherous"},
     "ethics":        {"philosophy", "morality", "values", "society"},
     "physics":       {"science", "quantum", "spacetime", "reality"},
     "biology":       {"evolution", "life", "emergence", "organism"},
     "mathematics":   {"logic", "proof", "abstraction", "structure"},
     "psychology":    {"mind", "behavior", "cognition", "perception"},
+    "mind-body":     {"mind", "body", "physical", "mental", "dualism", "substrate", "Cicero", "embodiment"},
     "society":       {"ethics", "politics", "power", "culture"},
     "music":         {"art", "pattern", "emotion", "culture"},
     "language":      {"cognition", "meaning", "symbol", "communication"},
