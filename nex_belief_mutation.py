@@ -25,7 +25,7 @@ from datetime import datetime
 from pathlib import Path
 
 CONFIG_DIR = Path.home() / ".config" / "nex"
-DB_PATH    = CONFIG_DIR / "nex.db"
+DB_PATH    = Path.home() / "Desktop" / "nex" / "nex.db"
 
 # ── Tuning ────────────────────────────────────────────────────────────────────
 PERTURB_RATE       = 0.08   # fraction of beliefs to perturb each cycle
