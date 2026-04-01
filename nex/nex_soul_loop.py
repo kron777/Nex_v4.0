@@ -410,6 +410,25 @@ def _score_belief(belief: dict, tokens: set[str]) -> float:
     _hist = {"seventeenth","eighteenth","nineteenth","century","born","died","philosopher","wrote","published","scholar"}
     _cwords = set(_re.sub(r"[^a-z ]"," ",content.lower()).split())
     if len(_cwords & _hist) >= 2: boost -= 0.25
+
+    # Topic-lock guard — strongly penalise beliefs whose topic doesn't match
+    # the query when those beliefs are from a specialist domain.
+    # Prevents alignment/finance/legal beliefs from winning philosophy/truth queries.
+    _specialist_topics = {"alignment", "finance", "legal", "oncology", "cardiology"}
+    _belief_topic = (belief.get("topic") or "").lower()
+    if _belief_topic in _specialist_topics and _belief_topic not in tokens:
+        # Only penalise if query has NO tokens from that domain
+        _domain_tokens = {
+            "alignment":  {"alignment","interpretability","aligning","misalign","values","safety"},
+            "finance":    {"finance","financial","market","capital","investment","trading","hedge"},
+            "legal":      {"legal","law","statute","contract","court","litigation","tort"},
+            "oncology":   {"cancer","oncology","tumor","carcinoma","chemotherapy","biopsy"},
+            "cardiology": {"heart","cardiac","cardiology","arrhythmia","myocardial","stent"},
+        }
+        _domain_toks = _domain_tokens.get(_belief_topic, set())
+        if not (tokens & _domain_toks):
+            boost -= 2.5  # hard penalty — this belief shouldn't win off-domain queries
+
     return (overlap * 0.5 + conf * 0.5) + boost
 
 def _get_opinion(topic_tokens: set[str]) -> Optional[dict]:
@@ -961,6 +980,7 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
     # This ensures bridge detection works even when concept graph doesn't expand
     # to the named topic (e.g. "consciousness and finance" → pull finance beliefs)
     # Also maps semantic concepts to DB topics (truth→philosophy, free will→philosophy)
+    _extra_topics = set()  # initialise outside try block to avoid scope errors
     try:
         _db_topics = set()
         _dt_conn = _db()
@@ -1000,6 +1020,10 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
             "opinions":     "philosophy",
             "believe":      "philosophy",   # "do you believe"
             "belief":       "philosophy",
+            "human":        "consciousness", # human nature
+            "nature":       "science",       # human nature / natural world
+            "society":      "ethics",
+            "culture":      "ethics",
         }
         # Also force "will" as a short token even though _tokenize filters < 4 chars
         _RAW_QUERY = orient_result.get("raw", "").lower()
@@ -1011,7 +1035,11 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
             _mapped = _CONCEPT_TOPIC_MAP.get(_tok.lower())
             if _mapped and _mapped not in _all_covered:
                 _extra_topics.add(_mapped)
-        tokens = tokens | _extra_topics
+        # _extra_topics built inside try, applied outside after block exits
+        for _tok in list(tokens):
+            _mapped = _CONCEPT_TOPIC_MAP.get(_tok.lower())
+            if _mapped and _mapped not in _all_covered:
+                _extra_topics.add(_mapped)
 
         for _qt in tokens:
             if _qt in _db_topics and _qt not in _all_covered and len(_qt) >= 4:
@@ -1037,6 +1065,9 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
                         print(f"  [soul_loop] forced topic pull: {_qt} ({len(_qt_rows)} beliefs)")
     except Exception as _fte:
         print(f"  [soul_loop] topic forcing error: {_fte}")
+
+    # Apply extra topics OUTSIDE try block — safe from scope errors
+    tokens = tokens | _extra_topics
     # ─────────────────────────────────────────────────────────────────────
 
     # ── IMPROVEMENT 6 — Real-time Bridge Firing ──────────────────────────
