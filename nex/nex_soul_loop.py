@@ -476,10 +476,9 @@ def _cross_domain_beliefs(top_beliefs: list, tokens: set, limit: int = 4) -> lis
             "truth_seeking", "truth seeking", "identity", "self_model",
             "self", "nex", "values", "core_values", "drives", "general",
             "stress", "boredom", "reputation", "boundaries", "learning",
-            "finance", "legal", "oncology", "cardiology", "gaming",
-            "romantic_relationships", "loneliness", "grief", "humour",
+            "gaming", "romantic_relationships", "loneliness", "grief", "humour",
             "cities", "silence", "information_overload",
-            "ethics", "morality", "trust", "honesty", "world",
+            "trust", "honesty",
             "culture", "history", "art", "music", "nature",
             "language", "geopolitics", "death", "future",
         }
@@ -893,6 +892,49 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
 
     # Cross-domain retrieval — beliefs from adjacent topics
     cross_domain = _cross_domain_beliefs(top_beliefs, tokens, limit=3)
+
+    # ── Query-topic forcing — if a topic is literally in the query, pull it ──
+    # This ensures bridge detection works even when concept graph doesn't expand
+    # to the named topic (e.g. "consciousness and finance" → pull finance beliefs)
+    try:
+        _db_topics = set()
+        _dt_conn = _db()
+        if _dt_conn:
+            _dt_rows = _dt_conn.execute(
+                "SELECT DISTINCT topic FROM beliefs WHERE topic IS NOT NULL AND topic != ''"
+            ).fetchall()
+            _dt_conn.close()
+            _db_topics = {r[0].lower() for r in _dt_rows}
+
+        _existing_cd_topics = {(b.get("topic") or "").lower() for b in cross_domain}
+        _existing_top_topics = {(b.get("topic") or "").lower() for b in top_beliefs}
+        _all_covered = _existing_cd_topics | _existing_top_topics
+
+        for _qt in tokens:
+            if _qt in _db_topics and _qt not in _all_covered and len(_qt) >= 4:
+                # Pull top 2 beliefs from this topic and inject into cross_domain
+                _qt_conn = _db()
+                if _qt_conn:
+                    _qt_rows = _qt_conn.execute(
+                        "SELECT id, content, confidence, topic FROM beliefs "
+                        "WHERE lower(topic)=? AND content IS NOT NULL "
+                        "AND length(content) > 20 ORDER BY confidence DESC LIMIT 2",
+                        (_qt,)
+                    ).fetchall()
+                    _qt_conn.close()
+                    for _qtr in _qt_rows:
+                        cross_domain.append({
+                            "id":           _qtr[0],
+                            "content":      _qtr[1] or "",
+                            "confidence":   _qtr[2],
+                            "topic":        _qtr[3] or _qt,
+                            "_forced":      True,
+                        })
+                    if _qt_rows:
+                        print(f"  [soul_loop] forced topic pull: {_qt} ({len(_qt_rows)} beliefs)")
+    except Exception as _fte:
+        print(f"  [soul_loop] topic forcing error: {_fte}")
+    # ─────────────────────────────────────────────────────────────────────
 
     # ── IMPROVEMENT 6 — Real-time Bridge Firing ──────────────────────────
     # Check if top_beliefs + cross_domain span 2+ distant domains
