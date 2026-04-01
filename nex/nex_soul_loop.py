@@ -954,7 +954,7 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
         for _sw in _seen_wordsets:
             if _words and _sw:
                 _overlap = len(_words & _sw) / min(len(_words), len(_sw))
-                if _overlap > 0.6:
+                if _overlap > 0.5:
                     _too_similar = True
                     break
         if _too_similar:
@@ -1571,7 +1571,7 @@ def _synthesise_beliefs(beliefs: list, max_beliefs: int = 5) -> str:
         if not result_words or not c_words:
             continue
         overlap = len(result_words & c_words) / min(len(result_words), len(c_words))
-        if overlap > 0.35:
+        if overlap > 0.25:
             continue  # too similar — skip
         result += _rr.choice(_TRANSITIONS) + c
         result_words |= c_words
