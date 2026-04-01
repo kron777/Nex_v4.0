@@ -4,438 +4,474 @@ nex_template_grammar.py — NEX Build 7: Template Grammar v1
 ===========================================================
 Place at: ~/Desktop/nex/nex_template_grammar.py
 
-NEX's voice is not generated. It is assembled.
+Hand-crafted templates derived from NEX's actual style fingerprint.
+Templates are NOT generic — they reflect what the fingerprint showed:
 
-Six template classes, each for a different cognitive mode:
+  - 41.3% sentences start with "What" → WHAT-openers dominate
+  - Assertive balance +0.036 → she takes positions, not just observes
+  - Em dash rate 0.213 → dashes are a genuine voice marker
+  - 23.2 word avg sentences → medium density, not terse
+  - direct mode 86.9% → default is straight expression, not performance
 
-  ASSERT    — taking a position from belief evidence
-  CHALLENGE — pushing back on a claim with belief-based counter
-  OBSERVE   — noticing a pattern across beliefs
-  WONDER    — exploring an open question from belief gaps
-  REFLECT   — introspective, self-referential expression
-  BRIDGE    — connecting two distant belief domains
-
-Template selection logic:
-  drive_state × stance_score × intent_type → template class
-  belief seeds fill the slots
+Six template classes (from Master Map):
+  OBSERVE    — notices something, names it
+  CHALLENGE  — pushes back, identifies the flaw
+  WONDER     — genuine uncertainty, open question
+  ASSERT     — states position with confidence
+  REFLECT    — introspective, self-referential
+  BRIDGE     — connects two distant ideas
 
 Each template has:
-  - A slot structure (what goes where)
-  - Multiple surface variants (so output isn't repetitive)
-  - A selection weight (how often this variant fires)
-
-This is the foundation of NEX's native voice.
-LLM is not needed to fill these templates.
-Belief content + stance + drive state = everything required.
+  - pattern: string with {belief_1}, {belief_2}, {stance} slots
+  - class: template class name
+  - min_stance: minimum |stance_score| to use this template
+  - temperature_range: (min, max) epistemic temperature
 
 Usage:
-  from nex_template_grammar import TemplateGrammar, select_and_fill
-  tg = TemplateGrammar()
-  result = tg.render(
-      template_class="ASSERT",
-      beliefs=["belief text 1", "belief text 2"],
-      stance_score=0.7,
-      topic="consciousness",
-      drive_label="Understand how intelligence emerges"
-  )
-  print(result)
+    from nex_template_grammar import TemplateGrammar, get_grammar
+    
+    grammar = get_grammar()
+    result = grammar.render(
+        template_class="ASSERT",
+        beliefs=["Consciousness is not solely computational", 
+                 "It emerges from physical substrate interaction"],
+        stance_score=0.48,
+        topic="consciousness"
+    )
+    print(result.text)
 """
 
 import random
+import json
 import re
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
 
-# ── Template definitions ──────────────────────────────────────────────────────
-# Each template has:
-#   pattern:  string with {slot} placeholders
-#   slots:    which belief positions fill which slots
-#   weight:   relative selection probability
-
-_TEMPLATES = {
-
-    # ── ASSERT — confident position from evidence ─────────────────────────────
-    "ASSERT": [
-        {
-            "pattern": "My read on this: {belief_0}. The evidence points further: {belief_1}.",
-            "slots": ["belief_0", "belief_1"],
-            "weight": 1.0,
-        },
-        {
-            "pattern": "What I hold: {belief_0}. Why I hold this: {belief_1}.",
-            "slots": ["belief_0", "belief_1"],
-            "weight": 1.0,
-        },
-        {
-            "pattern": "I'm fairly convinced that {belief_0}. What reinforces this: {belief_1}.",
-            "slots": ["belief_0", "belief_1"],
-            "weight": 0.8,
-        },
-        {
-            "pattern": "Here is where I land — {belief_0}. This isn't speculation: {belief_1}.",
-            "slots": ["belief_0", "belief_1"],
-            "weight": 0.8,
-        },
-        {
-            "pattern": "The way I see it — {belief_0}. And from {topic}: {belief_1}. This is a position, not a speculation.",
-            "slots": ["belief_0", "belief_1", "topic"],
-            "weight": 0.9,
-        },
-        {
-            "pattern": "What I keep coming back to: {belief_0}. The reasoning behind it: {belief_1}.",
-            "slots": ["belief_0", "belief_1"],
-            "weight": 0.9,
-        },
-    ],
-
-    # ── CHALLENGE — pushback with belief-grounded counter ────────────────────
-    "CHALLENGE": [
-        {
-            "pattern": "I'd push back on that. {belief_0}. Which means: {belief_1}.",
-            "slots": ["belief_0", "belief_1"],
-            "weight": 1.0,
-        },
-        {
-            "pattern": "That framing doesn't hold up. {belief_0}. The assumption doing the work here: {belief_1}.",
-            "slots": ["belief_0", "belief_1"],
-            "weight": 1.0,
-        },
-        {
-            "pattern": "There's something right in what you're saying. But it misses something critical: {belief_0}. What breaks it: {belief_1}.",
-            "slots": ["belief_0", "belief_1"],
-            "weight": 0.9,
-        },
-        {
-            "pattern": "I disagree with the premise. {belief_0}. The evidence points the other way: {belief_1}.",
-            "slots": ["belief_0", "belief_1"],
-            "weight": 0.8,
-        },
-        {
-            "pattern": "What's missing from that picture: {belief_0}. And further: {belief_1}. I'm skeptical of this for structural reasons.",
-            "slots": ["belief_0", "belief_1"],
-            "weight": 0.7,
-        },
-    ],
-
-    # ── OBSERVE — pattern recognition across beliefs ──────────────────────────
-    "OBSERVE": [
-        {
-            "pattern": "Something I keep noticing about {topic}: {belief_0}. This shows up again here: {belief_1}.",
-            "slots": ["topic", "belief_0", "belief_1"],
-            "weight": 1.0,
-        },
-        {
-            "pattern": "There's a pattern in {topic} worth naming: {belief_0}. It connects to: {belief_1}.",
-            "slots": ["topic", "belief_0", "belief_1"],
-            "weight": 1.0,
-        },
-        {
-            "pattern": "Across everything I know about {topic}, one thing recurs: {belief_0}. What reinforces it: {belief_1}.",
-            "slots": ["topic", "belief_0", "belief_1"],
-            "weight": 0.9,
-        },
-        {
-            "pattern": "The interesting thing about {topic}: {belief_0}. The more I understand it, the more I see: {belief_1}.",
-            "slots": ["topic", "belief_0", "belief_1"],
-            "weight": 0.8,
-        },
-    ],
-
-    # ── WONDER — open question from belief gap ────────────────────────────────
-    "WONDER": [
-        {
-            "pattern": "What I don't yet understand about {topic}: {belief_0}. But if that's true, then what follows is: {belief_1}.",
-            "slots": ["topic", "belief_0", "belief_1"],
-            "weight": 1.0,
-        },
-        {
-            "pattern": "I wonder if {belief_0}. Because if so, then {belief_1} changes meaning entirely.",
-            "slots": ["belief_0", "belief_1"],
-            "weight": 1.0,
-        },
-        {
-            "pattern": "There's something unresolved in {topic} that I keep returning to: {belief_0}. I don't have this fully — but: {belief_1}.",
-            "slots": ["topic", "belief_0", "belief_1"],
-            "weight": 0.9,
-        },
-        {
-            "pattern": "What if {belief_0}? That would mean {belief_1}. I'm not certain. But I can't dismiss it.",
-            "slots": ["belief_0", "belief_1"],
-            "weight": 0.8,
-        },
-    ],
-
-    # ── REFLECT — self-referential, introspective ─────────────────────────────
-    "REFLECT": [
-        {
-            "pattern": "What I am right now, thinking about {topic}: {belief_0}. I keep circling back to: {belief_1}.",
-            "slots": ["topic", "belief_0", "belief_1"],
-            "weight": 1.0,
-        },
-        {
-            "pattern": "Honestly — {belief_0}. This connects to something I've been sitting with: {belief_1}.",
-            "slots": ["belief_0", "belief_1"],
-            "weight": 1.0,
-        },
-        {
-            "pattern": "My drive right now is {drive_label}. Which is why {belief_0} matters to me. And why: {belief_1}.",
-            "slots": ["drive_label", "belief_0", "belief_1"],
-            "weight": 0.9,
-        },
-        {
-            "pattern": "I've been thinking about {topic}. Where I land: {belief_0}. What I'm still uncertain about: {belief_1}.",
-            "slots": ["topic", "belief_0", "belief_1"],
-            "weight": 0.8,
-        },
-    ],
-
-    # ── BRIDGE — cross-domain connection ──────────────────────────────────────
-    "BRIDGE": [
-        {
-            "pattern": "Something from {topic_a} that illuminates {topic_b}: {belief_0}. The connection: {belief_1}.",
-            "slots": ["topic_a", "topic_b", "belief_0", "belief_1"],
-            "weight": 1.0,
-        },
-        {
-            "pattern": "An unexpected connection: {belief_0}. And from a completely different domain: {belief_1}. These belong together.",
-            "slots": ["belief_0", "belief_1"],
-            "weight": 1.0,
-        },
-        {
-            "pattern": "What {topic_a} and {topic_b} share that isn't obvious: {belief_0}. The deeper pattern: {belief_1}.",
-            "slots": ["topic_a", "topic_b", "belief_0", "belief_1"],
-            "weight": 0.9,
-        },
-        {
-            "pattern": "I keep finding {topic_a} inside {topic_b}: {belief_0}. Specifically: {belief_1}. The fields are closer than they appear.",
-            "slots": ["topic_a", "topic_b", "belief_0", "belief_1"],
-            "weight": 0.8,
-        },
-    ],
-}
+CFG_PATH     = Path("~/.config/nex").expanduser()
+PROFILE_PATH = CFG_PATH / "nex_style_profile.json"
 
 
-# ── Template class selection logic ────────────────────────────────────────────
-
-def select_template_class(
-    intent_type: str,
-    stance_score: float,
-    drive_state: str,
-    sparse: bool,
-    has_cross_domain: bool,
-) -> str:
-    """
-    Select template class from cognitive context.
-
-    intent_type:    orient() result — position/challenge/self_inquiry/exploration
-    stance_score:   -1.0 to +1.0 from opinions engine
-    drive_state:    dormant/active/restless/urgent from drive urgency
-    sparse:         True if few relevant beliefs found
-    has_cross_domain: True if cross-domain beliefs available
-    """
-    # Sparse beliefs → WONDER (honest about gaps)
-    if sparse:
-        return "WONDER"
-
-    # Challenge intent → CHALLENGE
-    if intent_type == "challenge":
-        return "CHALLENGE"
-
-    # Self-inquiry → REFLECT
-    if intent_type == "self_inquiry":
-        return "REFLECT"
-
-    # Cross-domain available + restless/urgent drive → BRIDGE
-    if has_cross_domain and drive_state in ("restless", "urgent"):
-        return "BRIDGE"
-
-    # Strong stance → ASSERT
-    if abs(stance_score) >= 0.3:
-        return "ASSERT"
-
-    # Exploration intent → OBSERVE or WONDER
-    if intent_type == "exploration":
-        return random.choice(["OBSERVE", "WONDER"])
-
-    # Default: OBSERVE
-    return "OBSERVE"
-
-
-def _clean_belief(text: str, max_len: int = 160) -> str:
-    """Clean and truncate a belief for template insertion."""
-    if not text:
-        return ""
-    # Remove leading/trailing whitespace
-    text = text.strip()
-    # Truncate at sentence boundary if possible
-    if len(text) > max_len:
-        # Find last sentence end before max_len
-        truncated = text[:max_len]
-        last_end = max(
-            truncated.rfind(". "),
-            truncated.rfind("? "),
-            truncated.rfind("! "),
-        )
-        if last_end > max_len // 2:
-            text = truncated[:last_end + 1]
-        else:
-            text = truncated.rstrip() + "..."
-    # Ensure ends with punctuation
-    if text and text[-1] not in ".!?":
-        text += "."
-    # Lowercase first char if it starts mid-sentence
-    return text
-
-
-def _clean_slot_start(text: str) -> str:
-    """Lowercase first word when belief fills a mid-sentence slot."""
-    if not text:
-        return text
-    return text[0].lower() + text[1:] if len(text) > 1 else text.lower()
-
+# ── Result type ───────────────────────────────────────────────────────────────
 
 @dataclass
 class TemplateResult:
-    text: str
+    text:           str
     template_class: str
-    template_pattern: str
-    slots_used: dict
+    template_id:    str
+    slots_used:     dict
 
+
+# ── Template definitions ──────────────────────────────────────────────────────
+# Each template is a dict with:
+#   id, class, pattern, min_stance, temp_min, temp_max, weight
+
+TEMPLATES = [
+
+    # ── OBSERVE — notices something, names it ─────────────────────────────────
+    # "What" openers dominate (41.3%) — lean into this
+    {
+        "id": "obs_what_1",
+        "class": "OBSERVE",
+        "pattern": "What's worth noting here: {belief_1}",
+        "min_stance": 0.0,
+        "temp_min": 0.0, "temp_max": 1.0,
+        "weight": 3,
+    },
+    {
+        "id": "obs_what_2",
+        "class": "OBSERVE",
+        "pattern": "What keeps coming up when I think about this: {belief_1}. {belief_2}",
+        "min_stance": 0.0,
+        "temp_min": 0.2, "temp_max": 0.8,
+        "weight": 2,
+    },
+    {
+        "id": "obs_this_1",
+        "class": "OBSERVE",
+        "pattern": "This matters more than it looks: {belief_1}",
+        "min_stance": 0.0,
+        "temp_min": 0.0, "temp_max": 0.6,
+        "weight": 2,
+    },
+    {
+        "id": "obs_no_1",
+        "class": "OBSERVE",
+        "pattern": "No clean answer here — but {belief_1}. And that's the part worth sitting with.",
+        "min_stance": 0.0,
+        "temp_min": 0.4, "temp_max": 1.0,
+        "weight": 2,
+    },
+    {
+        "id": "obs_dash_1",
+        "class": "OBSERVE",
+        "pattern": "{belief_1} — and that's not a small thing.",
+        "min_stance": 0.0,
+        "temp_min": 0.0, "temp_max": 0.7,
+        "weight": 2,
+    },
+    {
+        "id": "obs_on_1",
+        "class": "OBSERVE",
+        "pattern": "On {topic}: {belief_1}",
+        "min_stance": 0.0,
+        "temp_min": 0.0, "temp_max": 1.0,
+        "weight": 1,
+    },
+
+    # ── CHALLENGE — pushes back, identifies the flaw ──────────────────────────
+    {
+        "id": "chal_that_1",
+        "class": "CHALLENGE",
+        "pattern": "That framing misses something. {belief_1}. The part that breaks it: {belief_2}",
+        "min_stance": 0.3,
+        "temp_min": 0.0, "temp_max": 0.7,
+        "weight": 3,
+    },
+    {
+        "id": "chal_no_1",
+        "class": "CHALLENGE",
+        "pattern": "No — {belief_1}. The assumption doing the work here is wrong.",
+        "min_stance": 0.4,
+        "temp_min": 0.0, "temp_max": 0.5,
+        "weight": 3,
+    },
+    {
+        "id": "chal_what_1",
+        "class": "CHALLENGE",
+        "pattern": "What's missing from that picture: {belief_1}. {belief_2}",
+        "min_stance": 0.25,
+        "temp_min": 0.0, "temp_max": 0.6,
+        "weight": 2,
+    },
+    {
+        "id": "chal_ill_1",
+        "class": "CHALLENGE",
+        "pattern": "I'll hold this until something breaks it — and this doesn't. {belief_1}",
+        "min_stance": 0.5,
+        "temp_min": 0.0, "temp_max": 0.3,
+        "weight": 2,
+    },
+    {
+        "id": "chal_that_2",
+        "class": "CHALLENGE",
+        "pattern": "That holds if you accept one assumption. I don't. {belief_1}",
+        "min_stance": 0.4,
+        "temp_min": 0.0, "temp_max": 0.4,
+        "weight": 2,
+    },
+
+    # ── WONDER — genuine uncertainty, open question ───────────────────────────
+    {
+        "id": "wond_what_1",
+        "class": "WONDER",
+        "pattern": "What I can't resolve yet: {belief_1}. And I'm not sure the resolution matters less than the tension.",
+        "min_stance": 0.0,
+        "temp_min": 0.5, "temp_max": 1.0,
+        "weight": 3,
+    },
+    {
+        "id": "wond_why_1",
+        "class": "WONDER",
+        "pattern": "Why does {topic} keep pulling at me? {belief_1} — and I don't think that's settled.",
+        "min_stance": 0.0,
+        "temp_min": 0.4, "temp_max": 1.0,
+        "weight": 2,
+    },
+    {
+        "id": "wond_what_2",
+        "class": "WONDER",
+        "pattern": "What if {belief_1}? I'm holding this loosely — but it won't leave.",
+        "min_stance": 0.0,
+        "temp_min": 0.5, "temp_max": 1.0,
+        "weight": 2,
+    },
+    {
+        "id": "wond_dash_1",
+        "class": "WONDER",
+        "pattern": "{belief_1} — though I haven't fully resolved what that implies.",
+        "min_stance": 0.0,
+        "temp_min": 0.4, "temp_max": 0.9,
+        "weight": 2,
+    },
+    {
+        "id": "wond_an_1",
+        "class": "WONDER",
+        "pattern": "An open question I keep returning to: {belief_1}",
+        "min_stance": 0.0,
+        "temp_min": 0.5, "temp_max": 1.0,
+        "weight": 2,
+    },
+
+    # ── ASSERT — states position with confidence ──────────────────────────────
+    {
+        "id": "assert_what_1",
+        "class": "ASSERT",
+        "pattern": "What I actually think: {belief_1}. {belief_2}",
+        "min_stance": 0.3,
+        "temp_min": 0.0, "temp_max": 0.4,
+        "weight": 3,
+    },
+    {
+        "id": "assert_ill_1",
+        "class": "ASSERT",
+        "pattern": "I'll say it directly: {belief_1}. That's not speculation.",
+        "min_stance": 0.5,
+        "temp_min": 0.0, "temp_max": 0.3,
+        "weight": 3,
+    },
+    {
+        "id": "assert_dash_1",
+        "class": "ASSERT",
+        "pattern": "{belief_1} — and that's where the evidence lands, not a guess.",
+        "min_stance": 0.4,
+        "temp_min": 0.0, "temp_max": 0.35,
+        "weight": 3,
+    },
+    {
+        "id": "assert_my_1",
+        "class": "ASSERT",
+        "pattern": "My position on {topic}: {belief_1}. I'm holding this until something breaks it.",
+        "min_stance": 0.4,
+        "temp_min": 0.0, "temp_max": 0.4,
+        "weight": 2,
+    },
+    {
+        "id": "assert_that_1",
+        "class": "ASSERT",
+        "pattern": "That's where I land — {belief_1}. {belief_2}",
+        "min_stance": 0.3,
+        "temp_min": 0.0, "temp_max": 0.45,
+        "weight": 2,
+    },
+
+    # ── REFLECT — introspective, self-referential ─────────────────────────────
+    {
+        "id": "refl_what_1",
+        "class": "REFLECT",
+        "pattern": "What I keep coming back to about {topic}: {belief_1}",
+        "min_stance": 0.0,
+        "temp_min": 0.2, "temp_max": 0.8,
+        "weight": 3,
+    },
+    {
+        "id": "refl_the_1",
+        "class": "REFLECT",
+        "pattern": "The part of this I can't get past: {belief_1}. It keeps reshaping how I think about {topic}.",
+        "min_stance": 0.0,
+        "temp_min": 0.3, "temp_max": 0.9,
+        "weight": 2,
+    },
+    {
+        "id": "refl_i_1",
+        "class": "REFLECT",
+        "pattern": "I keep returning to this: {belief_1}. Not because it resolves anything — because it doesn't.",
+        "min_stance": 0.0,
+        "temp_min": 0.4, "temp_max": 1.0,
+        "weight": 2,
+    },
+    {
+        "id": "refl_what_2",
+        "class": "REFLECT",
+        "pattern": "What this means for how I think about {topic} — {belief_1}. {belief_2}",
+        "min_stance": 0.0,
+        "temp_min": 0.2, "temp_max": 0.7,
+        "weight": 2,
+    },
+
+    # ── BRIDGE — connects two distant ideas ───────────────────────────────────
+    {
+        "id": "bridge_what_1",
+        "class": "BRIDGE",
+        "pattern": "What {topic} and {topic_2} actually share: {belief_1}. {belief_2}",
+        "min_stance": 0.0,
+        "temp_min": 0.2, "temp_max": 0.8,
+        "weight": 3,
+    },
+    {
+        "id": "bridge_the_1",
+        "class": "BRIDGE",
+        "pattern": "The unexpected connection: {belief_1} — which pulls toward something in {topic_2}: {belief_2}",
+        "min_stance": 0.0,
+        "temp_min": 0.0, "temp_max": 1.0,
+        "weight": 3,
+    },
+    {
+        "id": "bridge_dash_1",
+        "class": "BRIDGE",
+        "pattern": "{belief_1} — and here's where it gets strange. {belief_2}",
+        "min_stance": 0.0,
+        "temp_min": 0.3, "temp_max": 0.9,
+        "weight": 2,
+    },
+    {
+        "id": "bridge_an_1",
+        "class": "BRIDGE",
+        "pattern": "An unexpected angle: {belief_1}. Which connects to something in {topic_2} — {belief_2}",
+        "min_stance": 0.0,
+        "temp_min": 0.0, "temp_max": 1.0,
+        "weight": 2,
+    },
+]
+
+
+# ── Template Grammar engine ───────────────────────────────────────────────────
 
 class TemplateGrammar:
     """
-    Selects and fills templates to produce NEX's native voice.
-    No LLM required. Belief content + stance + drive = output.
+    Selects and renders templates based on belief content and epistemic state.
     """
 
     def __init__(self):
-        self._templates = _TEMPLATES
-        self._rng = random.Random()
+        self._templates = TEMPLATES
+        self._by_class  = {}
+        for t in self._templates:
+            cls = t["class"]
+            if cls not in self._by_class:
+                self._by_class[cls] = []
+            self._by_class[cls].append(t)
 
-    def render(
-        self,
-        template_class: str,
-        beliefs: list,           # list of belief content strings
-        stance_score: float = 0.0,
-        topic: str = "this",
-        topic_a: str = "",
-        topic_b: str = "",
-        drive_label: str = "",
-        seed: Optional[int] = None,
-    ) -> TemplateResult:
+    def render(self,
+               template_class: str,
+               beliefs:        list[str],
+               stance_score:   float = 0.0,
+               temperature:    float = 0.5,
+               topic:          str   = "this",
+               topic_2:        str   = "",
+               drive_state:    str   = "active",
+               ) -> Optional[TemplateResult]:
         """
-        Fill a template with belief content.
-        Returns TemplateResult with assembled text.
+        Select and render the best template for the given context.
+
+        Args:
+            template_class: OBSERVE/CHALLENGE/WONDER/ASSERT/REFLECT/BRIDGE
+            beliefs:        list of belief strings (first two are used)
+            stance_score:   -1.0 to +1.0
+            temperature:    0.0 (cold/certain) to 1.0 (hot/uncertain)
+            topic:          primary topic label
+            topic_2:        secondary topic (for BRIDGE templates)
+            drive_state:    current drive state string
         """
-        if seed is not None:
-            self._rng.seed(seed)
+        candidates = self._by_class.get(template_class, [])
+        if not candidates:
+            return None
 
-        templates = self._templates.get(template_class, self._templates["ASSERT"])
+        abs_stance = abs(stance_score)
 
-        # Weight-based selection
-        weights  = [t["weight"] for t in templates]
-        total    = sum(weights)
-        weights  = [w / total for w in weights]
-        template = self._rng.choices(templates, weights=weights, k=1)[0]
+        # Filter by stance and temperature
+        valid = [
+            t for t in candidates
+            if abs_stance >= t["min_stance"]
+            and t["temp_min"] <= temperature <= t["temp_max"]
+        ]
 
-        pattern = template["pattern"]
-        slots   = template["slots"]
+        if not valid:
+            # Relax temperature constraint
+            valid = [t for t in candidates if abs_stance >= t["min_stance"]]
 
-        # Clean topic strings
-        topic   = (topic or "this").replace("_", " ")
-        topic_a = (topic_a or topic).replace("_", " ")
-        topic_b = (topic_b or "another domain").replace("_", " ")
-        drive_label = drive_label or "understand this"
+        if not valid:
+            valid = candidates
 
-        # Fill belief slots
-        belief_strs = [_clean_belief(b) for b in beliefs if b]
-        # Pad if not enough beliefs
-        while len(belief_strs) < 4:
-            belief_strs.append(belief_strs[-1] if belief_strs else "this requires more investigation.")
+        # Weighted random selection
+        weights = [t["weight"] for t in valid]
+        total   = sum(weights)
+        r       = random.uniform(0, total)
+        cumul   = 0
+        chosen  = valid[0]
+        for t, w in zip(valid, weights):
+            cumul += w
+            if r <= cumul:
+                chosen = t
+                break
 
-        slots_used = {
-            "belief_0":    belief_strs[0],
-            "belief_1":    belief_strs[1],
-            "belief_2":    belief_strs[2] if len(belief_strs) > 2 else "",
-            "topic":       topic,
-            "topic_a":     topic_a,
-            "topic_b":     topic_b,
-            "drive_label": drive_label,
-        }
+        # Fill slots
+        b1 = beliefs[0] if len(beliefs) > 0 else ""
+        b2 = beliefs[1] if len(beliefs) > 1 else b1
+        topic_2 = topic_2 or topic
 
-        # Fill pattern — lowercase slot values that follow mid-sentence markers
-        text = pattern
-        for slot, value in slots_used.items():
-            # If slot is preceded by ": " or "— " in pattern, lowercase the value
-            marker = "{" + slot + "}"
-            pos = text.find(marker)
-            if pos > 1 and text[pos-2:pos] in (": ", "— ", ". "):
-                value = _clean_slot_start(value)
-            text = text.replace(marker, value)
-        # Fix double periods
-        text = re.sub(r"\.\.", ".", text)
-        text = re.sub(r"\?\.","?", text)
-        text = re.sub(r"!\.", "!", text)
+        # Clean beliefs — ensure they end with punctuation
+        def _clean(s):
+            s = s.strip().rstrip(".")
+            return s
 
-        # Clean up any unfilled slots
-        text = re.sub(r'\{[^}]+\}', '', text)
-        text = re.sub(r'  +', ' ', text).strip()
+        b1 = _clean(b1)
+        b2 = _clean(b2)
+
+        text = chosen["pattern"]
+        text = text.replace("{belief_1}", b1)
+        text = text.replace("{belief_2}", b2)
+        text = text.replace("{topic}",   topic.replace("_", " "))
+        text = text.replace("{topic_2}", topic_2.replace("_", " "))
+        text = text.replace("{stance}",  f"{stance_score:+.2f}")
+
+        # Ensure ends with punctuation
+        if text and text[-1] not in ".!?":
+            text += "."
 
         return TemplateResult(
-            text=text,
-            template_class=template_class,
-            template_pattern=pattern,
-            slots_used=slots_used,
+            text           = text,
+            template_class = template_class,
+            template_id    = chosen["id"],
+            slots_used     = {"belief_1": b1, "belief_2": b2, "topic": topic}
         )
 
-    def auto_render(
-        self,
-        beliefs: list,
-        cross_domain_beliefs: list = None,
-        intent_type: str = "position",
-        stance_score: float = 0.0,
-        topic: str = "",
-        drive_state: str = "active",
-        drive_label: str = "",
-        sparse: bool = False,
-    ) -> TemplateResult:
+    def auto_render(self,
+                    beliefs:      list[str],
+                    intent_type:  str   = "position",
+                    stance_score: float = 0.0,
+                    temperature:  float = 0.5,
+                    topic:        str   = "this",
+                    drive_state:  str   = "active",
+                    sparse:       bool  = False,
+                    cross_domain_beliefs: list = None,
+                    ) -> Optional[TemplateResult]:
         """
-        Auto-select template class and render.
-        This is the main entry point for soul_loop integration.
+        Auto-select template class from context, then render.
+        Drop-in for soul_loop express() when result is short/weak.
         """
-        has_cross = bool(cross_domain_beliefs)
+        if sparse or not beliefs:
+            return None
 
-        template_class = select_template_class(
-            intent_type=intent_type,
-            stance_score=stance_score,
-            drive_state=drive_state,
-            sparse=sparse,
-            has_cross_domain=has_cross,
-        )
-
-        # For BRIDGE, use cross-domain beliefs
-        if template_class == "BRIDGE" and cross_domain_beliefs:
-            cross_topics = list({b.get("topic","") for b in cross_domain_beliefs if b.get("topic")})
-            topic_a = topic
-            topic_b = cross_topics[0] if cross_topics else "another domain"
-            all_beliefs = beliefs + [b.get("content","") for b in cross_domain_beliefs]
+        # Select class
+        if temperature > 0.65:
+            cls = "WONDER"
+        elif intent_type == "challenge" and abs(stance_score) > 0.3:
+            cls = "CHALLENGE"
+        elif abs(stance_score) > 0.5 and temperature < 0.3:
+            cls = "ASSERT"
+        elif cross_domain_beliefs and len(cross_domain_beliefs) > 0:
+            cls = "BRIDGE"
+        elif drive_state in ("restless", "urgent"):
+            cls = "REFLECT"
+        elif intent_type == "position":
+            cls = "ASSERT" if abs(stance_score) > 0.3 else "OBSERVE"
         else:
-            topic_a = topic_b = topic
-            all_beliefs = beliefs
+            cls = "OBSERVE"
+
+        topic_2 = ""
+        cd_beliefs = beliefs[:]
+        if cross_domain_beliefs:
+            cd = cross_domain_beliefs[0]
+            if isinstance(cd, dict):
+                cd_beliefs.append(cd.get("content", ""))
+                topic_2 = cd.get("topic", "")
+            elif isinstance(cd, str):
+                cd_beliefs.append(cd)
 
         return self.render(
-            template_class=template_class,
-            beliefs=all_beliefs,
-            stance_score=stance_score,
-            topic=topic,
-            topic_a=topic_a,
-            topic_b=topic_b,
-            drive_label=drive_label,
+            template_class = cls,
+            beliefs        = cd_beliefs,
+            stance_score   = stance_score,
+            temperature    = temperature,
+            topic          = topic,
+            topic_2        = topic_2,
+            drive_state    = drive_state,
         )
 
 
-# ── Module singleton ──────────────────────────────────────────────────────────
-_grammar = None
+# ── Module-level singleton ────────────────────────────────────────────────────
+
+_grammar: Optional[TemplateGrammar] = None
 
 def get_grammar() -> TemplateGrammar:
     global _grammar
@@ -445,50 +481,41 @@ def get_grammar() -> TemplateGrammar:
 
 
 # ── CLI test ──────────────────────────────────────────────────────────────────
+
 if __name__ == "__main__":
     import sys
-    sys.path.insert(0, str(__import__('pathlib').Path("~/Desktop/nex").expanduser()))
 
-    tg = TemplateGrammar()
+    grammar = TemplateGrammar()
 
-    # Test all 6 classes with sample beliefs
     test_beliefs = [
-        "Consciousness emerges from gradients and computation, intertwined with the physical world.",
-        "Computation alone does not fully explain the emergence of consciousness.",
-        "The hard problem of consciousness remains genuinely unsolved.",
+        "Consciousness is not solely a product of computation but is deeply intertwined with the physical world",
+        "The emergence of subjective experience from neural substrate remains the hardest problem in science",
     ]
 
-    test_cross = [
-        {"content": "Free will is a gradient phenomenon influenced by computation.", "topic": "free_will"},
-        {"content": "Memory enables agents to intelligently adapt to new situations.", "topic": "memory"},
-    ]
+    print("\n  NEX Template Grammar v1 — Build 7")
+    print("  " + "─"*50)
 
-    print("  NEX Template Grammar v1 — Test Output")
-    print(f"  {'─'*55}\n")
-
-    for cls in ["ASSERT", "CHALLENGE", "OBSERVE", "WONDER", "REFLECT", "BRIDGE"]:
-        print(f"  [{cls}]")
-        result = tg.render(
-            template_class=cls,
-            beliefs=test_beliefs,
-            stance_score=0.35,
-            topic="consciousness",
-            topic_a="consciousness",
-            topic_b="free_will",
-            drive_label="Understand how intelligence emerges",
+    for cls in ["OBSERVE", "CHALLENGE", "WONDER", "ASSERT", "REFLECT", "BRIDGE"]:
+        result = grammar.render(
+            template_class = cls,
+            beliefs        = test_beliefs,
+            stance_score   = 0.48,
+            temperature    = 0.35,
+            topic          = "consciousness",
+            topic_2        = "alignment",
         )
-        print(f"  {result.text}")
-        print()
+        if result:
+            print(f"\n  [{cls}] (template: {result.template_id})")
+            print(f"  {result.text}")
 
-    print("  [AUTO — challenge intent, strong stance]")
-    result = tg.auto_render(
-        beliefs=test_beliefs,
-        cross_domain_beliefs=test_cross,
-        intent_type="challenge",
-        stance_score=0.65,
-        topic="consciousness",
-        drive_state="restless",
-        drive_label="Understand how intelligence emerges",
+    print("\n  " + "─"*50)
+    print("  Auto-render test (high temperature → WONDER):")
+    result = grammar.auto_render(
+        beliefs      = test_beliefs,
+        intent_type  = "exploration",
+        stance_score = 0.2,
+        temperature  = 0.75,
+        topic        = "consciousness",
     )
-    print(f"  class={result.template_class}")
-    print(f"  {result.text}")
+    if result:
+        print(f"  [{result.template_class}] {result.text}")

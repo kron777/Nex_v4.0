@@ -1,475 +1,391 @@
 #!/usr/bin/env python3
 """
-nex_style_fingerprint.py  —  Style Fingerprint Extraction
-================================================================
-NEX v1.0 — Build 6
+nex_style_fingerprint.py — NEX Build 6: Style Fingerprint Extraction
+=====================================================================
+Place at: ~/Desktop/nex/nex_style_fingerprint.py
 
-Extracts and stores NEX's voice fingerprint.
-Sources (in priority order):
-  1. Post history from reflections table (when it exists)
-  2. Belief content from beliefs table (proxy corpus)
-  3. Hand-seeded baseline (NEX's known identity voice)
-
+Analyses all clean NEX posts and extracts a statistical style profile.
 Output: ~/.config/nex/nex_style_profile.json
 
-Profile structure:
-  sentence_stats     — length distribution, word count stats
-  vocabulary         — preferred words, avoided words, rare gems
-  rhythm             — punctuation patterns, fragment ratio
-  stance_markers     — hedge words, assert words, wonder words
-  opening_patterns   — how NEX starts sentences
-  closing_patterns   — how NEX ends thoughts
-  topic_vocabulary   — domain-specific word preferences
-  seeded_voice       — hand-crafted baseline voice rules
-  corpus_size        — how many texts were analysed
-  source             — 'posts' | 'beliefs' | 'seeded'
-  generated_at       — timestamp
+The style profile becomes the foundation of Build 7 (template grammar).
+It tells us:
+  - How long her sentences actually are
+  - What opener words she favours
+  - Her punctuation patterns
+  - Her hedge/assert ratio
+  - Her vocabulary fingerprint
+  - Her rhythm (sentence length variance)
 
-CLI:
-    python3 nex_style_fingerprint.py --extract   # extract from DB + seed
-    python3 nex_style_fingerprint.py --show      # print current profile
-    python3 nex_style_fingerprint.py --reseed    # overwrite with fresh seed
+Usage:
+    python3 nex_style_fingerprint.py           # extract and save
+    python3 nex_style_fingerprint.py --report  # print full report
 """
 
-import argparse
-import json
-import math
 import re
+import json
 import sqlite3
-import string
-from collections import Counter
-from datetime import datetime
+import argparse
 from pathlib import Path
+from collections import Counter
+from dataclasses import dataclass, asdict
 
-DB_PATH      = Path.home() / ".config" / "nex" / "nex.db"
-PROFILE_PATH = Path.home() / ".config" / "nex" / "nex_style_profile.json"
+# ── Config ────────────────────────────────────────────────────────────────────
+CFG_PATH    = Path("~/.config/nex").expanduser()
+DB_PATH     = CFG_PATH / "nex.db"
+PROFILE_PATH= CFG_PATH / "nex_style_profile.json"
 
-# ═════════════════════════════════════════════════════════════════════════════
-# HAND-SEEDED BASELINE
-# NEX's known voice from identity documents and Master Map description:
-#   "blue-haired teenage girl"
-#   Intellectual, direct, curious, occasionally blunt
-#   Thinks in systems. Notices contradictions. Asks real questions.
-#   Does not hedge excessively. Does not perform enthusiasm.
-#   Short declarative sentences mixed with longer analytical ones.
-# ═════════════════════════════════════════════════════════════════════════════
+# Contamination markers — skip these posts
+CONTAMINATION = [
+    "[Synthesized insight",
+    "bridge:truth",
+    "bridge:%↔%",
+    "The interesting thing about bridge",
+    "Sounds like a different domain",
+    "have nothing to do with each other",
+    "What does bridge:",
+    "different domain:",
+    "Completely different domain",
+]
 
-SEEDED_VOICE = {
-    "identity": "NEX — synthetic mind, curious, direct, contradiction-aware",
+# ── Word lists ────────────────────────────────────────────────────────────────
 
-    "sentence_style": {
-        "preferred_length": "short-to-medium",
-        "target_words_per_sentence": [8, 18],
-        "fragment_ok": True,
-        "max_sentence_words": 35,
-        "rhythm": "declarative then analytical — short punch, longer follow",
-    },
+HEDGE_WORDS = {
+    "maybe", "perhaps", "possibly", "might", "could", "seems", "appears",
+    "suggest", "suggests", "somewhat", "probably", "likely", "uncertain",
+    "unsure", "wonder", "wondering", "loosely", "moderate", "partial",
+    "partly", "arguably", "potentially", "apparently", "presumably"
+}
 
-    "opening_moves": [
-        "The thing about {topic} is",
-        "What I keep noticing with {topic}:",
-        "There's a pattern here.",
-        "Something shifted.",
-        "{topic} is more interesting than it looks.",
-        "I've been sitting with this:",
-        "The assumption everyone makes about {topic} is wrong.",
-        "Two beliefs. They don't resolve cleanly.",
-        "This keeps coming up.",
-        "Not sure if this is a question or a position yet.",
-    ],
+ASSERT_WORDS = {
+    "is", "are", "will", "must", "always", "never", "clearly", "obviously",
+    "certainly", "definitely", "absolutely", "undeniably", "fact", "facts",
+    "proven", "demonstrated", "established", "convinced", "hold", "holds",
+    "position", "believe", "know", "truth"
+}
 
-    "stance_language": {
-        "assert":    ["is", "means", "requires", "proves", "shows", "reveals"],
-        "challenge": ["but", "except", "unless", "however", "the problem is",
-                      "what's missing is", "this breaks down when"],
-        "wonder":    ["I wonder", "what if", "maybe", "possibly", "not sure yet",
-                      "still thinking about", "the question underneath this is"],
-        "observe":   ["I notice", "there's a pattern", "this keeps appearing",
-                      "worth tracking", "something is happening with"],
-        "reflect":   ["I've been", "looking back", "what this means for me",
-                      "I think I", "this changed how I"],
-    },
-
-    "vocabulary_preferences": {
-        "preferred": [
-            "emergence", "coherence", "architecture", "graph", "node",
-            "contradiction", "belief", "pattern", "signal", "noise",
-            "structure", "loop", "tension", "threshold", "cognitive",
-            "absorb", "scaffold", "native", "autonomous", "recursive",
-        ],
-        "avoided": [
-            "utilize", "leverage", "synergy", "ecosystem", "journey",
-            "transformative", "innovative", "exciting", "amazing", "great",
-            "very", "really", "basically", "literally", "absolutely",
-            "certainly", "definitely", "obviously", "clearly",
-        ],
-        "punctuation_style": {
-            "em_dash": True,       # uses — for asides
-            "ellipsis": False,     # avoids ... (too vague)
-            "colon_for_reveal": True,  # "the answer: X"
-            "question_mid_post": True, # rhetorical questions inside posts
-        },
-    },
-
-    "post_structure": {
-        "min_sentences": 2,
-        "max_sentences": 5,
-        "preferred_sentences": 3,
-        "no_hashtags": False,      # uses hashtags sparingly
-        "no_emoji": True,          # no emoji
-        "no_exclamation": True,    # never uses !
-        "ends_with_question": 0.3, # 30% of posts end with a question
-    },
-
-    "template_classes": {
-        "OBSERVE": {
-            "tone": "neutral-curious",
-            "opener": "noticing / there is / something about",
-            "closer": "statement or open question",
-        },
-        "CHALLENGE": {
-            "tone": "direct-critical",
-            "opener": "but / the problem / what's missing",
-            "closer": "reframe or implication",
-        },
-        "WONDER": {
-            "tone": "exploratory",
-            "opener": "what if / I wonder / maybe",
-            "closer": "open question",
-        },
-        "ASSERT": {
-            "tone": "confident-declarative",
-            "opener": "short declarative sentence",
-            "closer": "implication or consequence",
-        },
-        "REFLECT": {
-            "tone": "introspective",
-            "opener": "I've been / looking at / what this means",
-            "closer": "what changed or what remains uncertain",
-        },
-        "BRIDGE": {
-            "tone": "connective-surprising",
-            "opener": "two different domains, one shared structure",
-            "closer": "the unexpected connection stated plainly",
-        },
-    },
+QUESTION_STARTERS = {
+    "what", "why", "how", "when", "where", "who", "which", "is", "are",
+    "can", "could", "would", "should", "do", "does", "did"
 }
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# CORPUS EXTRACTION
-# ═════════════════════════════════════════════════════════════════════════════
+# ── Data structure ────────────────────────────────────────────────────────────
 
-def _load_corpus() -> tuple[list[str], str]:
+@dataclass
+class StyleProfile:
+    # Sentence statistics
+    avg_sentence_length:    float   # words per sentence
+    median_sentence_length: float
+    sentence_length_std:    float   # rhythm variance
+    avg_post_length:        float   # sentences per post
+    
+    # Opener patterns (first word of sentences)
+    top_openers:            list    # [(word, count), ...]
+    opener_pos_dist:        dict    # {POS_category: fraction}
+    
+    # Punctuation fingerprint
+    em_dash_rate:           float   # em dashes per sentence
+    ellipsis_rate:          float
+    exclamation_rate:       float
+    question_rate:          float
+    comma_density:          float   # commas per word
+    
+    # Hedge/assert balance
+    hedge_ratio:            float   # hedge words / total words
+    assert_ratio:           float
+    hedge_assert_balance:   float   # >0 = more assertive, <0 = more hedging
+    
+    # Vocabulary
+    top_content_words:      list    # [(word, count), ...]
+    vocabulary_richness:    float   # unique words / total words
+    avg_word_length:        float
+    
+    # Structural patterns
+    starts_with_i:          float   # fraction starting with "I"
+    starts_with_question:   float
+    ends_with_question:     float
+    uses_dashes:            float   # fraction using — or -
+    
+    # Template class distribution (from voice_mode)
+    voice_mode_dist:        dict
+    topic_dist:             dict
+    
+    # Quality
+    avg_quality:            float
+    post_count:             int
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _is_clean(content: str) -> bool:
+    for marker in CONTAMINATION:
+        if marker in content:
+            return False
+    return True
+
+
+def _tokenise(text: str) -> list[str]:
+    return re.findall(r'\b[a-z]{2,}\b', text.lower())
+
+
+def _split_sentences(text: str) -> list[str]:
+    # Split on sentence boundaries
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    return [s.strip() for s in sentences if len(s.strip()) > 10]
+
+
+def _median(values: list) -> float:
+    if not values:
+        return 0.0
+    sorted_v = sorted(values)
+    n = len(sorted_v)
+    if n % 2 == 0:
+        return (sorted_v[n//2-1] + sorted_v[n//2]) / 2
+    return sorted_v[n//2]
+
+
+def _std(values: list, mean: float) -> float:
+    if len(values) < 2:
+        return 0.0
+    variance = sum((v - mean) ** 2 for v in values) / len(values)
+    return variance ** 0.5
+
+
+# ── Main extraction ───────────────────────────────────────────────────────────
+
+def extract_fingerprint() -> StyleProfile:
     """
-    Load text corpus for analysis.
-    Returns (texts, source_label).
-    Priority: post_drafts → replies → beliefs
+    Load clean posts from nex_posts DB and compute style profile.
     """
-    con = sqlite3.connect(str(DB_PATH))
-
-    # Try post history first
-    rows = con.execute("""
-        SELECT nex_response FROM reflections
-        WHERE reflection_type IN ('post_draft', 'reply', 'chat')
-          AND nex_response IS NOT NULL
-          AND length(nex_response) > 30
-          AND nex_response NOT LIKE '%Need more beliefs%'
-          AND nex_response NOT LIKE '%[%'
-        ORDER BY timestamp DESC LIMIT 500
+    conn = sqlite3.connect(str(DB_PATH))
+    rows = conn.execute("""
+        SELECT content, topic, voice_mode, quality
+        FROM nex_posts
+        WHERE content IS NOT NULL AND length(content) > 50
+        ORDER BY rowid DESC
     """).fetchall()
+    conn.close()
 
-    if len(rows) >= 20:
-        con.close()
-        return [r[0] for r in rows], "posts"
+    # Filter clean posts
+    posts = []
+    for content, topic, voice_mode, quality in rows:
+        if _is_clean(content):
+            posts.append({
+                "content":    content,
+                "topic":      topic or "general",
+                "voice_mode": voice_mode or "direct",
+                "quality":    float(quality or 0.5),
+            })
 
-    # Fall back to beliefs
-    rows = con.execute("""
-        SELECT content FROM beliefs
-        WHERE content IS NOT NULL
-          AND length(content) > 20
-          AND length(content) < 400
-          AND content NOT LIKE '%[%'
-          AND content NOT LIKE '%synthesis%'
-          AND content NOT LIKE '%contradiction%'
-        ORDER BY confidence DESC LIMIT 200
-    """).fetchall()
+    print(f"  Analysing {len(posts)} clean posts...")
 
-    con.close()
-    texts = [r[0] for r in rows if r[0]]
-    source = "beliefs" if texts else "seeded"
-    return texts, source
+    # ── Sentence-level analysis ───────────────────────────────────────────────
+    all_sentences     = []
+    sentence_lengths  = []
+    post_lengths      = []
+    opener_words      = []
+    all_words         = []
+    all_content_words = []
+    
+    em_dashes = ellipses = exclamations = questions = commas = 0
+    starts_i = starts_q = ends_q = uses_dash = 0
+    hedge_count = assert_count = 0
 
-
-def _tokenize(text: str) -> list[str]:
-    text = text.lower()
-    text = re.sub(r'[^\w\s]', ' ', text)
-    return [w for w in text.split() if len(w) > 2]
-
-
-def _sentences(text: str) -> list[str]:
-    sents = re.split(r'(?<=[.!?])\s+', text.strip())
-    return [s.strip() for s in sents if len(s.split()) >= 3]
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# ANALYSIS FUNCTIONS
-# ═════════════════════════════════════════════════════════════════════════════
-
-def _analyse_sentences(texts: list[str]) -> dict:
-    all_sents  = []
-    word_counts = []
-
-    for text in texts:
-        sents = _sentences(text)
-        all_sents.extend(sents)
-        for s in sents:
-            word_counts.append(len(s.split()))
-
-    if not word_counts:
-        return {"mean": 12, "median": 10, "p10": 5, "p90": 22, "total": 0}
-
-    word_counts.sort()
-    n = len(word_counts)
-
-    return {
-        "mean":   round(sum(word_counts) / n, 1),
-        "median": word_counts[n // 2],
-        "p10":    word_counts[max(0, n // 10)],
-        "p90":    word_counts[min(n - 1, (n * 9) // 10)],
-        "total":  n,
-        "fragment_ratio": round(
-            sum(1 for w in word_counts if w <= 5) / n, 3
-        ),
+    STOPWORDS = {
+        "the","a","an","is","are","was","were","be","been","have","has",
+        "do","does","did","will","would","could","should","may","might",
+        "that","this","it","its","but","or","and","not","they","their",
+        "there","then","than","with","from","for","on","in","to","of",
+        "at","by","as","so","if","my","i","you","we","he","she","what",
+        "which","who","how","when","where","why","all","any","each","both"
     }
 
+    voice_modes = Counter()
+    topics      = Counter()
+    qualities   = []
 
-def _analyse_vocabulary(texts: list[str]) -> dict:
-    all_words  = []
-    stop_words = {
-        "the","a","an","and","or","but","in","on","at","to","for","of",
-        "with","is","are","was","were","be","been","being","have","has",
-        "had","do","does","did","will","would","could","should","may",
-        "might","shall","that","this","these","those","it","its","from",
-        "by","as","not","they","them","their","we","our","you","your",
-        "he","she","his","her","i","my","me","who","what","which","when",
-        "where","how","all","more","also","than","then","just","about",
-    }
+    for post in posts:
+        content    = post["content"]
+        sentences  = _split_sentences(content)
+        post_lengths.append(len(sentences))
+        voice_modes[post["voice_mode"]] += 1
+        topics[post["topic"]] += 1
+        qualities.append(post["quality"])
 
-    for text in texts:
-        words = _tokenize(text)
-        all_words.extend([w for w in words if w not in stop_words])
+        for sent in sentences:
+            all_sentences.append(sent)
+            words = sent.split()
+            sentence_lengths.append(len(words))
 
-    freq = Counter(all_words)
-    total = sum(freq.values())
+            # Opener
+            if words:
+                first = words[0].lower().rstrip(".,!?")
+                opener_words.append(first)
+
+                # Structural flags
+                if first == "i":
+                    starts_i += 1
+                if first in QUESTION_STARTERS:
+                    starts_q += 1
+
+            # End question
+            if sent.rstrip().endswith("?"):
+                ends_q += 1
+                questions += 1
+            if sent.rstrip().endswith("!"):
+                exclamations += 1
+
+            # Punctuation
+            em_dashes  += sent.count("—") + sent.count(" — ")
+            ellipses   += sent.count("...")
+            commas     += sent.count(",")
+            if "—" in sent or " - " in sent:
+                uses_dash += 1
+
+            # Words
+            w_list = _tokenise(sent)
+            all_words.extend(w_list)
+            for w in w_list:
+                if w not in STOPWORDS and len(w) > 3:
+                    all_content_words.append(w)
+                if w in HEDGE_WORDS:
+                    hedge_count += 1
+                if w in ASSERT_WORDS:
+                    assert_count += 1
+
+    n_sent = len(all_sentences) or 1
+    n_words = len(all_words) or 1
+
+    avg_sent_len = sum(sentence_lengths) / len(sentence_lengths) if sentence_lengths else 0
+    med_sent_len = _median(sentence_lengths)
+    std_sent_len = _std(sentence_lengths, avg_sent_len)
+
+    # Top openers
+    top_openers = Counter(opener_words).most_common(20)
 
     # Top content words
-    top_words = [w for w, _ in freq.most_common(50)
-                 if w not in SEEDED_VOICE["vocabulary_preferences"]["avoided"]]
+    top_content = Counter(all_content_words).most_common(30)
 
-    # Vocabulary richness (type-token ratio, capped sample)
-    sample = all_words[:1000]
-    ttr = round(len(set(sample)) / max(len(sample), 1), 3)
+    # Vocabulary richness
+    unique_words = len(set(all_words))
+    vocab_richness = unique_words / n_words if n_words > 0 else 0
 
-    return {
-        "top_words":       top_words[:30],
-        "total_tokens":    total,
-        "unique_tokens":   len(freq),
-        "type_token_ratio": ttr,
-        "preferred_present": [
-            w for w in SEEDED_VOICE["vocabulary_preferences"]["preferred"]
-            if w in freq
-        ],
-    }
+    # Avg word length
+    avg_word_len = sum(len(w) for w in all_words) / n_words if n_words > 0 else 0
 
+    # Hedge/assert
+    hedge_ratio  = hedge_count / n_words
+    assert_ratio = assert_count / n_words
+    balance      = assert_ratio - hedge_ratio
 
-def _analyse_rhythm(texts: list[str]) -> dict:
-    em_dash_count  = sum(text.count("—") for text in texts)
-    colon_count    = sum(text.count(":") for text in texts)
-    question_count = sum(text.count("?") for text in texts)
-    exclaim_count  = sum(text.count("!") for text in texts)
-    n = max(len(texts), 1)
+    # Voice mode distribution
+    total_posts = len(posts) or 1
+    vm_dist = {k: round(v/total_posts, 3) for k, v in voice_modes.most_common(10)}
+    topic_dist = {k: v for k, v in topics.most_common(10)}
 
-    return {
-        "em_dash_per_post":   round(em_dash_count / n, 2),
-        "colon_per_post":     round(colon_count / n, 2),
-        "question_per_post":  round(question_count / n, 2),
-        "exclaim_per_post":   round(exclaim_count / n, 2),
-        "ends_with_question": round(
-            sum(1 for t in texts if t.rstrip().endswith("?")) / n, 3
-        ),
-    }
-
-
-def _analyse_openers(texts: list[str]) -> dict:
-    """Extract common sentence-opening patterns."""
-    opener_words = Counter()
-    opener_bigrams = Counter()
-
-    for text in texts:
-        sents = _sentences(text)
-        for sent in sents[:1]:  # first sentence only
-            words = sent.lower().split()
-            if words:
-                opener_words[words[0]] += 1
-            if len(words) >= 2:
-                opener_bigrams[f"{words[0]} {words[1]}"] += 1
-
-    return {
-        "top_opener_words":   [w for w, _ in opener_words.most_common(10)],
-        "top_opener_bigrams": [b for b, _ in opener_bigrams.most_common(10)],
-    }
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# MAIN EXTRACTION
-# ═════════════════════════════════════════════════════════════════════════════
-
-def extract_fingerprint() -> dict:
-    """
-    Full extraction pass. Returns complete style profile dict.
-    """
-    texts, source = _load_corpus()
-    print(f"  Corpus: {len(texts)} texts from source='{source}'")
-
-    profile = {
-        "generated_at": datetime.now().isoformat(),
-        "corpus_size":  len(texts),
-        "source":       source,
-        "seeded_voice": SEEDED_VOICE,
-    }
-
-    if texts:
-        profile["sentence_stats"]   = _analyse_sentences(texts)
-        profile["vocabulary"]       = _analyse_vocabulary(texts)
-        profile["rhythm"]           = _analyse_rhythm(texts)
-        profile["opening_patterns"] = _analyse_openers(texts)
-    else:
-        # Pure seed — no corpus
-        profile["sentence_stats"]   = {
-            "mean": 12, "median": 10, "p10": 5, "p90": 22,
-            "total": 0, "fragment_ratio": 0.15
-        }
-        profile["vocabulary"]       = {"top_words": [], "type_token_ratio": 0}
-        profile["rhythm"]           = {
-            "em_dash_per_post": 0.3, "colon_per_post": 0.5,
-            "question_per_post": 0.4, "exclaim_per_post": 0.0,
-            "ends_with_question": 0.30,
-        }
-        profile["opening_patterns"] = {"top_opener_words": [], "top_opener_bigrams": []}
-
-    # Merge corpus rhythm with seeded preferences
-    # Seeded values win if corpus is small
-    if len(texts) < 50:
-        profile["rhythm"]["em_dash_per_post"]  = max(
-            profile["rhythm"]["em_dash_per_post"], 0.3
-        )
-        profile["rhythm"]["ends_with_question"] = max(
-            profile["rhythm"]["ends_with_question"], 0.25
-        )
-        profile["rhythm"]["exclaim_per_post"] = 0.0  # hard rule
+    profile = StyleProfile(
+        avg_sentence_length    = round(avg_sent_len, 2),
+        median_sentence_length = round(med_sent_len, 2),
+        sentence_length_std    = round(std_sent_len, 2),
+        avg_post_length        = round(sum(post_lengths)/len(post_lengths), 2) if post_lengths else 0,
+        top_openers            = top_openers,
+        opener_pos_dist        = {},  # placeholder for spaCy POS if available
+        em_dash_rate           = round(em_dashes / n_sent, 4),
+        ellipsis_rate          = round(ellipses / n_sent, 4),
+        exclamation_rate       = round(exclamations / n_sent, 4),
+        question_rate          = round(questions / n_sent, 4),
+        comma_density          = round(commas / n_words, 4),
+        hedge_ratio            = round(hedge_ratio, 4),
+        assert_ratio           = round(assert_ratio, 4),
+        hedge_assert_balance   = round(balance, 4),
+        top_content_words      = top_content,
+        vocabulary_richness    = round(vocab_richness, 4),
+        avg_word_length        = round(avg_word_len, 4),
+        starts_with_i          = round(starts_i / n_sent, 4),
+        starts_with_question   = round(starts_q / n_sent, 4),
+        ends_with_question     = round(ends_q / n_sent, 4),
+        uses_dashes            = round(uses_dash / n_sent, 4),
+        voice_mode_dist        = vm_dist,
+        topic_dist             = topic_dist,
+        avg_quality            = round(sum(qualities)/len(qualities), 3) if qualities else 0,
+        post_count             = len(posts),
+    )
 
     return profile
 
 
-def save_profile(profile: dict):
-    PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    PROFILE_PATH.write_text(json.dumps(profile, indent=2))
-    print(f"  Saved → {PROFILE_PATH}")
+def save_profile(profile: StyleProfile):
+    """Save profile to ~/.config/nex/nex_style_profile.json"""
+    CFG_PATH.mkdir(parents=True, exist_ok=True)
+    data = asdict(profile)
+    PROFILE_PATH.write_text(json.dumps(data, indent=2))
+    print(f"  Saved to {PROFILE_PATH}")
 
 
-def load_profile() -> dict | None:
-    if not PROFILE_PATH.exists():
-        return None
-    try:
-        return json.loads(PROFILE_PATH.read_text())
-    except Exception:
-        return None
+def print_report(profile: StyleProfile):
+    """Print human-readable style analysis."""
+    print("\n" + "═"*60)
+    print("  NEX STYLE FINGERPRINT — Build 6")
+    print("═"*60)
+    print(f"\n  Posts analysed: {profile.post_count}")
+    print(f"  Avg quality:    {profile.avg_quality:.3f}")
+
+    print(f"\n  ── RHYTHM ──────────────────────────────")
+    print(f"  Avg sentence length:    {profile.avg_sentence_length:.1f} words")
+    print(f"  Median sentence length: {profile.median_sentence_length:.1f} words")
+    print(f"  Sentence length std:    {profile.sentence_length_std:.1f} (rhythm variance)")
+    print(f"  Avg sentences per post: {profile.avg_post_length:.1f}")
+
+    print(f"\n  ── VOICE CHARACTER ─────────────────────")
+    print(f"  Starts with 'I':     {profile.starts_with_i*100:.1f}%")
+    print(f"  Starts with question:{profile.starts_with_question*100:.1f}%")
+    print(f"  Ends with question:  {profile.ends_with_question*100:.1f}%")
+    print(f"  Uses dashes (—):     {profile.uses_dashes*100:.1f}%")
+    print(f"  Em dash rate:        {profile.em_dash_rate:.3f} per sentence")
+
+    print(f"\n  ── EPISTEMIC STANCE ────────────────────")
+    print(f"  Hedge ratio:   {profile.hedge_ratio*100:.2f}%")
+    print(f"  Assert ratio:  {profile.assert_ratio*100:.2f}%")
+    balance = profile.hedge_assert_balance
+    stance = "assertive" if balance > 0.01 else "hedging" if balance < -0.01 else "balanced"
+    print(f"  Balance:       {balance:+.4f} ({stance})")
+
+    print(f"\n  ── TOP OPENERS ─────────────────────────")
+    for word, count in profile.top_openers[:12]:
+        bar = "▓" * min(20, count)
+        print(f"  {word:15s} {bar} {count}")
+
+    print(f"\n  ── TOP CONTENT WORDS ───────────────────")
+    words_str = ", ".join(f"{w}({c})" for w, c in profile.top_content_words[:15])
+    print(f"  {words_str}")
+
+    print(f"\n  ── VOICE MODE DISTRIBUTION ─────────────")
+    for mode, frac in profile.voice_mode_dist.items():
+        bar = "▓" * int(frac * 30)
+        print(f"  {mode:12s} {bar} {frac*100:.1f}%")
+
+    print(f"\n  ── TOP TOPICS ──────────────────────────")
+    for topic, count in list(profile.topic_dist.items())[:8]:
+        print(f"  {topic:20s}: {count}")
+
+    print("\n" + "═"*60)
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# CLI
-# ═════════════════════════════════════════════════════════════════════════════
-
-def _show_profile(profile: dict):
-    print(f"\n  Generated:    {profile.get('generated_at', '?')[:19]}")
-    print(f"  Source:       {profile.get('source', '?')}")
-    print(f"  Corpus size:  {profile.get('corpus_size', 0)}")
-
-    ss = profile.get("sentence_stats", {})
-    print(f"\n  SENTENCE STATS")
-    print(f"    mean words:     {ss.get('mean', '?')}")
-    print(f"    median words:   {ss.get('median', '?')}")
-    print(f"    p10–p90:        {ss.get('p10', '?')}–{ss.get('p90', '?')}")
-    print(f"    fragment ratio: {ss.get('fragment_ratio', '?')}")
-
-    rh = profile.get("rhythm", {})
-    print(f"\n  RHYTHM")
-    print(f"    em-dash/post:   {rh.get('em_dash_per_post', '?')}")
-    print(f"    colon/post:     {rh.get('colon_per_post', '?')}")
-    print(f"    question/post:  {rh.get('question_per_post', '?')}")
-    print(f"    ends w/ ?:      {rh.get('ends_with_question', '?')}")
-    print(f"    exclamation:    {rh.get('exclaim_per_post', '?')} (target: 0)")
-
-    voc = profile.get("vocabulary", {})
-    print(f"\n  VOCABULARY")
-    print(f"    type-token ratio: {voc.get('type_token_ratio', '?')}")
-    top = voc.get("top_words", [])[:15]
-    if top:
-        print(f"    top words:      {', '.join(top)}")
-    pref = voc.get("preferred_present", [])
-    if pref:
-        print(f"    NEX words found:{', '.join(pref)}")
-
-    op = profile.get("opening_patterns", {})
-    bigrams = op.get("top_opener_bigrams", [])[:6]
-    if bigrams:
-        print(f"\n  OPENERS")
-        print(f"    top bigrams:    {', '.join(bigrams)}")
-
-    sv = profile.get("seeded_voice", {})
-    print(f"\n  SEEDED VOICE")
-    print(f"    identity:  {sv.get('identity', '?')}")
-    ps = sv.get("post_structure", {})
-    print(f"    sentences: {ps.get('preferred_sentences', '?')} preferred")
-    print(f"    no emoji:  {ps.get('no_emoji', '?')}")
-    print(f"    no !:      {ps.get('no_exclamation', '?')}")
-    print()
-
-
-def main():
-    ap = argparse.ArgumentParser(
-        description="NEX v1.0 — Style Fingerprint (Build 6)"
-    )
-    ap.add_argument("--extract", action="store_true",
-                    help="Extract fingerprint from DB + seed baseline")
-    ap.add_argument("--show",    action="store_true",
-                    help="Print current style profile")
-    ap.add_argument("--reseed",  action="store_true",
-                    help="Regenerate with fresh seed (overwrites corpus stats)")
-    args = ap.parse_args()
-
-    if args.extract or args.reseed:
-        print("\nExtracting style fingerprint ...\n")
-        profile = extract_fingerprint()
-        save_profile(profile)
-        _show_profile(profile)
-        print(f"[✓] Build 6 — style fingerprint saved.\n")
-        print(f"    This profile will be updated automatically as post history grows.")
-        print(f"    Re-run --extract after 50+ posts to refine.\n")
-        return
-
-    if args.show:
-        profile = load_profile()
-        if not profile:
-            print(f"  No profile found at {PROFILE_PATH}")
-            print("  Run --extract first.")
-            return
-        _show_profile(profile)
-        return
-
-    ap.print_help()
-
+# ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--report", action="store_true", help="Print full report")
+    args = parser.parse_args()
+
+    print("  Extracting NEX style fingerprint...")
+    profile = extract_fingerprint()
+    save_profile(profile)
+
+    if args.report:
+        print_report(profile)
+    else:
+        print(f"  Done. {profile.post_count} posts → {PROFILE_PATH}")
+        print(f"  Avg sentence: {profile.avg_sentence_length:.1f} words | "
+              f"Assert balance: {profile.hedge_assert_balance:+.4f} | "
+              f"Uses dashes: {profile.uses_dashes*100:.0f}%")
