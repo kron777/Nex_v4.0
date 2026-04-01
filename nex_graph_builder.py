@@ -25,7 +25,7 @@ import argparse
 from pathlib import Path
 from collections import defaultdict
 
-DB_PATH = Path.home() / ".config/nex/nex.db"
+DB_PATH = Path.home() / "Desktop" / "nex" / "nex.db"
 
 # ── Topic proximity map (conceptual neighbourhoods) ───────────────────────────
 TOPIC_GRAPH = {

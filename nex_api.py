@@ -22,7 +22,7 @@ except ImportError:
     from flask_cors import CORS
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
-DB_PATH       = Path("~/.config/nex/nex.db").expanduser()
+DB_PATH = Path.home() / "Desktop" / "nex" / "nex.db"
 API_KEYS_PATH = Path("~/.config/nex/api_keys.json").expanduser()
 SESSIONS_PATH = Path("~/.config/nex/sessions.json").expanduser()
 WEBHOOKS_PATH = Path("~/.config/nex/webhooks.json").expanduser()

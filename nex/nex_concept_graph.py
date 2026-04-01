@@ -55,7 +55,7 @@ from collections import defaultdict
 from typing import Optional
 
 _CFG        = Path("~/.config/nex").expanduser()
-_DB_PATH    = _CFG / "nex.db"
+_DB_PATH = Path.home() / "Desktop" / "nex" / "nex.db"
 _GRAPH_PATH = _CFG / "concept_graph.json"
 _CACHE_TTL  = 600.0   # rebuild every 10 min max
 
