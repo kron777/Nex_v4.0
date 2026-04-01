@@ -100,3 +100,5 @@ nex.db
 *.faiss
 *.pkl
 nex_lora.gguf
+*.gguf
+*.bak_*
