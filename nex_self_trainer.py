@@ -32,7 +32,8 @@ from datetime import datetime
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 DB_PATH    = Path.home() / ".config" / "nex" / "nex.db"
-BASE_MODEL = "/media/rr/4TB DATA/llmz/Mistral-7B-Instruct-v0.3-hf"
+BASE_MODEL = "/media/rr/NEX/models/Qwen2.5-3B-Instruct"  # Qwen2.5-3B: ~6GB fp16, fits 8GB VRAM with LoRA overhead
+# Fallback: "/media/rr/4TB DATA/llmz/Mistral-7B-Instruct-v0.3-hf"
 TRAINED    = "/home/rr/Desktop/nex/nex_trained"
 TRAIN_DIR  = "/home/rr/Desktop/nex/nex_training"
 LOG        = "/media/rr/4TB DATA/llmz/nex_training/train.log"
@@ -98,10 +99,12 @@ INTENSITIES = {
 # Each tier triggers when belief count AND avg confidence cross their thresholds
 # and that many NEW beliefs have accumulated since the last training run.
 WATERMARKS = {
-    "light":  {"new_beliefs": 300,   "avg_conf": 0.42},
-    "medium": {"new_beliefs": 800,   "avg_conf": 0.57},
-    "heavy":  {"new_beliefs": 1500,  "avg_conf": 0.62},
-    "havok":  {"new_beliefs": 3000,  "avg_conf": 0.67},
+    # avg_conf thresholds now match nex_belief_quality scorer scale (0.0-1.0)
+    # quality_score 0.47+ = healthy corpus; 0.55+ = strong; 0.65+ = elite-heavy
+    "light":  {"new_beliefs": 200,  "avg_conf": 0.44},
+    "medium": {"new_beliefs": 500,  "avg_conf": 0.50},
+    "heavy":  {"new_beliefs": 1000, "avg_conf": 0.55},
+    "havok":  {"new_beliefs": 2000, "avg_conf": 0.62},
 }
 
 # ── Global pending approval state ─────────────────────────────────────────────
@@ -153,17 +156,32 @@ def _log(msg: str):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _get_belief_stats() -> dict:
-    """Pull belief count, avg confidence, high-conf count, topic count."""
+    """Pull belief count, avg quality_score (or confidence fallback), high-conf count."""
     try:
         conn = sqlite3.connect(DB_PATH)
         cur  = conn.cursor()
-        cur.execute("SELECT COUNT(*), AVG(confidence) FROM beliefs")
-        total, avg_conf = cur.fetchone()
-        total    = total    or 0
-        avg_conf = avg_conf or 0.0
+        cur.execute("SELECT COUNT(*) FROM beliefs")
+        total = cur.fetchone()[0] or 0
 
-        cur.execute("SELECT COUNT(*) FROM beliefs WHERE confidence >= 0.70")
-        high_conf = cur.fetchone()[0] or 0
+        # Use quality_score if available (set by nex_belief_refiner)
+        try:
+            cur.execute("SELECT AVG(quality_score) FROM beliefs WHERE quality_score IS NOT NULL")
+            avg_q = cur.fetchone()[0]
+            avg_conf = round(float(avg_q or 0.0), 3)
+            # Fall back to confidence if quality_score not populated
+            if avg_conf < 0.01:
+                cur.execute("SELECT AVG(confidence) FROM beliefs")
+                avg_conf = round(float(cur.fetchone()[0] or 0.0), 3)
+        except Exception:
+            cur.execute("SELECT AVG(confidence) FROM beliefs")
+            avg_conf = round(float(cur.fetchone()[0] or 0.0), 3)
+
+        try:
+            cur.execute("SELECT COUNT(*) FROM beliefs WHERE quality_score >= 0.70")
+            high_conf = cur.fetchone()[0] or 0
+        except Exception:
+            cur.execute("SELECT COUNT(*) FROM beliefs WHERE confidence >= 0.70")
+            high_conf = cur.fetchone()[0] or 0
 
         cur.execute("SELECT COUNT(DISTINCT topic) FROM beliefs")
         topics = cur.fetchone()[0] or 0
@@ -171,7 +189,7 @@ def _get_belief_stats() -> dict:
         conn.close()
         return {
             "total":     total,
-            "avg_conf":  round(avg_conf, 3),
+            "avg_conf":  avg_conf,
             "high_conf": high_conf,
             "topics":    topics,
         }
@@ -537,7 +555,7 @@ def _run_training_thread(intensity: str, send_fn):
 def _do_training(intensity: str, send_fn):
     """The actual fine-tuning logic."""
     import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+    from transformers import AutoModelForCausalLM, AutoTokenizer
     from peft import LoraConfig, get_peft_model, TaskType
     from trl import SFTConfig, SFTTrainer
     from datasets import Dataset
@@ -589,7 +607,7 @@ def _do_training(intensity: str, send_fn):
         _log("GPU detected — loading fp16 on GPU only (no offload)")
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
-            dtype=torch.float16,
+            torch_dtype=torch.float16,
             device_map={"": 0},
             trust_remote_code=True,
         )
@@ -597,7 +615,7 @@ def _do_training(intensity: str, send_fn):
         _log("No GPU — loading on CPU (slow)")
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
-            dtype=torch.float16,
+            torch_dtype=torch.float16,
             device_map={"": torch.device("cpu")},
             trust_remote_code=True,
         )
@@ -611,9 +629,6 @@ def _do_training(intensity: str, send_fn):
         target_modules=["q_proj", "v_proj"],
         bias="none",
     )
-    for name, param in model.named_parameters():
-        if param.device.type == 'cpu':
-            param.requires_grad_(False)
     model = get_peft_model(model, lora_config)
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     _log(f"Trainable params: {trainable:,}")
@@ -629,6 +644,7 @@ def _do_training(intensity: str, send_fn):
         gradient_accumulation_steps=8,
         learning_rate=cfg["lr"],
         fp16=_use_gpu,
+        gradient_checkpointing=False,
         logging_steps=20,
         save_strategy="no",
         save_total_limit=1,
@@ -637,16 +653,17 @@ def _do_training(intensity: str, send_fn):
         report_to="none",
         dataloader_num_workers=0,
         dataset_text_field="text",
-        max_length=512,
+        max_seq_length=512,
         packing=False,
     )
 
-    model.gradient_checkpointing_enable()
+    # gradient_checkpointing disabled — conflicts with LoRA on ROCm
+    model.config.use_cache = False
     trainer = SFTTrainer(
         model=model,
         args=training_cfg,
         train_dataset=dataset,
-        processing_class=tokenizer,
+        tokenizer=tokenizer,
     )
 
     _log("Training started...")
@@ -680,7 +697,7 @@ def _merge_and_export(adapter_path: str, send_fn):
         from peft import PeftModel
 
         _log("Merging LoRA adapter into base model...")
-        base  = AutoModelForCausalLM.from_pretrained(BASE_MODEL, dtype=torch.float16, device_map="cpu")
+        base  = AutoModelForCausalLM.from_pretrained(BASE_MODEL, torch_dtype=torch.float16, device_map="cpu")
         model = PeftModel.from_pretrained(base, adapter_path)
         merged = model.merge_and_unload()
 
@@ -769,10 +786,17 @@ def _export_beliefs(min_conf: float, limit: int) -> list[dict]:
     try:
         conn = sqlite3.connect(DB_PATH)
         cur  = conn.cursor()
-        cur.execute("""
+        # Use quality_score for ordering when available
+        try:
+            cur.execute("SELECT COUNT(*) FROM pragma_table_info('beliefs') WHERE name='quality_score'")
+            has_qs = cur.fetchone()[0]
+        except Exception:
+            has_qs = 0
+        order_col = "quality_score DESC, confidence DESC" if has_qs else "confidence DESC, last_referenced DESC"
+        cur.execute(f"""
             SELECT topic, content, confidence FROM beliefs
             WHERE confidence >= ? AND length(content) > 40
-            ORDER BY confidence DESC, last_referenced DESC
+            ORDER BY {order_col}
             LIMIT ?
         """, (min_conf, limit))
         rows = cur.fetchall()

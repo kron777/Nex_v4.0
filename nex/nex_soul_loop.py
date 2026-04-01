@@ -1403,6 +1403,30 @@ def express(
     common_thread = reason_result.get("common_thread", "")
     prior_exchange= reason_result.get("prior_exchange", "")
 
+    # ── Belief relevance guard ─────────────────────────────────────────────
+    # Filter out beliefs with no token overlap to the query — prevents noise
+    # beliefs (unrelated DB content) from leaking into the voice path.
+    # Keeps only topic-matching beliefs; falls back to the full set when
+    # none pass (e.g. very short/generic follow-up queries).
+    _FILLER = {
+        "what","the","a","an","is","are","do","does","about","but","and","or",
+        "so","me","you","i","it","that","this","how","why","where","when","who",
+        "which","can","will","would","could","should","of","in","on","at","to",
+        "for","with","think","know","your","tell","just","more","some","all",
+        "if","not","no","as","up","than","let","say","does","now","then","well",
+    }
+    _query_toks = (
+        set(orient_result.get("query", "").lower().split()) - _FILLER
+    )
+    if _query_toks and beliefs:
+        _relevant = [
+            b for b in beliefs
+            if _query_toks & set(b.get("content", "").lower().split())
+        ]
+        if _relevant:
+            beliefs = _relevant
+    # ──────────────────────────────────────────────────────────────────────
+
     # ── SELF-INQUIRY ────────────────────────────────────────────────────────
     if intent_type == "self_inquiry":
         id_   = intend_result["identity"]
@@ -1507,12 +1531,13 @@ def express(
         return result.strip()
 
     # ── WONDER — bridge detector cross-domain surprise ───────────────────────
+    # Does NOT fire for challenge intent — those need pushback, not wondering.
     _wonder_result = None
     try:
         import nex_bridge_detector as _bd
         import nex_template_grammar as _tg
         _current_topic = (reason_result.get("topic") or "").lower()
-        if confidence < 0.6 or intent_type == "wonder":
+        if intent_type != "challenge" and (confidence < 0.6 or intent_type == "wonder"):
             _bridges = _bd.get_recent_bridges(n=3)
             _matched = None
             for _br in _bridges:
@@ -1524,14 +1549,39 @@ def express(
                 ):
                     _matched = _br
                     break
-            # Fallback: cross_domain beliefs from reason_result as bridge candidate
+            # Fallback: cross_domain beliefs — only when topics are relevant to query
             if not _matched and cross_domain and len(cross_domain) >= 2:
-                _matched = {
-                    "content_a": cross_domain[0].get("content", ""),
-                    "content_b": cross_domain[1].get("content", ""),
-                    "topic_a":   cross_domain[0].get("topic", ""),
-                    "topic_b":   cross_domain[1].get("topic", ""),
+                _SKIP = {
+                    "what","the","a","an","is","are","do","does","about","but","and",
+                    "or","so","me","you","i","it","that","this","how","why","where",
+                    "when","who","which","can","will","would","could","should","of",
+                    "in","on","at","to","for","with","just","very","more","some",
                 }
+                _qtoks = set(
+                    orient_result.get("query", "").lower().split()
+                ) - _SKIP
+                _cd_a = cross_domain[0]
+                _cd_b = cross_domain[1]
+                _ta   = (_cd_a.get("topic") or "").lower()
+                _tb   = (_cd_b.get("topic") or "").lower()
+                # Require topical overlap: a topic must share tokens with the query
+                # OR match the current resolved topic — prevents noise beliefs leaking in
+                _relevant = bool(
+                    _qtoks and (
+                        any(tok in _ta for tok in _qtoks) or
+                        any(tok in _tb for tok in _qtoks) or
+                        (_current_topic and (
+                            _current_topic in _ta or _current_topic in _tb
+                        ))
+                    )
+                )
+                if _relevant:
+                    _matched = {
+                        "content_a": _cd_a.get("content", ""),
+                        "content_b": _cd_b.get("content", ""),
+                        "topic_a":   _ta,
+                        "topic_b":   _tb,
+                    }
             if _matched:
                 _w = _tg.get_grammar().render(
                     template_class = "WONDER",

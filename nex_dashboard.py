@@ -5,7 +5,7 @@ Serves a live monitoring dashboard on port 7824.
 Pulls data from NEX API on port 7823.
 """
 import os, sys, json, time, sqlite3, threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 NEX_PATH = os.path.expanduser("~/Desktop/nex")
@@ -19,7 +19,7 @@ except ImportError:
     from flask import Flask, jsonify, render_template_string
     from flask_cors import CORS
 
-DB_PATH       = Path("~/.config/nex/nex.db").expanduser()
+DB_PATH = Path.home() / "Desktop" / "nex" / "nex.db"
 AUDIT_DB_PATH = Path("~/.config/nex/audit.db").expanduser()
 SESSIONS_PATH = Path("~/.config/nex/sessions.json").expanduser()
 API_KEY_PATH  = Path("~/.config/nex/api_keys.json").expanduser()
@@ -67,6 +67,9 @@ def audit_query(sql, params=()):
     except:
         return []
 
+def _now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
 # ── API routes for dashboard data ─────────────────────────────────────────────
 
 @app.route("/dash/stats")
@@ -87,13 +90,38 @@ def dash_stats():
         pass
     total_requests = sum(v.get("requests", 0) for v in keys.values())
 
+    # Quality scorer data from nex_belief_quality if available
+    avg_quality  = None
+    quality_dist = None
+    scored_by    = "confidence_fallback"
+    try:
+        has_qs = db_scalar(
+            "SELECT COUNT(*) FROM pragma_table_info('beliefs') WHERE name='quality_score'"
+        )
+        if has_qs:
+            avg_quality = round(float(db_scalar(
+                "SELECT AVG(quality_score) FROM beliefs WHERE quality_score IS NOT NULL"
+            ) or 0), 3)
+            quality_dist = {
+                "elite":  db_scalar("SELECT COUNT(*) FROM beliefs WHERE quality_score >= 0.70"),
+                "high":   db_scalar("SELECT COUNT(*) FROM beliefs WHERE quality_score >= 0.50 AND quality_score < 0.70"),
+                "medium": db_scalar("SELECT COUNT(*) FROM beliefs WHERE quality_score >= 0.30 AND quality_score < 0.50"),
+                "low":    db_scalar("SELECT COUNT(*) FROM beliefs WHERE quality_score < 0.30"),
+            }
+            scored_by = "quality_scorer"
+    except Exception:
+        pass
+
     return jsonify({
         "total_beliefs":    total,
         "hi_conf_beliefs":  hi_conf,
         "unique_sources":   sources,
         "active_sessions":  len(sessions),
         "total_requests":   total_requests,
-        "timestamp":        datetime.utcnow().isoformat()
+        "avg_quality":      avg_quality,
+        "quality_dist":     quality_dist,
+        "scored_by":        scored_by,
+        "timestamp":        _now_iso()
     })
 
 @app.route("/dash/topics")
@@ -133,16 +161,49 @@ def dash_gaps():
 
 @app.route("/dash/domain-activity")
 def dash_domain_activity():
-    domains = ["oncology", "cardiology", "finance", "legal", "ai", "climate", "neuroscience"]
+    TARGET  = 200
+    domains = ["oncology","cardiology","finance","legal","ai","climate","neuroscience"]
     result  = []
     for d in domains:
+        # Exact topic match — avoids overcounting from source LIKE
         count = db_scalar(
-            "SELECT COUNT(*) FROM beliefs WHERE topic LIKE ? OR source LIKE ?",
-            (f"%{d}%", f"%{d}%")
+            "SELECT COUNT(*) FROM beliefs WHERE topic = ?", (d,)
         )
-        result.append({"domain": d, "count": count})
+        result.append({
+            "domain": d,
+            "count":  count,
+            "target": TARGET,
+            "gap":    max(0, TARGET - count),
+            "pct":    round(min(count / TARGET, 1.0) * 100, 1),
+            "done":   count >= TARGET,
+        })
     result.sort(key=lambda x: -x["count"])
     return jsonify(result)
+
+@app.route("/dash/saturation")
+def dash_saturation():
+    """Proxy scheduler saturation status for dashboard. Falls back to DB counts."""
+    TARGET  = 200
+    domains = ["oncology","cardiology","finance","legal","ai","climate","neuroscience"]
+    try:
+        import requests as req
+        r = req.get("http://localhost:7825/scheduler/status", timeout=2)
+        if r.status_code == 200:
+            data = r.json()
+            return jsonify({
+                "status":       data.get("status", "unknown"),
+                "last_run":     data.get("saturation", {}).get("last_run"),
+                "domain_status": data.get("saturation", {}).get("domain_status", {}),
+                "total_beliefs": data.get("total_beliefs", 0),
+            })
+    except Exception:
+        pass
+    # Fallback: read directly from DB
+    domain_status = {}
+    for d in domains:
+        count = db_scalar("SELECT COUNT(*) FROM beliefs WHERE topic = ?", (d,))
+        domain_status[d] = {"count": count, "gap": max(0, TARGET - count), "done": count >= TARGET}
+    return jsonify({"status": "unknown", "last_run": None, "domain_status": domain_status})
 
 @app.route("/dash/recent-audit")
 def dash_recent_audit():
@@ -791,8 +852,8 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
   </div>
   <div class="stat-item">
     <div class="stat-label">NEX IQ</div>
-    <div class="stat-value" style="color:var(--gold)">92%</div>
-    <div class="stat-sub" style="color:var(--gold)">ELITE</div>
+    <div class="stat-value" id="statIQVal" style="color:var(--gold)">—</div>
+    <div class="stat-sub" id="statIQLabel" style="color:var(--gold)">ELITE</div>
   </div>
 </div>
 
@@ -801,8 +862,8 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
   <div style="background:var(--bg2);padding:16px 24px;">
     <div class="iq-block">
       <div class="iq-label">Cognitive Rating</div>
-      <div class="iq-bar-wrap"><div class="iq-bar"></div></div>
-      <div class="iq-value">92% · ELITE</div>
+      <div class="iq-bar-wrap"><div class="iq-bar" id="iqBar"></div></div>
+      <div class="iq-value" id="iqValue">— · —</div>
     </div>
   </div>
 </div>
@@ -821,10 +882,11 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- Domain Heatmap -->
+  <!-- Domain Saturation -->
   <div class="panel panel-right">
     <div class="panel-header">
-      <div class="panel-title"><span>02</span>Domain Heatmap</div>
+      <div class="panel-title"><span>02</span>Domain Saturation</div>
+      <div class="panel-badge">target: 200</div>
     </div>
     <div class="domain-grid" id="domainGrid">
       <!-- populated by JS -->
@@ -1005,19 +1067,55 @@ function renderTopics(rows) {
 }
 
 function renderDomains(rows) {
-  const max = Math.max(...rows.map(r => r.count), 1);
-  const grid = document.getElementById('domainGrid');
+  const TARGET = 200;
+  const grid   = document.getElementById('domainGrid');
   grid.innerHTML = rows.map(r => {
-    const color = DOMAIN_COLORS[r.domain] || '#4a6080';
-    const intensity = Math.max(0.1, r.count / max);
+    const color   = DOMAIN_COLORS[r.domain] || '#4a6080';
+    const pct     = r.pct ?? Math.min((r.count / TARGET) * 100, 100);
+    const done    = r.done ?? r.count >= TARGET;
+    const gap     = r.gap  ?? Math.max(0, TARGET - r.count);
+    const barCol  = done ? '#10b981' : (pct > 50 ? color : '#ff3e6c');
+    const status  = done ? '✓' : `${gap} to go`;
     return `
-      <div class="domain-cell" style="border-color:${color}33">
-        <div class="domain-cell" style="position:absolute;inset:0;background:${color};opacity:${intensity*0.12};border-radius:2px;"></div>
-        <div class="domain-name" style="position:relative">${r.domain}</div>
-        <div class="domain-count" style="position:relative;color:${color};text-shadow:0 0 10px ${color}66">${r.count}</div>
+      <div class="domain-cell" style="border-color:${color}33;padding:12px 10px;">
+        <div class="domain-name" style="position:relative;color:${done ? '#10b981' : 'var(--text-dim)'}">
+          ${r.domain}
+        </div>
+        <div class="domain-count" style="position:relative;color:${barCol};text-shadow:0 0 10px ${barCol}66;font-size:18px">
+          ${r.count}
+        </div>
+        <div style="margin-top:6px;height:3px;background:var(--bg);border-radius:1px;overflow:hidden;">
+          <div style="height:100%;width:${pct}%;background:${barCol};transition:width 1s ease;border-radius:1px;box-shadow:0 0 4px ${barCol}88;"></div>
+        </div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:8px;color:${done ? '#10b981' : 'var(--text-dim)'};margin-top:4px;letter-spacing:1px;">
+          ${status}
+        </div>
       </div>
     `;
   }).join('');
+}
+
+function renderQuality(stats) {
+  const q = stats.avg_quality;
+  if (q === null || q === undefined) return;
+  const pct     = Math.round(q * 100);
+  const bar     = document.getElementById('iqBar');
+  const val     = document.getElementById('iqValue');
+  const label   = pct >= 70 ? 'ELITE' : pct >= 50 ? 'HIGH' : pct >= 30 ? 'MEDIUM' : 'LOW';
+  const col     = pct >= 70 ? 'var(--accent)' : pct >= 50 ? 'var(--gold)' : 'var(--accent3)';
+  if (bar) {
+    bar.style.width = pct + '%';
+    bar.style.background = `linear-gradient(90deg, var(--accent2), ${col})`;
+  }
+  if (val) {
+    val.textContent = `${pct}% · ${label}`;
+    val.style.color = col;
+  }
+  // Also update stat bar IQ
+  const statIQ    = document.getElementById('statIQVal');
+  const statLabel = document.getElementById('statIQLabel');
+  if (statIQ)    { statIQ.textContent    = pct + '%'; statIQ.style.color = col; }
+  if (statLabel) { statLabel.textContent = label; statLabel.style.color = col; }
 }
 
 function renderGrowth(data) {
@@ -1120,6 +1218,7 @@ async function fetchAll() {
       fetch('/dash/webhooks').then(r=>r.json())
     ]);
     renderStats(stats);
+    renderQuality(stats);
     renderTopics(topics);
     renderGrowth(growth);
     renderGaps(gaps);

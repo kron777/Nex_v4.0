@@ -30,7 +30,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 CFG          = Path("~/.config/nex").expanduser()
-DB_PATH      = CFG / "nex.db"
+DB_PATH = Path.home() / "Desktop" / "nex" / "nex.db"
 BELIEFS_PATH = CFG / "beliefs.json"
 
 # ── tunables ──────────────────────────────────────────────────────
@@ -398,6 +398,33 @@ def _compose_reply(
     )
 
 
+# ── use_count feedback ───────────────────────────────────────────────────────
+def _increment_use_counts(belief_ids: list):
+    """
+    Increment use_count for every belief retrieved during reason().
+    Feeds the use_freq component of nex_belief_quality.score_belief().
+    Runs fire-and-forget in a background thread.
+    """
+    if not belief_ids or not DB_PATH.exists():
+        return
+    def _write():
+        try:
+            con = _db()
+            for bid in belief_ids:
+                try:
+                    con.execute(
+                        "UPDATE beliefs SET use_count = COALESCE(use_count, 0) + 1 WHERE id = ?",
+                        (bid,)
+                    )
+                except Exception:
+                    pass
+            con.commit()
+            con.close()
+        except Exception:
+            pass
+    threading.Thread(target=_write, daemon=True, name="use-count-update").start()
+
+
 # ── public API ────────────────────────────────────────────────────
 def reason(query: str, debug: bool = False) -> dict:
     """
@@ -439,6 +466,11 @@ def reason(query: str, debug: bool = False) -> dict:
 
             if debug:
                 print(f"  [reason v2] Graph expansion added {len(expanded)} linked beliefs")
+
+    # Increment use_count for retrieved beliefs (feeds quality scorer)
+    _used_ids = [b["id"] for b in supporting + opposing if "id" in b]
+    if _used_ids:
+        _increment_use_counts(_used_ids)
 
     matched_tensions = _match_tensions(query, tensions)
     epistemic        = _uncertainty_interval(supporting, opposing)
