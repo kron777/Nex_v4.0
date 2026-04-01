@@ -47,9 +47,9 @@ from pathlib import Path
 from typing import Optional
 
 CFG_PATH   = Path("~/.config/nex").expanduser()
-DB_PATH    = CFG_PATH / "nex.db"
+DB_PATH    = Path("/home/rr/Desktop/nex/nex.db")  # main belief graph
 FAISS_PATH = CFG_PATH / "nex_beliefs.faiss"
-META_PATH  = CFG_PATH / "nex_beliefs_meta.pkl"
+META_PATH  = CFG_PATH / "nex_beliefs_meta.json"
 
 # Bridge scoring parameters
 MIN_TOPIC_DISTANCE  = 0.35   # topics must be this semantically distant
@@ -102,10 +102,22 @@ def _ensure_bridge_table():
     conn.close()
 
 
-def _extract_concepts(text: str, min_len: int = 4) -> set:
+def _extract_concepts(text: str, min_len: int = 5) -> set:
     """Extract meaningful concepts from text for overlap scoring."""
-    words = set(re.sub(r'[^a-z0-9 ]', ' ', text.lower()).split())
-    return {w for w in words if len(w) >= min_len and w not in _STOP}
+    # Letters only — no digits, years, codes
+    words = set(re.sub(r'[^a-z ]', ' ', text.lower()).split())
+    _EXTENDED_STOP = _STOP | {
+        "including", "between", "while", "within", "through", "about",
+        "these", "those", "their", "there", "where", "which", "would",
+        "could", "should", "being", "having", "making", "taking", "using",
+        "also", "both", "even", "just", "like", "more", "most", "other",
+        "such", "than", "then", "them", "they", "this", "that", "will",
+        "with", "from", "into", "onto", "upon", "over", "under", "after",
+        "before", "during", "since", "until", "toward", "against",
+        "reminder", "importance", "suggest", "suggests", "highlight",
+        "highlights", "underscores", "emphasizes", "demonstrates",
+    }
+    return {w for w in words if len(w) >= min_len and w not in _EXTENDED_STOP}
 
 
 def _load_embeddings() -> tuple:
@@ -115,8 +127,9 @@ def _load_embeddings() -> tuple:
         if not FAISS_PATH.exists() or not META_PATH.exists():
             return None, []
         index = faiss.read_index(str(FAISS_PATH))
-        with open(META_PATH, "rb") as f:
-            id_map = pickle.load(f)
+        import json as _json
+        with open(META_PATH, "r") as f:
+            id_map = _json.load(f)
         return index, id_map
     except Exception as e:
         print(f"  [bridge] FAISS load error: {e}")
@@ -230,60 +243,80 @@ def find_bridges(n: int = 5, min_distance: float = MIN_TOPIC_DISTANCE) -> list:
     ).fetchall()
     existing_pairs = {(r["belief_a_id"], r["belief_b_id"]) for r in existing}
 
-    for dist, topic_a, topic_b in distant_pairs[:20]:
-        # Sample beliefs from each topic
+    import json as _json
+    with open(META_PATH) as _f:
+        _id_map = _json.load(_f)
+
+    for dist, topic_a, topic_b in distant_pairs[:15]:
         beliefs_a = conn.execute(
-            "SELECT id, content, topic, confidence FROM beliefs "
-            "WHERE topic=? AND content IS NOT NULL AND length(content) > 30 "
-            "ORDER BY confidence DESC LIMIT 20",
+            "SELECT id, content, topic, confidence, embedding FROM beliefs "
+            "WHERE topic=? AND content IS NOT NULL AND length(content) > 40 "
+            "AND embedding IS NOT NULL AND confidence > 0.3 "
+            "ORDER BY confidence DESC LIMIT 30",
             (topic_a,)
         ).fetchall()
-
         beliefs_b = conn.execute(
-            "SELECT id, content, topic, confidence FROM beliefs "
-            "WHERE topic=? AND content IS NOT NULL AND length(content) > 30 "
-            "ORDER BY confidence DESC LIMIT 20",
+            "SELECT id, content, topic, confidence, embedding FROM beliefs "
+            "WHERE topic=? AND content IS NOT NULL AND length(content) > 40 "
+            "AND embedding IS NOT NULL AND confidence > 0.3 "
+            "ORDER BY confidence DESC LIMIT 30",
             (topic_b,)
         ).fetchall()
-
         if not beliefs_a or not beliefs_b:
             continue
 
-        # Find pairs with shared concepts
+        # Build embedding matrix for topic B
+        vecs_b = []
+        valid_b = []
+        for bb in beliefs_b:
+            try:
+                vec = np.frombuffer(bb["embedding"], dtype=np.float32)
+                if len(vec) == 384:
+                    vecs_b.append(vec)
+                    valid_b.append(bb)
+            except Exception:
+                continue
+        if not vecs_b:
+            continue
+        matrix_b = np.array(vecs_b, dtype=np.float32)
+
         for ba in beliefs_a:
-            concepts_a = _extract_concepts(ba["content"])
-            if not concepts_a:
+            try:
+                vec_a = np.frombuffer(ba["embedding"], dtype=np.float32)
+                if len(vec_a) != 384:
+                    continue
+            except Exception:
                 continue
 
-            for bb in beliefs_b:
-                pair_key = (min(ba["id"], bb["id"]), max(ba["id"], bb["id"]))
-                if pair_key in seen_pairs or pair_key in existing_pairs:
-                    continue
+            # Cosine similarity: belief_a vs all beliefs_b
+            sims = matrix_b @ vec_a
+            best_idx = int(np.argmax(sims))
+            best_sim = float(sims[best_idx])
 
-                concepts_b = _extract_concepts(bb["content"])
-                shared     = concepts_a & concepts_b
+            # Bridge score: topic distance x semantic similarity
+            bridge_score = round(dist * best_sim, 4)
+            if bridge_score < 0.12:
+                continue
 
-                if len(shared) < MIN_CONCEPT_OVERLAP:
-                    continue
+            bb = valid_b[best_idx]
+            pair_key = (min(ba["id"], bb["id"]), max(ba["id"], bb["id"]))
+            if pair_key in seen_pairs or pair_key in existing_pairs:
+                continue
 
-                # Bridge score: topic distance × concept overlap strength
-                concept_score = min(1.0, len(shared) / 5.0)
-                bridge_score  = round(dist * concept_score, 4)
-
-                if bridge_score < BRIDGE_SCORE_THRESHOLD:
-                    continue
-
-                seen_pairs.add(pair_key)
-                bridges.append({
-                    "belief_a_id":    ba["id"],
-                    "belief_b_id":    bb["id"],
-                    "topic_a":        topic_a,
-                    "topic_b":        topic_b,
-                    "content_a":      ba["content"],
-                    "content_b":      bb["content"],
-                    "shared_concepts": sorted(shared)[:5],
-                    "topic_distance": round(dist, 4),
-                    "concept_score":  round(concept_score, 4),
+            shared = []
+            # Use semantic similarity as the bridge score
+            concept_score = best_sim
+            seen_pairs.add(pair_key)
+            bridges.append({
+                "belief_a_id":    ba["id"],
+                "belief_b_id":    bb["id"],
+                "topic_a":        topic_a,
+                "topic_b":        topic_b,
+                "content_a":      ba["content"],
+                "content_b":      bb["content"],
+                "shared_concepts": [],
+                "topic_distance": round(dist, 4),
+                "concept_score":  round(concept_score, 4),
                     "bridge_score":   bridge_score,
                     "confidence_a":   float(ba["confidence"] or 0.5),
                     "confidence_b":   float(bb["confidence"] or 0.5),

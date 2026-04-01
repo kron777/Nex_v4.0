@@ -4,266 +4,259 @@ nex_embed.py — NEX Build 2: Embedding Pipeline
 ===============================================
 Place at: ~/Desktop/nex/nex_embed.py
 
-Embeds all beliefs using all-MiniLM-L6-v2 (CPU, fast, ~80MB).
-Stores embeddings as BLOBs in beliefs.embedding column.
-Builds FAISS index and saves to ~/.config/nex/nex_beliefs.faiss
+Embeds all beliefs in nex.db using all-MiniLM-L6-v2,
+stores embeddings as BLOBs in the beliefs table,
+and builds a FAISS index for semantic search.
 
-This is the foundation of everything downstream:
-  - Semantic belief retrieval (replaces TF-IDF in soul_loop)
-  - LLM-free relation mapping (Build 3)
-  - Bridge detector (Build 9)
-  - Native opinions engine (Build 4)
+Run once, then nex_bridge_detector and nex_semantic_retrieval
+will use the index automatically.
 
 Usage:
-  python3 nex_embed.py              # embed all, build index
-  python3 nex_embed.py --check      # show embedding coverage only
-  python3 nex_embed.py --index-only # rebuild FAISS from existing embeddings
-  python3 nex_embed.py --test "consciousness and emergence"
+    python3 nex_embed.py              # embed all unembedded beliefs
+    python3 nex_embed.py --rebuild    # rebuild entire index from scratch
+    python3 nex_embed.py --index-only # just rebuild FAISS from existing BLOBs
 """
 
-import sqlite3
-import numpy as np
-import pickle
-import struct
-import time
 import sys
+import time
+import struct
+import sqlite3
 import argparse
+import numpy as np
 from pathlib import Path
 
-CFG_PATH   = Path("~/.config/nex").expanduser()
-DB_PATH    = CFG_PATH / "nex.db"
+NEX_DIR   = Path("/home/rr/Desktop/nex")
+DB_PATH   = NEX_DIR / "nex.db"
+CFG_PATH  = Path("~/.config/nex").expanduser()
 FAISS_PATH = CFG_PATH / "nex_beliefs.faiss"
-META_PATH  = CFG_PATH / "nex_beliefs_meta.pkl"   # belief_id → faiss index mapping
+META_PATH  = CFG_PATH / "nex_beliefs_meta.json"
 
-BATCH_SIZE   = 128    # beliefs per embedding batch
-MODEL_NAME   = "all-MiniLM-L6-v2"
-EMBED_DIM    = 384    # all-MiniLM-L6-v2 output dimension
+BATCH_SIZE  = 256   # beliefs per embedding batch
+MODEL_NAME  = "all-MiniLM-L6-v2"
+DIM         = 384   # embedding dimensions for MiniLM
 
 
-def _db():
+def _get_db():
     conn = sqlite3.connect(str(DB_PATH), timeout=30)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def load_model():
-    print(f"  Loading {MODEL_NAME}...")
+def _ensure_embedding_column():
+    """Add embedding column to beliefs table if missing."""
+    conn = _get_db()
+    try:
+        conn.execute("ALTER TABLE beliefs ADD COLUMN embedding BLOB")
+        conn.commit()
+        print("  Added embedding column to beliefs table")
+    except sqlite3.OperationalError:
+        pass  # column already exists
+    conn.close()
+
+
+def _vec_to_blob(vec: np.ndarray) -> bytes:
+    return vec.astype(np.float32).tobytes()
+
+
+def _blob_to_vec(blob: bytes) -> np.ndarray:
+    return np.frombuffer(blob, dtype=np.float32)
+
+
+def embed_beliefs(rebuild: bool = False):
+    """
+    Embed all beliefs without embeddings (or all, if rebuild=True).
+    Stores as BLOB in beliefs.embedding column.
+    """
     from sentence_transformers import SentenceTransformer
+
+    print(f"  Loading model: {MODEL_NAME}...")
     model = SentenceTransformer(MODEL_NAME)
     print(f"  Model loaded.")
-    return model
 
+    conn = _get_db()
 
-def embed_all(model, force: bool = False):
-    """
-    Embed all beliefs missing embeddings.
-    Saves embedding BLOBs directly to DB.
-    Returns count of beliefs embedded.
-    """
-    conn = _db()
-
-    if force:
-        rows = conn.execute(
-            "SELECT id, content FROM beliefs WHERE content IS NOT NULL AND length(content) > 10"
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            "SELECT id, content FROM beliefs "
-            "WHERE embedding IS NULL AND content IS NOT NULL AND length(content) > 10"
-        ).fetchall()
-
-    if not rows:
-        print("  All beliefs already embedded.")
-        conn.close()
-        return 0
-
-    print(f"  Embedding {len(rows)} beliefs in batches of {BATCH_SIZE}...")
-    total = len(rows)
-    embedded = 0
-    t0 = time.time()
-
-    for i in range(0, total, BATCH_SIZE):
-        batch = rows[i:i + BATCH_SIZE]
-        texts = [r["content"][:512] for r in batch]  # truncate long beliefs
-        ids   = [r["id"] for r in batch]
-
-        vecs = model.encode(texts, show_progress_bar=False, batch_size=BATCH_SIZE)
-
-        updates = []
-        for bid, vec in zip(ids, vecs):
-            blob = vec.astype(np.float32).tobytes()
-            updates.append((blob, bid))
-
-        conn.executemany("UPDATE beliefs SET embedding=? WHERE id=?", updates)
+    if rebuild:
+        print("  Rebuild mode — clearing existing embeddings...")
+        conn.execute("UPDATE beliefs SET embedding = NULL")
         conn.commit()
 
-        embedded += len(batch)
-        elapsed  = time.time() - t0
-        rate     = embedded / elapsed
-        eta      = (total - embedded) / rate if rate > 0 else 0
-        print(f"  [{embedded}/{total}] {rate:.0f} beliefs/sec  ETA {eta:.0f}s", end="\r")
+    # Count unembedded
+    total = conn.execute(
+        "SELECT COUNT(*) FROM beliefs WHERE embedding IS NULL AND content IS NOT NULL"
+    ).fetchone()[0]
+    print(f"  Beliefs to embed: {total:,}")
 
-    print(f"\n  Embedded {embedded} beliefs in {time.time()-t0:.1f}s")
+    if total == 0:
+        print("  All beliefs already embedded.")
+        conn.close()
+        return
+
+    embedded = 0
+    start    = time.time()
+
+    while True:
+        rows = conn.execute(
+            "SELECT id, content FROM beliefs "
+            "WHERE embedding IS NULL AND content IS NOT NULL "
+            "LIMIT ?",
+            (BATCH_SIZE,)
+        ).fetchall()
+
+        if not rows:
+            break
+
+        ids      = [r["id"] for r in rows]
+        contents = [r["content"][:512] for r in rows]  # truncate for speed
+
+        vecs = model.encode(
+            contents,
+            batch_size=64,
+            show_progress_bar=False,
+            normalize_embeddings=True,
+        )
+
+        for bid, vec in zip(ids, vecs):
+            blob = _vec_to_blob(vec)
+            conn.execute(
+                "UPDATE beliefs SET embedding = ? WHERE id = ?",
+                (blob, bid)
+            )
+
+        conn.commit()
+        embedded += len(rows)
+
+        elapsed  = time.time() - start
+        rate     = embedded / elapsed if elapsed > 0 else 0
+        remaining = (total - embedded) / rate if rate > 0 else 0
+
+        print(
+            f"  [{embedded:,}/{total:,}] "
+            f"{rate:.0f}/s — "
+            f"~{remaining/60:.1f}min remaining",
+            end="\r"
+        )
+
+    print(f"\n  Embedded {embedded:,} beliefs in {time.time()-start:.1f}s")
     conn.close()
-    return embedded
 
 
 def build_faiss_index():
     """
-    Build FAISS flat L2 index from all embedded beliefs.
-    Saves index + belief_id mapping to disk.
-    Returns (index, id_map) where id_map[faiss_idx] = belief_id
+    Build FAISS index from all embedded beliefs.
+    Saves to ~/.config/nex/nex_beliefs.faiss
     """
-    try:
-        import faiss
-    except ImportError:
-        print("  faiss not installed — installing...")
-        import subprocess
-        subprocess.run([sys.executable, "-m", "pip", "install", "faiss-cpu", "--quiet"], check=True)
-        import faiss
+    import faiss
+    import json
 
-    conn = _db()
+    print("  Building FAISS index...")
+    conn = _get_db()
+
     rows = conn.execute(
-        "SELECT id, embedding FROM beliefs WHERE embedding IS NOT NULL"
+        "SELECT id, embedding FROM beliefs "
+        "WHERE embedding IS NOT NULL"
     ).fetchall()
     conn.close()
 
     if not rows:
-        print("  No embeddings found — run embed_all first")
-        return None, []
+        print("  No embeddings found — run embed_beliefs first")
+        return
 
-    print(f"  Building FAISS index over {len(rows)} beliefs...")
-
-    id_map = []
-    vecs   = []
+    print(f"  Loading {len(rows):,} embeddings...")
+    ids  = []
+    vecs = []
     for row in rows:
-        blob = row["embedding"]
-        vec  = np.frombuffer(blob, dtype=np.float32)
-        if vec.shape[0] == EMBED_DIM:
-            id_map.append(row["id"])
-            vecs.append(vec)
+        try:
+            vec = _blob_to_vec(row["embedding"])
+            if len(vec) == DIM:
+                ids.append(row["id"])
+                vecs.append(vec)
+        except Exception:
+            continue
 
-    matrix = np.stack(vecs).astype(np.float32)
+    if not vecs:
+        print("  No valid embeddings found")
+        return
 
-    # Normalize for cosine similarity via inner product
-    norms  = np.linalg.norm(matrix, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
-    matrix = matrix / norms
+    matrix = np.array(vecs, dtype=np.float32)
+    print(f"  Matrix shape: {matrix.shape}")
 
-    index = faiss.IndexFlatIP(EMBED_DIM)   # Inner Product = cosine on normalized vecs
+    # Build flat L2 index (exact search — upgrade to IVF for >1M beliefs)
+    index = faiss.IndexFlatIP(DIM)   # Inner product = cosine on normalized vecs
     index.add(matrix)
 
-    # Save
+    CFG_PATH.mkdir(parents=True, exist_ok=True)
     faiss.write_index(index, str(FAISS_PATH))
-    with open(META_PATH, "wb") as f:
-        pickle.dump(id_map, f)
 
-    print(f"  FAISS index: {index.ntotal} vectors → {FAISS_PATH}")
-    print(f"  ID map:      {len(id_map)} entries → {META_PATH}")
-    return index, id_map
+    # Save ID map
+    import json
+    with open(META_PATH, 'w') as f:
+        json.dump(ids, f)
+
+    print(f"  FAISS index saved: {FAISS_PATH}")
+    print(f"  ID map saved:      {META_PATH}")
+    print(f"  Index size:        {index.ntotal:,} vectors")
 
 
-def semantic_search(query: str, k: int = 10, model=None) -> list:
+def search(query: str, k: int = 10):
     """
-    Search beliefs by semantic similarity to query.
-    Returns list of {belief_id, score, content, topic}.
+    Semantic search — find k most similar beliefs to query.
+    Used to test the index after building.
     """
-    try:
-        import faiss
-    except ImportError:
-        return []
+    import faiss
+    import json
+    from sentence_transformers import SentenceTransformer
 
-    if not FAISS_PATH.exists() or not META_PATH.exists():
-        print("  FAISS index not found — run nex_embed.py first")
-        return []
+    if not FAISS_PATH.exists():
+        print("  No FAISS index found — run build first")
+        return
 
-    if model is None:
-        from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer(MODEL_NAME)
+    model = SentenceTransformer(MODEL_NAME)
+    vec   = model.encode([query], normalize_embeddings=True).astype(np.float32)
 
-    index = faiss.read_index(str(FAISS_PATH))
-    with open(META_PATH, "rb") as f:
-        id_map = pickle.load(f)
+    index  = faiss.read_index(str(FAISS_PATH))
+    with open(META_PATH) as f:
+        id_map = json.load(f)
 
-    # Embed query
-    vec = model.encode([query], show_progress_bar=False)[0].astype(np.float32)
-    vec = vec / (np.linalg.norm(vec) or 1.0)
-    vec = vec.reshape(1, -1)
+    distances, indices = index.search(vec, k)
 
-    scores, indices = index.search(vec, k)
-
-    # Fetch belief content
-    conn = _db()
-    results = []
-    for score, idx in zip(scores[0], indices[0]):
-        if idx < 0 or idx >= len(id_map):
+    conn = _get_db()
+    print(f"\n  Top {k} results for: '{query}'\n")
+    for dist, idx in zip(distances[0], indices[0]):
+        if idx < 0:
             continue
         bid = id_map[idx]
         row = conn.execute(
-            "SELECT id, content, topic, confidence FROM beliefs WHERE id=?", (bid,)
+            "SELECT content, topic, confidence FROM beliefs WHERE id=?", (bid,)
         ).fetchone()
         if row:
-            results.append({
-                "belief_id": bid,
-                "score":     round(float(score), 4),
-                "content":   row["content"],
-                "topic":     row["topic"] or "general",
-                "confidence": row["confidence"],
-            })
+            print(f"  [{row['topic']}|{row['confidence']:.2f}|sim={dist:.3f}]")
+            print(f"  {row['content'][:120]}")
+            print()
     conn.close()
-    return results
-
-
-def coverage_report():
-    """Print embedding coverage stats."""
-    conn = _db()
-    total   = conn.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
-    has_emb = conn.execute("SELECT COUNT(*) FROM beliefs WHERE embedding IS NOT NULL").fetchone()[0]
-    conn.close()
-    print(f"\n  Embedding coverage: {has_emb}/{total} ({100*has_emb//total if total else 0}%)")
-    if FAISS_PATH.exists():
-        size_mb = round(FAISS_PATH.stat().st_size / 1024 / 1024, 1)
-        print(f"  FAISS index:        {FAISS_PATH} ({size_mb} MB)")
-    else:
-        print(f"  FAISS index:        not built yet")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--check",      action="store_true", help="Coverage report only")
-    parser.add_argument("--index-only", action="store_true", help="Rebuild FAISS from existing embeddings")
-    parser.add_argument("--force",      action="store_true", help="Re-embed all beliefs")
-    parser.add_argument("--test",       type=str, default=None, help="Test semantic search query")
+    parser = argparse.ArgumentParser(description="NEX Embedding Pipeline — Build 2")
+    parser.add_argument("--rebuild",    action="store_true", help="Re-embed all beliefs")
+    parser.add_argument("--index-only", action="store_true", help="Just rebuild FAISS index")
+    parser.add_argument("--search",     type=str, default="", help="Test search query")
+    parser.add_argument("--k",          type=int, default=10,  help="Search results count")
     args = parser.parse_args()
 
-    if args.check:
-        coverage_report()
+    print("\n  NEX Embedding Pipeline — Build 2")
+    print("  " + "─"*50)
+
+    if args.search:
+        search(args.search, k=args.k)
         sys.exit(0)
 
-    if args.test:
-        print(f"\n  Semantic search: '{args.test}'")
-        results = semantic_search(args.test, k=8)
-        for r in results:
-            print(f"\n  [{r['score']:.4f}] {r['topic']}")
-            print(f"  {r['content'][:120]}")
-        sys.exit(0)
+    _ensure_embedding_column()
 
-    if args.index_only:
-        build_faiss_index()
-        sys.exit(0)
+    if not args.index_only:
+        embed_beliefs(rebuild=args.rebuild)
 
-    # Full run: embed → index
-    print(f"\n  NEX Build 2 — Embedding Pipeline")
-    print(f"  {'─'*45}")
-    coverage_report()
+    build_faiss_index()
 
-    model = load_model()
-
-    n = embed_all(model, force=args.force)
-    if n > 0 or args.force:
-        build_faiss_index()
-    elif not FAISS_PATH.exists():
-        build_faiss_index()
-
-    print(f"\n  Done.")
-    coverage_report()
+    print("\n  Build 2 complete.")
+    print(f"  FAISS index: {FAISS_PATH}")
+    print(f"  Run test:    python3 nex_embed.py --search 'consciousness and computation'")
