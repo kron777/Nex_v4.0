@@ -264,6 +264,21 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
         raw = ". ".join(unique_s).strip()
         if raw and not raw.endswith("."):
             raw += "."
+        # Anti-overconfidence correction — replace assertive phrases with calibrated ones
+        overconfident = [
+            ('I am certain', 'I hold'),
+            ('I am absolutely', 'I find'),
+            ('It is undoubtedly', 'I believe'),
+            ('It is obvious', 'The evidence suggests'),
+            ('clearly shows', 'suggests'),
+            ('it is clear that', 'I find that'),
+            ('undoubtedly', 'likely'),
+            ('without question', 'I think'),
+            ('it is certain', 'I hold'),
+        ]
+        for phrase, replacement in overconfident:
+            final = final.replace(phrase, replacement)
+            final = final.replace(phrase.lower(), replacement.lower())
         # Cap at 3 sentences
         final = ". ".join(unique_s[:3]).strip()
         if final and not final.endswith("."):
@@ -309,6 +324,16 @@ def generate(query: str) -> str:
                 belief_text = belief_text + tension_note if belief_text else tension_note
     except Exception:
         pass
+    # 2b1. Metacognitive calibration — calibrate voice to belief density
+    _belief_lines = [l for l in belief_text.split("\n") if l.strip("- ").strip()]
+    _belief_count = len(_belief_lines)
+    if _belief_count < 2:
+        # Thin coverage — force gaps intent, signal uncertainty
+        intent = "gaps"
+        belief_text = belief_text + "\n- My beliefs on this topic are sparse."
+    elif _belief_count >= 5:
+        # Rich coverage — allow assert if not already overridden
+        pass  # keep current intent
     # 2b2. Live bridge firing — inject cross-domain surprise if relevant
     try:
         from nex_live_bridge import get_live_bridge, bridge_to_belief_text
