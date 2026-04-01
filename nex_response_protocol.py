@@ -279,6 +279,21 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
         for phrase, replacement in overconfident:
             raw = raw.replace(phrase, replacement)
             raw = raw.replace(phrase.lower(), replacement.lower())
+        # Anti-overconfidence correction
+        overconfident = [
+            ('I am certain', 'I hold'),
+            ('I am absolutely', 'I find'),
+            ('It is undoubtedly', 'I believe'),
+            ('It is obvious', 'The evidence suggests'),
+            ('clearly shows', 'suggests'),
+            ('it is clear that', 'I find that'),
+            ('undoubtedly', 'likely'),
+            ('without question', 'I think'),
+            ('it is certain', 'I hold'),
+        ]
+        for phrase, replacement in overconfident:
+            raw = raw.replace(phrase, replacement)
+            raw = raw.replace(phrase.lower(), replacement.lower())
         # Cap at 3 sentences
         final = ". ".join(unique_s[:3]).strip()
         if final and not final.endswith("."):
@@ -334,6 +349,12 @@ def generate(query: str) -> str:
     elif _belief_count >= 5:
         # Rich coverage — allow assert if not already overridden
         pass  # keep current intent
+    # 2b1. Metacognitive calibration — calibrate voice to belief density
+    _belief_lines = [l for l in belief_text.split("\n") if l.strip("- ").strip()]
+    _belief_count = len(_belief_lines)
+    if _belief_count < 2:
+        intent = "gaps"
+        belief_text = belief_text + "\n- My beliefs on this topic are sparse."
     # 2b2. Live bridge firing — inject cross-domain surprise if relevant
     try:
         from nex_live_bridge import get_live_bridge, bridge_to_belief_text
@@ -353,7 +374,14 @@ def generate(query: str) -> str:
         _raw_beliefs = [b.strip("- ").strip() for b in belief_text.split("\n") if b.strip("- ").strip()]
         _inference = infer_and_store(_raw_beliefs, query=query, topic=intent)
         if _inference:
-            belief_text = belief_text + f"\n- [MY INFERENCE] {_inference}"
+            belief_text = belief_text + "\n- " + _inference
+            try:
+                _l2 = retrieve_beliefs_by_intent(intent, _inference, n=2)
+                for _lb in _l2:
+                    if _lb not in belief_text:
+                        belief_text = belief_text + "\n- " + _lb
+            except Exception:
+                pass
     except Exception:
         pass
     # 3. Pick opener
