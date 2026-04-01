@@ -1506,6 +1506,50 @@ def express(
 
         return result.strip()
 
+    # ── WONDER — bridge detector cross-domain surprise ───────────────────────
+    _wonder_result = None
+    try:
+        import nex_bridge_detector as _bd
+        import nex_template_grammar as _tg
+        _current_topic = (reason_result.get("topic") or "").lower()
+        if confidence < 0.6 or intent_type == "wonder":
+            _bridges = _bd.get_recent_bridges(n=3)
+            _matched = None
+            for _br in _bridges:
+                _ta = (_br.get("topic_a") or "").lower()
+                _tb = (_br.get("topic_b") or "").lower()
+                if _current_topic and (
+                    _current_topic in _ta or _current_topic in _tb
+                    or _ta in _current_topic or _tb in _current_topic
+                ):
+                    _matched = _br
+                    break
+            # Fallback: cross_domain beliefs from reason_result as bridge candidate
+            if not _matched and cross_domain and len(cross_domain) >= 2:
+                _matched = {
+                    "content_a": cross_domain[0].get("content", ""),
+                    "content_b": cross_domain[1].get("content", ""),
+                    "topic_a":   cross_domain[0].get("topic", ""),
+                    "topic_b":   cross_domain[1].get("topic", ""),
+                }
+            if _matched:
+                _w = _tg.get_grammar().render(
+                    template_class = "WONDER",
+                    beliefs        = [_matched["content_a"], _matched["content_b"]],
+                    topic          = "{} and {}".format(
+                        (_matched["topic_a"] or "").replace("_", " "),
+                        (_matched["topic_b"] or "").replace("_", " "),
+                    ),
+                    temperature    = max(_etemp, 0.6),
+                )
+                if _w and _w.text and len(_w.text) > 60:
+                    _wonder_result = _w.text
+    except Exception:
+        pass
+
+    if _wonder_result:
+        return _wonder_result
+
     # ── POSITION / EXPLORATION — full argument ───────────────────────────────
     if confidence >= 0.82:
         openers = _OPENERS["position"]
