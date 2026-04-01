@@ -342,19 +342,26 @@ def _drive_beliefs() -> list[dict]:
         return []
 
 # Source quality tiers — used in _score_belief
-_HIGH_QUALITY_SOURCES = {
-    "scheduler_saturation", "distilled", "nex_reasoning", "conversation",
-    "injector", "nex_seed", "manual", "identity",
+# TIER 1: Hand-crafted / verified high-signal sources
+_TIER1_SOURCES = {
+    "nex_seed", "manual", "identity", "injector",
 }
+# TIER 2: Good automated sources — scheduler output, conversation learning
+_TIER2_SOURCES = {
+    "scheduler_saturation", "nex_reasoning", "conversation", "saturation_manual",
+}
+# TIER 3: Mixed quality — distilled/auto_growth produce inconsistent output
+_TIER3_SOURCES = {
+    "distilled", "auto_growth",
+}
+# TIER 4: Low-quality RSS/Reddit
 _LOW_QUALITY_SOURCES = {
-    # Reddit — high noise, low epistemic density
     "https://www.reddit.com/r/art/top/.rss?t=day",
     "https://www.reddit.com/r/nature/top/.rss?t=day",
     "https://www.reddit.com/r/consciousness/top/.rss?t=day",
     "https://www.reddit.com/r/MachineLearning/top/.rss?t=day",
     "https://www.reddit.com/r/science/top/.rss?t=day",
     "https://www.reddit.com/r/psychology/top/.rss?t=day",
-    # Low-signal RSS
     "https://www.theguardian.com/culture/rss",
     "https://www.theguardian.com/society/rss",
     "https://philosophynow.org/rss",
@@ -363,17 +370,30 @@ _LOW_QUALITY_SOURCES = {
 def _source_quality_modifier(belief: dict) -> float:
     """Return a score modifier based on belief source quality."""
     source = (belief.get("source") or "").strip()
-    if source in _HIGH_QUALITY_SOURCES:
-        return 0.4   # boost high-quality sources
+
+    # Empty source — unknown provenance, mild penalty
+    if not source:
+        return -0.3
+
+    if source in _TIER1_SOURCES:
+        return 0.6   # hand-crafted beliefs get strongest boost
+    if source in _TIER2_SOURCES:
+        return 0.3   # good automated sources
+    if source in _TIER3_SOURCES:
+        return -0.1  # distilled/auto_growth — slight penalty, inconsistent quality
     if source in _LOW_QUALITY_SOURCES:
-        return -0.6  # penalise low-quality sources hard
-    # Generic RSS/URL sources — mild penalty unless confidence is high
+        return -0.6  # hard penalty
+    # Reddit sources not explicitly listed
+    if "reddit.com" in source or "reddit" in source:
+        return -0.5
+    # Generic HTTP RSS — penalty scaled by confidence
     if source.startswith("http"):
         conf = belief.get("confidence", 0.5)
         if conf < 0.45:
-            return -0.4
+            return -0.5
         if conf < 0.55:
-            return -0.2
+            return -0.3
+        return -0.1
     return 0.0
 
 def _score_belief(belief: dict, tokens: set[str]) -> float:
