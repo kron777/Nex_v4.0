@@ -141,7 +141,10 @@ def _check_training_ready() -> bool:
     _train_check_t = now
     try:
         import sqlite3
-        db   = sqlite3.connect(str(CFG / "nex.db"), timeout=2)
+        # Use main nex.db (64k+ beliefs) not config DB (legacy)
+        _main_db_path = Path.home() / "Desktop" / "nex" / "nex.db"
+        _db_path = _main_db_path if _main_db_path.exists() else CFG / "nex.db"
+        db   = sqlite3.connect(str(_db_path), timeout=2)
         total    = db.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
         high     = db.execute("SELECT COUNT(*) FROM beliefs WHERE confidence > 0.7").fetchone()[0]
         avg_conf = db.execute("SELECT AVG(confidence) FROM beliefs").fetchone()[0] or 0
