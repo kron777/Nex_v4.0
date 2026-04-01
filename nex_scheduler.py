@@ -167,7 +167,7 @@ DEFAULT_SCHEDULE = {
         "start_hour":        2,
         "end_hour":          6,
         "target_per_domain": 200,
-        "domains": ["finance","legal","climate","cardiology","oncology","neuroscience","ai"],
+        "domains": ["finance","legal","climate","cardiology","oncology","neuroscience","free_will","machine_learning","ai"],
         "last_run":          None
     },
     "synthesis": {
@@ -267,6 +267,30 @@ DOMAIN_PROMPTS = {
         "What is predictive coding and how does it relate to perception?",
         "Explain the differences between episodic, semantic and procedural memory.",
     ],
+    "free_will": [
+        "Explain the compatibilist position on free will and determinism.",
+        "What is the hard problem of free will and why does it matter?",
+        "Describe how neuroscience has challenged traditional notions of free will.",
+        "What is libertarian free will and what are its main philosophical problems?",
+        "Explain how quantum indeterminacy relates to debates about free will.",
+        "What is the difference between hard determinism and soft determinism?",
+        "Describe the role of consciousness in decision-making and free will.",
+        "What is the Frankfurt cases argument and what does it show about moral responsibility?",
+        "Explain how the Libet experiments challenged our understanding of voluntary action.",
+        "What is agent causation theory and how does it differ from event causation?",
+    ],
+    "machine_learning": [
+        "Explain the bias-variance tradeoff in machine learning models.",
+        "Describe the key principles behind gradient descent optimisation.",
+        "What is overfitting and what techniques prevent it?",
+        "Explain the difference between supervised, unsupervised and reinforcement learning.",
+        "What is the curse of dimensionality and how does it affect ML models?",
+        "Describe how backpropagation works in neural networks.",
+        "What is attention mechanism and why did it revolutionise sequence modelling?",
+        "Explain the role of regularisation in preventing model overfitting.",
+        "What is transfer learning and why is it powerful in practice?",
+        "Describe the key differences between generative and discriminative models.",
+    ],
     "ai": [
         "Explain a key concept in transformer architecture design.",
         "Describe an important principle in reinforcement learning from human feedback.",
@@ -281,7 +305,7 @@ Respond with a single clear, precise, factual statement (2-4 sentences).
 No preamble. No 'I think'. Just the knowledge itself."""
 
 
-def saturate_domain(domain: str, target: int = 200) -> int:
+def saturate_domain(domain: str, target: int = 200, force: bool = False) -> int:
     current = db_scalar("SELECT COUNT(*) FROM beliefs WHERE topic = ?", (domain,))
     needed  = max(0, target - current)
     if needed == 0:
