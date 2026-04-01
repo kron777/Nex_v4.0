@@ -257,7 +257,7 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
         seen_s = set()
         unique_s = []
         for s in sentences:
-            key = s[:40].lower()
+            key = s[:25].lower()
             if key not in seen_s:
                 seen_s.add(key)
                 unique_s.append(s)
