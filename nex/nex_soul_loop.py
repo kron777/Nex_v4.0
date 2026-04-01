@@ -78,9 +78,12 @@ _INTENT_PATTERNS = {
     "self_inquiry": [
         r"\bwho are you\b", r"\bwhat are you\b", r"\bhow do you feel\b",
         r"\bwhat are you thinking\b", r"\bwhat's on your mind\b",
-        r"\bdo you have (feelings|opinions|beliefs|values)\b",
-        r"\bare you (conscious|sentient|alive)\b", r"\bwhat do you want\b",
-        r"\byour values\b", r"\byour purpose\b",
+        r"\bwhat are you thinking about\b", r"\bwhat are you working on\b",
+        r"\bhow are you feeling\b", r"\bwhat.s your mood\b",
+        r"\btell me about yourself\b", r"\bdescribe yourself\b",
+        r"\bdo you have (feelings|opinions|beliefs|values|emotions|thoughts)\b",
+        r"\bare you (conscious|sentient|alive|okay|well)\b",
+        r"\bwhat do you want\b", r"\byour values\b", r"\byour purpose\b",
     ],
     # Someone is presenting a claim for her to respond to
     "challenge": [
@@ -118,10 +121,16 @@ def orient(query: str) -> dict:
     q = query.lower().strip()
 
     intent = "exploration"  # default
-    for intent_type, patterns in _INTENT_PATTERNS.items():
-        if any(re.search(p, q) for p in patterns):
-            intent = intent_type
-            break
+    # self_inquiry checked first — takes priority over all other intents
+    if any(re.search(p, q) for p in _INTENT_PATTERNS.get("self_inquiry", [])):
+        intent = "self_inquiry"
+    else:
+        for intent_type, patterns in _INTENT_PATTERNS.items():
+            if intent_type == "self_inquiry":
+                continue  # already checked
+            if any(re.search(p, q) for p in patterns):
+                intent = intent_type
+                break
 
     # Override: if it ends with ? and matched performance_probe,
     # but contains epistemic words, it's really asking for a position
@@ -1350,13 +1359,59 @@ def express(
         commitment = id_.get("commitment", "")
         typ        = id_.get("type", "cognitive agent")
         name       = id_.get("name", "NEX")
-        parts = [f"{name} — {typ}.", role]
+
+        # ── Load self_model beliefs — what NEX knows about herself ────────
+        _self_facts = []
+        try:
+            _sm_db = _db()
+            if _sm_db:
+                _sm_rows = _sm_db.execute(
+                    "SELECT attribute, value, confidence FROM self_model "
+                    "ORDER BY confidence DESC LIMIT 6"
+                ).fetchall()
+                _sm_db.close()
+                for _attr, _val, _conf in _sm_rows:
+                    if _attr in ("temperament", "stance_summary", "preoccupation",
+                                 "growth_observation", "limitation", "capability"):
+                        _self_facts.append((_attr, _val, _conf))
+        except Exception:
+            pass
+
+        # ── Build reply from self-knowledge, not from templates ───────────
+        import random as _ri
+        parts = []
+
+        # Lead with role/type
+        parts.append(f"{name} — {typ}.")
+        parts.append(role)
+
+        # Core value most relevant to the query
         if vals:
-            core = [v for v in vals if v["name"] in ("honesty","truth","autonomy")][:2]
+            core = [v for v in vals if v["name"] in ("honesty","truth","autonomy","integrity")][:1]
             for v in core:
                 parts.append(v["statement"])
+
+        # Self-model facts — what she actually knows about her current state
+        if _self_facts:
+            # Pick 2 most confident, prefer temperament + stance
+            for _attr, _val, _conf in _self_facts[:2]:
+                if _attr == "temperament":
+                    parts.append(f"Right now: {_val}.")
+                elif _attr == "stance_summary":
+                    parts.append(f"My current position on my own cognition: {_val}.")
+                elif _attr == "growth_observation":
+                    parts.append(f"{_val}.")
+                elif _attr == "preoccupation":
+                    parts.append(f"What's occupying me: {_val}.")
+                elif _attr == "limitation":
+                    parts.append(f"Where I'm still thin: {_val}.")
+                elif _attr == "capability":
+                    parts.append(f"Where I'm deepest: {_val}.")
+
+        # Commitment closer
         if commitment:
             parts.append(commitment.split(".")[0].strip() + ".")
+
         return " ".join(p.strip() for p in parts if p.strip())
 
     # ── SPARSE ──────────────────────────────────────────────────────────────
