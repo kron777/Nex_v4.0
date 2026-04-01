@@ -205,7 +205,7 @@ if __name__ == "__main__":
             console.print(f"  [dim]?[/dim]\n")
         else:
             with console.status("", spinner="dots"):
-                # Domain commands
+                pass
             if raw.startswith('/domain ') and _DOMAIN_OK:
                 domain = raw.split(' ', 1)[1].strip()
                 result = _domain.activate(domain)
