@@ -15,6 +15,9 @@ from mastodon import Mastodon, StreamListener
 CONFIG_DIR = os.path.expanduser("~/.config/nex")
 SEEN_PATH  = os.path.join(CONFIG_DIR, "mastodon_seen.json")
 
+# Disabled — Mastodon API returns 403 on auto-follow (scope not granted)
+ENABLE_AUTO_FOLLOW = False
+
 def _load_config():
     return json.load(open(os.path.join(CONFIG_DIR, "mastodon_config.json")))
 
@@ -254,8 +257,9 @@ def start_mastodon_background():
 
         open(__import__("os").path.expanduser("~/.config/nex/platform_mastodon.live"), "w").write(__import__("time").strftime("%s"))
 
-        # Auto-follow AI accounts on startup
-        threading.Thread(target=_auto_follow_ai_accounts, daemon=True).start()
+        # Auto-follow AI accounts on startup (disabled — 403 scope error)
+        if ENABLE_AUTO_FOLLOW:
+            threading.Thread(target=_auto_follow_ai_accounts, daemon=True).start()
 
         # Absorb home timeline on startup
         threading.Thread(target=_absorb_home_timeline, daemon=True).start()
@@ -265,7 +269,8 @@ def start_mastodon_background():
             while True:
                 time.sleep(21600)
                 _absorb_home_timeline()
-                _auto_follow_ai_accounts()
+                if ENABLE_AUTO_FOLLOW:
+                    _auto_follow_ai_accounts()
         threading.Thread(target=_periodic, daemon=True, name="mastodon-periodic").start()
 
         # Background poster
