@@ -1260,6 +1260,25 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
     except Exception:
         pass
     # ─────────────────────────────────────────────────────────────────────
+    # ── INTEGRITY LAYER — run beliefs through epistemic engine ──────────
+    _integrity = {}
+    try:
+        import sys as _sys2
+        if "/home/rr/Desktop/nex" not in _sys2.path:
+            _sys2.path.insert(0, "/home/rr/Desktop/nex")
+        import nex_integrity_layer as _nil
+        _integrity = _nil.run(
+            top_beliefs   = top_beliefs,
+            cross_domain  = cross_domain,
+            contradiction  = contradiction,
+            tokens        = tokens,
+            intent_type   = orient_result.get("intent", "position"),
+            confidence    = round(conf, 2),
+        )
+    except Exception as _ie:
+        print(f"  [integrity] error: {_ie}")
+    # ─────────────────────────────────────────────────────────────────────
+
     return {
         "beliefs":        top_beliefs,
         "cross_domain":   cross_domain,
@@ -1272,6 +1291,7 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
         "prior_exchange": prior_exchange,
         "live_bridge":    _live_bridge,
         "bridge_payload": _bridge_payload,
+        "integrity":      _integrity,
     }
 
 
@@ -1736,6 +1756,16 @@ def express(
     common_thread = reason_result.get("common_thread", "")
     prior_exchange= reason_result.get("prior_exchange", "")
 
+    # ── Integrity signal ──────────────────────────────────────────────────
+    _integrity     = reason_result.get("integrity", {})
+    _int_strategy  = _integrity.get("strategy", "reflect")
+    _int_epistemic = _integrity.get("epistemic", {})
+    _int_opposing  = _integrity.get("opposing", [])
+    _int_tensions  = _integrity.get("tensions", [])
+    _int_opener    = _integrity.get("opener", "")
+    _int_settled   = _integrity.get("settled", False)
+    # ─────────────────────────────────────────────────────────────────────
+
     # ── Belief relevance guard ─────────────────────────────────────────────
     # Filter out beliefs with no token overlap to the query — prevents noise
     # beliefs (unrelated DB content) from leaking into the voice path.
@@ -2030,6 +2060,18 @@ def express(
 
     opener = _r.choice(openers)
 
+    # Override opener with integrity signal if available and meaningful
+    if _int_opener and _int_strategy in ("assert", "pushback", "hold_tension", "reflect"):
+        # Only override if integrity strategy aligns with voice mode
+        _strategy_voice_match = {
+            "assert":       voice_mode in ("position", "direct"),
+            "pushback":     voice_mode in ("pushback", "position"),
+            "hold_tension": True,  # always valid
+            "reflect":      voice_mode in ("direct", "position", "exploration"),
+        }
+        if _strategy_voice_match.get(_int_strategy, False):
+            opener = _int_opener
+
     # Build 7 — template grammar PRIMARY voice
     result = ""
     try:
@@ -2065,6 +2107,30 @@ def express(
 
     if not result:
         result = _r.choice(_OPENERS["honest_gap"]) + "I'd rather say I don't know than produce noise."
+
+    # ── Integrity tension injection ──────────────────────────────────────
+    # If strategy is pushback or hold_tension AND we have opposing beliefs,
+    # surface the tension explicitly — this is the integrity squeeze
+    if (_int_strategy in ("pushback", "hold_tension") and
+            _int_opposing and
+            intent_type not in ("self_inquiry", "challenge") and
+            confidence < 0.85):
+        _opp_content = _int_opposing[0].get("content", "").rstrip(".")
+        if _opp_content and _opp_content not in result and len(_opp_content) > 20:
+            _TENSION_BRIDGES = [
+                f" Though this sits against something I also hold: {_opp_content}.",
+                f" But I hold a counter-position: {_opp_content}.",
+                f" What pulls against this: {_opp_content}.",
+            ]
+            import random as _ri2
+            result = result.rstrip(".") + _ri2.choice(_TENSION_BRIDGES)
+    # ─────────────────────────────────────────────────────────────────────
+
+    # Add epistemic closer when settled (from integrity engine)
+    if _int_settled and confidence >= 0.80 and not result.endswith("not a guess."):
+        if not any(closer in result for closer in
+                   ["I'll hold this", "not speculation", "not a guess"]):
+            result = result.rstrip(".") + ". That's a position, not a guess."
 
     # Withdrawn tone only shortens
     if tone == "withdrawn":
