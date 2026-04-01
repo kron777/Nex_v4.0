@@ -21,7 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path("~/Desktop/nex").expanduser()))
 
-DB_PATH = Path("~/.config/nex/nex.db").expanduser()
+DB_PATH = Path.home() / "Desktop" / "nex" / "nex.db"
 BF_PATH = Path("~/.config/nex/beliefs.json").expanduser()
 MIN_BELIEFS_PER_TOPIC = 10
 

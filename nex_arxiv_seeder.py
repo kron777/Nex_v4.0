@@ -30,7 +30,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from datetime import datetime, timezone
 
-DB_PATH  = Path("~/.config/nex/nex.db").expanduser()
+DB_PATH  = Path.home() / "Desktop" / "nex" / "nex.db"
 LOG_PATH = Path("/tmp/nex_arxiv_seeder.log")
 
 # PubMed E-utilities base URLs

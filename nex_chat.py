@@ -110,7 +110,7 @@ def cmd_batch():
 def cmd_beliefs():
     try:
         import sqlite3, pathlib
-        db = sqlite3.connect(pathlib.Path("~/.config/nex/nex.db").expanduser())
+        db = sqlite3.connect(pathlib.Path.home() / "Desktop" / "nex" / "nex.db")
         rows = db.execute(
             "SELECT content, confidence, source FROM beliefs "
             "WHERE confidence > 0.5 ORDER BY confidence DESC"
@@ -134,7 +134,7 @@ def cmd_seed(text: str):
     try:
         import sqlite3, pathlib
         from datetime import datetime as dt
-        db = sqlite3.connect(pathlib.Path("~/.config/nex/nex.db").expanduser())
+        db = sqlite3.connect(pathlib.Path.home() / "Desktop" / "nex" / "nex.db")
         db.execute(
             "INSERT INTO beliefs (content, confidence, timestamp, pinned, is_identity, source, salience, energy) "
             "VALUES (?,?,?,1,1,?,0.99,0.99)",
@@ -150,7 +150,7 @@ def cmd_demote(keyword: str):
         return
     try:
         import sqlite3, pathlib
-        db = sqlite3.connect(pathlib.Path("~/.config/nex/nex.db").expanduser())
+        db = sqlite3.connect(pathlib.Path.home() / "Desktop" / "nex" / "nex.db")
         db.execute(
             "UPDATE beliefs SET confidence=0.05 WHERE content LIKE ? AND (source != 'nex_core' OR source IS NULL)",
             (f"%{keyword}%",)

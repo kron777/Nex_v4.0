@@ -35,7 +35,7 @@ logging.basicConfig(
 log = logging.getLogger("nex_scheduler")
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-DB_PATH     = Path("~/.config/nex/nex.db").expanduser()
+DB_PATH = Path.home() / "Desktop" / "nex" / "nex.db"
 SCHED_PATH  = Path("~/.config/nex/scheduler.json").expanduser()
 EXPORT_PATH = Path("~/.config/nex/exports/").expanduser()
 

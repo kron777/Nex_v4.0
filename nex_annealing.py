@@ -30,7 +30,7 @@ from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 
-DB_PATH = Path.home() / ".config/nex/nex.db"
+DB_PATH = Path.home() / "Desktop" / "nex" / "nex.db"
 
 # Annealing parameters
 INITIAL_TEMPERATURE  = 1.0    # starting heat

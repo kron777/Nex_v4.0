@@ -13,7 +13,7 @@ import sqlite3
 import pathlib
 import datetime
 
-DB_PATH = pathlib.Path("~/.config/nex/nex.db").expanduser()
+DB_PATH = Path.home() / "Desktop" / "nex" / "nex.db"
 
 BELIEFS = [
 
