@@ -1063,11 +1063,38 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
             "nature":       "science",       # human nature / natural world
             "society":      "ethics",
             "culture":      "ethics",
+            "intelligence": "intelligence",  # direct topic map
+            "intelligent":  "intelligence",
+            "emergence":    "emergence",     # direct topic map
+            "emergent":     "emergence",
+            "emergentism":  "emergence",
+            "qualia":       "consciousness", # hard problem
+            "phenomenal":   "consciousness",
+            "zombie":       "consciousness",
+            "explanatory":  "consciousness",
+            "substrate":    "emergence",
+            "complexity":   "emergence",
+            "mathematics":  "mathematics",
+            "mathematical": "mathematics",
+            "neuroscience": "neuroscience",
+            "neural":       "neuroscience",
+            "brain":        "neuroscience",
+            "climate":      "climate",
+            "carbon":       "climate",
+            "emissions":    "climate",
         }
         # Also force "will" as a short token even though _tokenize filters < 4 chars
         _RAW_QUERY = orient_result.get("raw", "").lower()
         if "free will" in _RAW_QUERY and "philosophy" not in _all_covered:
             _extra_topics.add("philosophy")
+        # Multi-token concept forcing
+        if "hard problem" in _RAW_QUERY:
+            _extra_topics.add("consciousness")
+            _extra_topics.add("philosophy")
+        if "artificial intelligence" in _RAW_QUERY or "general intelligence" in _RAW_QUERY:
+            _extra_topics.add("intelligence")
+        if "climate change" in _RAW_QUERY or "global warming" in _RAW_QUERY:
+            _extra_topics.add("climate")
         # Inject mapped topics as synthetic tokens
         _extra_topics = set()
         for _tok in tokens:
