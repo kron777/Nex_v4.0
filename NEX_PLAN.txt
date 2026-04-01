@@ -99,7 +99,7 @@ STEP 10 - Webhook delivery dashboard panel [DONE]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PAYMENT -> KEY DELIVERY FLOW
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Personal $199 (Gumroad):
+Personal $49 (Gumroad):
   Purchase -> webhook fires on port 7777 -> nex_keygen.py generates key
   -> emailed automatically via nex_webhook_server.py
 
@@ -144,10 +144,10 @@ NEXT COMMERCIAL STEPS (in priority order)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COMMERCIAL PRICING
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-NEX Personal          $199        one-time, node-locked
-NEX Professional      $2,500/mo   multi-user, webhooks, audit, reasoning chain
-NEX Enterprise        $15,000/mo  unlimited, all features, domain activation
-NEX Research          $50,000/yr  source access, QLoRA pipeline
+NEX Personal          $49         one-time, node-locked
+NEX Professional      $99/mo      multi-user, webhooks, audit, reasoning chain
+NEX Enterprise        $149/mo     unlimited, all features, domain activation
+NEX Research          $199/yr     source access, QLoRA pipeline
 NEX Sovereign         custom      air-gapped, classified
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

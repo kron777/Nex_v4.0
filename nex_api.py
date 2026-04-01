@@ -1528,7 +1528,7 @@ select option{{background:#020510}}
       <select id="ktier">
         <option value="personal">PERSONAL — $49 one-time</option>
         <option value="professional">PROFESSIONAL — $99/mo</option>
-        <option value="enterprise">ENTERPRISE — $199/mo</option>
+        <option value="enterprise">ENTERPRISE — $149/mo</option>
         <option value="free">FREE</option>
       </select>
     </div>
