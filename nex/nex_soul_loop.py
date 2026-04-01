@@ -294,7 +294,8 @@ def _load_all_beliefs() -> list[dict]:
             _limit = 800 if _t in ("ai","philosophy","science","consciousness",
                                    "technology","society") else 300
             _rows = db.execute(
-                "SELECT id, content, confidence, topic, is_identity, 0 as pinned "
+                "SELECT id, content, confidence, topic, is_identity, 0 as pinned, "
+                "COALESCE(source, '') as source "
                 "FROM beliefs WHERE topic=? AND content IS NOT NULL "
                 "AND length(content) > 15 "
                 "AND (confidence >= 0.45 OR source IN "
