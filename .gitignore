@@ -96,3 +96,7 @@ nex_amend.py
 nex_final_fix.py
 nex_fix_affect.py
 nex_fix_affect_score.py
+nex.db
+*.faiss
+*.pkl
+nex_lora.gguf

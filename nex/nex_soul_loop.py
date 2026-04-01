@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Optional
 
 CFG     = Path("~/.config/nex").expanduser()
-DB_PATH = CFG / "nex.db"
+DB_PATH = Path("/home/rr/Desktop/nex/nex.db")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -261,11 +261,22 @@ def _load_all_beliefs() -> list[dict]:
     if not db:
         return []
     try:
-        rows = db.execute(
-            "SELECT id, content, confidence, topic, is_identity, pinned "
-            "FROM beliefs WHERE content IS NOT NULL AND length(content) > 15 "
-            "ORDER BY confidence DESC LIMIT 5000"
-        ).fetchall()
+        # Per-domain sampling — prevents high-volume domains crowding out small ones
+        _all_rows = []
+        _topics = [r[0] for r in db.execute(
+            "SELECT DISTINCT topic FROM beliefs WHERE content IS NOT NULL"
+        ).fetchall()]
+        for _t in _topics:
+            _limit = 800 if _t in ("ai","philosophy","science","consciousness",
+                                   "technology","society") else 300
+            _rows = db.execute(
+                "SELECT id, content, confidence, topic, is_identity, 0 as pinned "
+                "FROM beliefs WHERE topic=? AND content IS NOT NULL "
+                "AND length(content) > 15 ORDER BY confidence DESC LIMIT ?",
+                (_t, _limit)
+            ).fetchall()
+            _all_rows.extend(_rows)
+        rows = _all_rows
         db.close()
         return [dict(r) for r in rows]
     except Exception:
@@ -623,11 +634,27 @@ def _store_exchange(query: str, reply: str):
         except Exception: pass
 
 
-def _recall_prior_exchange(tokens: set) -> str:
+def _recall_prior_exchange(tokens: set, conversation_history: list = None) -> str:
     """
     Find the most relevant prior exchange from memory.
     Returns a thread-continuation string if relevant overlap found.
     """
+    # Check in-memory history first (most recent, most reliable)
+    if conversation_history and len(conversation_history) >= 2:
+        pairs = list(zip(conversation_history[::2], conversation_history[1::2]))
+        best_ov, best_reply = 0, ""
+        for prior_q, prior_r in reversed(pairs[-4:]):
+            ov = len(tokens & _tokenize(prior_q))
+            if ov > best_ov and ov >= 2:
+                best_ov, best_reply = ov, prior_r
+        if best_ov >= 2 and best_reply:
+            import random as _rpe
+            return _rpe.choice([
+                f"Building on what I said earlier: {best_reply[:80].rstrip(".")}."
+                f" — and here's where that leads:",
+                f"Earlier I held: {best_reply[:80].rstrip(".")}."
+                f" This connects directly:",
+            ])
     db = _db()
     if not db:
         return ""
@@ -654,7 +681,8 @@ def _recall_prior_exchange(tokens: set) -> str:
                 except Exception:
                     best_reply = ""
 
-        if best_ov >= 999 and best_reply:  # disabled until corpus stable
+        # DB fallback disabled — in-memory history is sufficient
+        if False and best_ov >= 2 and best_reply and not conversation_history:
             return f"Earlier I said: {best_reply[:100].rstrip('.')}. This connects because:"
         return ""
     except Exception:
@@ -728,7 +756,7 @@ def _socratic_pushback(query: str, beliefs: list, opinion: dict) -> str:
 
     return result.strip()
 
-def reason(orient_result: dict) -> dict:
+def reason(orient_result: dict, conversation_history: list = None) -> dict:
     """
     Pull her epistemic state for this query.
     v2: adds cross-domain retrieval, common thread, conversational memory.
@@ -776,6 +804,13 @@ def reason(orient_result: dict) -> dict:
         _semantic = _sr.boost_map(orient_result.get("raw", ""), k=20)
     except Exception:
         pass
+    # Domain guard — kill boosts for beliefs outside active topic cluster
+    if _expanded_topics and _semantic:
+        _id_to_topic = {b.get("id"): (b.get("topic") or "general") for b in all_b}
+        _semantic = {
+            bid: boost for bid, boost in _semantic.items()
+            if _id_to_topic.get(bid, "general") in _expanded_topics
+        }
 
     scored = []
     for b in all_b:
@@ -824,7 +859,17 @@ def reason(orient_result: dict) -> dict:
         _seen_prefixes.add(_prefix)
         _seen_wordsets.append(_words)
         _deduped.append((_score, _b))
-    top_beliefs = [b for _, b in _deduped[:8]]
+    # Domain guard — hard filter on top_beliefs after dedup
+    # Fallback: if filter yields < 3 beliefs, relax to unfiltered top scored
+    if _expanded_topics:
+        _filtered = [b for _, b in _deduped
+                     if (b.get("topic") or "general") in _expanded_topics][:8]
+        if len(_filtered) >= 3:
+            top_beliefs = _filtered
+        else:
+            top_beliefs = [b for _, b in _deduped[:8]]
+    else:
+        top_beliefs = [b for _, b in _deduped[:8]]
 
     # Derive primary topic from top belief
     topic = top_beliefs[0].get("topic", "") if top_beliefs else ""
@@ -844,7 +889,7 @@ def reason(orient_result: dict) -> dict:
     common_thread = _find_common_thread(all_retrieved) if len(all_retrieved) >= 3 else ""
 
     # Conversational memory — relevant prior exchange
-    prior_exchange = _recall_prior_exchange(tokens)
+    prior_exchange = _recall_prior_exchange(tokens, conversation_history=conversation_history)
 
     # Confidence — average of top beliefs
     conf = 0.0
@@ -1628,7 +1673,7 @@ class SoulLoop:
         state = self._get_state()
 
         # Step 3: Reason
-        reason_result = reason(orient_result)
+        reason_result = reason(orient_result, conversation_history=self._conversation_history)
 
         # Step 4: Intend
         intend_result = intend(orient_result, reason_result)
@@ -1636,9 +1681,20 @@ class SoulLoop:
         # Step 5: Express
         reply = express(orient_result, state, reason_result, intend_result)
 
-        # Store exchange for conversational continuity
+        # Store exchange — strip any prior_exchange prefix before storing
         try:
-            _store_exchange(query, reply)
+            _reply_to_store = reply
+            for _prefix in ["Earlier I said:", "Building on what I said:",
+                            "Earlier I held:", "We touched on this"]:
+                if _reply_to_store.startswith(_prefix):
+                    # Find the actual response after "This connects because:" or similar
+                    for _sep in ["This connects because:", "— and here's where that leads:",
+                                 "This connects directly:", "Building on that —"]:
+                        if _sep in _reply_to_store:
+                            _reply_to_store = _reply_to_store[_reply_to_store.index(_sep)+len(_sep):].strip()
+                            break
+                    break
+            _store_exchange(query, _reply_to_store)
         except Exception:
             pass
 
