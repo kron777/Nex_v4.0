@@ -91,7 +91,7 @@ def _already_exists(db: sqlite3.Connection, inference: str) -> bool:
         # Quick prefix check
         prefix = inference[:60].lower()
         rows = db.execute(
-            "SELECT content FROM beliefs WHERE source=\'nex_reasoning\' "
+            "SELECT content FROM beliefs WHERE source='nex_reasoning' "
             "ORDER BY created_at DESC LIMIT 50"
         ).fetchall()
         for row in rows:
@@ -105,17 +105,17 @@ def _already_exists(db: sqlite3.Connection, inference: str) -> bool:
 def _write_belief(db: sqlite3.Connection, content: str, topic: str) -> Optional[int]:
     """Insert an inferred belief into the DB. Returns row id or None."""
     try:
+        from datetime import datetime as _dt
         cur = db.execute(
             "INSERT INTO beliefs (content, confidence, topic, source, created_at, "
-            "is_identity, tags) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "is_identity) VALUES (?, ?, ?, ?, ?, ?)",
             (
                 content,
                 0.6,
                 topic,
                 "nex_reasoning",
-                time.time(),
+                _dt.utcnow().isoformat(),
                 0,
-                "inferred,reasoning",
             )
         )
         db.commit()
