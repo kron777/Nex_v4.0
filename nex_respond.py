@@ -146,6 +146,12 @@ def nex_reply(
                     _rro(topic="general", success=True, pcc_conf=0.65)
                 except Exception:
                     pass
+                # Conversation-to-belief pipeline
+                try:
+                    from nex_conversation_extractor import store_conversation_beliefs
+                    store_conversation_beliefs(reply.strip(), query=query)
+                except Exception:
+                    pass
                 return reply.strip()
         except Exception as e:
             print(f"  [nex_respond] SoulLoop error: {e}")

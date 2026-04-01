@@ -1006,6 +1006,15 @@ def chat():
             print(f"  [API] contradiction detection error: {e}")
 
 
+    # ── Conversation-to-belief pipeline ─────────────────────────────────────
+    try:
+        from nex_conversation_extractor import store_conversation_beliefs
+        _resp_text = result.get("response", "")
+        _resp_topic = result.get("domain") or "conversation"
+        if _resp_text and len(_resp_text) > 40:
+            store_conversation_beliefs(_resp_text, query=query, topic=_resp_topic)
+    except Exception:
+        pass
     # ── Feedback loop — record reply outcome for belief confidence update ──
     try:
         from nex_loop_wiring import record_reply_outcome as _rro
