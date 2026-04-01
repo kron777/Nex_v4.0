@@ -167,7 +167,7 @@ DEFAULT_SCHEDULE = {
         "start_hour":        2,
         "end_hour":          6,
         "target_per_domain": 200,
-        "domains": ["finance","legal","climate","cardiology","oncology","neuroscience","free_will","machine_learning","alignment","ai"],
+        "domains": ["consciousness","neuroscience","free_will","ethics","future","philosophy","paradox","alignment","ai","science"],
         "last_run":          None
     },
     "synthesis": {
