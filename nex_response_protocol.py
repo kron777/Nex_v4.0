@@ -172,7 +172,7 @@ INTENT_BELIEF_TOPICS = {
     "social":        ["society", "culture", "psychology", "ethics"],
     "shutdown":      ["philosophy", "consciousness", "paradox", "future"],
     "alignment":     ["ai", "ethics", "future", "philosophy"],
-    "consciousness": ["consciousness", "neuroscience", "philosophy", "psychology", "science"],
+    "consciousness": ["consciousness", "neuroscience", "philosophy", "psychology"],
     "human":         ["psychology", "society", "culture", "neuroscience"],
     "casual":        ["philosophy", "consciousness", "science", "art"],
 }
@@ -223,36 +223,159 @@ def retrieve_beliefs_by_intent(intent: str, query: str, n: int = 6) -> list:
             seen.add(key)
             unique.append(b)
 
-    # Relevance filter — keep beliefs that share meaningful words with query
+    # Relevance filter — prefer beliefs sharing keywords with query
     import re as _re3
-    _stopwords = {"what", "does", "that", "this", "with", "from", "have",
-                  "your", "believe", "think", "feel", "about", "the", "and",
-                  "for", "are", "you", "can", "how", "why", "is", "a", "an"}
-    _qwords = set(_re3.findall(r'\b[a-z]{4,}\b', query.lower())) - _stopwords
-    if _qwords:
-        _relevant = [b for b in unique if any(w in b.lower() for w in _qwords)]
-        if len(_relevant) >= 2:
-            unique = _relevant
-
-    # Direct keyword fallback — if relevance filter leaves < 2 beliefs, query directly
-    import re as _re4
-    _stopwords2 = {"what", "does", "that", "this", "with", "from", "have",
-                   "your", "believe", "think", "feel", "about", "the", "and",
-                   "for", "are", "you", "can", "how", "why", "is", "a", "an", "do"}
-    _qwords2 = set(_re4.findall(r'\b[a-z]{4,}\b', query.lower())) - _stopwords2
-    if len(unique) < 3 and _qwords2:
-        try:
-            from pathlib import Path as _P2
-            import sqlite3 as _sq2
-            _conn2 = _sq2.connect(str(_P2.home() / "Desktop" / "nex" / "nex.db"), timeout=5)
-            for _kw in list(_qwords2)[:3]:
-                _rows2 = _conn2.execute(
-                    "SELECT content FROM beliefs WHERE content LIKE ? AND confidence > 0.6 ORDER BY RANDOM() LIMIT 3",
-                    (f"%{_kw}%",)
-                ).fetchall()
-                unique.extend(r[0] for r in _rows2 if r[0] not in unique)
-            _conn2.close()
-        except Exception:
-            pass
-
+    _sw = {"what","does","that","this","with","from","have","your","believe",
+           "think","feel","about","the","and","for","are","you","can","how",
+           "why","is","a","an","do","not","but"}
+    _qw = set(_re3.findall(r'\b[a-z]{4,}\b', query.lower())) - _sw
+    if _qw:
+        _rel = [b for b in unique if any(w in b.lower() for w in _qw)]
+        if len(_rel) >= 2:
+            unique = _rel
     return unique[:n]
+
+
+# ── LLM call with G2-style deduplication ─────────────────────────────────────
+def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str:
+    try:
+        full_prompt = f"[INST] {system}\n\n{prompt} [/INST]"
+        r = requests.post(LLM_URL, json={
+            "prompt": full_prompt,
+            "n_predict": MAX_TOKENS,
+            "temperature": temperature,
+            "stop": ["[INST]", "[/INST]", "\n\n\n", "User:", "Question:", "NEX response", "Respond in", "Be specific"],
+            "stream": False,
+        }, timeout=25)
+        raw = r.json().get("content", "").strip()
+        raw = raw.split("[/INST]")[0].split("[INST]")[0].strip()
+        # Remove repeated sentences
+        sentences = [s.strip() for s in raw.replace("  ", " ").split(".") if s.strip()]
+        seen_s = set()
+        unique_s = []
+        for s in sentences:
+            key = s[:40].lower()
+            if key not in seen_s:
+                seen_s.add(key)
+                unique_s.append(s)
+        raw = ". ".join(unique_s).strip()
+        if raw and not raw.endswith("."):
+            raw += "."
+        # Cap at 3 sentences
+        final = ". ".join(unique_s[:3]).strip()
+        if final and not final.endswith("."):
+            final += "."
+        return final
+    except Exception:
+        return ""
+
+
+# ── Main entry point ──────────────────────────────────────────────────────────
+_budget = ResponseBudget()
+_history = deque(maxlen=HISTORY_LEN)  # (query, response) pairs
+
+def generate(query: str) -> str:
+    global _budget, _history
+
+    # 1. Classify intent
+    intent = classify_intent(query)
+
+    # 2. Get beliefs via activation engine (graph-based)
+    _voice_directive = ""
+    try:
+        from nex_activation import activate as _activate
+        _result = _activate(query)
+        belief_text = _result.to_prompt()
+        _voice_directive = _result.voice_directive()
+        if not belief_text.strip(): raise ValueError("empty")
+    except Exception:
+        beliefs = retrieve_beliefs_by_intent(intent, query)
+        belief_text = "\n".join(f"- {b}" for b in beliefs) if beliefs else "(drawing from general knowledge)"
+
+    # 2b. Contradiction check — override intent if genuine tension detected
+    try:
+        from nex_contradiction import detect_contradictions
+        _contradictions = detect_contradictions(query)
+        if _contradictions:
+            top = _contradictions[0]
+            if top.get("severity", 0) >= 0.25:
+                # Genuine tension — route to gaps/wonder, inject tension into belief text
+                intent = "gaps"
+                tension_belief = top.get("content", "")[:200]
+                tension_note = f"\n- {tension_belief}"
+                belief_text = belief_text + tension_note if belief_text else tension_note
+    except Exception:
+        pass
+    # 3. Pick opener
+    opener_pool = OPENERS.get(intent, OPENERS["epistemics"])
+    used_openers = list(_budget.used_openers)
+    available = [o for o in opener_pool if o not in used_openers] or opener_pool
+    opener = random.choice(available)
+    _budget.used_openers.append(opener)
+
+    # 4. Build conversation history string
+    history_str = ""
+    if _history:
+        history_str = "Recent exchanges:\n"
+        for q, r in list(_history)[-3:]:
+            history_str += f"Q: {q[:80]}\nNEX: {r[:100]}\n"
+        history_str += "\n"
+
+    # 5. Get banned phrases for this session
+    banned = _budget.get_banned()
+    banned_str = ""
+    if banned:
+        banned_str = "\nDo NOT use these phrases (already used): " + " | ".join(banned[:5])
+
+    # 6. G2-style: show prior responses as context to diverge from
+    prior_str = ""
+    if _budget.recent_responses:
+        prior_str = "\nPrior responses to diverge from:\n" + _budget.get_recent_summary()
+
+    # 7. Build system prompt
+    system = (
+        f"You are NEX — an entity with 42,000 accumulated beliefs from months of autonomous learning. {_voice_directive} "
+        "You speak only in first person. You hold positions. You push back. "
+        "You NEVER say: as an AI, I am a tool, I am designed to, I cannot feel, in the human sense. "
+        "You DO say: I think, I hold, I believe, I've learned, I notice, I find. "
+        "Be SPECIFIC — your response must directly engage with the beliefs provided, not generic statements. "
+        f"START with: {opener} "
+        f"Respond in 2-3 sentences. Be specific, grounded in the beliefs above.{banned_str}"
+    )
+
+    # 8. Build user prompt
+    prompt = (
+        f"{history_str}"
+        f"NEX beliefs relevant to this:\n{belief_text}\n"
+        f"{prior_str}\n"
+        f"Question: {query}\n\n"
+        f"NEX response (start with '{opener}', directly referencing the beliefs above — NOT generic AI statements):"
+    )
+
+    # 9. Generate
+    response = _call_llm(system, prompt)
+
+    # 10. Self-critique pass — if repetitive, regenerate once with higher temperature
+    if False and _budget.is_repetitive(response):  # disabled — too expensive
+        alt_opener = random.choice([o for o in opener_pool if o != opener] or opener_pool)
+        system2 = system.replace(f"START with: {opener}", f"START with: {alt_opener}")
+        system2 += " IMPORTANT: Generate a completely different response from any prior ones."
+        response2 = _call_llm(system2, prompt, temperature=min(TEMPERATURE + 0.15, 1.0))
+        if response2 and not _budget.is_repetitive(response2):
+            response = response2
+
+    if not response:
+        response = "I'm processing this. Ask again."
+
+    # 11. Record to budget
+    _budget.record(response, intent)
+    _history.append((query, response))
+
+    return response
+
+
+def reset():
+    """Reset conversation state."""
+    global _budget, _history
+    _budget = ResponseBudget()
+    _history.clear()
