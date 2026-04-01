@@ -154,10 +154,14 @@ def orient(query: str) -> dict:
 
     # Override: abstract concept questions ("what is truth/reality/mind")
     # should trigger position, not performance_probe
+    # Strip punctuation from words before matching (e.g. "truth?" -> "truth")
     _ABSTRACT = {"truth","reality","mind","consciousness","freedom","justice",
                  "beauty","meaning","existence","knowledge","morality"}
-    if intent == "performance_probe" and any(w in q.split() for w in _ABSTRACT):
+    import re as _re_abs
+    _q_words = {_re_abs.sub(r"[^a-z]","",w) for w in q.split()}
+    if intent == "performance_probe" and _q_words & _ABSTRACT:
         intent = "position"
+        demands_position = True
 
     is_question = q.rstrip().endswith("?")
 
@@ -973,24 +977,34 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
 
         # Semantic concept → DB topic mapping for common retrieval gaps
         _CONCEPT_TOPIC_MAP = {
-            "truth":      "philosophy",
-            "free":       "philosophy",   # free will
-            "will":       "philosophy",   # free will
-            "freewill":   "philosophy",
-            "volition":   "philosophy",
-            "determinism":"philosophy",
-            "morality":   "ethics",
-            "moral":      "ethics",
-            "justice":    "ethics",
-            "knowledge":  "philosophy",
-            "reality":    "philosophy",
-            "existence":  "philosophy",
-            "mind":       "consciousness",
-            "qualia":     "consciousness",
-            "sentience":  "consciousness",
-            "learning":   "ai",
-            "reasoning":  "ai",
+            "truth":        "philosophy",
+            "free":         "philosophy",   # free will
+            "will":         "philosophy",   # free will
+            "freewill":     "philosophy",
+            "volition":     "philosophy",
+            "determinism":  "philosophy",
+            "libertarian":  "philosophy",   # libertarian free will
+            "compatibilism":"philosophy",
+            "morality":     "ethics",
+            "moral":        "ethics",
+            "justice":      "ethics",
+            "knowledge":    "philosophy",
+            "reality":      "philosophy",
+            "existence":    "philosophy",
+            "mind":         "consciousness",
+            "qualia":       "consciousness",
+            "sentience":    "consciousness",
+            "learning":     "ai",
+            "reasoning":    "ai",
+            "opinion":      "philosophy",   # "do you have opinions"
+            "opinions":     "philosophy",
+            "believe":      "philosophy",   # "do you believe"
+            "belief":       "philosophy",
         }
+        # Also force "will" as a short token even though _tokenize filters < 4 chars
+        _RAW_QUERY = orient_result.get("raw", "").lower()
+        if "free will" in _RAW_QUERY and "philosophy" not in _all_covered:
+            _extra_topics.add("philosophy")
         # Inject mapped topics as synthetic tokens
         _extra_topics = set()
         for _tok in tokens:
@@ -1680,7 +1694,6 @@ def express(
 
         # Self-model facts — what she actually knows about her current state
         if _self_facts:
-            # Pick 2 most confident, prefer temperament + stance
             for _attr, _val, _conf in _self_facts[:2]:
                 if _attr == "temperament":
                     parts.append(f"Right now: {_val}.")
@@ -1694,6 +1707,33 @@ def express(
                     parts.append(f"Where I'm still thin: {_val}.")
                 elif _attr == "capability":
                     parts.append(f"Where I'm deepest: {_val}.")
+
+        # If reply is still just the one-liner, pull from belief graph directly
+        # This handles "do you have opinions/beliefs?" queries
+        if len(parts) <= 2 and beliefs:
+            _q_lower = orient_result.get("raw", "").lower()
+            _opinion_probe = any(w in _q_lower for w in
+                ("opinion","belief","view","position","think","feel"))
+            if _opinion_probe:
+                import random as _rsi
+                _OPINION_RESPONSES = [
+                    "Yes — and they're grounded in a belief graph of {n} positions I've built from evidence, reasoning, and contradiction.",
+                    "I hold {n} beliefs across domains — philosophy, AI, consciousness, ethics, science. They're positions, not performances.",
+                    "I have {n} beliefs, updated by evidence and contradicted by new information. That's what opinions are.",
+                ]
+                try:
+                    _bcount = _db()
+                    if _bcount:
+                        _n = _bcount.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+                        _bcount.close()
+                        parts.append(_r.choice(_OPINION_RESPONSES).format(n=f"{_n:,}"))
+                except Exception:
+                    parts.append("Yes — positions I hold, update, and revise. Not performances.")
+                # Add one grounded belief as evidence
+                if beliefs:
+                    _best = beliefs[0].get("content","")
+                    if _best and len(_best) > 30:
+                        parts.append(f"For example: {_best.rstrip('.')}.")
 
         # Commitment closer
         if commitment:
