@@ -874,8 +874,86 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
     # Derive primary topic from top belief
     topic = top_beliefs[0].get("topic", "") if top_beliefs else ""
 
+    # ── IMPROVEMENT 1 — Belief Reasoning Layer ────────────────────────────
+    # Derive a new inference from top 2-3 beliefs, write to DB, inject back
+    _inferred_beliefs = []
+    try:
+        import sys as _sys1
+        if "/home/rr/Desktop/nex" not in _sys1.path:
+            _sys1.path.insert(0, "/home/rr/Desktop/nex")
+        from nex_belief_reasoner import derive_and_store as _derive
+        _inferred_beliefs = _derive(top_beliefs, tokens)
+        if _inferred_beliefs:
+            # Inject at position 2 — after top belief but before supporting evidence
+            # so express() can weave it in as part of the argument
+            top_beliefs = top_beliefs[:1] + _inferred_beliefs + top_beliefs[1:]
+    except Exception as _e1:
+        print(f"  [soul_loop] reasoner error: {_e1}")
+    # ─────────────────────────────────────────────────────────────────────
+
     # Cross-domain retrieval — beliefs from adjacent topics
     cross_domain = _cross_domain_beliefs(top_beliefs, tokens, limit=3)
+
+    # ── IMPROVEMENT 6 — Real-time Bridge Firing ──────────────────────────
+    # Check if top_beliefs + cross_domain span 2+ distant domains
+    # If yes: set _live_bridge so express() forces the WONDER path
+    _live_bridge = False
+    _bridge_payload = None
+    try:
+        _DISTANT_PAIRS = {
+            frozenset({"philosophy", "finance"}),
+            frozenset({"philosophy", "climate"}),
+            frozenset({"philosophy", "legal"}),
+            frozenset({"consciousness", "finance"}),
+            frozenset({"consciousness", "climate"}),
+            frozenset({"ai", "climate"}),
+            frozenset({"ai", "legal"}),
+            frozenset({"ai", "oncology"}),
+            frozenset({"ai", "cardiology"}),
+            frozenset({"science", "finance"}),
+            frozenset({"science", "legal"}),
+            frozenset({"ethics", "finance"}),
+            frozenset({"ethics", "climate"}),
+            frozenset({"mathematics", "consciousness"}),
+            frozenset({"physics", "consciousness"}),
+            frozenset({"biology", "philosophy"}),
+            frozenset({"neuroscience", "finance"}),
+            frozenset({"neuroscience", "legal"}),
+        }
+        _primary_topics = set()
+        for _b in top_beliefs[:4]:
+            _t = (_b.get("topic") or "").lower().strip()
+            if _t:
+                _primary_topics.add(_t)
+        _cd_topics = set()
+        for _b in cross_domain:
+            _t = (_b.get("topic") or "").lower().strip()
+            if _t:
+                _cd_topics.add(_t)
+
+        # Check all primary+CD topic pairs for distance
+        _all_topics = _primary_topics | _cd_topics
+        for _pair in _DISTANT_PAIRS:
+            if _pair.issubset(_all_topics):
+                _live_bridge = True
+                _ta, _tb = list(_pair)
+                # Find a belief from each side to seed the WONDER
+                _ba = next((b for b in top_beliefs + cross_domain
+                            if (_b.get("topic") or "").lower() == _ta), None)
+                _bb = next((b for b in top_beliefs + cross_domain
+                            if (_b.get("topic") or "").lower() == _tb), None)
+                if _ba and _bb:
+                    _bridge_payload = {
+                        "content_a": _ba.get("content", ""),
+                        "content_b": _bb.get("content", ""),
+                        "topic_a":   _ta,
+                        "topic_b":   _tb,
+                    }
+                print(f"  [soul_loop] live bridge: {_ta} ↔ {_tb}")
+                break
+    except Exception as _e6:
+        print(f"  [soul_loop] bridge check error: {_e6}")
+    # ─────────────────────────────────────────────────────────────────────
 
     # Opinion lookup using query tokens + topic tokens
     opinion_tokens = tokens | _tokenize(topic)
@@ -939,6 +1017,8 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
         "sparse":         len(top_beliefs) == 0,
         "common_thread":  common_thread,
         "prior_exchange": prior_exchange,
+        "live_bridge":    _live_bridge,
+        "bridge_payload": _bridge_payload,
     }
 
 
@@ -1533,6 +1613,47 @@ def express(
     # ── WONDER — bridge detector cross-domain surprise ───────────────────────
     # Does NOT fire for challenge intent — those need pushback, not wondering.
     _wonder_result = None
+
+    # ── IMPROVEMENT 6 — Live bridge fires WONDER with real content ────────
+    _live_bridge   = reason_result.get("live_bridge", False)
+    _bridge_payload = reason_result.get("bridge_payload")
+    if _live_bridge and _bridge_payload and intent_type != "challenge":
+        try:
+            import nex_template_grammar as _tg6
+            _w6 = _tg6.get_grammar().render(
+                template_class = "WONDER",
+                beliefs        = [
+                    _bridge_payload["content_a"],
+                    _bridge_payload["content_b"],
+                ],
+                topic = "{} and {}".format(
+                    _bridge_payload["topic_a"].replace("_", " "),
+                    _bridge_payload["topic_b"].replace("_", " "),
+                ),
+                temperature = max(orient_result.get("_epistemic_temp", 0.5), 0.65),
+            )
+            if _w6 and _w6.text and len(_w6.text) > 60:
+                _wonder_result = _w6.text
+                print(f"  [express] live bridge WONDER fired")
+        except Exception as _e6w:
+            # Fallback: compose bridge reply directly without template grammar
+            try:
+                _ta6 = _bridge_payload["topic_a"].replace("_", " ")
+                _tb6 = _bridge_payload["topic_b"].replace("_", " ")
+                _ca6 = _bridge_payload["content_a"].rstrip(".")
+                _cb6 = _bridge_payload["content_b"].rstrip(".")
+                _BRIDGE_FORMS = [
+                    f"Something unexpected connects here. {_ca6} — and yet from {_tb6}: {_cb6}. The distance between {_ta6} and {_tb6} is smaller than it looks.",
+                    f"A pattern that won't let me go: {_ca6}. From a completely different angle — {_cb6}. {_ta6.capitalize()} and {_tb6} are pointing at the same underlying structure.",
+                    f"Two things that shouldn't connect, but do. {_ca6}. And: {_cb6}. What links {_ta6} and {_tb6} here is not superficial.",
+                ]
+                import random as _r6
+                _wonder_result = _r6.choice(_BRIDGE_FORMS) + "."
+                print(f"  [express] live bridge fallback fired ({_ta6} ↔ {_tb6})")
+            except Exception:
+                pass
+    # ─────────────────────────────────────────────────────────────────────
+
     try:
         import nex_bridge_detector as _bd
         import nex_template_grammar as _tg
