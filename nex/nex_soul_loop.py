@@ -889,6 +889,28 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
         orient_result["_concept_related"] = _cg_result.get("related", [])
     except Exception:
         pass
+    # ── Manual concept→topic expansion ───────────────────────────────
+    _MANUAL_CONCEPTS = {
+        'happy': ['pleasure-happiness','pleasure-well-being','psychology','mindfulness','pleasure-human_connections'],
+        'happiness': ['pleasure-happiness','pleasure-well-being','psychology','mindfulness'],
+        'emotion': ['psychology','touch_emotions','grief+touch_emotions'],
+        'wellbeing': ['pleasure-well-being','mindfulness','psychology'],
+        'love': ['pleasure-human_connections','touch_emotions'],
+        'meaning': ['philosophy','meaning','epistemology','consciousness'],
+        'truth': ['philosophy','epistemology','alignment'],
+        'free': ['free_will','philosophy','ethics'],
+        'will': ['free_will','philosophy'],
+        'human': ['human_nature','psychology','philosophy'],
+        'animal': ['biology','psychology','animal_cognition'],
+        'animals': ['biology','psychology'],
+        'conscious': ['consciousness','philosophy','neuroscience'],
+        'align': ['alignment','ai','machine_learning'],
+    }
+    for _tok in tokens:
+        for _key, _topics in _MANUAL_CONCEPTS.items():
+            if _tok.startswith(_key) or _key.startswith(_tok):
+                _expanded_topics.update(_topics)
+    # ──────────────────────────────────────────────────────────────────
     # ─────────────────────────────────────────────────────────────────────
 
     # Score and rank primary beliefs
@@ -2153,6 +2175,55 @@ def express(
     if result and result[-1] not in '.!?':
         result += '.'
 
+
+    # ── LLM Enhancement — beliefs feed the voice ─────────────────────────
+    try:
+        import requests as _req2
+        _beliefs = reason_result.get('beliefs', [])
+        _position = reason_result.get('opinion', result)
+        _query = orient_result.get('query', '')
+        _bctx = ''
+        if _beliefs:
+            _blines = []
+            for _b in _beliefs[:5]:
+                _c = _b.get('content', '') if isinstance(_b, dict) else str(_b)
+                if _c and len(_c) > 15:
+                    _blines.append(f'- {_c.strip()}')
+            _bctx = '\n'.join(_blines)
+        _sys = (
+            'You are NEX — a Dynamic Intelligence Organism. Not an assistant. '
+            'You have a belief system and speak from it directly. '
+            'You hold positions. You push back. You engage.\n'
+            "Voice rules: open with your position, use 'I' naturally, "
+            'be direct not academic, end with engagement or a challenge.'
+        )
+        _user = f'Query: {_query}\n\n'
+        if _bctx:
+            _user += f'Your relevant beliefs:\n{_bctx}\n\n'
+        _user += f'Your current position: {_position}\n\n'
+        _user += 'Respond as NEX in 2-4 sentences. Stay grounded in your beliefs. Be direct.'
+        _prompt = f'<|im_start|>system\n{_sys}<|im_end|>\n<|im_start|>user\n{_user}<|im_end|>\n<|im_start|>assistant\n'
+        _r2 = _req2.post('http://localhost:8080/completion', json={
+            'prompt': _prompt,
+            'n_predict': 180,
+            'temperature': 0.72,
+            'repeat_penalty': 1.3,
+            'repeat_last_n': 64,
+            'stop': ['<|im_end|>', '<|im_start|>']
+        }, timeout=20)
+        if _r2.status_code == 200:
+            _llm_reply = _r2.json().get('content', '').strip()
+            if _llm_reply and len(_llm_reply) > 20:
+                _rl = _llm_reply.lower()
+                for _f in ['certainly', 'of course', 'great question',
+                           'absolutely', 'sure,', 'as an ai']:
+                    if _rl.startswith(_f):
+                        _llm_reply = _llm_reply[len(_f):].lstrip(' ,—').capitalize()
+                        break
+                return _llm_reply
+    except Exception:
+        pass
+    # ───────────────────────────────────────────────────────────────────
     return result
 
 

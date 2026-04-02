@@ -61,21 +61,20 @@ def _load_beliefs() -> list:
             con = _db()
             cur = con.cursor()
             cur.execute("""
-                SELECT id, content, confidence, topic, reinforce_count, decay_score
+                SELECT id, content, confidence, topic
                 FROM beliefs
                 WHERE content IS NOT NULL AND length(content) > 10
                 ORDER BY confidence DESC
                 LIMIT ?
             """, (BELIEF_LOAD_LIMIT,))
-            for bid, content, conf, topic, rc, ds in cur.fetchall():
+            for bid, content, conf, topic in cur.fetchall():
                 tag_list = [topic.strip()] if topic and topic.strip() else ["general"]
                 beliefs.append({
                     "id":             bid,
                     "content":        content,
                     "confidence":     conf or 0.5,
                     "tags":           tag_list,
-                    "reinforce_count": rc or 0,
-                    "decay_score":    ds or 0,
+
                 })
             con.close()
         except Exception as e:
@@ -152,7 +151,7 @@ def _load_hbg_levels() -> dict:
         con = _db()
         cur = con.cursor()
         cur.execute("""
-            SELECT topic, COUNT(*) n, SUM(reinforce_count) rc
+            SELECT topic, COUNT(*) n, 0 rc
             FROM beliefs
             WHERE topic IS NOT NULL AND topic != ''
             GROUP BY topic

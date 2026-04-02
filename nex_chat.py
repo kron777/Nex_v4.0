@@ -162,6 +162,19 @@ def cmd_demote(keyword: str):
         console.print(f"  [red]{e}[/red]\n")
 
 
+
+# [NEX_RESPOND_V2] — patched by install_nex_v2.sh
+import sys as _sys
+_sys.path.insert(0, __import__('os').path.expanduser('~/Desktop/nex'))
+try:
+    from nex.nex_respond_v2 import generate_reply as _nex_reply, cognite as _nex_reply_alt
+    _NEX_V2_ACTIVE = True
+    print("  [nex_respond_v2] grounded engine loaded ✓")
+except Exception as _v2e:
+    print(f"  [WARN] nex_respond_v2 unavailable: {_v2e}")
+    _NEX_V2_ACTIVE = False
+# [/NEX_RESPOND_V2]
+
 # [VOICE_GEN] -- patched by install_nex_overhaul.py
 import sys as _sys
 _sys.path.insert(0, __import__('os').path.expanduser('~/Desktop/nex'))

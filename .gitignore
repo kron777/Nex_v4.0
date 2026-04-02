@@ -102,3 +102,5 @@ nex.db
 nex_lora.gguf
 *.gguf
 *.bak_*
+nex_trained/
+models/

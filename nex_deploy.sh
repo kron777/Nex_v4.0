@@ -40,7 +40,7 @@ echo "[2/4] Converting to GGUF f16..."
 
 # Step 3 — quantize
 echo "[3/4] Quantizing to q8_0..."
-$LLAMA_SERVER/../llama-quantize $GGUF_F16 $GGUF_Q8 q8_0
+/media/rr/NEX/llama.cpp/build/bin/llama-quantize $GGUF_F16 $GGUF_Q8 q8_0
 
 # Step 4 — restart server
 echo "[4/4] Starting llama-server..."
