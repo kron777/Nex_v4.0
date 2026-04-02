@@ -1148,7 +1148,9 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
                     _qt_rows = _qt_conn.execute(
                         "SELECT id, content, confidence, topic FROM beliefs "
                         "WHERE lower(topic)=? AND content IS NOT NULL "
-                        "AND length(content) > 20 ORDER BY confidence DESC LIMIT 2",
+                        "AND length(content) > 20 "
+                        "ORDER BY CASE WHEN content LIKE 'I %' OR content LIKE 'What I%' "
+                        "THEN 1 ELSE 2 END, confidence DESC LIMIT 5",
                         (_qt,)
                     ).fetchall()
                     _qt_conn.close()
