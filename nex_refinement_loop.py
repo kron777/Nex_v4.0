@@ -263,13 +263,53 @@ print(f"Micro fine-tune complete. Saved to {{OUT}}")
         f.write(finetune_script)
 
     try:
+        env = os.environ.copy()
+        env["CUDA_VISIBLE_DEVICES"] = ""
+        env["HIP_VISIBLE_DEVICES"] = ""
         result = subprocess.run(
             [sys.executable, str(script_path)],
             timeout=3600,  # 1 hour max
             capture_output=False,
+            env=env,
         )
         if result.returncode == 0:
             log.info("Micro fine-tune succeeded.")
+            # Auto-merge LoRA into base GGUF and hot-swap llama-server
+            try:
+                import subprocess as _sp, shutil
+                lora_hf   = NEX_DIR / "models" / "nex_lora_live"
+                lora_gguf = NEX_DIR / "models" / "nex_lora_live.gguf"
+                base_gguf = NEX_DIR / "nex_lora.gguf"
+                out_gguf  = NEX_DIR / "models" / "nex_v2.gguf"
+                llama_dir = "/media/rr/NEX/llama.cpp"
+                # Convert HF adapter -> GGUF
+                _sp.run([
+                    "python3", f"{llama_dir}/convert_lora_to_gguf.py",
+                    "--base", str(NEX_DIR / "nex_trained" / "merged"),
+                    "--outfile", str(lora_gguf), "--outtype", "f16",
+                    str(lora_hf)
+                ], check=True, timeout=300)
+                # Merge into base
+                _sp.run([
+                    f"{llama_dir}/build/bin/llama-export-lora",
+                    "--model", str(base_gguf),
+                    f"--lora-scaled", f"{lora_gguf}:1.0",
+                    "--output", str(out_gguf), "--threads", "8"
+                ], check=True, timeout=600)
+                # Hot-swap llama-server
+                _sp.run(["pkill", "-f", "llama-server"], timeout=10)
+                import time; time.sleep(3)
+                merge_env = {"HSA_OVERRIDE_GFX_VERSION": "10.3.0", "HIP_VISIBLE_DEVICES": "0", "PATH": "/usr/bin:/bin"}
+                _sp.Popen([
+                    f"{llama_dir}/build/bin/llama-server",
+                    "-m", str(out_gguf), "--port", "8080",
+                    "-ngl", "99", "--host", "0.0.0.0", "-c", "4096",
+                    "--parallel", "2", "--cache-type-k", "q8_0",
+                    "--cache-type-v", "q8_0", "-fa", "1", "--no-mmap"
+                ], env=merge_env)
+                log.info("Auto-merge complete — nex_v2.gguf redeployed.")
+            except Exception as me:
+                log.warning(f"Auto-merge failed (model unchanged): {me}")
             return True
         else:
             log.error(f"Fine-tune exited with code {result.returncode}")
