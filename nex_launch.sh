@@ -98,5 +98,31 @@ nohup bash $NEX_DIR/nex_watchdog.sh > /tmp/nex_watchdog.log 2>&1 &
 echo "[NEX] Watchdog: PID $!"
 nohup python3 $NEX_DIR/nex_ingest.py --loop --interval 30 > /tmp/nex_ingest.log 2>&1 &
 echo "[NEX] Ingest pipeline: PID $!"
+# ── D1-D8 module init ─────────────────────────────────────────
+echo "[NEX] Initialising D1-D8 modules..."
+source $NEX_DIR/venv/bin/activate
+# Rebuild FAISS if needed
+python3 -c "
+import sys; sys.path.insert(0, '$NEX_DIR')
+from nex_embed import build_faiss_index
+build_faiss_index()
+" >> /tmp/nex_faiss_init.log 2>&1 &
+# Seed goals
+python3 -c "
+import sys; sys.path.insert(0, '$NEX_DIR')
+from nex_goal_system import GoalStack
+GoalStack().seed_defaults()
+" >> /tmp/nex_goals_init.log 2>&1 &
+# Seed world model
+python3 -c "
+import sys; sys.path.insert(0, '$NEX_DIR')
+from nex_world_model import WorldModel
+wm = WorldModel()
+wm.update('NEX', 'type', 'Dynamic Intelligence Organism', 1.0, 'seed')
+wm.update('NEX', 'eval_score', '92/100 ELITE', 0.95, 'seed')
+wm.update('llama-server', 'port', '8080', 1.0, 'seed')
+wm.update('llama-server', 'model', 'nex_v2.gguf', 1.0, 'seed')
+" >> /tmp/nex_world_init.log 2>&1 &
+echo "[NEX] D1-D8 modules initialising in background."
 echo "[NEX] All systems live."
 echo "[NEX] To stop cleanly: bash $NEX_DIR/nex_exit.sh"

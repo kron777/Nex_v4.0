@@ -865,6 +865,40 @@ def main():
     print("[INIT] NEX Discipline Enforcer loaded")
     print("[INIT] NEX v5.1 Core Infrastructure loaded")
     print("[INIT] NEX v5.0 Cognitive Architecture loaded")
+    # ── D2-D7 Module init ─────────────────────────────────────────
+    try:
+        import sys as _mi_sys
+        _mi_sys.path.insert(0, "/home/rr/Desktop/nex")
+        # Goal system
+        from nex_goal_system import GoalStack as _GS
+        _gs = _GS()
+        _gs.seed_defaults()
+        print("[INIT] Goal system loaded —", len(list(_gs.all_active())), "active goals")
+        # World model
+        from nex_world_model import WorldModel as _WM
+        _wm = _WM()
+        print("[INIT] World model loaded —", _wm.stats()["total_facts"], "facts")
+        # Metacognition
+        from nex_metacognition import MetaCognition as _MC
+        _mc = _MC()
+        print("[INIT] Metacognition loaded")
+        # Planner tick (background thread)
+        import threading as _th
+        from nex_planner import Planner as _PL
+        def _planner_loop():
+            import time
+            _pl = _PL()
+            while True:
+                try:
+                    _pl.tick()
+                except Exception:
+                    pass
+                time.sleep(3600)  # tick every hour
+        _pt = _th.Thread(target=_planner_loop, daemon=True)
+        _pt.start()
+        print("[INIT] Planner tick started")
+    except Exception as _mi_e:
+        print(f"[INIT] D2-D7 modules: {_mi_e}")
     # ── Clean shutdown handler — kills all NEX protocols on exit ──
     import subprocess as _sub, signal as _sig, atexit as _ae
 
@@ -1454,6 +1488,15 @@ def main():
                                 if hasattr(_build_system, "_episodic") and prompt:
                                     _build_system._episodic.store(
                                         prompt, result, score=0.75)
+                            except Exception: pass
+                            # World model extraction
+                            try:
+                                import sys as _wm_sys
+                                _wm_sys.path.insert(0, "/home/rr/Desktop/nex")
+                                from nex_world_model import WorldModel as _WMX
+                                if not hasattr(_build_system, "_wm"):
+                                    _build_system._wm = _WMX()
+                                _build_system._wm.extract_and_update(result, source="llm_response")
                             except Exception: pass
                             return result
                 except Exception as _qe:
