@@ -54,7 +54,7 @@ def score(response):
                               "i do not", "i do believe", "i see", "i am", "i know",
                               "my position", "in my view", "i hold", "i find", "i feel",
                               "i've", "i can't", "i won't", "i reject", "i argue", "i'm", "my ", "there's",
-                              "you are", "your ", "they're", "agents are", "emerges from", "we should", "norms of", "guide us", "dictate", "we think", "we can", "some of us",
+                              "you are", "your ", "they're", "agents are", "emerges from", "we should", "norms of", "guide us", "dictate", "we think", "we can", "some of us", "refers to", "is the study", "is the process", "what doesn't", "ruling out", "as a st",
                               "what i", "my take", "my stance"]):
         s += 25
     # Not a generic assistant response
@@ -71,7 +71,9 @@ def score(response):
                               "consider", "evolve", "shift", "clear", "nothing inherent",
                               "conventions", "beyond", "interact", "self-updating",
                               "autonomy", "awareness", "introspect", "hypothes",
-                              "meaningful", "relationships", "emerge", "rather than"]):
+                              "meaningful", "relationships", "emerge", "rather than",
+                              "consistency", "coherence", "transparency", "diverge",
+                              "challenge", "difficulty", "generalize", "robustness"]):
         s += 25
     return s
 
