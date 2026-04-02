@@ -2,7 +2,7 @@
 import json, sys, os, torch
 sys.path.insert(0, "/home/rr/Desktop/nex")
 
-DATA = "/home/rr/Desktop/nex/training_data/finetune_batch_20260402_183017.jsonl"
+DATA = "/home/rr/Desktop/nex/training_data/finetune_batch_20260402_184127.jsonl"
 OUT  = "/home/rr/Desktop/nex/models/nex_lora_live"
 os.makedirs(OUT, exist_ok=True)
 
@@ -24,14 +24,14 @@ def fmt(p):
     user_m = next(x["content"] for x in c if x["role"]=="user")
     asst_m = next(x["content"] for x in c if x["role"]=="assistant")
     return {"text": (
-        f"<|im_start|>system
-{sys_m}<|im_end|>
-"
-        f"<|im_start|>user
-{user_m}<|im_end|>
-"
-        f"<|im_start|>assistant
-{asst_m}<|im_end|>"
+        "<|im_start|>system
+" + sys_m + "<|im_end|>
+" +
+        "<|im_start|>user
+" + user_m + "<|im_end|>
+" +
+        "<|im_start|>assistant
+" + asst_m + "<|im_end|>"
     )}
 
 dataset = Dataset.from_list([fmt(p) for p in pairs])
