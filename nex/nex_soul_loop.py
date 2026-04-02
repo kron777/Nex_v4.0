@@ -2062,9 +2062,9 @@ def express(
                 _w = _tg.get_grammar().render(
                     template_class = "WONDER",
                     beliefs        = [_matched["content_a"], _matched["content_b"]],
-                    topic          = "{} and {}".format(
-                        (_matched["topic_a"] or "").replace("_", " "),
-                        (_matched["topic_b"] or "").replace("_", " "),
+                    topic          = (lambda a, b: a if a == b else f"{a} and {b}")(
+                        (_matched["topic_a"] or "this").replace("_", " "),
+                        (_matched["topic_b"] or "this").replace("_", " "),
                     ),
                     temperature    = max(_etemp, 0.6),
                 )
