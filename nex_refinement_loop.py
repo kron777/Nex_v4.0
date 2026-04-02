@@ -394,6 +394,23 @@ def main():
             total_seen += len(new_pairs)
 
             for pair in new_pairs:
+                # Reflexion gate — skip low-quality pairs
+                try:
+                    import sys as _rsys
+                    _rsys.path.insert(0, "/home/rr/Desktop/nex")
+                    from nex_reflexion import Reflexion as _Ref
+                    if not hasattr(watcher, "_ref"):
+                        watcher._ref = _Ref()
+                    _c = pair.get("conversations", [])
+                    _asst = next((x["content"] for x in _c if x["role"]=="assistant"), "")
+                    _user = next((x["content"] for x in _c if x["role"]=="user"), "")
+                    if _asst:
+                        _rv = watcher._ref.evaluate(_user, _asst)
+                        if not _rv["should_train"]:
+                            log.info(f"Reflexion SKIP (score={_rv['score']}) — {_rv['issues']}")
+                            continue
+                except Exception:
+                    pass
                 save_to_buffer(pair)
                 total_kept += 1
                 log.info(
