@@ -1978,6 +1978,10 @@ def express(
             try:
                 _ta6 = _bridge_payload["topic_a"].replace("_", " ")
                 _tb6 = _bridge_payload["topic_b"].replace("_", " ")
+                # Deduplicate — if same topic on both sides, skip WONDER
+                if _ta6.strip() == _tb6.strip():
+                    _wonder_result = None
+                    _live_bridge = False
                 _ca6 = _bridge_payload["content_a"].rstrip(".")
                 _cb6 = _bridge_payload["content_b"].rstrip(".")
                 _BRIDGE_FORMS = [
@@ -2331,6 +2335,17 @@ class SoulLoop:
 
         # Step 3: Reason
         reason_result = reason(orient_result, conversation_history=self._conversation_history)
+
+        # Epistemic Momentum — record which beliefs fired
+        try:
+            from nex_epistemic_momentum import record_activation, apply_momentum_boost
+            _belief_ids = [b.get("id") for b in reason_result.get("beliefs", []) if b.get("id")]
+            _topic = reason_result.get("topic", "")
+            record_activation(_belief_ids, query, _topic)
+            # Boost confidence of high-momentum beliefs
+            reason_result["beliefs"] = apply_momentum_boost(reason_result["beliefs"])
+        except Exception as _em_err:
+            pass
 
         # Step 4: Intend
         intend_result = intend(orient_result, reason_result)
