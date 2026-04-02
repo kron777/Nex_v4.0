@@ -202,9 +202,9 @@ def fmt(p):
     user_m = next(x["content"] for x in c if x["role"]=="user")
     asst_m = next(x["content"] for x in c if x["role"]=="assistant")
     return {{"text": (
-        f"<|im_start|>system\n{{sys_m}}<|im_end|>\n"
-        f"<|im_start|>user\n{{user_m}}<|im_end|>\n"
-        f"<|im_start|>assistant\n{{asst_m}}<|im_end|>"
+        "<|im_start|>system\n" + sys_m + "<|im_end|>\n" +
+        "<|im_start|>user\n" + user_m + "<|im_end|>\n" +
+        "<|im_start|>assistant\n" + asst_m + "<|im_end|>"
     )}}
 
 dataset = Dataset.from_list([fmt(p) for p in pairs])
