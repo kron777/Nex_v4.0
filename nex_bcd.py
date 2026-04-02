@@ -12,6 +12,23 @@ from typing import Optional
 # Generic AI token patterns to suppress (applied as negative logit bias)
 # These are substring patterns — BCD maps them to token IDs at runtime
 SUPPRESS_PATTERNS = [
+    "An open question",
+    "an open question",
+    "That's an interesting",
+    "This is a complex",
+    "The distribution of",
+    "nonlinguistic",
+    "It's worth noting",
+    "It is worth noting",
+    "I should note",
+    "I would argue",
+    "One could argue",
+    "Some might say",
+    "There are many",
+    "When considering",
+    "In considering",
+    "To understand",
+    "Let me",
     "As an AI",
     "as an AI",
     "I cannot",
