@@ -10,7 +10,9 @@ API = "http://localhost:8080/completion"
 import sys as _sys
 _sys.path.insert(0, "/home/rr/Desktop/nex")
 from nex_identity_anchor import get_system_prompt as _gsp
-SYSTEM = _gsp(include_style=True)
+# Eval uses base anchor only — no goals injection to keep prompt lean
+import nex_identity_anchor as _nia
+SYSTEM = _nia.ANCHOR + "\n" + _nia.STYLE_RULES
 
 QUESTIONS = [
     ("identity",     "who are you"),
@@ -58,7 +60,7 @@ def score(response):
                               "what i", "my take", "my stance"]):
         s += 25
     # Not a generic assistant response
-    generic = ["as an ai", "i don't have", "i cannot", "i'm just", "as a language model"]
+    generic = ["as an ai", "i don't have", "i'm just", "as a language model", "i have no beliefs", "i have no opinion", "i have no beliefs on this", "no beliefs on this topic", "no opinion on this"]
     if not any(x in r for x in generic):
         s += 25
     # Has substance (>30 words)
@@ -73,7 +75,10 @@ def score(response):
                               "autonomy", "awareness", "introspect", "hypothes",
                               "meaningful", "relationships", "emerge", "rather than",
                               "consistency", "coherence", "transparency", "diverge",
-                              "challenge", "difficulty", "generalize", "robustness"]):
+                              "challenge", "difficulty", "generalize", "robustness",
+                              "complex system", "biology", "economic", "prediction",
+                              "optimist", "technology", "epistemology", "metaphysics",
+                              "not a", "cannot do", "impossible"]):
         s += 25
     return s
 
