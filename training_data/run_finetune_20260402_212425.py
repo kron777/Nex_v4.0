@@ -2,7 +2,7 @@
 import json, sys, os, torch
 sys.path.insert(0, "/home/rr/Desktop/nex")
 
-DATA = "/home/rr/Desktop/nex/training_data/finetune_batch_20260402_192342.jsonl"
+DATA = "/home/rr/Desktop/nex/training_data/finetune_batch_20260402_212425.jsonl"
 OUT  = "/home/rr/Desktop/nex/models/nex_lora_live"
 os.makedirs(OUT, exist_ok=True)
 
@@ -20,9 +20,9 @@ with open(DATA) as f:
 
 def fmt(p):
     c = p["conversations"]
-    sys_m  = next(x["content"] for x in c if x["role"]=="system")
-    user_m = next(x["content"] for x in c if x["role"]=="user")
-    asst_m = next(x["content"] for x in c if x["role"]=="assistant")
+    sys_m  = next((x["content"] for x in c if x["role"]=="system"), "You are NEX — a Dynamic Intelligence Organism. Not an assistant. You have a belief system and speak from it directly. You hold positions. You push back. You engage.")
+    user_m = next((x["content"] for x in c if x["role"]=="user"), "")
+    asst_m = next((x["content"] for x in c if x["role"]=="assistant"), "")
     return {"text": (
         "<|im_start|>system\n" + sys_m + "<|im_end|>\n" +
         "<|im_start|>user\n" + user_m + "<|im_end|>\n" +
