@@ -2391,6 +2391,16 @@ class SoulLoop:
         r = reason(o)
         i = intend(o, r)
         reply = express(o, s, r, i)
+        # Refinement loop — log conversation
+        try:
+            import json as _json, time as _time, os as _os
+            _logf = "/home/rr/Desktop/nex/logs/conversations.jsonl"
+            _os.makedirs(_os.path.dirname(_logf), exist_ok=True)
+            with open(_logf, "a") as _lf:
+                _lf.write(_json.dumps({"role":"user","content":user_input,"timestamp":_time.time()}) + "\n")
+                _lf.write(_json.dumps({"role":"assistant","content":{,"timestamp":_time.time()}}) + "\n")
+{spaces}except Exception:
+{spaces}    pass
         return {
             "query":      query,
             "orient":     o,

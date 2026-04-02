@@ -1,0 +1,17 @@
+[Unit]
+Description=NEX Refinement Loop — continuous self-improvement
+After=network.target
+
+[Service]
+Type=simple
+User=rr
+WorkingDirectory=/home/rr/Desktop/nex
+ExecStart=/home/rr/Desktop/nex/venv/bin/python3 /home/rr/Desktop/nex/nex_refinement_loop.py
+Restart=on-failure
+RestartSec=30
+StandardOutput=append:/home/rr/Desktop/nex/logs/refinement_loop.log
+StandardError=append:/home/rr/Desktop/nex/logs/refinement_loop.log
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
