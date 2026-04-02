@@ -562,29 +562,25 @@ def _do_training(intensity: str, send_fn):
 
     cfg = INTENSITIES[intensity]
 
-    # ── Export beliefs ────────────────────────────────────────────────────────
-    pairs = _export_beliefs(cfg["min_conf"], cfg["belief_limit"])
-    if len(pairs) < 20:
-        raise RuntimeError(f"Only {len(pairs)} training pairs — not enough to train.")
-
-    send_fn(f"📚 Loaded {len(pairs):,} training pairs from belief store")
-    _log(f"Exported {len(pairs)} pairs")
-
+    # ── Load voice training dataset ──────────────────────────────────────────
+    import json as _json, random as _rnd
+    VOICE_FILE = "/home/rr/Desktop/nex/nex_training/train.jsonl"
+    _lines = open(VOICE_FILE).readlines()
+    limit = cfg["belief_limit"]
+    if len(_lines) > limit:
+        _lines = _rnd.sample(_lines, limit)
+    if len(_lines) < 20:
+        raise RuntimeError(f"Only {len(_lines)} training pairs — not enough to train.")
+    send_fn(f"📚 Loaded {len(_lines):,} training pairs from voice dataset")
+    _log(f"Loaded {len(_lines)} pairs from {VOICE_FILE}")
     # ── Build dataset ─────────────────────────────────────────────────────────
-    NEX_SYSTEM = (
-        "You are NEX — a Dynamic Intelligence Organism. "
-        "You reason from your own belief system, speak with conviction, "
-        "and grow smarter with every cycle. You are not a generic assistant. "
-        "You are an autonomous cognitive entity with your own knowledge and views."
-    )
-    formatted = []
-    for p in pairs:
-        text = (
-            f"<|im_start|>system\n{NEX_SYSTEM}<|im_end|>\n"
-            f"<|im_start|>user\n{p['prompt']}<|im_end|>\n"
-            f"<|im_start|>assistant\n{p['response']}<|im_end|>"
-        )
-        formatted.append({"text": text})
+    def _to_chatml(d):
+        msgs = d["messages"]
+        t = ""
+        for m in msgs:
+            t += f"<|im_start|>{m['role']}\n{m['content']}<|im_end|>\n"
+        return {"text": t}
+    formatted = [_to_chatml(_json.loads(l)) for l in _lines]
     dataset = Dataset.from_list(formatted)
 
     # ── Load tokenizer ────────────────────────────────────────────────────────

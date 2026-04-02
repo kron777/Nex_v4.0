@@ -182,7 +182,7 @@ def _expand_via_links(belief_ids: list) -> list:
         con = _db()
         cur = con.cursor()
         cur.execute(f"""
-            SELECT b.id, b.content, b.confidence, b.topic, b.reinforce_count, b.decay_score
+            SELECT b.id, b.content, b.confidence, b.topic
             FROM beliefs b
             JOIN belief_links l ON b.id = l.parent_id
             WHERE l.child_id IN ({placeholders})
@@ -191,16 +191,14 @@ def _expand_via_links(belief_ids: list) -> list:
             LIMIT ?
         """, belief_ids + belief_ids + [HOP_LIMIT])
         expanded = []
-        for bid, content, conf, topic, rc, ds in cur.fetchall():
+        for bid, content, conf, topic in cur.fetchall():
             tag_list = [topic.strip()] if topic and topic.strip() else ["general"]
             expanded.append({
-                "id":             bid,
-                "content":        content,
-                "confidence":     conf or 0.5,
-                "tags":           tag_list,
-                "reinforce_count": rc or 0,
-                "decay_score":    ds or 0,
-                "_from_link":     True,
+                "id":          bid,
+                "content":     content,
+                "confidence":  conf or 0.5,
+                "tags":        tag_list,
+                "_from_link":  True,
             })
         con.close()
         return expanded
