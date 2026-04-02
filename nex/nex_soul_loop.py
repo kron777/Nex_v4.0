@@ -2003,7 +2003,7 @@ def express(
         # WONDER fires only when: not a direct position query, AND low confidence
         # OR explicitly a wonder/exploration intent. Never on challenge or position.
         # Topics that should never trigger WONDER — direct position topics
-        _no_wonder_topics = {"animals", "ethics", "identity", "alignment", "happiness"}
+        _no_wonder_topics = {"animals", "identity"}
         _wonder_eligible = (
             intent_type not in ("challenge", "position") and
             _current_topic not in _no_wonder_topics and
