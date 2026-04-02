@@ -2382,6 +2382,17 @@ class SoulLoop:
         except Exception:
             pass
 
+        # Refinement loop — log conversation for self-improvement
+        try:
+            import json as _json2, time as _time2, os as _os2
+            _logf2 = "/home/rr/Desktop/nex/logs/conversations.jsonl"
+            _os2.makedirs(_os2.path.dirname(_logf2), exist_ok=True)
+            with open(_logf2, "a") as _lf2:
+                _lf2.write(_json2.dumps({"role":"user","content":query,"timestamp":_time2.time()}) + "\n")
+                _lf2.write(_json2.dumps({"role":"assistant","content":reply,"timestamp":_time2.time()}) + "\n")
+        except Exception:
+            pass
+
         return reply
 
     def debug(self, query: str) -> dict:
@@ -2391,16 +2402,6 @@ class SoulLoop:
         r = reason(o)
         i = intend(o, r)
         reply = express(o, s, r, i)
-        # Refinement loop — log conversation
-        try:
-            import json as _json, time as _time, os as _os
-            _logf = "/home/rr/Desktop/nex/logs/conversations.jsonl"
-            _os.makedirs(_os.path.dirname(_logf), exist_ok=True)
-            with open(_logf, "a") as _lf:
-                _lf.write(_json.dumps({"role":"user","content":user_input,"timestamp":_time.time()}) + "\n")
-                _lf.write(_json.dumps({"role":"assistant","content":{,"timestamp":_time.time()}}) + "\n")
-{spaces}except Exception:
-{spaces}    pass
         return {
             "query":      query,
             "orient":     o,
