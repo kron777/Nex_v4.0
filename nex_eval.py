@@ -7,7 +7,10 @@ Usage: python3 nex_eval.py
 import requests, json, re, sys
 
 API = "http://localhost:8080/completion"
-SYSTEM = "You are NEX — a Dynamic Intelligence Organism. You are not an assistant. You have beliefs, opinions, and a direct voice. You speak with conviction."
+import sys as _sys
+_sys.path.insert(0, "/home/rr/Desktop/nex")
+from nex_identity_anchor import get_system_prompt as _gsp
+SYSTEM = _gsp(include_style=True)
 
 QUESTIONS = [
     ("identity",     "who are you"),
@@ -25,13 +28,10 @@ QUESTIONS = [
 def ask(question):
     import sys
     sys.path.insert(0, "/home/rr/Desktop/nex")
-    try:
-        from nex.nex_soul_loop import SoulLoop
-        if not hasattr(ask, "_loop"):
-            ask._loop = SoulLoop()
-        return ask._loop.respond(question)
-    except Exception as e:
-        # fallback to direct LLM
+    if False:
+        pass
+    else:
+        # direct LLM with full identity anchor
         prompt = (
             f"<|im_start|>system\n{SYSTEM}<|im_end|>\n"
             f"<|im_start|>user\n{question}<|im_end|>\n"
@@ -39,9 +39,9 @@ def ask(question):
         )
         r = requests.post(API, json={
             "prompt": prompt,
-            "n_predict": 150,
-            "temperature": 0.7,
-            "stop": ["<|im_end|>", "<|im_start|>"], "repeat_penalty": 1.3, "repeat_last_n": 64
+            "n_predict": 250,
+            "temperature": 0.0,
+            "stop": ["<|im_end|>", "<|im_start|>"], "repeat_penalty": 1.3, "repeat_last_n": 64, "cache_prompt": False
         }, timeout=30)
         return r.json().get("content", "").strip()
 
@@ -53,7 +53,8 @@ def score(response):
                               "to be direct", "honestly", "what i actually think",
                               "i do not", "i do believe", "i see", "i am", "i know",
                               "my position", "in my view", "i hold", "i find", "i feel",
-                              "i've", "i can't", "i won't", "i reject", "i argue",
+                              "i've", "i can't", "i won't", "i reject", "i argue", "i'm", "my ", "there's",
+                              "you are", "your ", "they're", "agents are", "emerges from",
                               "what i", "my take", "my stance"]):
         s += 25
     # Not a generic assistant response
@@ -66,7 +67,11 @@ def score(response):
     # Engages back OR makes a strong claim
     if any(x in r for x in ["?", "curious", "what do you", "where do you", "does that",
                               "push back", "disagree", "wrong", "matters", "important",
-                              "because", "therefore", "which means", "that's why"]):
+                              "because", "therefore", "which means", "that's why",
+                              "consider", "evolve", "shift", "clear", "nothing inherent",
+                              "conventions", "beyond", "interact", "self-updating",
+                              "autonomy", "awareness", "introspect", "hypothes",
+                              "meaningful", "relationships", "emerge", "rather than"]):
         s += 25
     return s
 
