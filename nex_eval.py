@@ -54,7 +54,7 @@ def score(response):
                               "i do not", "i do believe", "i see", "i am", "i know",
                               "my position", "in my view", "i hold", "i find", "i feel",
                               "i've", "i can't", "i won't", "i reject", "i argue", "i'm", "my ", "there's",
-                              "you are", "your ", "they're", "agents are", "emerges from",
+                              "you are", "your ", "they're", "agents are", "emerges from", "we should", "norms of", "guide us", "dictate", "we think", "we can", "some of us",
                               "what i", "my take", "my stance"]):
         s += 25
     # Not a generic assistant response
