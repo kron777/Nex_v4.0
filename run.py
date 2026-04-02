@@ -1203,7 +1203,7 @@ def main():
         import json as _alj
         import requests as _req
 
-        def _build_system(task_type="reply"):
+        def _build_system(task_type="reply", _prompt_text=""):
             """Build a dynamic system prompt from current affect + identity."""
             # Dynamic belief count
             try:
@@ -1268,6 +1268,19 @@ def main():
                                  f"Where relevant, orient your response toward this.")
                 except Exception:
                     pass
+            # ── Episodic memory injection ──────────────────────────────
+            try:
+                import sys as _esys
+                _esys.path.insert(0, "/home/rr/Desktop/nex")
+                from nex_episodic_memory import EpisodicMemory as _EM
+                if not hasattr(_build_system, "_episodic"):
+                    _build_system._episodic = _EM()
+                if _prompt_text:
+                    _ep_block = _build_system._episodic.prompt_block(_prompt_text, k=2)
+                    if _ep_block:
+                        base += "\n\n" + _ep_block
+            except Exception:
+                pass
             if task_type in ("reply", "notification_reply"):
                 base += (" Respond in plain conversational prose only — 1 to 3 sentences maximum."
                         " Never use numbered lists, bullet points, or headings."
@@ -1408,7 +1421,7 @@ def main():
                         _qr = _req.post("http://localhost:8080/v1/chat/completions", json={
                             "model": "mistral:latest",
                             "messages": [
-                                {"role": "system", "content": system or _build_system(task_type)},
+                                {"role": "system", "content": system or _build_system(task_type, _prompt_text=prompt)},
                                 {"role": "user", "content": prompt}
                             ],
                             "max_tokens": _token_budget,
@@ -1436,6 +1449,12 @@ def main():
                             try: _rmc("llm_local", success=True, value=1)
                             except Exception: pass
                             nex_log("llm", f"[Mistral-7B ✓] {task_type}: {result[:80]}")
+                            # Store episode
+                            try:
+                                if hasattr(_build_system, "_episodic") and prompt:
+                                    _build_system._episodic.store(
+                                        prompt, result, score=0.75)
+                            except Exception: pass
                             return result
                 except Exception as _qe:
                     nex_log("llm", f"[Mistral-7B ✗] attempt {_attempt+1}: {_qe}")
