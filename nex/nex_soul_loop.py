@@ -2212,14 +2212,21 @@ def express(
         _user += f'Your current position: {_position}\n\n'
         _user += 'Respond as NEX in 2-4 sentences. Stay grounded in your beliefs. Be direct.'
         _prompt = f'<|im_start|>system\n{_sys}<|im_end|>\n<|im_start|>user\n{_user}<|im_end|>\n<|im_start|>assistant\n'
-        _r2 = _req2.post('http://localhost:8080/completion', json={
+        # BCD — apply logit bias to suppress generic AI patterns
+        _bcd_payload = {
             'prompt': _prompt,
             'n_predict': 180,
             'temperature': 0.72,
             'repeat_penalty': 1.3,
             'repeat_last_n': 64,
             'stop': ['<|im_end|>', '<|im_start|>']
-        }, timeout=20)
+        }
+        try:
+            from nex_bcd import build_logit_bias
+            _bcd_payload['logit_bias'] = build_logit_bias()
+        except Exception:
+            pass
+        _r2 = _req2.post('http://localhost:8080/completion', json=_bcd_payload, timeout=20)
         if _r2.status_code == 200:
             _llm_reply = _r2.json().get('content', '').strip()
             if _llm_reply and len(_llm_reply) > 20:
