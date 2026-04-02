@@ -1964,7 +1964,7 @@ def express(
                     _bridge_payload["content_a"],
                     _bridge_payload["content_b"],
                 ],
-                topic = "{} and {}".format(
+                topic = (lambda a, b: a if a == b else f"{a} and {b}")(
                     _bridge_payload["topic_a"].replace("_", " "),
                     _bridge_payload["topic_b"].replace("_", " "),
                 ),
