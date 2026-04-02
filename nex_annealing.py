@@ -199,6 +199,15 @@ def anneal_cycle(conn, temperature: float, cycle_num: int) -> dict:
                     stats["crystallised"] += 1
 
     conn.commit()
+    # Run contradiction detection after each anneal cycle
+    try:
+        import sys as _sys
+        _sys.path.insert(0, "/home/rr/Desktop/nex")
+        from nex_contradiction_detector import run as _detect
+        r = _detect(dry_run=False)
+        stats["contradictions_resolved"] = len(r) if isinstance(r, list) else 0
+    except Exception:
+        pass
     return stats
 
 

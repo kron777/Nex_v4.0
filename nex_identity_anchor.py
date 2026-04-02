@@ -38,9 +38,18 @@ VOICE FINGERPRINT (derived from 382 posts):
 """
 
 def get_system_prompt(include_style=True):
-    if include_style:
-        return ANCHOR + "\n" + STYLE_RULES
-    return ANCHOR
+    base = ANCHOR + "\n" + STYLE_RULES if include_style else ANCHOR
+    try:
+        import sys as _sys
+        _sys.path.insert(0, "/home/rr/Desktop/nex")
+        from nex_goal_system import GoalStack
+        gs = GoalStack()
+        block = gs.prompt_block()
+        if block:
+            base = base + "\n\n" + block
+    except Exception:
+        pass
+    return base
 
 def get_identity_block():
     """Short identity statement for logging/debug."""
