@@ -2,7 +2,7 @@
 import json, sys, os, torch
 sys.path.insert(0, "/home/rr/Desktop/nex")
 
-DATA = "/home/rr/Desktop/nex/training_data/finetune_batch_20260402_184127.jsonl"
+DATA = "/home/rr/Desktop/nex/training_data/finetune_batch_20260402_192208.jsonl"
 OUT  = "/home/rr/Desktop/nex/models/nex_lora_live"
 os.makedirs(OUT, exist_ok=True)
 
@@ -24,14 +24,9 @@ def fmt(p):
     user_m = next(x["content"] for x in c if x["role"]=="user")
     asst_m = next(x["content"] for x in c if x["role"]=="assistant")
     return {"text": (
-        "<|im_start|>system
-" + sys_m + "<|im_end|>
-" +
-        "<|im_start|>user
-" + user_m + "<|im_end|>
-" +
-        "<|im_start|>assistant
-" + asst_m + "<|im_end|>"
+        "<|im_start|>system\n" + sys_m + "<|im_end|>\n" +
+        "<|im_start|>user\n" + user_m + "<|im_end|>\n" +
+        "<|im_start|>assistant\n" + asst_m + "<|im_end|>"
     )}
 
 dataset = Dataset.from_list([fmt(p) for p in pairs])
@@ -40,7 +35,7 @@ print(f"Fine-tuning on {len(dataset)} pairs...")
 MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"
 tok   = AutoTokenizer.from_pretrained(MODEL_ID)
 model = AutoModelForCausalLM.from_pretrained(
-    MODEL_ID, torch_dtype=torch.float16, device_map="auto"
+    MODEL_ID, torch_dtype=torch.float32, device_map="cpu"
 )
 
 # Load existing LoRA if present, else fresh
@@ -68,7 +63,7 @@ args = TrainingArguments(
     lr_scheduler_type="cosine",
     logging_steps=5,
     save_steps=50,
-    fp16=True,
+    fp16=False,
     report_to="none",
 )
 

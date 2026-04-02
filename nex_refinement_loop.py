@@ -213,7 +213,7 @@ print(f"Fine-tuning on {{len(dataset)}} pairs...")
 MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"
 tok   = AutoTokenizer.from_pretrained(MODEL_ID)
 model = AutoModelForCausalLM.from_pretrained(
-    MODEL_ID, torch_dtype=torch.float16, device_map="auto"
+    MODEL_ID, torch_dtype=torch.float32, device_map="cpu"
 )
 
 # Load existing LoRA if present, else fresh
@@ -241,7 +241,7 @@ args = TrainingArguments(
     lr_scheduler_type="cosine",
     logging_steps=5,
     save_steps=50,
-    fp16=True,
+    fp16=False,
     report_to="none",
 )
 
