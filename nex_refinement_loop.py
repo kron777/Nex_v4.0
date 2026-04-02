@@ -50,13 +50,18 @@ ENGAGE  = ["?","because","therefore","matters","important","which means",
            "that\'s why","disagree","wrong","curious","what do you","does that",
            "push back","where do you"]
 
-def score_response(r):
-    r2 = r.lower()
-    v = any(x in r2 for x in VOICE)
-    g = not any(x in r2 for x in GENERIC)
-    l = len(r.split()) > 30
-    e = any(x in r2 for x in ENGAGE)
-    return sum([v, g, l, e]) * 25
+def score_response(r, user_input=""):
+    try:
+        import sys as _sq; _sq.path.insert(0, "/home/rr/Desktop/nex")
+        from nex_response_quality import score_pair as _sp
+        return int(_sp(user_input, r) * 100)
+    except Exception:
+        r2 = r.lower()
+        v = any(x in r2 for x in VOICE)
+        g = not any(x in r2 for x in GENERIC)
+        l = len(r.split()) > 30
+        e = any(x in r2 for x in ENGAGE)
+        return sum([v, g, l, e]) * 25
 
 # ── Logging ───────────────────────────────────────────────────────────────
 def setup_logging():

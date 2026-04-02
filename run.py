@@ -1483,11 +1483,14 @@ def main():
                             try: _rmc("llm_local", success=True, value=1)
                             except Exception: pass
                             nex_log("llm", f"[Mistral-7B ✓] {task_type}: {result[:80]}")
-                            # Store episode
+                            # Store episode with quality score
                             try:
                                 if hasattr(_build_system, "_episodic") and prompt:
+                                    import sys as _qs; _qs.path.insert(0,"/home/rr/Desktop/nex")
+                                    from nex_response_quality import score_pair as _sp
+                                    _qscore = _sp(prompt, result)
                                     _build_system._episodic.store(
-                                        prompt, result, score=0.75)
+                                        prompt, result, score=_qscore)
                             except Exception: pass
                             # World model extraction
                             try:

@@ -147,6 +147,16 @@ def run(task: str, max_steps=5) -> dict:
 
     return {"steps": steps, "answer": None, "complete": False}
 
+@tool("web_search", "Search the web for current information. Input: search query string.")
+def web_search(query: str) -> str:
+    try:
+        import sys as _ws
+        _ws.path.insert(0, "/home/rr/Desktop/nex")
+        from nex_web_search import search as _search
+        return _search(query, max_results=4)
+    except Exception as e:
+        return f"Search error: {e}"
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     print("Tools available:", list(TOOLS.keys()))
