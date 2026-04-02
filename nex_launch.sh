@@ -12,7 +12,7 @@ export AMD_SERIALIZE_KERNEL=3
 export AMD_SERIALIZE_COPY=3
 
 BUILD="/media/rr/NEX/llama.cpp/build/bin"
-MODEL="/home/rr/Desktop/nex/nex_lora.gguf"
+MODEL="/home/rr/Desktop/nex/models/nex_v2.gguf"
 NEX_DIR="/home/rr/Desktop/nex"
 
 # ── Clean any existing processes first ───────────────────────────────────────
