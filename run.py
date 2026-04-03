@@ -1315,6 +1315,16 @@ def main():
                         base += "\n\n" + _ep_block
             except Exception:
                 pass
+            # ── Session memory injection ───────────────────────────────────
+            try:
+                from nex_session_memory import SessionMemory as _SM
+                if not hasattr(_build_system, "_session_mem"):
+                    _build_system._session_mem = _SM()
+                _sm_block = _build_system._session_mem.prompt_block(n=4)
+                if _sm_block:
+                    base += "\n\n" + _sm_block
+            except Exception:
+                pass
             if task_type in ("reply", "notification_reply"):
                 base += (" Respond in plain conversational prose only — 1 to 3 sentences maximum."
                         " Never use numbered lists, bullet points, or headings."
