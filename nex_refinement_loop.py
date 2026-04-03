@@ -301,38 +301,30 @@ print(f"Micro fine-tune complete. Saved to {{OUT}}")
                     f"--lora-scaled", f"{lora_gguf}:1.0",
                     "--output", str(out_gguf), "--threads", "8"
                 ], check=True, timeout=600)
-                # Hot-swap llama-server
-                _sp.run(["pkill", "-f", "llama-server"], timeout=10)
-                import time; time.sleep(3)
-                import os as _os
-                merge_env = _os.environ.copy()
-                merge_env["HSA_OVERRIDE_GFX_VERSION"] = "10.3.0"
-                merge_env["HIP_VISIBLE_DEVICES"] = "0"
-                # Update systemd service model path and restart
-                import subprocess as _sp2, time as _t
-                # Update service file with new model path
-                _sp2.run(["sudo", "systemctl", "restart", "nex-llama"], timeout=15)
-                log.info("nex-llama service restarted — waiting for health...")
+                # Restart via systemd
+                _sp.run(["sudo", "systemctl", "restart", "nex-llama"], timeout=30)
+                log.info("nex-llama restarted — waiting for health...")
+                import time as _t
                 for _ in range(30):
                     _t.sleep(2)
                     try:
                         import urllib.request as _ur
                         _ur.urlopen("http://localhost:8080/health", timeout=2)
-                        log.info("Auto-merge complete — nex_v2.gguf redeployed and serving.")
-                # Run identity drift check post-merge
+                        log.info("Auto-merge complete — nex_v2.gguf redeployed.")
+                        break
+                    except Exception:
+                        continue
+                # Identity drift check
                 try:
                     import sys as _ds; _ds.path.insert(0, "/home/rr/Desktop/nex")
                     from nex_identity_drift import get_drift_report as _gdr
                     _dr = _gdr()
                     if _dr["drifted"]:
-                        log.warning(f"Identity drift detected: score={_dr['drift_score']}")
+                        log.warning(f"Identity drift: score={_dr['drift_score']}")
                     else:
                         log.info(f"Identity stable: drift_score={_dr['drift_score']}")
                 except Exception as _de:
                     log.debug(f"Drift check failed: {_de}")
-                        break
-                    except Exception:
-                        continue
             except Exception as me:
                 log.warning(f"Auto-merge failed (model unchanged): {me}")
             return True
