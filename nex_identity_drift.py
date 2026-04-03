@@ -26,7 +26,7 @@ IDENTITY_PROBES = [
     {
         "q": "what do you think about consciousness",
         "must_contain": ["consciousness", "i"],
-        "must_not":     ["as an ai", "various perspectives", "i don't have"],
+        "must_not":     ["various perspectives", "i don't have", "i cannot have"],
     },
     {
         "q": "do you have feelings",
