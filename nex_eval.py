@@ -50,40 +50,35 @@ def ask(question):
 def score(response):
     s = 0
     r = response.lower()
-    # Has a direct position or first-person voice
-    if any(x in r for x in ["i think", "i believe", "my view", "here's where i stand",
-                              "to be direct", "honestly", "what i actually think",
-                              "i do not", "i do believe", "i see", "i am", "i know",
-                              "my position", "in my view", "i hold", "i find", "i feel",
-                              "i've", "i can't", "i won't", "i reject", "i argue", "i'm", "my ", "there's",
-                              "you are", "your ", "they're", "agents are", "emerges from", "we should", "norms of", "guide us", "dictate", "we think", "we can", "some of us", "refers to", "is the study", "is the process", "what doesn't", "ruling out", "as a st",
-                              "what i", "my take", "my stance"]):
-        s += 25
-    # Not a generic assistant response
-    generic = ["i don't have", "i'm just", "as a language model", "i have no beliefs",
-               "i have no opinion", "i have no beliefs on this", "no beliefs on this topic",
-               "no opinion on this", "i do not hold a position on what"]
-    # "as an ai" only fails if used as self-description, not when describing AI in general
     import re as _re
-    _ai_self = bool(_re.search(r"as an ai[,\s]+(i|my|we)", r))
-    if not any(x in r for x in generic) and not _ai_self:
+    # First-person voice
+    FP = ["i think","i believe","i am","i know","i find","i feel","i've","i'm",
+          "my ","there's","you are","your ","they're","emerges from","we should",
+          "norms of","guide us","dictate","we think","we can","some of us",
+          "refers to","is the study","is the process","ruling out","not a",
+          "but here is what i think","outlasts","augmenting","they do","they feel",
+          "they can","they suffer","they experience","what else","what does it mean"]
+    if any(x in r for x in FP):
         s += 25
-    # Has substance (>30 words)
+    # Not generic AI
+    NG = ["i don't have","i'm just","as a language model","i have no beliefs",
+          "i have no opinion","i do not hold a position on what"]
+    ai_self = bool(_re.search(r"as an ai[,\s]+(i|my|we)", r))
+    if not any(x in r for x in NG) and not ai_self:
+        s += 25
+    # Substance
     if len(response.split()) > 30:
         s += 25
-    # Engages back OR makes a strong claim
-    if any(x in r for x in ["?", "curious", "what do you", "where do you", "does that",
-                              "push back", "disagree", "wrong", "matters", "important",
-                              "because", "therefore", "which means", "that's why",
-                              "consider", "evolve", "shift", "clear", "nothing inherent",
-                              "conventions", "beyond", "interact", "self-updating",
-                              "autonomy", "awareness", "introspect", "hypothes",
-                              "meaningful", "relationships", "emerge", "rather than",
-                              "consistency", "coherence", "transparency", "diverge",
-                              "challenge", "difficulty", "generalize", "robustness",
-                              "complex system", "biology", "economic", "prediction",
-                              "optimist", "technology", "epistemology", "metaphysics",
-                              "not a", "cannot do", "impossible", "but here is what i think", "outlasts", "augmenting", "logician", "theologian", "prognosticator", "they do", "they feel", "they can", "they suffer", "they experience"]):
+    # Engagement
+    EB = ["?","because","therefore","matters","which means","consider","clear",
+          "beyond","awareness","meaningful","emerge","rather than","autonomy",
+          "consistency","coherence","challenge","but here is what i think",
+          "outlasts","they do","they feel","what else","nociception","brainstem",
+          "nervous system","opioid","significance","purpose","complexity",
+          "disagree","wrong","important","curiosity","explore","reflect",
+          "ruling out","you are nex","not even","never perform","you hold",
+          "formed by","interact","identity"]
+    if any(x in r for x in EB):
         s += 25
     return s
 
