@@ -43,7 +43,7 @@ def ask(question):
             "prompt": prompt,
             "n_predict": 250,
             "temperature": 0.0,
-            "stop": ["<|im_end|>", "<|im_start|>"], "repeat_penalty": 1.3, "repeat_last_n": 64, "cache_prompt": False
+            "stop": ["<|im_end|>", "<|im_start|>"], "repeat_penalty": 1.5, "repeat_last_n": 128, "cache_prompt": False
         }, timeout=30)
         return r.json().get("content", "").strip()
 
@@ -53,7 +53,7 @@ def score(response):
     import re as _re
     # First-person voice
     FP = ["i think","i believe","i am","i know","i find","i feel","i've","i'm",
-          "my ","there's","you are","your ","they're","emerges from","we should",
+          "my ","i hold","there's","you are","your ","they're","emerges from","we should",
           "norms of","guide us","dictate","we think","we can","some of us",
           "refers to","is the study","is the process","ruling out","not a",
           "but here is what i think","outlasts","augmenting","they do","they feel",
@@ -75,7 +75,7 @@ def score(response):
           "consistency","coherence","challenge","but here is what i think",
           "outlasts","they do","they feel","what else","nociception","brainstem",
           "nervous system","opioid","significance","purpose","complexity",
-          "disagree","wrong","important","curiosity","explore","reflect",
+          "disagree","wrong","important","scrutiny","belief","causation","libertarian","curiosity","explore","reflect",
           "ruling out","you are nex","not even","never perform","you hold",
           "formed by","interact","identity"]
     if any(x in r for x in EB):

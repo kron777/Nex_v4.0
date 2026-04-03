@@ -34,6 +34,78 @@ def get_belief_cluster(topic: str, n=3) -> list:
     db.close()
     return [{"id": r[0], "content": r[1]} for r in rows]
 
+def get_warmth_cluster(n=3) -> list:
+    """
+    Get beliefs clustered by word warmth pull_toward vectors.
+    Finds cross-topic beliefs whose key words pull toward each other.
+    This surfaces connections topic-based clustering misses.
+    """
+    db = sqlite3.connect(str(DB_PATH))
+    import re as _re
+
+    # Get hot words with pull_toward vectors
+    hot = db.execute(
+        "SELECT word, pull_toward FROM word_tags WHERE w >= 0.55 AND pull_toward IS NOT NULL"
+    ).fetchall()
+    if len(hot) < 2:
+        db.close()
+        return []
+
+    # Build pull_toward sets per word
+    import json as _json
+    word_pulls = {}
+    for word, pull_json in hot:
+        try:
+            pulls = _json.loads(pull_json) if isinstance(pull_json, str) else pull_json
+            if isinstance(pulls, list):
+                word_pulls[word] = set(str(p).lower() for p in pulls)
+        except Exception:
+            pass
+
+    if len(word_pulls) < 2:
+        db.close()
+        return []
+
+    # Find word pairs with overlapping pull_toward
+    words = list(word_pulls.keys())
+    best_pair = None
+    best_overlap = 0
+    import random
+    random.shuffle(words)
+    for i in range(min(len(words), 20)):
+        for j in range(i+1, min(len(words), 20)):
+            overlap = word_pulls[words[i]] & word_pulls[words[j]]
+            if len(overlap) > best_overlap:
+                best_overlap = len(overlap)
+                best_pair = (words[i], words[j])
+
+    if not best_pair or best_overlap == 0:
+        db.close()
+        return []
+
+    w1, w2 = best_pair
+    # Find high-confidence beliefs containing either word, different topics
+    rows = db.execute("""
+        SELECT id, content, topic FROM beliefs
+        WHERE confidence >= 0.72
+        AND (content LIKE ? OR content LIKE ?)
+        ORDER BY confidence DESC LIMIT 20
+    """, (f"%{w1}%", f"%{w2}%")).fetchall()
+
+    # Pick from different topics if possible
+    seen_topics = set()
+    cluster = []
+    for bid, content, topic in rows:
+        if topic not in seen_topics or len(cluster) < 2:
+            cluster.append({"id": bid, "content": content, "topic": topic})
+            seen_topics.add(topic)
+        if len(cluster) >= n:
+            break
+
+    db.close()
+    return cluster
+
+
 def synthesize(beliefs: list, topic: str) -> str:
     """Ask LLM to synthesize a new belief from existing ones."""
     belief_text = "\n".join(f"- {b['content']}" for b in beliefs)
@@ -69,7 +141,11 @@ def run_synthesis(topics=None, n_per_topic=3, dry_run=False) -> int:
 
     for topic in topics:
         for _ in range(n_per_topic):
-            cluster = get_belief_cluster(topic, n=3)
+            # 30% chance to use warmth-cluster instead of topic-cluster
+            if random.random() < 0.30:
+                cluster = get_warmth_cluster(n=3)
+            else:
+                cluster = get_belief_cluster(topic, n=3)
             if len(cluster) < 2:
                 continue
 

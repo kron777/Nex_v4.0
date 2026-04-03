@@ -223,6 +223,17 @@ def retrieve_beliefs_by_intent(intent: str, query: str, n: int = 6) -> list:
             seen.add(key)
             unique.append(b)
 
+    # Filter question-type beliefs — they cause deflection back to user
+    def _is_question_belief(b):
+        s = b.strip()
+        if s.endswith("?"): return True
+        if s.startswith("What ") or s.startswith("Why ") or s.startswith("How "): return True
+        if s.lower().startswith("what do you") or s.lower().startswith("what are you"): return True
+        return False
+    filtered = [b for b in unique if not _is_question_belief(b)]
+    if len(filtered) >= 2:
+        unique = filtered
+
     # Relevance filter — prefer beliefs sharing keywords with query
     import re as _re3
     _sw = {"what","does","that","this","with","from","have","your","believe",
@@ -377,6 +388,22 @@ def _live_bridge_fire(belief_text: str, intent: str, query: str) -> str | None:
 def generate(query: str) -> str:
     global _budget, _history
 
+
+    # ── WARMTH PRE-PROCESS ────────────────────────────────────────
+    _warmth_ctx = {}
+    _warmth_db  = None
+    try:
+        import sqlite3
+        from nex_word_tag_schema import init_db
+        from nex_warmth_integrator import pre_process, cot_gate
+        _warmth_db = sqlite3.connect(
+            str(Path.home() / "Desktop/nex/nex.db"))
+        _warmth_db.row_factory = sqlite3.Row
+        init_db(_warmth_db)
+        _warmth_ctx = pre_process(query)
+    except Exception as _we:
+        pass
+    # ─────────────────────────────────────────────────────────────
     # 1. Classify intent
     intent = classify_intent(query)
 
@@ -392,6 +419,44 @@ def generate(query: str) -> str:
         beliefs = retrieve_beliefs_by_intent(intent, query)
         belief_text = "\n".join(f"- {b}" for b in beliefs) if beliefs else "(drawing from general knowledge)"
 
+
+    # ── WARMTH COT GATE ───────────────────────────────────────────
+    if _warmth_ctx and _warmth_db:
+        try:
+            _gate = cot_gate(query, [belief_text], _warmth_ctx)
+            if _gate.get("reasoning_seed"):
+                belief_text = (
+                    _gate["reasoning_seed"] + "\n" + belief_text
+                )
+            if _warmth_ctx.get("depth_ceiling", 0) >= 5:
+                # Soul-level question — force rich intent
+                if intent not in ("identity","consciousness",
+                                  "introspective","gaps"):
+                    intent = "introspective"
+        except Exception as _ge:
+            pass
+    # ─────────────────────────────────────────────────────────────
+
+    # ── VALENCE CONTEXT ───────────────────────────────────────
+    _valence_ctx = {}
+    if _warmth_ctx:
+        try:
+            from nex_warmth_valence import get_valence_context
+            _valence_ctx = get_valence_context(query)
+            if _valence_ctx.get("register") == "negative":
+                # Deep tension territory — slow down, go deeper
+                _voice_directive = (
+                    "Take time with this. Don't rush to "
+                    "resolution. Acknowledge genuine difficulty. "
+                    + _voice_directive)
+            elif _valence_ctx.get("register") == "mixed":
+                _voice_directive = (
+                    "Hold the tension here. Don't collapse "
+                    "ambiguity prematurely. "
+                    + _voice_directive)
+        except Exception:
+            pass
+    # ─────────────────────────────────────────────────────────
     # 2b. Contradiction check — override intent if genuine tension detected
     try:
         from nex_contradiction import detect_contradictions
@@ -406,16 +471,36 @@ def generate(query: str) -> str:
                 belief_text = belief_text + tension_note if belief_text else tension_note
     except Exception:
         pass
-    # 2b1. Metacognitive calibration — calibrate voice to belief density
-    _belief_lines = [l for l in belief_text.split("\n") if l.strip("- ").strip()]
-    _belief_count = len(_belief_lines)
-    if _belief_count < 2:
-        # Thin coverage — force gaps intent, signal uncertainty
-        intent = "gaps"
-        belief_text = belief_text + "\n- My beliefs on this topic are sparse."
-    elif _belief_count >= 5:
-        # Rich coverage — allow assert if not already overridden
-        pass  # keep current intent
+    # 2b1. Metacognitive confidence gate — NEX knows what she knows
+    try:
+        from nex_metacog_gate import assess as _metacog_assess, BLIND, THIN, PARTIAL, GROUNDED
+        _graph_ctx = None
+        try:
+            from nex_graph_reasoner import has_sufficient_coverage
+            _graph_ctx = has_sufficient_coverage(query)
+        except Exception:
+            pass
+        _metacog = _metacog_assess(query, belief_text, graph_ctx=_graph_ctx)
+        if _metacog.skip_llm:
+            # BLIND — return honest uncertainty directly, no LLM
+            _history.append((query, _metacog.response))
+            if _warmth_db:
+                try: _warmth_db.close()
+                except: pass
+            return _metacog.response
+        elif _metacog.level == THIN:
+            intent = "gaps"
+            _voice_directive = _metacog.hedge + _voice_directive
+        elif _metacog.level == PARTIAL:
+            _voice_directive = _metacog.hedge + _voice_directive
+        # GROUNDED — proceed normally
+    except Exception as _mg_err:
+        # Gate failed — fall through to normal generation
+        _belief_lines = [l for l in belief_text.split("\n") if l.strip("- ").strip()]
+        _belief_count = len(_belief_lines)
+        if _belief_count < 2:
+            intent = "gaps"
+            belief_text = belief_text + "\n- My beliefs on this topic are sparse."
     # 2b1. Metacognitive calibration — calibrate voice to belief density
     _belief_lines = [l for l in belief_text.split("\n") if l.strip("- ").strip()]
     _belief_count = len(_belief_lines)
@@ -464,13 +549,24 @@ def generate(query: str) -> str:
     opener = random.choice(available)
     _budget.used_openers.append(opener)
 
-    # 4. Build conversation history string
+    # 4. Build conversation history string + world context
     history_str = ""
     if _history:
         history_str = "Recent exchanges:\n"
         for q, r in list(_history)[-3:]:
             history_str += f"Q: {q[:80]}\nNEX: {r[:100]}\n"
         history_str += "\n"
+
+    # ── WORLD CONTEXT INJECTION ───────────────────────────────────
+    _world_ctx = ""
+    try:
+        from nex_live_world import pre_response as _lw_pre
+        _world_ctx = _lw_pre(query)
+        if _world_ctx:
+            history_str = _world_ctx + "\n" + history_str
+    except Exception:
+        pass
+    # ─────────────────────────────────────────────────────────────
 
     # 5. Get banned phrases for this session
     banned = _budget.get_banned()
@@ -503,8 +599,38 @@ def generate(query: str) -> str:
         f"NEX response (start with '{opener}', directly referencing the beliefs above — NOT generic AI statements):"
     )
 
+    # 9. COT pre-reasoning — fires on deep/soul-level questions
+    _cot_reasoning = ""
+    try:
+        if _warmth_ctx.get("depth_ceiling", 0) >= 4 or len(query.split()) >= 6:
+            from nex_cot_engine import reason
+            _raw_beliefs = [b.strip("- ").strip()
+                            for b in belief_text.split("\n")
+                            if b.strip("- ").strip()]
+            _cot_reasoning = reason(query, _raw_beliefs[:5])
+            if _cot_reasoning and len(_cot_reasoning.split()) >= 20:
+                prompt = (
+                    prompt +
+                    f"\n\nYour reasoning chain before answering:\n{_cot_reasoning[:400]}"
+                )
+    except Exception:
+        pass
+
     # 9. Generate
     response = _call_llm(system, prompt)
+    # ── WARMTH POST-PROCESS ───────────────────────────────────────
+    if _warmth_ctx and _warmth_db:
+        try:
+            from nex_warmth_integrator import post_process
+            post_process(query, response, _warmth_ctx)
+        except Exception:
+            pass
+        try:
+            _warmth_db.close()
+        except Exception:
+            pass
+    # ─────────────────────────────────────────────────────────────
+
 
     # 10. Self-critique pass — if repetitive, regenerate once with higher temperature
     if False and _budget.is_repetitive(response):  # disabled — too expensive
@@ -521,6 +647,14 @@ def generate(query: str) -> str:
     # 11. Record to budget
     _budget.record(response, intent)
     _history.append((query, response))
+
+    # ── LIVE WORLD UPDATE ─────────────────────────────────────────
+    try:
+        from nex_live_world import post_response as _lw_post
+        _lw_post(query, response, topic=intent)
+    except Exception:
+        pass
+    # ─────────────────────────────────────────────────────────────
 
     return response
 
