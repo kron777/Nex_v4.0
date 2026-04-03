@@ -260,6 +260,22 @@ class EmbeddingEngine:
             for r in rows
         ]
         results.sort(key=lambda x: x["score"], reverse=True)
+        # Track usage for calibration
+        try:
+            import sys as _cs; _cs.path.insert(0, "/home/rr/Desktop/nex")
+            from nex_belief_calibrator import _ensure_schema
+            import time as _ct
+            _cdb = _db_connect()
+            _ensure_schema(_cdb)
+            for _r in results:
+                _cdb.execute("""UPDATE beliefs SET
+                    use_count = COALESCE(use_count, 0) + 1,
+                    last_used = ?
+                    WHERE id=?""", (_ct.time(), _r["id"]))
+            _cdb.commit()
+            _cdb.close()
+        except Exception:
+            pass
         return results
 
     def search_by_vec(self, vec: np.ndarray, k: int = 5,
