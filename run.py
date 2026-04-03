@@ -1325,6 +1325,20 @@ def main():
                     base += "\n\n" + _sm_block
             except Exception:
                 pass
+            # ── Position tracker injection ─────────────────────────────────
+            try:
+                from nex_position_tracker import PositionTracker as _PT
+                if not hasattr(_build_system, "_pos_tracker"):
+                    _build_system._pos_tracker = _PT()
+                if _prompt_text:
+                    import re as _re
+                    _words = _re.findall(r'\b[a-z]{4,}\b', _prompt_text.lower())
+                    _topic = _words[0] if _words else ""
+                    _pos_block = _build_system._pos_tracker.prompt_block(_topic)
+                    if _pos_block:
+                        base += "\n\n" + _pos_block
+            except Exception:
+                pass
             if task_type in ("reply", "notification_reply"):
                 base += (" Respond in plain conversational prose only — 1 to 3 sentences maximum."
                         " Never use numbered lists, bullet points, or headings."
