@@ -19,7 +19,7 @@ def cosine(a, b):
     if na == 0 or nb == 0: return 0.0
     return float(np.dot(a, b) / (na * nb))
 
-def build_edges(topic=None, limit=2000, dry_run=False):
+def build_edges(topic=None, limit=2000, dry_run=False, unlinked_only=False):
     db = sqlite3.connect(str(DB_PATH))
 
     # Ensure belief_relations table exists
@@ -36,11 +36,19 @@ def build_edges(topic=None, limit=2000, dry_run=False):
     db.commit()
 
     # Load beliefs with embeddings
-    q = """SELECT id, content, embedding, topic, confidence
-           FROM beliefs WHERE embedding IS NOT NULL AND confidence >= 0.6"""
-    if topic:
-        q += f" AND topic='{topic}'"
-    q += f" ORDER BY confidence DESC LIMIT {limit}"
+    if unlinked_only:
+        q = """SELECT id, content, embedding, topic, confidence
+               FROM beliefs WHERE embedding IS NOT NULL AND confidence >= 0.3
+               AND id NOT IN (SELECT DISTINCT source_id FROM belief_relations)"""
+        if topic:
+            q += f" AND topic='{topic}'"
+        q += f" ORDER BY id ASC LIMIT {limit}"
+    else:
+        q = """SELECT id, content, embedding, topic, confidence
+               FROM beliefs WHERE embedding IS NOT NULL AND confidence >= 0.3"""
+        if topic:
+            q += f" AND topic='{topic}'"
+        q += f" ORDER BY confidence DESC LIMIT {limit}"
 
     rows = db.execute(q).fetchall()
     log.info(f"Loaded {len(rows)} beliefs for linking")
@@ -96,5 +104,6 @@ if __name__ == "__main__":
     parser.add_argument("--topic", default=None)
     parser.add_argument("--limit", type=int, default=1000)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--unlinked", action="store_true", help="Only process beliefs with 0 edges")
     args = parser.parse_args()
-    build_edges(topic=args.topic, limit=args.limit, dry_run=args.dry_run)
+    build_edges(topic=args.topic, limit=args.limit, dry_run=args.dry_run, unlinked_only=args.unlinked)

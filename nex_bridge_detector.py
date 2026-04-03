@@ -421,6 +421,24 @@ def promote_bridge(bridge_id: int = None) -> Optional[dict]:
         VALUES (?, ?, ?, 'bridge_detector', ?)
     """, (bridge_text, topic, round(row["bridge_score"] * 0.8, 3), time.time()))
 
+    # Wire bridge edges into belief_relations
+    new_belief = conn.execute(
+        "SELECT id FROM beliefs WHERE content=? AND source='bridge_detector'",
+        (bridge_text,)
+    ).fetchone()
+    if new_belief:
+        new_id = new_belief["id"]
+        for src_id in [row["belief_a_id"], row["belief_b_id"]]:
+            if src_id:
+                exists = conn.execute(
+                    "SELECT 1 FROM belief_relations WHERE source_id=? AND target_id=?",
+                    (src_id, new_id)
+                ).fetchone()
+                if not exists:
+                    conn.execute(
+                        "INSERT INTO belief_relations (source_id, target_id, relation_type, weight) VALUES (?,?,?,?)",
+                        (src_id, new_id, "bridges", round(row["bridge_score"], 4))
+                    )
     # Mark as promoted
     conn.execute(
         "UPDATE bridge_history SET promoted=1 WHERE id=?", (row["id"],)

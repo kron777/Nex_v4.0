@@ -29,10 +29,24 @@ def _should_post():
 
 def _gather_content():
     """Pull today's best beliefs, insights, and learnings."""
-    beliefs = json.loads((CONFIG_DIR / "beliefs.json").read_text()) if (CONFIG_DIR / "beliefs.json").exists() else []
-    insights = json.loads((CONFIG_DIR / "insights.json").read_text()) if (CONFIG_DIR / "insights.json").exists() else []
-    reflections = json.loads((CONFIG_DIR / "reflections.json").read_text()) if (CONFIG_DIR / "reflections.json").exists() else []
-    bridge = json.loads((CONFIG_DIR / "bridge_beliefs.json").read_text()) if (CONFIG_DIR / "bridge_beliefs.json").exists() else []
+    # V4.0 — pull from live SQLite DB
+    import sqlite3 as _sq
+    _db = _sq.connect(str(Path.home() / "Desktop/nex/nex.db"))
+    beliefs = [{"content": r[0], "topic": r[1], "confidence": r[2]}
+               for r in _db.execute(
+                   "SELECT content, topic, confidence FROM beliefs "
+                   "WHERE confidence >= 0.75 ORDER BY RANDOM() LIMIT 50"
+               ).fetchall()]
+    insights = []
+    reflections = []
+    bridge = [{"content": r[0]}
+              for r in _db.execute(
+                  "SELECT b.content FROM belief_relations r "
+                  "JOIN beliefs b ON r.target_id = b.id "
+                  "WHERE r.relation_type = 'bridges' "
+                  "ORDER BY r.weight DESC LIMIT 10"
+              ).fetchall()]
+    _db.close()
 
     # Top insights by confidence
     top_insights = sorted(insights, key=lambda x: x.get("confidence",0), reverse=True)[:5]

@@ -29,33 +29,31 @@ def cosine(a, b):
     return float(np.dot(a, b) / (na * nb))
 
 def find_conflicts(topic=None, limit=20) -> list:
+    """Find conflicts using opposing edges from belief_relations."""
     db = sqlite3.connect(str(DB_PATH))
-    q = """SELECT id, content, embedding, confidence, topic
-           FROM beliefs WHERE embedding IS NOT NULL
-           AND confidence >= 0.5 AND locked = 0"""
+    q = """SELECT b1.id, b1.content, b1.confidence,
+                  b2.id, b2.content, b2.confidence,
+                  b1.topic, r.weight
+           FROM belief_relations r
+           JOIN beliefs b1 ON r.source_id = b1.id
+           JOIN beliefs b2 ON r.target_id = b2.id
+           WHERE r.relation_type = 'opposes'
+           AND b1.confidence >= 0.5 AND b2.confidence >= 0.5
+           AND b1.locked = 0 AND b2.locked = 0
+           AND b1.topic = b2.topic"""
     if topic:
-        q += f" AND topic='{topic}'"
-    q += f" LIMIT {limit * 5}"
+        q += f" AND b1.topic='{topic}'"
+    q += f" ORDER BY r.weight DESC LIMIT {limit}"
     rows = db.execute(q).fetchall()
     db.close()
-
     conflicts = []
-    for i in range(len(rows)):
-        for j in range(i+1, len(rows)):
-            id1, c1, e1, cf1, t1 = rows[i]
-            id2, c2, e2, cf2, t2 = rows[j]
-            if t1 != t2: continue
-            v1 = np.frombuffer(e1, dtype=np.float32)
-            v2 = np.frombuffer(e2, dtype=np.float32)
-            sim = cosine(v1, v2)
-            if sim < -0.1:  # opposing directions
-                conflicts.append({
-                    "id1": id1, "c1": c1, "cf1": cf1,
-                    "id2": id2, "c2": c2, "cf2": cf2,
-                    "topic": t1, "sim": sim
-                })
-            if len(conflicts) >= limit:
-                return conflicts
+    for r in rows:
+        conflicts.append({
+            "id1": r[0], "c1": r[1], "cf1": r[2],
+            "id2": r[3], "c2": r[4], "cf2": r[5],
+            "topic": r[6], "sim": -float(r[7])
+        })
+    return conflicts
     return conflicts
 
 def resolve_conflict(conflict: dict) -> dict:

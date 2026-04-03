@@ -1,3 +1,14 @@
+
+# ── Warmth-weighted batch support ────────────────────────────
+def _get_weighted_batch():
+    """Get latest warmth-weighted training batch if available."""
+    pointer = Path(__file__).parent / "training_data" / "warmth_weighted_latest.txt"
+    if pointer.exists():
+        batch_path = Path(pointer.read_text().strip())
+        if batch_path.exists():
+            return batch_path
+    return None
+# ─────────────────────────────────────────────────────────────
 """
 nex_train_scheduler.py — Autonomous Training Data Generation + Telegram Notification
 NEX auto-generates training pairs from live DB, evaluates readiness,

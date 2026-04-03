@@ -3,6 +3,11 @@
 # Works with AMD ROCm (RX 6600 LE) — no nvidia-smi dependency
 
 echo "[NEX] Shutting down all processes..."
+# ── Stop systemd services first (prevents race with pkill) ──────
+sudo systemctl stop nex-llama 2>/dev/null
+sudo systemctl stop nex-refinement-loop 2>/dev/null
+sleep 1
+
 
 # ── Step 1: Kill by name (catches most cases) ─────────────────────
 for pattern in \
@@ -25,23 +30,22 @@ do
     pkill -9 -f "$pattern" 2>/dev/null
 done
 
-# ── Step 2: Kill any process holding the GPU render node ──────────
-GPU_PIDS=$(sudo fuser /dev/dri/renderD128 2>/dev/null | tr ' ' '\n' | grep -v '^$')
-if [ -n "$GPU_PIDS" ]; then
-    echo "[NEX] Killing GPU holders: $GPU_PIDS"
-    for pid in $GPU_PIDS; do
-        kill -9 "$pid" 2>/dev/null
-    done
+# ── Step 2: Kill only llama-server GPU processes (NOT display server) ──
+# Get llama-server PID specifically — never kill gnome-shell or Xorg
+LLAMA_PID=$(pgrep -f "llama-server" 2>/dev/null)
+if [ -n "$LLAMA_PID" ]; then
+    echo "[NEX] Killing llama-server PIDs: $LLAMA_PID"
+    kill -9 $LLAMA_PID 2>/dev/null
 fi
-
-# Also check renderD129 (some setups use different node)
-GPU_PIDS2=$(sudo fuser /dev/dri/renderD129 2>/dev/null | tr ' ' '\n' | grep -v '^$')
-if [ -n "$GPU_PIDS2" ]; then
-    echo "[NEX] Killing GPU holders (D129): $GPU_PIDS2"
-    for pid in $GPU_PIDS2; do
+# Check VRAM holders but ONLY kill known NEX processes
+GPU_PIDS=$(sudo fuser /dev/kfd 2>/dev/null | tr " " "\n" | grep -v "^$")
+for pid in $GPU_PIDS; do
+    PNAME=$(ps -p $pid -o comm= 2>/dev/null)
+    if echo "$PNAME" | grep -qE "llama|python|nex"; then
+        echo "[NEX] Killing GPU process: $pid ($PNAME)"
         kill -9 "$pid" 2>/dev/null
-    done
-fi
+    fi
+done
 
 # ── Step 3: Kill tmux sessions ────────────────────────────────────
 tmux kill-server 2>/dev/null

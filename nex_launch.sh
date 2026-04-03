@@ -17,7 +17,6 @@ NEX_DIR="/home/rr/Desktop/nex"
 
 # ── Clean any existing processes first ───────────────────────────────────────
 echo "[NEX] Stopping existing processes..."
-bash "$NEX_DIR/nex_exit.sh" 2>/dev/null
 sleep 2
 
 # ── Launch llama-server via systemd ──────────────────────────────────────────
@@ -77,8 +76,10 @@ else
 fi
 
 # ── Open terminals ────────────────────────────────────────────────────────────
+# Stagger terminal launches to prevent display server crash
+sleep 1
 gnome-terminal --title="NEX BRAIN" -- bash -c "
-    cd "$NEX_DIR" && source venv/bin/activate
+    cd $NEX_DIR && source venv/bin/activate
     tmux kill-session -t nex 2>/dev/null
     tmux new-session -d -s nex
     tmux split-window -h -t nex
@@ -86,11 +87,12 @@ gnome-terminal --title="NEX BRAIN" -- bash -c "
     tmux send-keys -t nex:0.1 'cd $NEX_DIR && source venv/bin/activate && sleep 5 && python3 nex_debug.py' Enter
     tmux attach -t nex
     exec bash" &
-
+sleep 3
 gnome-terminal --title="NEX AUTO CHECK" -- bash -c "
     cd $NEX_DIR && source venv/bin/activate
     sleep 7 && python3 auto_check.py
     exec bash" &
+sleep 2
 
 nohup python3 $NEX_DIR/nex_api.py > /tmp/nex_api.log 2>&1 &
 echo "[NEX] API: PID $!"

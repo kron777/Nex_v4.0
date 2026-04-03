@@ -38,6 +38,18 @@ from pathlib import Path
 
 CFG = Path("~/.config/nex").expanduser()
 
+# ── Warmth session layer ──────────────────────────────────────
+try:
+    import sqlite3 as _sqlite3
+    from nex_warmth_session import get_session, end_session
+    from pathlib import Path as _Path
+    _WARMTH_SESSION_OK = True
+    _WARMTH_DB_PATH = _Path.home() / "Desktop/nex/nex.db"
+except Exception:
+    _WARMTH_SESSION_OK = False
+# ─────────────────────────────────────────────────────────────
+
+
 # ── Singleton SoulLoop ────────────────────────────────────────────────────────
 _soul_loop = None
 
@@ -82,6 +94,36 @@ def nex_reply(
 
     query = query.strip()
 
+
+    # ── SESSION WARMTH LAYER ──────────────────────────────────────
+    _session = None
+    _conv_id  = str(id(history)) if history else "default"
+    if _WARMTH_SESSION_OK:
+        try:
+            _sdb = _sqlite3.connect(str(_WARMTH_DB_PATH))
+            _sdb.row_factory = _sqlite3.Row
+            _session = get_session(_conv_id)
+            _session.process_text(query, _sdb)
+            _sdb.close()
+        except Exception:
+            pass
+    # ─────────────────────────────────────────────────────────────
+
+    # ── INTER-SESSION MEMORY RECALL ──────────────────────────
+    if _WARMTH_SESSION_OK and _session:
+        try:
+            from nex_warmth_memory import apply_recall_to_session
+            _recall = apply_recall_to_session(
+                _session, query, _conv_id)
+            if _recall.get("matched"):
+                import logging as _log
+                _log.getLogger("nex.respond").info(
+                    f"Memory recalled: "
+                    f"depth={_recall.get('depth_name')} "
+                    f"boosts={len(_recall.get('pre_boosts',{}))}")
+        except Exception:
+            pass
+    # ─────────────────────────────────────────────────────────
     # ── 1. Enrich query with history context if available ─────────────────────
     # If she's been talking with this person, thread the last exchange
     # into the query so she has continuity — not memory, just context window.
@@ -140,6 +182,25 @@ def nex_reply(
                 reply = loop.respond(enriched)
 
             if reply and len(reply.strip()) > 15:
+
+                # Advance session warmth for next exchange
+                if _session:
+                    try:
+                        _sdb2 = _sqlite3.connect(str(_WARMTH_DB_PATH))
+                        _sdb2.row_factory = _sqlite3.Row
+                        _session.process_text(reply.strip(), _sdb2)
+                        _session.next_exchange()
+                        _sdb2.close()
+                    except Exception:
+                        pass
+
+                # Store session to memory on successful reply
+                if _session and _session.exchange_count >= 3:
+                    try:
+                        from nex_warmth_memory import store_session
+                        store_session(_session, _conv_id)
+                    except Exception:
+                        pass
                 # Fire feedback loop
                 try:
                     from nex_loop_wiring import record_reply_outcome as _rro

@@ -65,6 +65,14 @@ except Exception as e:
     print(f"  [API] NEX NRP: unavailable ({e})")
     nex_nrp = None
     nrp_generate = nrp_classify_intent = None
+try:
+    from nex_reasoner_integration import gated_cognite
+    GATE_OK = True
+    print("  [API] NEX gate: loaded")
+except Exception as _ge:
+    GATE_OK = False
+    print(f"  [API] NEX gate: unavailable ({_ge})")
+
 
 # ─── Flask app ────────────────────────────────────────────────────────────────
 app = Flask("nex_api")
@@ -571,7 +579,11 @@ def run_nex_query(query: str, session: dict, domain_hint: str = None) -> dict:
     # Try NRP pipeline
     if nrp_generate:
         try:
-            result = nrp_generate(query=query)
+            if GATE_OK:
+                gate_out = gated_cognite(query, nrp_generate)
+                result   = {"response": gate_out["response"], "domain": domain_used}
+            else:
+                result = nrp_generate(query=query)
             if isinstance(result, dict):
                 response_text = result.get("response", "")
                 domain_used   = result.get("domain", domain_used)
@@ -1004,12 +1016,10 @@ def chat():
     contradiction_rpt   = {"detected": False, "count": 0, "conflicts": []}
     if tier_allows("reasoning_chain"):
         try:
-            from nex_contradiction import (
-                detect_contradictions, contradiction_summary, contradiction_report
-            )
-            contradictions     = detect_contradictions(query)
-            contradiction_flag = contradiction_summary(contradictions)
-            contradiction_rpt  = contradiction_report(contradictions)
+            from nex_contradiction_detector import run as _run_detector
+            contradictions     = _run_detector(dry_run=True) or []
+            contradiction_flag = len(contradictions) > 0
+            contradiction_rpt  = f"{len(contradictions)} contradiction(s)" if contradictions else ""
         except Exception as e:
             print(f"  [API] contradiction detection error: {e}")
 
