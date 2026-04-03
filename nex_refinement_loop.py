@@ -319,6 +319,17 @@ print(f"Micro fine-tune complete. Saved to {{OUT}}")
                         import urllib.request as _ur
                         _ur.urlopen("http://localhost:8080/health", timeout=2)
                         log.info("Auto-merge complete — nex_v2.gguf redeployed and serving.")
+                # Run identity drift check post-merge
+                try:
+                    import sys as _ds; _ds.path.insert(0, "/home/rr/Desktop/nex")
+                    from nex_identity_drift import get_drift_report as _gdr
+                    _dr = _gdr()
+                    if _dr["drifted"]:
+                        log.warning(f"Identity drift detected: score={_dr['drift_score']}")
+                    else:
+                        log.info(f"Identity stable: drift_score={_dr['drift_score']}")
+                except Exception as _de:
+                    log.debug(f"Drift check failed: {_de}")
                         break
                     except Exception:
                         continue

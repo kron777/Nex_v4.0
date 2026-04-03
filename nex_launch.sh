@@ -20,9 +20,11 @@ echo "[NEX] Stopping existing processes..."
 bash "$NEX_DIR/nex_exit.sh" 2>/dev/null
 sleep 2
 
-# ── Launch llama-server ───────────────────────────────────────────────────────
-echo "[NEX] Starting llama-server (GPU ngl=99)..."
-"$BUILD/llama-server" \
+# ── Launch llama-server via systemd ──────────────────────────────────────────
+echo "[NEX] Starting llama-server via systemd..."
+sudo systemctl restart nex-llama
+echo "[NEX] llama-server managed by systemd (auto-restart enabled)"
+: \
     -m "$MODEL" \
     --port 8080 \
     -ngl 99 \
