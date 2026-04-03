@@ -1501,6 +1501,14 @@ def main():
                                     _build_system._wm = _WMX()
                                 _build_system._wm.extract_and_update(result, source="llm_response")
                             except Exception: pass
+                            # Self-assessment gate
+                            try:
+                                import sys as _sa_sys
+                                _sa_sys.path.insert(0, "/home/rr/Desktop/nex")
+                                from nex_self_assess import assess_and_regen as _aar
+                                _sys_prompt = system or _build_system(task_type, _prompt_text=prompt)
+                                result = _aar(prompt, result, _sys_prompt, threshold=55)
+                            except Exception: pass
                             return result
                 except Exception as _qe:
                     nex_log("llm", f"[Mistral-7B ✗] attempt {_attempt+1}: {_qe}")
