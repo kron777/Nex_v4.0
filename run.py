@@ -1302,6 +1302,39 @@ def main():
                                  f"Where relevant, orient your response toward this.")
                 except Exception:
                     pass
+            # ── Belief graph injection (semantic FAISS) ──────────────
+            try:
+                import sys as _bsys; _bsys.path.insert(0, "/home/rr/Desktop/nex")
+                import json as _bj, numpy as _bnp, faiss as _bfaiss
+                from pathlib import Path as _BP
+                from sentence_transformers import SentenceTransformer as _BST
+                _BIDX = _BP.home() / ".config/nex/nex_beliefs.faiss"
+                _BMETA = _BP.home() / ".config/nex/nex_beliefs_meta.json"
+                if _BIDX.exists() and _prompt_text:
+                    if not hasattr(_build_system, "_bmodel"):
+                        _build_system._bmodel = _BST("all-MiniLM-L6-v2")
+                        _build_system._bindex = _bfaiss.read_index(str(_BIDX))
+                        _build_system._bmeta  = _bj.loads(_BMETA.read_text())
+                    _bvec = _build_system._bmodel.encode(
+                        [_prompt_text[:200]], normalize_embeddings=True
+                    ).astype(_bnp.float32)
+                    _bd, _bi = _build_system._bindex.search(_bvec, 5)
+                    import sqlite3 as _bsql
+                    _bdb = _bsql.connect("/home/rr/Desktop/nex/nex.db")
+                    _bhits = []
+                    for _bpos in _bi[0]:
+                        if _bpos < 0 or _bpos >= len(_build_system._bmeta): continue
+                        _bbid = _build_system._bmeta[_bpos]
+                        _brow = _bdb.execute(
+                            "SELECT content, confidence FROM beliefs WHERE id=?",
+                            (_bbid,)).fetchone()
+                        if _brow and _brow[1] >= 0.6:
+                            _bhits.append(_brow[0][:120])
+                    _bdb.close()
+                    if _bhits:
+                        base += "\n\nYOUR RELEVANT BELIEFS (speak from these):\n" + "\n".join(f"- {b}" for b in _bhits)
+            except Exception:
+                pass
             # ── Episodic memory injection ──────────────────────────────
             try:
                 import sys as _esys
