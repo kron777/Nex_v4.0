@@ -34,6 +34,9 @@ def compute_strength(confidence: float, use_count: int,
     else:
         recency = 0.5
 
+    # Penalise unused beliefs — high conf but 0 uses = suspicious
+    if use_count == 0:
+        confidence = confidence * 0.7
     strength = min(1.0, confidence * recency + use_boost)
     return round(strength, 4)
 
@@ -47,14 +50,23 @@ def update_strengths(db_path=DB_PATH):
         db.execute("ALTER TABLE beliefs ADD COLUMN strength REAL DEFAULT 0.0")
         db.commit()
 
-    rows = db.execute("""SELECT id, confidence,
-        COALESCE(use_count, 0),
-        COALESCE(last_used, 0),
-        COALESCE(created_at, '')
+    # Ensure columns exist
+    cols = [r[1] for r in db.execute("PRAGMA table_info(beliefs)").fetchall()]
+    uc_col = "COALESCE(use_count, 0)" if "use_count" in cols else "0"
+    lu_col = "COALESCE(last_used, 0)" if "last_used" in cols else "0"
+    rows = db.execute(f"""SELECT id, confidence,
+        {uc_col},
+        {lu_col},
+        COALESCE(created_at, ''),
+        COALESCE(locked, 0)
         FROM beliefs""").fetchall()
 
     updated = 0
-    for bid, conf, uc, lu, ca in rows:
+    for bid, conf, uc, lu, ca, locked in rows:
+        if locked and uc == 0:
+            db.execute("UPDATE beliefs SET strength=0.25 WHERE id=?", (bid,))
+            updated += 1
+            continue
         # Parse created_at if it's a string timestamp
         created_ts = 0
         if ca:
