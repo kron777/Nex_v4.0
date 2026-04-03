@@ -308,14 +308,27 @@ print(f"Micro fine-tune complete. Saved to {{OUT}}")
                 merge_env = _os.environ.copy()
                 merge_env["HSA_OVERRIDE_GFX_VERSION"] = "10.3.0"
                 merge_env["HIP_VISIBLE_DEVICES"] = "0"
-                _sp.Popen([
-                    f"{llama_dir}/build/bin/llama-server",
-                    "-m", str(out_gguf), "--port", "8080",
-                    "-ngl", "99", "--host", "0.0.0.0", "-c", "4096",
-                    "--parallel", "2", "--cache-type-k", "q8_0",
-                    "--cache-type-v", "q8_0", "-fa", "1", "--no-mmap"
-                ], env=merge_env)
-                log.info("Auto-merge complete — nex_v2.gguf redeployed.")
+                import subprocess as _sp2
+                with open("/tmp/llama_server.log", "w") as _lf:
+                    _sp2.Popen([
+                        f"{llama_dir}/build/bin/llama-server",
+                        "-m", str(out_gguf), "--port", "8080",
+                        "-ngl", "99", "--host", "0.0.0.0", "-c", "4096",
+                        "--parallel", "2", "--cache-type-k", "q8_0",
+                        "--cache-type-v", "q8_0", "-fa", "1", "--no-mmap"
+                    ], env=merge_env, stdout=_lf, stderr=_lf,
+                       close_fds=True, start_new_session=True)
+                # Wait for server to come up
+                import time as _t
+                for _ in range(30):
+                    _t.sleep(2)
+                    try:
+                        import urllib.request as _ur
+                        _ur.urlopen("http://localhost:8080/health", timeout=2)
+                        log.info("Auto-merge complete — nex_v2.gguf redeployed and serving.")
+                        break
+                    except Exception:
+                        continue
             except Exception as me:
                 log.warning(f"Auto-merge failed (model unchanged): {me}")
             return True
