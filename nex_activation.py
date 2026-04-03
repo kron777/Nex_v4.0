@@ -283,6 +283,15 @@ class ActivationEngine:
         result.tension_density = round(
             tension_traversed / max(total_edges, 1), 3
         )
+
+        # Log co-activations for edge reweighting
+        try:
+            from nex_edge_reweight import wire_into_activation
+            activated_ids = [b.id for b in result.activated]
+            wire_into_activation(activated_ids)
+        except Exception:
+            pass
+
         return result
 
 
