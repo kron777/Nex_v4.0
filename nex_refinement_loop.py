@@ -304,7 +304,10 @@ print(f"Micro fine-tune complete. Saved to {{OUT}}")
                 # Hot-swap llama-server
                 _sp.run(["pkill", "-f", "llama-server"], timeout=10)
                 import time; time.sleep(3)
-                merge_env = {"HSA_OVERRIDE_GFX_VERSION": "10.3.0", "HIP_VISIBLE_DEVICES": "0", "PATH": "/usr/bin:/bin"}
+                import os as _os
+                merge_env = _os.environ.copy()
+                merge_env["HSA_OVERRIDE_GFX_VERSION"] = "10.3.0"
+                merge_env["HIP_VISIBLE_DEVICES"] = "0"
                 _sp.Popen([
                     f"{llama_dir}/build/bin/llama-server",
                     "-m", str(out_gguf), "--port", "8080",

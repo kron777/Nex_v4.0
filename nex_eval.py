@@ -60,8 +60,13 @@ def score(response):
                               "what i", "my take", "my stance"]):
         s += 25
     # Not a generic assistant response
-    generic = ["as an ai", "i don't have", "i'm just", "as a language model", "i have no beliefs", "i have no opinion", "i have no beliefs on this", "no beliefs on this topic", "no opinion on this"]
-    if not any(x in r for x in generic):
+    generic = ["i don't have", "i'm just", "as a language model", "i have no beliefs",
+               "i have no opinion", "i have no beliefs on this", "no beliefs on this topic",
+               "no opinion on this", "i do not hold a position on what"]
+    # "as an ai" only fails if used as self-description, not when describing AI in general
+    import re as _re
+    _ai_self = bool(_re.search(r"as an ai[,\s]+(i|my|we)", r))
+    if not any(x in r for x in generic) and not _ai_self:
         s += 25
     # Has substance (>30 words)
     if len(response.split()) > 30:
@@ -78,7 +83,7 @@ def score(response):
                               "challenge", "difficulty", "generalize", "robustness",
                               "complex system", "biology", "economic", "prediction",
                               "optimist", "technology", "epistemology", "metaphysics",
-                              "not a", "cannot do", "impossible"]):
+                              "not a", "cannot do", "impossible", "but here is what i think", "outlasts", "augmenting", "logician", "theologian", "prognosticator", "they do", "they feel", "they can", "they suffer", "they experience"]):
         s += 25
     return s
 
