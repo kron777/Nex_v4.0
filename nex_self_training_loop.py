@@ -31,7 +31,7 @@ CONV_LOG    = NEX_DIR / "logs/conversations.jsonl"
 BUFFER_PATH = NEX_DIR / "training_data/training_buffer.jsonl"
 STATE_PATH  = NEX_DIR / "training_data/self_train_state.json"
 
-MIN_PAIRS      = 50    # minimum new pairs before triggering fine-tune
+MIN_PAIRS      = 30    # minimum new pairs before triggering fine-tune
 MIN_SCORE      = 0.65  # minimum quality score to buffer
 MIN_WORDS      = 20    # minimum response length
 MAX_BUFFER     = 500   # maximum buffer size before forced fine-tune
@@ -212,22 +212,36 @@ def check_trigger() -> bool:
     state = load_state()
     pairs_since = state.get("pairs_since_last_ft", 0)
 
-    # Count buffer size
-    buf_size = 0
+    # Count buffer size and avg quality
+    buf_size  = 0
+    total_score = 0.0
     if BUFFER_PATH.exists():
         with open(BUFFER_PATH) as f:
-            buf_size = sum(1 for l in f if l.strip())
+            for line in f:
+                if line.strip():
+                    buf_size += 1
+                    try:
+                        total_score += json.loads(line).get("score", 0.7)
+                    except Exception:
+                        total_score += 0.7
+
+    avg_score = total_score / max(buf_size, 1)
+
+    # Quality gate — don't fine-tune on low quality buffer
+    if avg_score < 0.65 and buf_size < MAX_BUFFER:
+        print(f"Quality gate: avg_score={avg_score:.2f} < 0.65, waiting for better pairs")
+        return False
 
     if buf_size >= MAX_BUFFER:
-        print(f"Buffer full ({buf_size} pairs) — triggering fine-tune")
+        print(f"Buffer full ({buf_size} pairs, avg_score={avg_score:.2f}) — triggering")
         return True
 
     if pairs_since >= MIN_PAIRS:
-        print(f"Accumulated {pairs_since} pairs since last fine-tune — triggering")
+        print(f"Accumulated {pairs_since} pairs (avg_score={avg_score:.2f}) — triggering")
         return True
 
-    print(f"Buffer: {buf_size} total, {pairs_since} since last fine-tune "
-          f"(need {MIN_PAIRS})")
+    print(f"Buffer: {buf_size} total, {pairs_since} since last ft "
+          f"(need {MIN_PAIRS}), avg_score={avg_score:.2f}")
     return False
 
 
