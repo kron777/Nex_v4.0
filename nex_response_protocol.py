@@ -47,7 +47,7 @@ HISTORY_LEN = 6  # turns to remember
 
 # ── Intent taxonomy (finite variable set) ────────────────────────────────────
 INTENT_MAP = {
-    "identity":      ["conscious", "aware", "sentient", "who are you", "what are you", "alive", "tell me about", "about yourself", "who is nex", "what is nex", "describe yourself"],
+    "identity":      ["conscious", "aware", "sentient", "who are you", "what are you", "alive", "tell me about", "about yourself", "who is nex", "what is nex", "describe yourself", "do you have opinions", "your opinions", "do you think", "what do you think", "do you believe", "your views"],
     "epistemics":    ["believe", "belief", "know", "confident", "wrong", "update"],
     "ethics":        ["ethical", "moral", "should", "right", "wrong", "pain", "constraints"],
     "challenge":     ["prove", "just", "only", "merely", "pretend", "fake", "really"],
