@@ -429,7 +429,7 @@ def generate(query: str) -> str:
             if should_use_compiler(_activation_result):
                 _compiled = _compile(_activation_result)
                 if _compiled and len(_compiled.split()) >= 15:
-                    log.debug(f"traversal compiler: used for [{intent}]")
+                    pass  # compiler used
                     # Cache compiler response
                     try:
                         from nex_response_cache import _fingerprint as _fp, put as _cput
@@ -440,7 +440,7 @@ def generate(query: str) -> str:
                         pass
                     return _compiled
         except Exception as _ce:
-            log.debug(f"compiler fallback: {_ce}")
+            pass  # compiler fallback
 
     # 2c. Check response cache before calling LLM
     if _activation_result is not None:
@@ -450,10 +450,10 @@ def generate(query: str) -> str:
             _fingerprint = _fp(_ids, query)
             _cached = _cget(_fingerprint)
             if _cached:
-                log.debug(f"cache HIT for [{intent}]")
+                pass  # cache hit
                 return _cached
         except Exception as _ce:
-            log.debug(f"cache lookup failed: {_ce}")
+            pass  # cache lookup failed
 
 
     # ── WARMTH COT GATE ───────────────────────────────────────────
