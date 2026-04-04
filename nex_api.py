@@ -611,6 +611,28 @@ def run_nex_query(query: str, session: dict, domain_hint: str = None) -> dict:
 
     latency = round(time.time() - start, 3)
 
+    # B3: Real-time prediction evaluation
+    try:
+        import sys as _sys; _sys.path.insert(0, '/home/rr/Desktop/nex')
+        from nex_prediction_evaluator import detect_evaluation_signal, get_pending_predictions, match_prediction, apply_evaluation
+        import sqlite3 as _sql3, numpy as _np
+        from pathlib import Path as _Path
+        _signal = detect_evaluation_signal(query)
+        if _signal != 'NEUTRAL':
+            _pdb = _sql3.connect(str(_Path.home() / 'Desktop/nex/nex.db'))
+            _preds = get_pending_predictions(_pdb)
+            if _preds:
+                from sentence_transformers import SentenceTransformer as _ST
+                _pvecs = _ST('all-MiniLM-L6-v2').encode(
+                    [p['prediction'] for p in _preds], normalize_embeddings=True).astype(_np.float32)
+                _match = match_prediction(query, _preds, _pvecs)
+                if _match:
+                    apply_evaluation(_match['prediction'], _signal, _pdb)
+                    print(f'  [API] Prediction {_signal}: {_match["prediction"]["prediction"][:50]}')
+            _pdb.commit(); _pdb.close()
+    except Exception:
+        pass
+
     # ── Reasoning chain (Step 3 — transparency, Pro+ only) ──────────
     reasoning_chain = {}
     try:
