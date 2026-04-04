@@ -654,6 +654,15 @@ def generate(query: str) -> str:
             history_str += f"Q: {q[:80]}\nNEX: {r[:100]}\n"
         history_str += "\n"
 
+    # Inject working memory context
+    try:
+        from nex_working_memory import get_context
+        _wm_ctx = get_context()
+        if _wm_ctx:
+            history_str = _wm_ctx + "\n\n" + history_str
+    except Exception:
+        pass
+
     # ── WORLD CONTEXT INJECTION ───────────────────────────────────
     _world_ctx = ""
     try:
@@ -760,6 +769,14 @@ def generate(query: str) -> str:
             _cput(_fingerprint, query, response, source="llm")
         except Exception:
             pass
+
+    # Record turn in working memory
+    try:
+        from nex_working_memory import record_turn
+        _act_ids = [b.id for b in _activation_result.activated] if _activation_result else []
+        record_turn(query, response if "response" in dir() else "", intent, _act_ids)
+    except Exception:
+        pass
 
     # Self-critique — regenerate if response quality too low
     try:
