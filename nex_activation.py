@@ -292,33 +292,40 @@ class ActivationEngine:
             tension_traversed / max(total_edges, 1), 3
         )
 
-        # Enrich with causal chains from top seed beliefs
+        # Enrich with causal chain EXTENSIONS beyond activated set
         try:
             from nex_causal_engine import CausalEngine
             _ce = CausalEngine()
-            _seeds = [b for b in result.activated if b.role == "seed"][:2]
-            _causal_ids = set(b.id for b in result.activated)
-            for _seed in _seeds:
+            _activated_ids = set(b.id for b in result.activated)
+            _causal_ids = set(_activated_ids)
+            _top = sorted(result.activated,
+                          key=lambda b: b.activation * b.confidence,
+                          reverse=True)[:8]
+            for _ab in _top:
                 _chains = _ce.causal_chain(
-                    _seed.id, max_depth=2,
+                    _ab.id, max_depth=3,
                     relation_types=("causes",))
-                for _chain in _chains[:3]:
+                if not _chains:
+                    continue
+                for _chain in _chains:
+                    # Walk full chain — find beliefs beyond activated set
                     for _cb in _chain.get("beliefs", []):
                         _bid = _cb.get("id")
-                        if _bid and _bid not in _causal_ids:
-                            if _bid in self._belief_cache:
-                                _b = self._belief_cache[_bid]
-                                result.activated.append(ActivatedBelief(
-                                    id=_bid,
-                                    content=_b["content"],
-                                    topic=_b["topic"],
-                                    confidence=_b["confidence"],
-                                    activation=round(_seed.activation * 0.4, 4),
-                                    hop=_seed.hop + 1,
-                                    role="causal",
-                                    momentum=_b.get("momentum", 0.0) or 0.0,
-                                ))
-                                _causal_ids.add(_bid)
+                        if not _bid or _bid in _causal_ids:
+                            continue
+                        if _bid in self._belief_cache:
+                            _b = self._belief_cache[_bid]
+                            result.activated.append(ActivatedBelief(
+                                id=_bid,
+                                content=_b["content"],
+                                topic=_b["topic"],
+                                confidence=_b["confidence"],
+                                activation=round(_ab.activation * 0.35, 4),
+                                hop=_ab.hop + 1,
+                                role="causal",
+                                momentum=_b.get("momentum", 0.0) or 0.0,
+                            ))
+                            _causal_ids.add(_bid)
         except Exception:
             pass
 
