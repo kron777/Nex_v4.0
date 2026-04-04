@@ -269,13 +269,30 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
         full_prompt = f"[INST] {system}\n\n{prompt} [/INST]"
         r = requests.post(LLM_URL, json={
             "prompt": full_prompt,
-            "n_predict": INTENT_TOKENS.get(intent, MAX_TOKENS),
+            "n_predict": min(INTENT_TOKENS.get(intent, MAX_TOKENS), 80),
             "temperature": temperature,
             "stop": ["[INST]", "\n\n\n", "User:", "Question:", "NEX response"],
+            "repeat_penalty": 1.4,
+            "frequency_penalty": 0.3,
             "stream": False,
         }, timeout=25)
         raw = r.json().get("content", "").strip()
         raw = raw.split("[/INST]")[0].split("[INST]")[0].strip()
+        # Dedup: remove looping sentences
+        _sentences = [s.strip() for s in raw.replace("—", ".").split(".") if s.strip()]
+        _seen = []; _deduped = []
+        for _s in _sentences:
+            _key = _s.lower()[:25]
+            if _key not in _seen:
+                _seen.append(_key); _deduped.append(_s)
+        raw = ". ".join(_deduped[:6]).strip()
+        if raw and not raw.endswith("."): raw += "."
+        # Quality gate — if LLM response contains loop markers, use top belief instead
+        _hold_count = raw.lower().count("i hold") + raw.lower().count("what you hold") + raw.lower().count("you hold")
+        if _hold_count >= 3 and _activation_result is not None:
+            _top = _activation_result.top(1)
+            if _top:
+                raw = _top[0].content.strip().rstrip(".") + "."
         # Strip any remaining instruction tokens
         import re as _rei
         raw = _rei.sub(r"\[/?INST\][^\[]*", "", raw).strip()
@@ -476,6 +493,10 @@ def generate(query: str) -> str:
         _result = _activate(query)
         _activation_result = _result
         belief_text = _result.to_prompt()
+        import re as _re2
+        for _hp in [r"(?i)\bwhat i hold is that\b", r"(?i)\bi hold that\b",
+                    r"(?i)\bmy position is that\b", r"(?i)\bi hold —\b"]:
+            belief_text = _re2.sub(_hp, "", belief_text)
         _voice_directive = _result.voice_directive()
         if not belief_text.strip(): raise ValueError("empty")
     except Exception:
@@ -489,7 +510,7 @@ def generate(query: str) -> str:
             from nex_traversal_compiler import compile as _compile, should_use_compiler
             if should_use_compiler(_activation_result):
                 _compiled = _compile(_activation_result)
-                if _compiled and len(_compiled.split()) >= 15:
+                if _compiled and len(_compiled.split()) >= 5:
                     # Track compiler usage
                     try:
                         import sqlite3 as _sq; from pathlib import Path as _Pa
@@ -743,7 +764,16 @@ def generate(query: str) -> str:
         _sd3.execute("INSERT INTO routing_stats VALUES (?,?)", ("llm", __import__("time").time()))
         _sd3.commit(); _sd3.close()
     except Exception: pass
-    response = _call_llm(system, prompt)
+    # Belief-only assembly — LLM disabled (looping on nex_v3.gguf)
+    if _activation_result is not None:
+        _top = _activation_result.top(3)
+        if _top:
+            _parts = [b.content.strip().rstrip(".") for b in _top[:2]]
+            response = ". ".join(_parts) + "."
+        else:
+            response = ""
+    else:
+        response = _call_llm(system, prompt)
     # ── WARMTH POST-PROCESS ───────────────────────────────────────
     if _warmth_ctx and _warmth_db:
         try:

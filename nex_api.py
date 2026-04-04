@@ -579,21 +579,20 @@ def run_nex_query(query: str, session: dict, domain_hint: str = None) -> dict:
     # Try NRP pipeline
     if nrp_generate:
         try:
-            if GATE_OK:
-                gate_out = gated_cognite(query, nrp_generate)
-                result   = {"response": gate_out["response"], "domain": domain_used}
-            else:
-                result = nrp_generate(query=query)
+            result = nrp_generate(query=query)
             if isinstance(result, dict):
                 response_text = result.get("response", "")
                 domain_used   = result.get("domain", domain_used)
             else:
                 response_text = str(result)
+            if response_text and _PROFILER_ACTIVE:
+                _profile_log("compiler", query, response=response_text[:300])
         except Exception as e:
             print(f"  [API] NRP error: {e}")
 
     # Fallback: direct Mistral call
     if not response_text:
+        if _PROFILER_ACTIVE: _profile_log("llm", query, notes="nrp_failed_or_empty")
         try:
             import requests as req
             prompt = f"{history_text}User: {query}\nNEX:"
@@ -1049,10 +1048,9 @@ def chat():
     # ── Conversation-to-belief pipeline ─────────────────────────────────────
     try:
         from nex_conversation_extractor import store_conversation_beliefs
-        _resp_text = result.get("response", "")
         _resp_topic = result.get("domain") or "conversation"
-        if _resp_text and len(_resp_text) > 40:
-            store_conversation_beliefs(_resp_text, query=query, topic=_resp_topic)
+        if query and len(query) > 20:
+            store_conversation_beliefs(query, query=query, topic=_resp_topic)
     except Exception:
         pass
     # ── Feedback loop — record reply outcome for belief confidence update ──
@@ -1434,6 +1432,16 @@ def gdpr_delete():
 # ADMIN — Key Management (Step 9)
 # ══════════════════════════════════════════════════════════════════════════════
 import os as _os
+# [LLM_PROFILER_PATCH]
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(__import__('pathlib').Path.home() / 'Desktop/nex'))
+    from nex_llm_profiler import log_turn as _profile_log
+    _PROFILER_ACTIVE = True
+except Exception:
+    _PROFILER_ACTIVE = False
+    def _profile_log(*a, **kw): pass
+
 ADMIN_SECRET = _os.environ.get("NEX_ADMIN_SECRET", "nex-admin-2026")
 
 def require_admin(f):

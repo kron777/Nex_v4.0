@@ -36,7 +36,7 @@ DB_PATH = Path(__file__).parent / "nex.db"
 INTEGRATION_MODE = "augment"   # augment | override | parallel
 
 # Minimum gate score to augment/override the response
-AUGMENT_THRESHOLD  = 0.35   # moderate+ → enrich response
+AUGMENT_THRESHOLD  = 0.75   # raised — only augment high-confidence gate results
 OVERRIDE_THRESHOLD = 0.55   # high → full gate override
 GAP_THRESHOLD      = 0.10   # below → use gap acknowledgement
 

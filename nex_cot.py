@@ -44,7 +44,18 @@ except ImportError:
 
 # ── LLM call ─────────────────────────────────────────────────────────────────
 
+def _strip_holds(text: str) -> str:
+    import re
+    text = re.sub(r"(?i)\bwhat i hold is that\b", "", text)
+    text = re.sub(r"(?i)\bi hold that\b", "", text)
+    text = re.sub(r"(?i)\bi hold —\b", "", text)
+    text = re.sub(r"(?i)\bmy position is that\b", "", text)
+    text = re.sub(r"(?i)\bwhat i provisionally hold is that\b", "", text)
+    return re.sub(r"  +", " ", text).strip()
+
 def _llm(system: str, user: str, max_tokens: int = 900, temperature: float = 0.7) -> str:
+    system = _strip_holds(system)
+    user   = _strip_holds(user)
     """Call llama-server on port 8080 (OpenAI-compatible /v1/chat/completions)."""
     try:
         import requests
@@ -55,6 +66,8 @@ def _llm(system: str, user: str, max_tokens: int = 900, temperature: float = 0.7
             ],
             "max_tokens": max_tokens,
             "temperature": temperature,
+            "repeat_penalty": 1.4,
+            "frequency_penalty": 0.3,
             "stream": False,
         }
         r = requests.post("http://localhost:8080/v1/chat/completions",
