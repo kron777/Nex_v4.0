@@ -181,6 +181,25 @@ def print_report(report: dict):
             print(f"  [{item['topic']}] {item['content'][:70]}")
 
 
+def clean_hollow(db, dry_run=False) -> int:
+    """Remove ontologically hollow beliefs from the graph."""
+    try:
+        rows = db.execute("""SELECT id, content FROM beliefs
+            WHERE ontology_hollow=1
+            AND confidence < 0.80
+            AND source NOT LIKE '%nex_core%'
+            AND source NOT LIKE '%depth%'""").fetchall()
+        removed = 0
+        for bid, content in rows:
+            if not dry_run:
+                db.execute("DELETE FROM beliefs WHERE id=?", (bid,))
+            removed += 1
+        if not dry_run:
+            db.commit()
+        return removed
+    except Exception:
+        return 0
+
 if __name__ == "__main__":
     import argparse
     logging.basicConfig(level=logging.INFO)
@@ -201,6 +220,8 @@ if __name__ == "__main__":
         removed = clean(db, report, dry_run=args.dry_run)
         print(f"\nCleaned: {removed} beliefs removed"
               f"{' (dry run)' if args.dry_run else ''}")
+        hollow_removed = clean_hollow(db, dry_run=args.dry_run)
+        print(f"Hollow beliefs removed: {hollow_removed}")
 
     if args.quarantine:
         n = quarantine(db, report, dry_run=args.dry_run)
