@@ -186,6 +186,20 @@ def run_goal_directed(n_sagas=5, dry_run=False) -> dict:
         db.close()
         return {"generated": 0}
 
+    # Also add challenged beliefs as gap targets
+    try:
+        challenged = db.execute("""SELECT b.content, b.topic
+            FROM beliefs b
+            JOIN belief_validations v ON b.id = v.belief_id
+            WHERE v.survived = 0
+            ORDER BY v.validated_at DESC LIMIT 5""").fetchall()
+        for row in challenged:
+            # Treat each challenged belief as a saga question
+            q = f"How would you defend or revise: {row[0][:80]}?"
+            sagas = list(sagas) + [(q, "DEEP", 0.5, 1)]
+    except Exception:
+        pass
+
     if not sagas:
         print("No sagas found")
         db.close()
