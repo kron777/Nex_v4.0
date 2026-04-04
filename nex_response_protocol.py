@@ -25,7 +25,23 @@ from collections import deque
 # ── Config ────────────────────────────────────────────────────────────────────
 LLM_URL   = "http://localhost:8080/completion"
 DB_PATH   = Path.home() / "Desktop" / "nex" / "nex.db"
-MAX_TOKENS = 200
+MAX_TOKENS = 200  # default
+
+# Intent-based token budgets
+INTENT_TOKENS = {
+    "identity":      250,   # who are you — needs depth
+    "consciousness": 280,   # hardest problem — needs space
+    "epistemics":    220,   # belief questions — medium
+    "ethics":        240,   # moral reasoning — needs nuance
+    "meaning":       220,   # purpose — medium
+    "introspective": 260,   # self-reflection — deep
+    "factual":       120,   # direct facts — short
+    "comparative":   180,   # comparisons — medium
+    "social":        150,   # social queries — short
+    "alignment":     220,   # AI safety — medium
+    "human":         160,   # about humans — medium
+    "consciousness": 280,   # override above
+}
 TEMPERATURE = 0.85
 HISTORY_LEN = 6  # turns to remember
 
@@ -253,7 +269,7 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
         full_prompt = f"[INST] {system}\n\n{prompt} [/INST]"
         r = requests.post(LLM_URL, json={
             "prompt": full_prompt,
-            "n_predict": MAX_TOKENS,
+            "n_predict": INTENT_TOKENS.get(intent, MAX_TOKENS),
             "temperature": temperature,
             "stop": ["[INST]", "\n\n\n", "User:", "Question:", "NEX response"],
             "stream": False,
