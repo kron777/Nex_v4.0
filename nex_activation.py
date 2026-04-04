@@ -46,6 +46,7 @@ class ActivatedBelief:
     activation: float   # 0.0-1.0, how strongly activated
     hop: int            # distance from seed (0=seed)
     role: str           # seed | support | bridge | tension | refine
+    momentum: float = 0.0  # epistemic momentum score
 
 
 @dataclass
@@ -130,7 +131,8 @@ class ActivationEngine:
         db = sqlite3.connect(str(DB_PATH))
         db.row_factory = sqlite3.Row
         rows = db.execute(
-            "SELECT id, content, topic, confidence FROM beliefs WHERE length(content) > 20"
+            "SELECT id, content, topic, confidence, COALESCE(momentum,0.0) as momentum "
+            "FROM beliefs WHERE length(content) > 20"
         ).fetchall()
         for row in rows:
             self._belief_cache[row["id"]] = dict(row)
@@ -276,6 +278,7 @@ class ActivationEngine:
                 activation = round(activation, 4),
                 hop        = 0 if bid in seed_ids else 1,
                 role       = role,
+                momentum   = b.get("momentum", 0.0) or 0.0,
             ))
 
         result.depth   = max((b.hop for b in result.activated), default=0)

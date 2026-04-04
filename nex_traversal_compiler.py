@@ -81,7 +81,19 @@ def _clean(text: str, max_len: int = 180) -> str:
     return text[:max_len]
 
 
-def _opener(idx: int = 0) -> str:
+def _opener(idx: int = 0, momentum: float = 0.0) -> str:
+    if momentum >= 0.5:
+        # High momentum — assertive, no softening
+        assertive = ["I hold that", "My position is that", "I hold —"]
+        return assertive[idx % len(assertive)]
+    elif momentum < -0.2:
+        # Low momentum — provisional
+        provisional = [
+            "What I provisionally hold is that",
+            "My current position — though I hold it lightly — is that",
+            "I lean toward the view that",
+        ]
+        return provisional[idx % len(provisional)]
     return SEED_OPENERS[idx % len(SEED_OPENERS)]
 
 
@@ -98,7 +110,9 @@ def _compile_settled(result) -> str:
         seeds = top[:1]
 
     seed = seeds[0]
-    text = f"{_opener()} {_clean(seed.content)}."
+    # Get momentum for expression style
+    _mom = getattr(seed, 'momentum', 0.0) or 0.0
+    text = f"{_opener(0, _mom)} {_clean(seed.content)}."
 
     # Add support — prefer same topic as seed
     relevant_support = [b for b in support if b.topic == seed.topic]
@@ -134,7 +148,8 @@ def _compile_mixed(result) -> str:
         seeds = top[:1]
 
     seed = seeds[0]
-    text = f"{_opener(1)} {_clean(seed.content)}."
+    _mom = getattr(seed, 'momentum', 0.0) or 0.0
+    text = f"{_opener(1, _mom)} {_clean(seed.content)}."
 
     # Add support — prefer topic match
     relevant_support = [b for b in support if b.topic == seed.topic] or support
