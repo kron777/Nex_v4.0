@@ -490,7 +490,14 @@ def generate(query: str) -> str:
             if should_use_compiler(_activation_result):
                 _compiled = _compile(_activation_result)
                 if _compiled and len(_compiled.split()) >= 15:
-                    pass  # compiler used
+                    # Track compiler usage
+                    try:
+                        import sqlite3 as _sq; from pathlib import Path as _Pa
+                        _sd = _sq.connect(str(_Pa.home()/"Desktop/nex/nex.db"))
+                        _sd.execute("CREATE TABLE IF NOT EXISTS routing_stats (route TEXT, ts REAL)")
+                        _sd.execute("INSERT INTO routing_stats VALUES (?,?)", ("compiler", __import__("time").time()))
+                        _sd.commit(); _sd.close()
+                    except Exception: pass
                     # Cache compiler response
                     try:
                         from nex_response_cache import _fingerprint as _fp, put as _cput
@@ -511,7 +518,13 @@ def generate(query: str) -> str:
             _fingerprint = _fp(_ids, query)
             _cached = _cget(_fingerprint)
             if _cached:
-                pass  # cache hit
+                try:
+                    import sqlite3 as _sq2; from pathlib import Path as _Pa2
+                    _sd2 = _sq2.connect(str(_Pa2.home()/"Desktop/nex/nex.db"))
+                    _sd2.execute("CREATE TABLE IF NOT EXISTS routing_stats (route TEXT, ts REAL)")
+                    _sd2.execute("INSERT INTO routing_stats VALUES (?,?)", ("cache", __import__("time").time()))
+                    _sd2.commit(); _sd2.close()
+                except Exception: pass
                 return _cached
         except Exception as _ce:
             pass  # cache lookup failed
@@ -723,6 +736,13 @@ def generate(query: str) -> str:
         pass
 
     # 9. Generate
+    try:
+        import sqlite3 as _sq3; from pathlib import Path as _Pa3
+        _sd3 = _sq3.connect(str(_Pa3.home()/"Desktop/nex/nex.db"))
+        _sd3.execute("CREATE TABLE IF NOT EXISTS routing_stats (route TEXT, ts REAL)")
+        _sd3.execute("INSERT INTO routing_stats VALUES (?,?)", ("llm", __import__("time").time()))
+        _sd3.commit(); _sd3.close()
+    except Exception: pass
     response = _call_llm(system, prompt)
     # ── WARMTH POST-PROCESS ───────────────────────────────────────
     if _warmth_ctx and _warmth_db:
