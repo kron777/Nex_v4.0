@@ -266,18 +266,18 @@ def retrieve_beliefs_by_intent(intent: str, query: str, n: int = 6) -> list:
 # ── LLM call with G2-style deduplication ─────────────────────────────────────
 def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str:
     try:
-        full_prompt = f"[INST] {system}\n\n{prompt} [/INST]"
+        full_prompt = f"<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n"
         r = requests.post(LLM_URL, json={
             "prompt": full_prompt,
-            "n_predict": min(INTENT_TOKENS.get(intent, MAX_TOKENS), 80),
+            "n_predict": min(INTENT_TOKENS.get(intent, MAX_TOKENS), 120),
             "temperature": temperature,
-            "stop": ["[INST]", "\n\n\n", "User:", "Question:", "NEX response"],
-            "repeat_penalty": 1.4,
-            "frequency_penalty": 0.3,
+            "stop": ["<|im_end|>", "<|im_start|>", "\n\nUser:", "User:"],
+            "repeat_penalty": 1.1,
+            "frequency_penalty": 0.1,
             "stream": False,
         }, timeout=25)
         raw = r.json().get("content", "").strip()
-        raw = raw.split("[/INST]")[0].split("[INST]")[0].strip()
+        raw = raw.split("<|im_end|>")[0].split("<|im_start|>")[0].strip()
         # Dedup: remove looping sentences
         _sentences = [s.strip() for s in raw.replace("—", ".").split(".") if s.strip()]
         _seen = []; _deduped = []
@@ -764,16 +764,7 @@ def generate(query: str) -> str:
         _sd3.execute("INSERT INTO routing_stats VALUES (?,?)", ("llm", __import__("time").time()))
         _sd3.commit(); _sd3.close()
     except Exception: pass
-    # Belief-only assembly — LLM disabled (looping on nex_v3.gguf)
-    if _activation_result is not None:
-        _top = _activation_result.top(3)
-        if _top:
-            _parts = [b.content.strip().rstrip(".") for b in _top[:2]]
-            response = ". ".join(_parts) + "."
-        else:
-            response = ""
-    else:
-        response = _call_llm(system, prompt)
+    response = _call_llm(system, prompt)
     # ── WARMTH POST-PROCESS ───────────────────────────────────────
     if _warmth_ctx and _warmth_db:
         try:
