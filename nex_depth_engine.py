@@ -202,7 +202,24 @@ def run_depth_cycle(n_questions=3, store=True) -> dict:
     Called nightly or on demand.
     """
     import random
-    questions = random.sample(DEPTH_QUESTIONS, min(n_questions, len(DEPTH_QUESTIONS)))
+    # Try resonance-weighted selection first
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(Path.home() / "Desktop/nex"))
+        from nex_saga_resonance import get_top_sagas
+        top_sagas = get_top_sagas(n=n_questions * 2)
+        resonant_qs = [s["question"] for s in top_sagas if s["score"] > 0.1]
+        # Mix: 60% resonant, 40% random for diversity
+        n_resonant = max(1, int(n_questions * 0.6))
+        n_random   = n_questions - n_resonant
+        selected   = resonant_qs[:n_resonant]
+        remaining  = [q for q in DEPTH_QUESTIONS if q not in selected]
+        selected  += random.sample(remaining, min(n_random, len(remaining)))
+        questions  = selected[:n_questions]
+        log.info(f"Resonance-weighted: {n_resonant} resonant + {n_random} random")
+    except Exception as _re:
+        log.debug(f"Resonance selection failed, using random: {_re}")
+        questions = random.sample(DEPTH_QUESTIONS, min(n_questions, len(DEPTH_QUESTIONS)))
 
     total_beliefs = 0
     engagements   = []
