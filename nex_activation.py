@@ -47,6 +47,7 @@ class ActivatedBelief:
     hop: int            # distance from seed (0=seed)
     role: str           # seed | support | bridge | tension | refine
     momentum: float = 0.0  # epistemic momentum score
+    ontology_score: float = 0.5  # grounding score 0-1
 
 
 @dataclass
@@ -67,7 +68,7 @@ class ActivationResult:
     def top(self, n: int = 8):
         return sorted(
             self.activated,
-            key=lambda b: b.activation * b.confidence,
+            key=lambda b: b.activation * b.confidence * (0.7 + b.ontology_score * 0.3),
             reverse=True
         )[:n]
 
@@ -131,7 +132,8 @@ class ActivationEngine:
         db = sqlite3.connect(str(DB_PATH))
         db.row_factory = sqlite3.Row
         rows = db.execute(
-            "SELECT id, content, topic, confidence, COALESCE(momentum,0.0) as momentum "
+            "SELECT id, content, topic, confidence, COALESCE(momentum,0.0) as momentum, "
+            "COALESCE(ontology_score,0.5) as ontology_score "
             "FROM beliefs WHERE length(content) > 20"
         ).fetchall()
         for row in rows:
@@ -271,14 +273,15 @@ class ActivationEngine:
             elif is_bridge:       role = "bridge"
             else:                 role = "support"
             result.activated.append(ActivatedBelief(
-                id         = bid,
-                content    = b["content"],
-                topic      = b["topic"],
-                confidence = b["confidence"],
-                activation = round(activation, 4),
-                hop        = 0 if bid in seed_ids else 1,
-                role       = role,
-                momentum   = b.get("momentum", 0.0) or 0.0,
+                id             = bid,
+                content        = b["content"],
+                topic          = b["topic"],
+                confidence     = b["confidence"],
+                activation     = round(activation, 4),
+                hop            = 0 if bid in seed_ids else 1,
+                role           = role,
+                momentum       = b.get("momentum", 0.0) or 0.0,
+                ontology_score = b.get("ontology_score", 0.5) or 0.5,
             ))
 
         result.depth   = max((b.hop for b in result.activated), default=0)
