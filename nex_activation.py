@@ -292,6 +292,28 @@ class ActivationEngine:
             tension_traversed / max(total_edges, 1), 3
         )
 
+        # Pull alignment re-ranking
+        try:
+            from nex_pull_alignment import pull_aligned_search
+            import faiss as _faiss, json as _json
+            _fidx  = _faiss.read_index(str(
+                __import__('pathlib').Path.home() / '.config/nex/nex_beliefs.faiss'))
+            _imap  = _json.loads(open(
+                __import__('pathlib').Path.home() / '.config/nex/nex_beliefs_meta.json').read())
+            import sqlite3 as _sql
+            _db = _sql.connect(str(
+                __import__('pathlib').Path.home() / 'Desktop/nex/nex.db'))
+            _reranked = pull_aligned_search(
+                query, n=8, faiss_index=_fidx, id_map=_imap, db=_db)
+            _db.close()
+            # Boost activation of pull-aligned beliefs
+            _pull_set = set(_reranked[:4])
+            for _ab in result.activated:
+                if _ab.id in _pull_set:
+                    _ab.activation = min(1.0, _ab.activation * 1.15)
+        except Exception:
+            pass
+
         # Enrich with causal chain EXTENSIONS beyond activated set
         try:
             from nex_causal_engine import CausalEngine
