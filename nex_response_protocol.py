@@ -409,15 +409,29 @@ def generate(query: str) -> str:
 
     # 2. Get beliefs via activation engine (graph-based)
     _voice_directive = ""
+    _activation_result = None
     try:
         from nex_activation import activate as _activate
         _result = _activate(query)
+        _activation_result = _result
         belief_text = _result.to_prompt()
         _voice_directive = _result.voice_directive()
         if not belief_text.strip(): raise ValueError("empty")
     except Exception:
         beliefs = retrieve_beliefs_by_intent(intent, query)
         belief_text = "\n".join(f"- {b}" for b in beliefs) if beliefs else "(drawing from general knowledge)"
+
+    # 2b. Try traversal compiler — zero LLM calls for settled queries
+    if _activation_result is not None:
+        try:
+            from nex_traversal_compiler import compile as _compile, should_use_compiler
+            if should_use_compiler(_activation_result):
+                _compiled = _compile(_activation_result)
+                if _compiled and len(_compiled.split()) >= 15:
+                    log.debug(f"traversal compiler: used for [{intent}]")
+                    return _compiled
+        except Exception as _ce:
+            log.debug(f"compiler fallback: {_ce}")
 
 
     # ── WARMTH COT GATE ───────────────────────────────────────────

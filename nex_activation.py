@@ -163,6 +163,11 @@ class ActivationEngine:
             "their","there","then","than","when","which","who","into","its"
         }
         query_words = set(re.findall(r'\b\w{3,}\b', query.lower())) - stop
+        # Identity queries need special seeding — short words get filtered
+        _q_lower = query.lower().strip()
+        if _q_lower in ("who are you", "what are you", "who is nex", "what is nex"):
+            query_words |= {"nex", "identity", "dynamic", "intelligence", "organism",
+                           "belief", "position", "xenogenesis", "emergent"}
 
         # Load warmth scores for query words from word_tags table
         _warmth = {}
