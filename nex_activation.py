@@ -48,6 +48,7 @@ class ActivatedBelief:
     role: str           # seed | support | bridge | tension | refine
     momentum: float = 0.0  # epistemic momentum score
     ontology_score: float = 0.5  # grounding score 0-1
+    quality_score:  float = 0.5  # composite quality score
 
 
 @dataclass
@@ -69,6 +70,14 @@ class ActivationResult:
         return sorted(
             self.activated,
             key=lambda b: b.activation * b.confidence * (0.7 + b.ontology_score * 0.3),
+            reverse=True
+        )[:n]
+
+    def top_quality(self, n: int = 8):
+        """Rank by composite quality score — best beliefs first."""
+        return sorted(
+            self.activated,
+            key=lambda b: getattr(b, "quality_score", b.confidence),
             reverse=True
         )[:n]
 
@@ -133,11 +142,21 @@ class ActivationEngine:
         db.row_factory = sqlite3.Row
         rows = db.execute(
             "SELECT id, content, topic, confidence, COALESCE(momentum,0.0) as momentum, "
-            "COALESCE(ontology_score,0.5) as ontology_score "
+            "COALESCE(ontology_score,0.5) as ontology_score, "
+            "COALESCE(use_count,0) as use_count "
             "FROM beliefs WHERE length(content) > 20"
         ).fetchall()
         for row in rows:
-            self._belief_cache[row["id"]] = dict(row)
+            b = dict(row)
+            # Compute composite quality score
+            # quality = confidence * ontology * momentum_boost * use_boost
+            conf    = b.get("confidence", 0.5) or 0.5
+            ont     = b.get("ontology_score", 0.5) or 0.5
+            mom     = max(0, b.get("momentum", 0.0) or 0.0)
+            uses    = b.get("use_count", 0) or 0
+            use_w   = min(1.0, (uses + 1) / 10)
+            b["quality_score"] = round(conf * 0.4 + ont * 0.35 + mom * 0.15 + use_w * 0.10, 3)
+            self._belief_cache[b["id"]] = b
 
         edges = db.execute(
             "SELECT source_id, target_id, relation_type, weight FROM belief_relations"
@@ -282,6 +301,7 @@ class ActivationEngine:
                 role           = role,
                 momentum       = b.get("momentum", 0.0) or 0.0,
                 ontology_score = b.get("ontology_score", 0.5) or 0.5,
+                quality_score  = b.get("quality_score", 0.5) or 0.5,
             ))
 
         result.depth   = max((b.hop for b in result.activated), default=0)
