@@ -147,6 +147,16 @@ def quarantine(db, report: dict, dry_run=False) -> int:
     return quarantined
 
 
+def get_hollow_beliefs(db, limit=20) -> list:
+    """Get ontologically hollow beliefs for immune review."""
+    try:
+        rows = db.execute("""SELECT id, content, topic FROM beliefs
+            WHERE ontology_hollow=1
+            ORDER BY confidence DESC LIMIT ?""", (limit,)).fetchall()
+        return [r[0] for r in rows]
+    except Exception:
+        return []
+
 def print_report(report: dict):
     print(f"\nNEX BELIEF IMMUNE SCAN")
     print(f"{'='*50}")
