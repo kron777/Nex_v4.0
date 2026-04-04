@@ -583,10 +583,6 @@ def run_nex_query(query: str, session: dict, domain_hint: str = None) -> dict:
                 gate_out = gated_cognite(query, nrp_generate)
                 result   = {"response": gate_out["response"], "domain": domain_used}
             else:
-                if GATE_OK:
-                gate_out = gated_cognite(query, nrp_generate)
-                result   = {"response": gate_out["response"], "domain": domain_used}
-            else:
                 result = nrp_generate(query=query)
             if isinstance(result, dict):
                 response_text = result.get("response", "")

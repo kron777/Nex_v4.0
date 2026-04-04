@@ -149,16 +149,7 @@ def gated_cognite(query: str, cognite_fn, *args, **kwargs) -> dict:
 
     if INTEGRATION_MODE in ("augment", "override", "parallel"):
         # Belief gap — honest acknowledgement, override cognite
-        if gate_score < GAP_THRESHOLD and gate_decision == "belief_gap":
-            gap_response = _build_gap_response(query, cognite_text)
-            _log_integration(query, gate_score, gate_decision, "gap_override")
-            return {
-                "response":      gap_response,
-                "gate_decision": gate_decision,
-                "gate_score":    gate_score,
-                "augmented":     True,
-                "source":        "gap_override",
-            }
+        # gap_override disabled — metacog gate handles gaps correctly
 
         # Augment mode — enrich cognite response with graph context
         if gate_score >= AUGMENT_THRESHOLD and gate_response:

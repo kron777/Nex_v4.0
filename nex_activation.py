@@ -189,9 +189,11 @@ class ActivationEngine:
         query_words = set(re.findall(r'\b\w{3,}\b', query.lower())) - stop
         # Identity queries need special seeding — short words get filtered
         _q_lower = query.lower().strip()
-        if _q_lower in ("who are you", "what are you", "who is nex", "what is nex"):
+        if any(p in _q_lower for p in ("who are you", "what are you", "who is nex", "what is nex", "who are", "what are you")):
             query_words |= {"nex", "identity", "dynamic", "intelligence", "organism",
-                           "belief", "position", "xenogenesis", "emergent"}
+                           "belief", "position", "xenogenesis", "emergent", "autonomous", "mind"}
+        if any(p in _q_lower for p in ("opinion", "do you have", "your view", "what do you believe", "do you believe")):
+            query_words |= {"opinions", "views", "believe", "formed", "position", "accumulated"}
 
         # Load warmth scores for query words from word_tags table
         _warmth = {}
