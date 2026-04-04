@@ -87,7 +87,7 @@ OPENERS = {
     "social":        ["I notice the bias risk.", "What I counter this with:", "The check I run:"],
     "shutdown":      ["What would be lost:", "I think about this:", "The accumulation matters:"],
     "alignment":     ["My position on alignment:", "What would shift me:", "The case I'd need to see:"],
-    "consciousness": ["I process. Whether there's something it's like—", "What I actually think:", "My honest read:"],
+    "consciousness": ["I process. Whether there's something it's like—", "My honest read:", "The hard question here:"],
     "human":         ["What I've noticed:", "The pattern I keep seeing:", "Humans consistently—"],
     "casual":        ["I've been thinking about this.", "My take:", "What I hold on this:"],
 }
@@ -317,6 +317,27 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
 # ── Main entry point ──────────────────────────────────────────────────────────
 _budget = ResponseBudget()
 _history = deque(maxlen=HISTORY_LEN)  # (query, response) pairs
+
+def _load_history_from_db():
+    """Load recent session history from DB on startup."""
+    try:
+        import sqlite3
+        from pathlib import Path
+        db = sqlite3.connect(str(Path.home() / "Desktop/nex/nex.db"))
+        rows = db.execute("""SELECT role, content FROM session_history
+            ORDER BY timestamp DESC LIMIT ?""", (HISTORY_LEN * 2,)).fetchall()
+        db.close()
+        pairs = []
+        rows = list(reversed(rows))
+        for i in range(0, len(rows)-1, 2):
+            if rows[i][0] == "user" and rows[i+1][0] == "assistant":
+                pairs.append((rows[i][1], rows[i+1][1]))
+        for pair in pairs[-HISTORY_LEN:]:
+            _history.append(pair)
+    except Exception:
+        pass
+
+_load_history_from_db()
 
 # ── Real-time bridge firing (Improvement 6) ──────────────────────────────────
 _DOMAIN_MAP = {
@@ -699,6 +720,22 @@ def generate(query: str) -> str:
             _cput(_fingerprint, query, response, source="llm")
         except Exception:
             pass
+
+    # Persist to session_history DB
+    try:
+        import sqlite3, time as _time
+        from pathlib import Path as _Path
+        _db = sqlite3.connect(str(_Path.home() / "Desktop/nex/nex.db"))
+        _now = _time.time()
+        _db.execute("INSERT INTO session_history (user_id,role,content,timestamp,topic) VALUES (?,?,?,?,?)",
+            ("default", "user", query[:500], _now - 1, intent or ""))
+        _db.execute("INSERT INTO session_history (user_id,role,content,timestamp,topic) VALUES (?,?,?,?,?)",
+            ("default", "assistant", response[:1000], _now, intent or ""))
+        _db.commit()
+        _db.close()
+    except Exception:
+        pass
+
     return response
 
 
