@@ -444,6 +444,30 @@ def generate(query: str) -> str:
     # 1. Classify intent
     intent = classify_intent(query)
 
+    # 1b. Domain expert mode — detect if query is outside NEX's domains
+    CORE_DOMAINS = {
+        "consciousness","ethics","free_will","identity","alignment",
+        "truth","philosophy","meaning","mind","morality","existence",
+        "epistemics","belief","cognition","intelligence","agency",
+    }
+    OUT_OF_DOMAIN_SIGNALS = [
+        r"\bwhat time\b", r"\bweather\b", r"\bprice of\b",
+        r"\bstock\b", r"\brecipe\b", r"\bhow to cook\b",
+        r"\bsports\b", r"\bscore\b", r"\bnews\b",
+        r"\bcurrent events\b", r"\bwho won\b",
+        r"\bcalculate\b", r"\bmath problem\b",
+        r"\btranslate\b", r"\bin spanish\b", r"\bin french\b",
+    ]
+    import re as _re
+    _ql = query.lower()
+    _out_of_domain = any(_re.search(p, _ql) for p in OUT_OF_DOMAIN_SIGNALS)
+    _in_core = any(kw in _ql for kw in CORE_DOMAINS)
+    if _out_of_domain and not _in_core:
+        return ("I don't have access to real-time information, current events, "
+                "or general factual data. My domain is consciousness, ethics, "
+                "identity, truth, and philosophical reasoning. Ask me something "
+                "in those territories.")
+
     # 2. Get beliefs via activation engine (graph-based)
     _voice_directive = ""
     _activation_result = None
