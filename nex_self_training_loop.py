@@ -72,7 +72,20 @@ def score_response(query: str, response: str) -> float:
         return 0.0
 
     rl = response.lower()
-    score = 0.5  # base
+
+    # Ontology grounding check — hollow responses score lower
+    try:
+        import sys as _sys
+        _sys.path.insert(0, "/home/rr/Desktop/nex")
+        from nex_ontology import pattern_ground
+        grounding = pattern_ground(response)
+        if grounding["hollow"]:
+            return 0.0  # reject hollow responses for training
+        ontology_bonus = grounding["score"] * 0.10
+    except Exception:
+        ontology_bonus = 0.0
+
+    score = 0.5 + ontology_bonus  # base + ontology bonus
 
     # NEX voice bonus
     voice_hits = sum(1 for v in NEX_VOICE if v in rl)
