@@ -761,6 +761,14 @@ def generate(query: str) -> str:
         except Exception:
             pass
 
+    # Self-critique — regenerate if response quality too low
+    try:
+        from nex_response_critic import critique_and_fix
+        _beliefs_text = [b.content for b in _activation_result.activated[:5]] if _activation_result else []
+        response = critique_and_fix(query, response, activated_beliefs=_beliefs_text)
+    except Exception:
+        pass
+
     # Persist to session_history DB
     try:
         import sqlite3, time as _time
