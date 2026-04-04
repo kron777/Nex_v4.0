@@ -186,9 +186,10 @@ def clean_hollow(db, dry_run=False) -> int:
     try:
         rows = db.execute("""SELECT id, content FROM beliefs
             WHERE ontology_hollow=1
-            AND confidence < 0.80
-            AND source NOT LIKE '%nex_core%'
-            AND source NOT LIKE '%depth%'""").fetchall()
+            AND (
+                (confidence < 0.80 AND source NOT LIKE '%nex_core%' AND source NOT LIKE '%depth%')
+                OR (source = 'nex_seed' AND confidence < 0.99)
+            )""").fetchall()
         removed = 0
         for bid, content in rows:
             if not dry_run:
