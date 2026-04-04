@@ -37,7 +37,7 @@ INTEGRATION_MODE = "augment"   # augment | override | parallel
 
 # Minimum gate score to augment/override the response
 AUGMENT_THRESHOLD  = 0.75   # raised — only augment high-confidence gate results
-OVERRIDE_THRESHOLD = 0.55   # high → full gate override
+OVERRIDE_THRESHOLD = 0.80   # high → full gate override
 GAP_THRESHOLD      = 0.10   # below → use gap acknowledgement
 
 # ── Lazy imports (don't crash API if gate modules missing) ────────────────────

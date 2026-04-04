@@ -579,7 +579,11 @@ def run_nex_query(query: str, session: dict, domain_hint: str = None) -> dict:
     # Try NRP pipeline
     if nrp_generate:
         try:
-            result = nrp_generate(query=query)
+            if GATE_OK:
+                gate_out = gated_cognite(query, nrp_generate)
+                result   = {"response": gate_out["response"], "domain": domain_used}
+            else:
+                result = nrp_generate(query=query)
             if isinstance(result, dict):
                 response_text = result.get("response", "")
                 domain_used   = result.get("domain", domain_used)
