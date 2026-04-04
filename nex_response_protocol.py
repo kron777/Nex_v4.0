@@ -422,6 +422,7 @@ def generate(query: str) -> str:
         belief_text = "\n".join(f"- {b}" for b in beliefs) if beliefs else "(drawing from general knowledge)"
 
     # 2b. Try traversal compiler — zero LLM calls for settled queries
+    _fingerprint = None
     if _activation_result is not None:
         try:
             from nex_traversal_compiler import compile as _compile, should_use_compiler
@@ -429,9 +430,30 @@ def generate(query: str) -> str:
                 _compiled = _compile(_activation_result)
                 if _compiled and len(_compiled.split()) >= 15:
                     log.debug(f"traversal compiler: used for [{intent}]")
+                    # Cache compiler response
+                    try:
+                        from nex_response_cache import _fingerprint as _fp, put as _cput
+                        _ids = [b.id for b in _activation_result.activated]
+                        _fingerprint = _fp(_ids, query)
+                        _cput(_fingerprint, query, _compiled, source="compiler")
+                    except Exception:
+                        pass
                     return _compiled
         except Exception as _ce:
             log.debug(f"compiler fallback: {_ce}")
+
+    # 2c. Check response cache before calling LLM
+    if _activation_result is not None:
+        try:
+            from nex_response_cache import _fingerprint as _fp, get as _cget
+            _ids = [b.id for b in _activation_result.activated]
+            _fingerprint = _fp(_ids, query)
+            _cached = _cget(_fingerprint)
+            if _cached:
+                log.debug(f"cache HIT for [{intent}]")
+                return _cached
+        except Exception as _ce:
+            log.debug(f"cache lookup failed: {_ce}")
 
 
     # ── WARMTH COT GATE ───────────────────────────────────────────
@@ -670,6 +692,13 @@ def generate(query: str) -> str:
         pass
     # ─────────────────────────────────────────────────────────────
 
+    # Store LLM response in cache
+    if _fingerprint and response and len(response.split()) >= 20:
+        try:
+            from nex_response_cache import put as _cput
+            _cput(_fingerprint, query, response, source="llm")
+        except Exception:
+            pass
     return response
 
 
