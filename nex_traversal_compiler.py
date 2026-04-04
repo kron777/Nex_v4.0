@@ -38,10 +38,10 @@ MIN_SEED_CONF    = 0.65   # minimum top seed confidence
 
 # Connective phrases by edge type and role
 SEED_OPENERS = [
-    "",
-    "My view:",
-    "The way I see it —",
-    "On this:",
+    "From what I know —",
+    "The way I see it,",
+    "I think",
+    "Honestly,",
 ]
 
 SUPPORT_CONNECTIVES = [
@@ -84,14 +84,14 @@ def _clean(text: str, max_len: int = 180) -> str:
 def _opener(idx: int = 0, momentum: float = 0.0) -> str:
     if momentum >= 0.5:
         # High momentum — assertive, no softening
-        assertive = ["", "Directly:", "The way I see it —"]
+        assertive = ["From what I know —", "I think", "Honestly,"]
         return assertive[idx % len(assertive)]
     elif momentum < -0.2:
         # Low momentum — provisional
         provisional = [
-            "Tentatively —",
-            "I lean toward:",
-            "Not settled, but —",
+            "I'm not sure, but —",
+            "I lean toward thinking",
+            "Still working this out, but —",
         ]
         return provisional[idx % len(provisional)]
     return SEED_OPENERS[idx % len(SEED_OPENERS)]
