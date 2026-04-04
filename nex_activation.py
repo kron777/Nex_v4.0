@@ -292,6 +292,36 @@ class ActivationEngine:
             tension_traversed / max(total_edges, 1), 3
         )
 
+        # Enrich with causal chains from top seed beliefs
+        try:
+            from nex_causal_engine import CausalEngine
+            _ce = CausalEngine()
+            _seeds = [b for b in result.activated if b.role == "seed"][:2]
+            _causal_ids = set(b.id for b in result.activated)
+            for _seed in _seeds:
+                _chains = _ce.causal_chain(
+                    _seed.id, max_depth=2,
+                    relation_types=("causes",))
+                for _chain in _chains[:3]:
+                    for _cb in _chain.get("beliefs", []):
+                        _bid = _cb.get("id")
+                        if _bid and _bid not in _causal_ids:
+                            if _bid in self._belief_cache:
+                                _b = self._belief_cache[_bid]
+                                result.activated.append(ActivatedBelief(
+                                    id=_bid,
+                                    content=_b["content"],
+                                    topic=_b["topic"],
+                                    confidence=_b["confidence"],
+                                    activation=round(_seed.activation * 0.4, 4),
+                                    hop=_seed.hop + 1,
+                                    role="causal",
+                                    momentum=_b.get("momentum", 0.0) or 0.0,
+                                ))
+                                _causal_ids.add(_bid)
+        except Exception:
+            pass
+
         # Log co-activations for edge reweighting
         try:
             from nex_edge_reweight import wire_into_activation
