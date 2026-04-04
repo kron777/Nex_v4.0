@@ -183,7 +183,8 @@ class ActivationEngine:
             "the","and","or","but","for","with","this","that","what","how",
             "are","you","do","does","can","will","would","should","about",
             "also","from","been","have","has","had","was","were","they",
-            "their","there","then","than","when","which","who","into","its"
+            "their","there","then","than","when","which","who","into","its",
+            "think","tell","explain","describe","your","view","opinion","think"
         }
         query_words = set(re.findall(r'\b\w{3,}\b', query.lower())) - stop
         # Identity queries need special seeding — short words get filtered

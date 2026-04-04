@@ -118,7 +118,7 @@ def _compile_settled(result) -> str:
     relevant_support = [b for b in support if b.topic == seed.topic]
     if not relevant_support:
         relevant_support = support
-    if relevant_support and relevant_support[0].confidence >= 0.70:
+    if relevant_support and relevant_support[0].confidence >= 0.80 and relevant_support[0].topic == seed.topic:
         sup = _clean(relevant_support[0].content, max_len=120)
         # Only add if not near-duplicate of seed
         seed_words = set(seed.content.lower().split())
@@ -126,9 +126,6 @@ def _compile_settled(result) -> str:
         if len(seed_words & sup_words) / max(len(seed_words), 1) < 0.5:
             text += f" {sup}."
 
-    # Add second seed if very different topic
-    if len(seeds) > 1 and seeds[1].topic != seed.topic:
-        text += f" {_clean(seeds[1].content, max_len=100)}."
 
     return text
 
