@@ -85,7 +85,10 @@ JSON:"""
     # Fallback: extract key nouns from question
     words = re.findall(r'\b[a-z]{4,}\b', question.lower())
     stops = {"what","does","that","with","from","have","this","your","will",
-             "would","could","should","about","when","where","which","there"}
+             "would","could","should","about","when","where","which","there",
+             "like","just","more","some","been","than","them","they","into",
+             "only","also","such","each","most","over","time","very","even",
+             "right","like","something","anything","thing","things","change"}
     return list(set(words) - stops)[:5]
 
 
