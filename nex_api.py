@@ -1064,6 +1064,31 @@ def chat():
         _rro(topic=_topic, success=True, pcc_conf=0.65)
     except Exception:
         pass
+    # ── Synthesis engine — generalise from beliefs on novel queries ──────
+    try:
+        from nex_synthesis_engine import synthesize as _synth
+        _activation_count = 0
+        try:
+            from nex_activation import activate as _act2
+            _ar2 = _act2(query)
+            _activation_count = len(_ar2.activated)
+            _activated_beliefs = [(b.content, b.confidence, b.topic) for b in _ar2.top(8)]
+        except Exception:
+            _activated_beliefs = []
+        # Only synthesize if activation is thin (< 5 beliefs) and LLM was used
+        if _activation_count < 5 and _activated_beliefs:
+            _synth_result = _synth(query, _activated_beliefs, store=True)
+            if _synth_result.get("response") and not result.get("response"):
+                result["response"] = _synth_result["response"]
+    except Exception:
+        pass
+    # ── Argument tracker — record position for multi-turn consistency ─────
+    try:
+        from nex_argument_tracker import ArgumentTracker as _AT
+        _tracker = _AT(session_id)
+        _tracker.record(query, result.get("response",""), result.get("domain","general"))
+    except Exception:
+        pass
     # ── Conversation feedback loop — boost beliefs, extract new ones ──────
     try:
         from nex_session_persist import save_turn as _save_turn

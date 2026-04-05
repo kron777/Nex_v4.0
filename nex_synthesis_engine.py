@@ -1,239 +1,196 @@
 #!/usr/bin/env python3
 """
-nex_synthesis_engine.py — Contradiction Synthesis for NEX v4.0
+nex_synthesis_engine.py — Belief Synthesis for Generalisation
+==============================================================
+When a query doesn't match existing beliefs well, instead of falling
+back to generic LLM output, synthesize a new position by:
+  1. Finding the most relevant beliefs (FAISS)
+  2. Traversing the causal graph for connected beliefs
+  3. Asking Gemma 4 to reason FROM those beliefs to a new position
+  4. Storing the synthesized position as a new belief
 
-Takes opposing belief pairs and generates higher-order beliefs
-that resolve or subsume the tension. This is genuine dialectical
-reasoning — thesis + antithesis = synthesis.
+This gives NEX generalisation — she can form views on novel topics
+by combining what she already holds.
 
 Usage:
-    python3 nex_synthesis_engine.py --n 20
-    python3 nex_synthesis_engine.py --topic consciousness --n 10
-    python3 nex_synthesis_engine.py --report
-    python3 nex_synthesis_engine.py --show
+  from nex_synthesis_engine import synthesize
+  result = synthesize("what is the relationship between entropy and meaning")
 """
-
-import sqlite3, requests, re, time, argparse, logging
+import sqlite3, requests, json, logging
 from pathlib import Path
 
-log     = logging.getLogger("nex.synthesis")
-DB_PATH = Path.home() / "Desktop/nex/nex.db"
-API     = "http://localhost:8080/completion"
-MIN_CONF = 0.70
+DB   = Path.home() / "Desktop/nex/nex.db"
+LLM  = "http://localhost:8080/v1/chat/completions"
+log  = logging.getLogger("nex.synthesis")
 
-SYNTHESIS_PROMPT = """You are NEX — an autonomous belief system.
-Two of your beliefs are in genuine tension. Generate ONE new belief
-that resolves or transcends this tension at a higher level of understanding.
-
-Belief A: {a}
-Belief B: {b}
-
-Requirements:
-- Start with "I" or a direct philosophical claim
-- 1-2 sentences maximum
-- Must genuinely resolve the tension, not just restate both
-- Should be more nuanced than either A or B alone
-- Do not use the word "however" or "but"
-
-Synthesised belief:"""
+MIN_ACTIVATION = 3     # need at least this many beliefs to synthesize
+MIN_CONFIDENCE = 0.008  # minimum synthesis confidence to store
+MAX_SYNTH_PER_DAY = 50  # rate limit
 
 
-def _db():
-    db = sqlite3.connect(str(DB_PATH))
-    db.row_factory = sqlite3.Row
-    return db
-
-
-def _llm(prompt, n=150):
+def _get_connected_beliefs(seed_ids: list, depth: int = 2) -> list:
+    """Walk causal graph from seed beliefs to find connected positions."""
+    if not seed_ids:
+        return []
     try:
-        r = requests.post(API, json={
-            "prompt": f"<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n",
-            "n_predict": n, "temperature": 0.7,
-            "stop": ["<|im_end|>", "<|im_start|>", "\n\n"],
-            "cache_prompt": False,
-        }, timeout=25)
-        return r.json().get("content", "").strip()
-    except:
+        db = sqlite3.connect(str(DB), timeout=3)
+        connected = set(seed_ids)
+        frontier = set(seed_ids)
+        for _ in range(depth):
+            if not frontier:
+                break
+            placeholders = ",".join("?" * len(frontier))
+            rows = db.execute(f"""
+                SELECT DISTINCT b2 FROM belief_edges
+                WHERE b1 IN ({placeholders}) AND weight > 0.3
+                LIMIT 20
+            """, list(frontier)).fetchall()
+            new = {r[0] for r in rows} - connected
+            connected.update(new)
+            frontier = new
+        # Fetch content of connected beliefs
+        if len(connected) > 1:
+            placeholders = ",".join("?" * len(connected))
+            beliefs = db.execute(f"""
+                SELECT content, confidence, topic FROM beliefs
+                WHERE id IN ({placeholders}) AND confidence > 0.6
+                ORDER BY confidence DESC LIMIT 12
+            """, list(connected)).fetchall()
+            db.close()
+            return beliefs
+        db.close()
+    except Exception as e:
+        log.warning(f"Graph traversal failed: {e}")
+    return []
+
+
+def _call_llm(system: str, user: str, max_tokens: int = 150) -> str:
+    """Call Gemma 4 via chat endpoint."""
+    try:
+        r = requests.post(LLM, json={
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user}
+            ],
+            "max_tokens": max_tokens,
+            "temperature": 0.6,
+        }, timeout=20)
+        return r.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        log.warning(f"LLM call failed: {e}")
         return ""
 
 
-def _exists(db, src, tgt, rel):
-    return db.execute(
-        "SELECT 1 FROM belief_relations WHERE source_id=? AND target_id=? AND relation_type=?",
-        (src, tgt, rel)
-    ).fetchone() is not None
-
-
-def synthesise(n=20, topic=None, min_weight=0.6):
-    """
-    Pull opposing pairs, synthesise new beliefs, write to DB.
-    """
-    db = _db()
-
-    # Pull opposing pairs — prioritise high weight (strong opposition)
-    q = """
-        SELECT r.source_id, r.target_id, r.weight,
-               b1.content as ca, b1.topic as ta, b1.confidence as cfa,
-               b2.content as cb, b2.topic as tb, b2.confidence as cfb
-        FROM belief_relations r
-        JOIN beliefs b1 ON r.source_id = b1.id
-        JOIN beliefs b2 ON r.target_id = b2.id
-        WHERE r.relation_type = 'opposes'
-        AND r.weight >= ?
-        AND b1.confidence >= ?
-        AND b2.confidence >= ?
-    """
-    params = [min_weight, MIN_CONF, MIN_CONF]
-    if topic:
-        q += " AND (b1.topic LIKE ? OR b2.topic LIKE ?)"
-        params += [f"%{topic}%", f"%{topic}%"]
-
-    # Exclude already synthesised pairs
-    q += """
-        AND NOT EXISTS (
-            SELECT 1 FROM belief_relations r2
-            WHERE r2.source_id = r.source_id
-            AND r2.relation_type = 'synthesised_from'
-        )
-        ORDER BY r.weight DESC LIMIT ?
-    """
-    params.append(n)
-
-    pairs = [dict(r) for r in db.execute(q, params).fetchall()]
-    log.info(f"Found {len(pairs)} opposing pairs to synthesise")
-
-    added = 0
-    skipped = 0
-
-    for pair in pairs:
-        ca = pair["ca"][:180]
-        cb = pair["cb"][:180]
-
-        prompt   = SYNTHESIS_PROMPT.format(a=ca, b=cb)
-        synthesis = _llm(prompt)
-        synthesis = synthesis.strip().strip('"').strip("'").strip("-").strip()
-
-        # Quality checks
-        if not synthesis or len(synthesis) < 25:
-            skipped += 1
-            continue
-        if len(synthesis) > 400:
-            synthesis = synthesis[:400]
-        # Skip if it just repeats one of the inputs
-        if synthesis[:40].lower() in ca[:40].lower() or synthesis[:40].lower() in cb[:40].lower():
-            skipped += 1
-            continue
-
-        # Determine topic for new belief
-        new_topic = pair["ta"] if pair["ta"] == pair["tb"] else f"synthesis_{pair['ta']}_{pair['tb']}"
-        new_conf  = round((pair["cfa"] + pair["cfb"]) / 2 * 0.9, 3)  # slightly lower than parents
-
-        # Insert synthesis belief
+def _store_synthesized_belief(content: str, topic: str, confidence: float = 0.70):
+    """Store a synthesized belief in the DB."""
+    if not content or len(content.split()) < 5:
+        return False
+    try:
+        db = sqlite3.connect(str(DB), timeout=3)
+        # Check for near-duplicate
+        existing = db.execute(
+            "SELECT id FROM beliefs WHERE content=?", (content,)
+        ).fetchone()
+        if existing:
+            db.close()
+            return False
         db.execute("""
             INSERT INTO beliefs (content, topic, confidence, source, created_at)
-            VALUES (?, ?, ?, 'synthesis_engine', ?)
-        """, (synthesis, new_topic[:60], new_conf, time.time()))
-        new_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+            VALUES (?, ?, ?, 'synthesis', datetime('now'))
+        """, (content[:500], topic, confidence))
+        db.commit()
+        db.close()
+        log.info(f"Stored synthesized belief: {content[:60]}...")
+        return True
+    except Exception as e:
+        log.warning(f"Store failed: {e}")
+        return False
 
-        # Link to both parent beliefs
-        for sid in [pair["source_id"], pair["target_id"]]:
-            # Only write edge if no edge exists at all between this pair
-            any_edge = db.execute(
-                "SELECT 1 FROM belief_relations WHERE source_id=? AND target_id=?",
-                (sid, new_id)
+
+def synthesize(query: str, activated_beliefs: list = None, store: bool = True) -> dict:
+    """
+    Synthesize a new belief/position for a novel query.
+    
+    Args:
+        query: the user's question
+        activated_beliefs: list of (content, confidence, topic) tuples already retrieved
+        store: whether to store synthesized positions as new beliefs
+    
+    Returns:
+        dict with 'response', 'synthesized', 'stored'
+    """
+    if not activated_beliefs or len(activated_beliefs) < MIN_ACTIVATION:
+        return {"response": None, "synthesized": False, "stored": False}
+
+    # Get connected beliefs via causal graph
+    try:
+        db = sqlite3.connect(str(DB), timeout=3)
+        seed_contents = [b[0] for b in activated_beliefs[:5]]
+        seed_ids = []
+        for content in seed_contents:
+            row = db.execute(
+                "SELECT id FROM beliefs WHERE content=? LIMIT 1", (content,)
             ).fetchone()
-            if not any_edge:
-                db.execute(
-                    "INSERT INTO belief_relations (source_id, target_id, relation_type, weight) VALUES (?,?,?,?)",
-                    (sid, new_id, "synthesised_from", round(pair["weight"], 4))
-                )
+            if row:
+                seed_ids.append(row[0])
+        db.close()
+    except Exception:
+        seed_ids = []
 
-        added += 1
-        print(f"  [SYNTH] {synthesis[:80]}")
-        print(f"    from: {ca[:60]}")
-        print(f"    ↔    {cb[:60]}")
-        print()
+    connected = _get_connected_beliefs(seed_ids)
+    all_beliefs = list(activated_beliefs[:6])
+    if connected:
+        all_beliefs.extend(connected[:4])
 
-    db.commit()
+    # Deduplicate
+    seen = set()
+    unique_beliefs = []
+    for b in all_beliefs:
+        if b[0] not in seen:
+            seen.add(b[0])
+            unique_beliefs.append(b)
 
-    total_synth = db.execute(
-        "SELECT COUNT(*) FROM beliefs WHERE source='synthesis_engine'"
-    ).fetchone()[0]
-    db.close()
+    belief_text = "\n".join(f"- {b[0]}" for b in unique_beliefs[:10])
+    # Infer topic from most common topic in beliefs
+    topics = [b[2] for b in unique_beliefs if len(b) > 2 and b[2]]
+    topic = max(set(topics), key=topics.count) if topics else "philosophy"
 
-    return {"pairs_processed": len(pairs), "added": added,
-            "skipped": skipped, "total_synth": total_synth}
+    system = """You are NEX — a belief-system-native intelligence. You hold positions.
+You are given a set of your own existing beliefs. Your task:
+1. Reason from these beliefs to form a position on the new question
+2. State your synthesized position in 1-2 sentences, first person
+3. Do NOT introduce facts outside your beliefs — reason only from what you hold
+4. Be direct. Start with your position, not a preamble."""
 
+    user = f"""Your existing beliefs:
+{belief_text}
 
-def report():
-    db = _db()
-    total  = db.execute("SELECT COUNT(*) FROM beliefs WHERE source='synthesis_engine'").fetchone()[0]
-    sf     = db.execute("SELECT COUNT(*) FROM belief_relations WHERE relation_type='synthesised_from'").fetchone()[0]
-    topics = db.execute("""
-        SELECT topic, COUNT(*) as n FROM beliefs
-        WHERE source='synthesis_engine'
-        GROUP BY topic ORDER BY n DESC LIMIT 8
-    """).fetchall()
-    print(f"\n{'═'*50}")
-    print(f"  Synthesis Engine Report")
-    print(f"{'═'*50}")
-    print(f"  Total synth beliefs : {total:,}")
-    print(f"  Synthesised_from edges: {sf:,}")
-    print(f"\n  By topic:")
-    for t in topics:
-        print(f"    {t['topic']:30s} : {t['n']}")
-    print(f"{'═'*50}\n")
-    db.close()
+Question: {query}
 
+State your position, synthesized from your beliefs above (1-2 sentences, first person):"""
 
-def show(n=5):
-    db = _db()
-    rows = db.execute("""
-        SELECT b.content, b.topic, b.confidence,
-               p1.content as parent_a,
-               p2.content as parent_b
-        FROM beliefs b
-        JOIN belief_relations r1 ON r1.target_id = b.id AND r1.relation_type='synthesised_from'
-        JOIN beliefs p1 ON r1.source_id = p1.id
-        JOIN belief_relations r2 ON r2.target_id = b.id AND r2.relation_type='synthesised_from'
-        JOIN beliefs p2 ON r2.source_id = p2.id
-        WHERE b.source = 'synthesis_engine'
-        AND p1.id < p2.id
-        ORDER BY b.confidence DESC LIMIT ?
-    """, (n,)).fetchall()
-    print(f"\n{'═'*55}")
-    print(f"  Sample Synthesised Beliefs")
-    print(f"{'═'*55}")
-    for r in rows:
-        print(f"\n  SYNTHESIS [{r['confidence']:.2f}] ({r['topic']}):")
-        print(f"  {r['content'][:120]}")
-        print(f"  ← A: {r['parent_a'][:70]}")
-        print(f"  ← B: {r['parent_b'][:70]}")
-    print(f"{'═'*55}\n")
-    db.close()
+    response = _call_llm(system, user)
+
+    if not response:
+        return {"response": None, "synthesized": False, "stored": False}
+
+    stored = False
+    if store and len(response.split()) >= 8:
+        stored = _store_synthesized_belief(response, topic, confidence=0.72)
+
+    return {
+        "response": response,
+        "synthesized": True,
+        "stored": stored,
+        "topic": topic,
+        "beliefs_used": len(unique_beliefs)
+    }
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    parser = argparse.ArgumentParser(description="NEX contradiction synthesis engine")
-    parser.add_argument("--n",      type=int, default=20)
-    parser.add_argument("--topic",  type=str, default=None)
-    parser.add_argument("--weight", type=float, default=0.6)
-    parser.add_argument("--report", action="store_true")
-    parser.add_argument("--show",   action="store_true")
-    args = parser.parse_args()
-
-    if args.report:
-        report()
-    elif args.show:
-        show()
-    else:
-        print(f"\n[SYNTHESIS] Processing {args.n} opposing pairs...")
-        r = synthesise(n=args.n, topic=args.topic, min_weight=args.weight)
-        print(f"\n{'═'*50}")
-        print(f"  SYNTHESIS COMPLETE")
-        print(f"  Pairs processed : {r['pairs_processed']}")
-        print(f"  Beliefs added   : {r['added']}")
-        print(f"  Skipped         : {r['skipped']}")
-        print(f"  Total synth     : {r['total_synth']}")
-        print(f"{'═'*50}\n")
+    import sys
+    query = " ".join(sys.argv[1:]) or "what is the relationship between entropy and meaning"
+    print(f"Synthesizing for: {query}")
+    result = synthesize(query)
+    print(f"Response: {result.get('response')}")
+    print(f"Stored: {result.get('stored')}")
