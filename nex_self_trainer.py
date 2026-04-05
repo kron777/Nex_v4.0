@@ -32,7 +32,7 @@ from datetime import datetime
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 DB_PATH    = Path.home() / ".config" / "nex" / "nex.db"
-BASE_MODEL = "/media/rr/NEX/models/Qwen2.5-3B-Instruct"  # Qwen2.5-3B: ~6GB fp16, fits 8GB VRAM with LoRA overhead
+BASE_MODEL = "/media/rr/NEX/models/gemma-4-E4B-it"  # Qwen2.5-3B: ~6GB fp16, fits 8GB VRAM with LoRA overhead
 # Fallback: "/media/rr/4TB DATA/llmz/Mistral-7B-Instruct-v0.3-hf"
 TRAINED    = "/home/rr/Desktop/nex/nex_trained"
 TRAIN_DIR  = "/home/rr/Desktop/nex/nex_training"
@@ -603,7 +603,7 @@ def _do_training(intensity: str, send_fn):
         _log("GPU detected — loading fp16 on GPU only (no offload)")
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             device_map={"": 0},
             trust_remote_code=True,
         )
@@ -611,7 +611,7 @@ def _do_training(intensity: str, send_fn):
         _log("No GPU — loading on CPU (slow)")
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             device_map={"": torch.device("cpu")},
             trust_remote_code=True,
         )
@@ -693,7 +693,7 @@ def _merge_and_export(adapter_path: str, send_fn):
         from peft import PeftModel
 
         _log("Merging LoRA adapter into base model...")
-        base  = AutoModelForCausalLM.from_pretrained(BASE_MODEL, torch_dtype=torch.float16, device_map="cpu")
+        base  = AutoModelForCausalLM.from_pretrained(BASE_MODEL, dtype=torch.float16, device_map="cpu")
         model = PeftModel.from_pretrained(base, adapter_path)
         merged = model.merge_and_unload()
 
