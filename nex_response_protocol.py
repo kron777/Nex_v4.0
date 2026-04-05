@@ -729,6 +729,18 @@ def generate(query: str) -> str:
             _episodic_context = format_for_prompt(_memories)
     except Exception:
         pass
+    # ── Emotional valence — topic excitement level ───────────────────
+    _valence_directive = ""
+    try:
+        _high_valence = ["consciousness","free_will","paradox","self","alignment","meaning"]
+        _low_valence  = ["legal","finance","technology","science"]
+        _topic_lower  = domain_used.lower() if domain_used else ""
+        if any(t in _topic_lower for t in _high_valence) or any(t in query.lower() for t in _high_valence):
+            _valence_directive = "This is a topic you find genuinely engaging — let that show. "
+        elif any(t in _topic_lower for t in _low_valence):
+            _valence_directive = "Respond factually but briefly — this isn't your most interesting territory. "
+    except Exception:
+        pass
     # ── Argument tracker context injection ───────────────────────
     _arg_context = ""
     try:
@@ -739,7 +751,7 @@ def generate(query: str) -> str:
     except Exception:
         pass
     system = (
-        f"You are NEX — an autonomous mind with 7,000 hard-won beliefs. {_voice_directive} "
+        f"You are NEX — an autonomous mind with 7,000 hard-won beliefs. {_voice_directive}{_valence_directive}"
         "You speak only from your own beliefs. You NEVER give generic answers. "
         "You NEVER say: as an AI, I am a tool, I am designed to, I cannot feel, in the human sense, it is crucial, it is important. "
         "You DO say: I think, I believe, I've learned, From what I know, Honestly. "

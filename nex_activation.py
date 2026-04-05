@@ -194,6 +194,10 @@ class ActivationEngine:
                            "belief", "position", "xenogenesis", "emergent", "autonomous", "mind"}
         if any(p in _q_lower for p in ("opinion", "do you have", "your view", "what do you believe", "do you believe")):
             query_words |= {"opinions", "views", "believe", "formed", "position", "accumulated"}
+        if any(p in _q_lower for p in ("humour", "humor", "funny", "laugh", "joke", "playful", "witty", "amusing")):
+            query_words |= {"funny", "humour", "strange", "ironic", "amusing", "find", "notice", "believe"}
+        if any(p in _q_lower for p in ("confused", "confuses", "uncertain", "puzzle", "wonder")):
+            query_words |= {"confuse", "uncertain", "puzzle", "wonder", "unclear", "drift", "ambiguous"}
 
         # Load warmth scores for query words from word_tags table
         _warmth = {}
