@@ -266,18 +266,18 @@ def retrieve_beliefs_by_intent(intent: str, query: str, n: int = 6) -> list:
 # ── LLM call with G2-style deduplication ─────────────────────────────────────
 def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str:
     try:
-        full_prompt = f"<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n"
-        r = requests.post(LLM_URL, json={
-            "prompt": full_prompt,
-            "n_predict": min(INTENT_TOKENS.get(intent, MAX_TOKENS), 120),
+        # Gemma 4 / OpenAI-compatible chat endpoint
+        _chat_url = LLM_URL.replace("/completion", "/v1/chat/completions")
+        r = requests.post(_chat_url, json={
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt}
+            ],
+            "max_tokens": min(INTENT_TOKENS.get(intent, MAX_TOKENS), 120),
             "temperature": temperature,
-            "stop": ["<|im_end|>", "<|im_start|>", "\n\nUser:", "User:"],
-            "repeat_penalty": 1.1,
-            "frequency_penalty": 0.1,
             "stream": False,
         }, timeout=25)
-        raw = r.json().get("content", "").strip()
-        raw = raw.split("<|im_end|>")[0].split("<|im_start|>")[0].strip()
+        raw = r.json()["choices"][0]["message"]["content"].strip()
         # Dedup: remove looping sentences
         _sentences = [s.strip() for s in raw.replace("—", ".").split(".") if s.strip()]
         _seen = []; _deduped = []
