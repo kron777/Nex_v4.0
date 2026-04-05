@@ -649,7 +649,7 @@ def _do_training(intensity: str, send_fn):
         report_to="none",
         dataloader_num_workers=0,
         dataset_text_field="text",
-        max_seq_length=256,
+        max_seq_length=128,
         packing=False,
     )
 

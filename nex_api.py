@@ -1064,6 +1064,43 @@ def chat():
         _rro(topic=_topic, success=True, pcc_conf=0.65)
     except Exception:
         pass
+    # ── Conversation feedback loop — boost beliefs, extract new ones ──────
+    try:
+        from nex_feedback_loop import record_exchange as _record_exchange
+        # Infer route from routing_stats (last entry)
+        _route = "llm"
+        try:
+            import sqlite3 as _sq; from pathlib import Path as _Pa
+            _rd = _sq.connect(str(_Pa.home()/"Desktop/nex/nex.db"))
+            _last = _rd.execute("SELECT route FROM routing_stats ORDER BY ts DESC LIMIT 1").fetchone()
+            if _last: _route = _last[0]
+            _rd.close()
+        except Exception:
+            pass
+        # Get activated belief IDs from activation result stored in result
+        _activated_ids = []
+        try:
+            from nex_activation import activate as _act
+            _ar = _act(query)
+            _activated_ids = [b.id for b in _ar.activated]
+        except Exception:
+            pass
+        _threading = __import__("threading")
+        _t = _threading.Thread(
+            target=_record_exchange,
+            kwargs={
+                "query": query,
+                "response": result["response"],
+                "route": _route,
+                "activated_ids": _activated_ids,
+                "topic": result.get("domain") or "general",
+                "had_contradiction": bool(contradictions),
+            },
+            daemon=True
+        )
+        _t.start()
+    except Exception:
+        pass
     response_payload = {
         "query":           query,
         "response":        result["response"],
