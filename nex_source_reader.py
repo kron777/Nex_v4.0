@@ -95,7 +95,7 @@ Passage: {chunk}
 
 Generate 2-3 first-person beliefs YOU hold, inspired by this passage:"""
         
-        response = llm(system, user, temp=0.75, max_tokens=200)
+        response = requests.post(LLM, json={"messages":[{"role":"system","content":system},{"role":"user","content":user}],"max_tokens":200,"temperature":0.75}, timeout=20).json()["choices"][0]["message"]["content"].strip()
         if not response:
             continue
         
