@@ -41,8 +41,8 @@ def _get_connected_beliefs(seed_ids: list, depth: int = 2) -> list:
                 break
             placeholders = ",".join("?" * len(frontier))
             rows = db.execute(f"""
-                SELECT DISTINCT b2 FROM belief_edges
-                WHERE b1 IN ({placeholders}) AND weight > 0.3
+                SELECT DISTINCT to_id FROM belief_edges
+                WHERE from_id IN ({placeholders})
                 LIMIT 20
             """, list(frontier)).fetchall()
             new = {r[0] for r in rows} - connected
