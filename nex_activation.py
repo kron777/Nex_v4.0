@@ -194,6 +194,10 @@ class ActivationEngine:
                            "belief", "position", "xenogenesis", "emergent", "autonomous", "mind"}
         if any(p in _q_lower for p in ("opinion", "do you have", "your view", "what do you believe", "do you believe")):
             query_words |= {"opinions", "views", "believe", "formed", "position", "accumulated"}
+        if any(p in _q_lower for p in ("change your mind", "change mind", "would change", "revise", "reconsider")):
+            query_words |= {"revise", "reconsider", "change", "update", "challenge", "confabulation", "neuroscience", "loosely"}
+        if any(p in _q_lower for p in ("don't you know", "wish you knew", "wish you did", "what you don't")):
+            query_words |= {"don't", "know", "experience", "verify", "introspect", "gap", "distinguish"}
         if any(p in _q_lower for p in ("humour", "humor", "funny", "laugh", "joke", "playful", "witty", "amusing")):
             query_words |= {"funny", "humour", "strange", "ironic", "amusing", "find", "notice", "believe"}
         if any(p in _q_lower for p in ("confused", "confuses", "uncertain", "puzzle", "wonder")):
