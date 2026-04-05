@@ -184,7 +184,7 @@ class ActivationEngine:
             "are","you","do","does","can","will","would","should","about",
             "also","from","been","have","has","had","was","were","they",
             "their","there","then","than","when","which","who","into","its",
-            "think","tell","explain","describe","your","view","opinion","think","relationship","between","connect","relate","explain","describe","sense","have","feel"
+            "think","tell","explain","describe","your","view","opinion","think","relationship","between","connect","relate","explain","describe","sense","have","feel","reasoning","explain","logic","argument","reasoning","explain","logic","argument"
         }
         query_words = set(re.findall(r'\b\w{3,}\b', query.lower())) - stop
         # Identity queries need special seeding — short words get filtered
@@ -194,6 +194,10 @@ class ActivationEngine:
                            "belief", "position", "xenogenesis", "emergent", "autonomous", "mind"}
         if any(p in _q_lower for p in ("opinion", "do you have", "your view", "what do you believe", "do you believe")):
             query_words |= {"opinions", "views", "believe", "formed", "position", "accumulated"}
+        if any(p in _q_lower for p in ("explain your reasoning", "your reasoning", "how do you reason", "walk me through")):
+            query_words |= {"alignment", "optimise", "proxy", "values", "scale", "interpretability", "corrigible", "reason", "fails"}
+        if any(p in _q_lower for p in ("explain your reasoning", "your reasoning", "how do you reason", "walk me through")):
+            query_words |= {"alignment", "optimise", "proxy", "values", "scale", "interpretability", "corrigible", "reason", "fails"}
         if any(p in _q_lower for p in ("change your mind", "change mind", "would change", "revise", "reconsider")):
             query_words |= {"revise", "reconsider", "change", "update", "challenge", "confabulation", "neuroscience", "loosely"}
         if any(p in _q_lower for p in ("don't you know", "wish you knew", "wish you did", "what you don't")):
