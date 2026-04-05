@@ -779,7 +779,7 @@ def generate(query: str) -> str:
         f"{history_str}"
         f"NEX beliefs relevant to this:\n{belief_text}\n"
         + (f"Your causal argument chain: {_chain_response}\n" if _chain_response else "")
-        f"{prior_str}\n"
+        + f"{prior_str}\n"
         f"Question: {query}\n\n"
         f"NEX response (start with '{opener}', directly referencing the beliefs above — NOT generic AI statements):"
     )

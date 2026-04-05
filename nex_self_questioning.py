@@ -55,9 +55,7 @@ def _get_context_beliefs(topic, n=4):
 
 def _generate_question(belief: str, topic: str) -> str:
     system = "Generate ONE probing question that challenges or deepens this belief. Be specific. Just the question, no preamble."
-    user = f'Belief: "{belief}"
-
-Probing question:'
+    user = "Belief: " + repr(belief) + "\n\nProbing question:"
     return _llm(system, user, temp=0.8, max_tokens=60)
 
 def _answer_question(question: str, belief: str, topic: str) -> str:
