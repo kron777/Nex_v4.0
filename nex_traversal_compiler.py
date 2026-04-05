@@ -34,7 +34,7 @@ log = logging.getLogger("nex.compiler")
 # Thresholds for compiler activation
 MIN_FIELD_ENERGY = 0.10   # minimum average activation*confidence
 MIN_BREADTH      = 3      # minimum beliefs activated
-MIN_SEED_CONF    = 0.65   # minimum top seed confidence
+MIN_SEED_CONF    = 0.75   # minimum top seed confidence
 
 # Connective phrases by edge type and role
 SEED_OPENERS = [
@@ -109,6 +109,7 @@ def _compile_settled(result) -> str:
     if not seeds:
         seeds = top[:1]
 
+    seeds = sorted(seeds, key=lambda b: b.confidence, reverse=True)
     seed = seeds[0]
     # Get momentum for expression style
     _mom = getattr(seed, 'momentum', 0.0) or 0.0
@@ -144,6 +145,7 @@ def _compile_mixed(result) -> str:
     if not seeds:
         seeds = top[:1]
 
+    seeds = sorted(seeds, key=lambda b: b.confidence, reverse=True)
     seed = seeds[0]
     _mom = getattr(seed, 'momentum', 0.0) or 0.0
     text = f"{_opener(1, _mom)} {_clean(seed.content)}."
@@ -183,6 +185,7 @@ def _compile_hot(result) -> str:
     if not seeds:
         seeds = top[:1]
 
+    seeds = sorted(seeds, key=lambda b: b.confidence, reverse=True)
     seed = seeds[0]
 
     # What IS clear
