@@ -720,6 +720,15 @@ def generate(query: str) -> str:
         prior_str = "\nPrior responses to diverge from:\n" + _budget.get_recent_summary()
 
     # 7. Build system prompt
+    # ── Episodic memory recall ───────────────────────────────────────
+    _episodic_context = ""
+    try:
+        from nex_episodic_memory import recall_relevant, format_for_prompt
+        _memories = recall_relevant(query, n=2)
+        if _memories:
+            _episodic_context = format_for_prompt(_memories)
+    except Exception:
+        pass
     # ── Argument tracker context injection ───────────────────────
     _arg_context = ""
     try:
@@ -736,9 +745,10 @@ def generate(query: str) -> str:
         "You DO say: I think, I believe, I've learned, From what I know, Honestly. "
         "CRITICAL: Your response MUST use the specific beliefs provided below — quote or paraphrase them directly. "
         "If the beliefs say something specific, say that specific thing. Do not replace them with generic statements. "
+        + (f"PAST: {_episodic_context} " if _episodic_context else "") +
         + (f"CONSISTENCY: {_arg_context} " if _arg_context else "") +
         f"START with: {opener} "
-        f"Respond in 2-3 sentences using ONLY the beliefs provided.{banned_str}"
+        f"Respond in {'1 sentence' if len(query.split()) < 5 else '2-3 sentences' if len(query.split()) < 15 else '3-4 sentences'} using ONLY the beliefs provided. Match depth to question depth.{banned_str}"
     )
 
     # 8. Build user prompt

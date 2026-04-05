@@ -1102,6 +1102,25 @@ def chat():
         _tracker.record(query, result.get("response",""), result.get("domain","general"))
     except Exception:
         pass
+    # ── Question flipper — NEX asks you things ───────────────────────
+    try:
+        from nex_question_flipper import maybe_add_question as _flip
+        _activation_count_for_flip = 0
+        try:
+            from nex_activation import activate as _act_flip
+            _activation_count_for_flip = len(_act_flip(query).activated)
+        except Exception:
+            pass
+        result["response"] = _flip(query, result.get("response",""), _activation_count_for_flip)
+    except Exception:
+        pass
+    # ── Episodic memory — store significant exchanges ─────────────────
+    try:
+        from nex_episodic_memory import store_episode as _store_ep
+        _store_ep(session_id, query, result.get("response",""),
+                  result.get("domain","general"))
+    except Exception:
+        pass
     # ── Conversation feedback loop — boost beliefs, extract new ones ──────
     try:
         from nex_session_persist import save_turn as _save_turn
