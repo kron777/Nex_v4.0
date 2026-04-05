@@ -1066,6 +1066,8 @@ def chat():
         pass
     # ── Conversation feedback loop — boost beliefs, extract new ones ──────
     try:
+        from nex_session_persist import save_turn as _save_turn
+        _save_turn(session_id, query, result["response"])
         from nex_feedback_loop import record_exchange as _record_exchange
         # Infer route from routing_stats (last entry)
         _route = "llm"

@@ -193,6 +193,19 @@ def extract_beliefs(
         return []
 
     # Split into sentences
+    # Strip compiler openers before extracting beliefs
+    _openers = [
+        "From what I know — ", "From what I know — ",
+        "Honestly, ", "Honestly — ",
+        "I think — ", "I think, ",
+        "From what I know, ",
+        "My position is that ",
+        "What I hold is ",
+    ]
+    for _op in _openers:
+        if response.startswith(_op):
+            response = response[len(_op):]
+            break
     sentences = re.split(r'(?<=[.!?])\s+', response.strip())
 
     scored = []

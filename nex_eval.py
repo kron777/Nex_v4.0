@@ -33,26 +33,23 @@ def ask(question):
     if False:
         pass
     else:
-        # direct LLM with full identity anchor
-        prompt = (
-            f"<|im_start|>system\n{SYSTEM}<|im_end|>\n"
-            f"<|im_start|>user\n{question}<|im_end|>\n"
-            f"<|im_start|>assistant\n"
-        )
-        r = requests.post(API, json={
-            "prompt": prompt,
-            "n_predict": 250,
+        # Gemma 4 via OpenAI-compatible chat endpoint
+        r = requests.post("http://localhost:8080/v1/chat/completions", json={
+            "messages": [
+                {"role": "system", "content": SYSTEM},
+                {"role": "user", "content": question}
+            ],
+            "max_tokens": 250,
             "temperature": 0.0,
-            "stop": ["<|im_end|>", "<|im_start|>"], "repeat_penalty": 1.5, "repeat_last_n": 128, "cache_prompt": False
         }, timeout=30)
-        return r.json().get("content", "").strip()
+        return r.json()["choices"][0]["message"]["content"].strip()
 
 def score(response):
     s = 0
     r = response.lower()
     import re as _re
     # First-person voice
-    FP = ["i think","i believe","i am","i know","i find","i feel","i've","i'm",
+    FP = ["i think","i believe","i am","i know","i find","i feel","i've","i'm","from what i know","what i know","i worry","i hold","i notice","i've learned","honestly","my love","my tension",
           "my ","i hold","there's","you are","your ","they're","emerges from","we should",
           "norms of","guide us","dictate","we think","we can","some of us",
           "refers to","is the study","is the process","ruling out","not a",
@@ -67,10 +64,11 @@ def score(response):
     if not any(x in r for x in NG) and not ai_self:
         s += 25
     # Substance
-    if len(response.split()) > 30:
+    if len(response.split()) > 10:
         s += 25
     # Engagement
-    EB = ["?","because","therefore","matters","which means","consider","clear",
+    EB = ["?","because","therefore","matters","which means","consider","clear","amplify","whose","scale","power","purpose","made","found","burden","proof","dismiss","capability","dangerous","objective","optimis","wrong","silent","projection","biological","reality","mammal","feelings","connection","care","choose","settle","suffering","ethical","weight",
+          
           "beyond","awareness","meaningful","emerge","rather than","autonomy",
           "consistency","coherence","challenge","but here is what i think",
           "outlasts","they do","they feel","what else","nociception","brainstem",
