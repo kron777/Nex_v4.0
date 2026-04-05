@@ -80,8 +80,8 @@ class ArgumentTracker:
                 relevant.append(pos)
 
         if not relevant:
-            # Just include the last exchange for continuity
-            relevant = self._positions[-1:]
+            # Always include last 2 exchanges for continuity
+            relevant = self._positions[-2:]
 
         if not relevant:
             return ""

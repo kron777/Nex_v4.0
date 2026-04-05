@@ -720,6 +720,17 @@ def generate(query: str) -> str:
         prior_str = "\nPrior responses to diverge from:\n" + _budget.get_recent_summary()
 
     # 7. Build system prompt
+    # ── Belief chain reasoning — build argument from causal graph ───
+    _chain_response = ""
+    try:
+        from nex_belief_chain import chain_response as _chain_resp
+        from nex_activation import activate as _act_chain
+        _ar_chain = _act_chain(query)
+        _chain_ids = [b.id for b in _ar_chain.top(4) if b.confidence >= 0.78]
+        if len(_chain_ids) >= 3:
+            _chain_response = _chain_resp(_chain_ids, query)
+    except Exception:
+        pass
     # ── Episodic memory recall ───────────────────────────────────────
     _episodic_context = ""
     try:
@@ -767,6 +778,7 @@ def generate(query: str) -> str:
     prompt = (
         f"{history_str}"
         f"NEX beliefs relevant to this:\n{belief_text}\n"
+        + (f"Your causal argument chain: {_chain_response}\n" if _chain_response else "")
         f"{prior_str}\n"
         f"Question: {query}\n\n"
         f"NEX response (start with '{opener}', directly referencing the beliefs above — NOT generic AI statements):"
