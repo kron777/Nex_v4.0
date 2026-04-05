@@ -1064,6 +1064,19 @@ def chat():
         _rro(topic=_topic, success=True, pcc_conf=0.65)
     except Exception:
         pass
+    # ── Real-time contradiction self-correction ──────────────────
+    try:
+        from nex_realtime_correction import correct_confidence as _correct
+        _activated_ids_for_correction = []
+        try:
+            from nex_activation import activate as _act3
+            _ar3 = _act3(query)
+            _activated_ids_for_correction = [b.id for b in _ar3.activated[:10]]
+        except Exception:
+            pass
+        _corrections = _correct(result.get("response",""), query, _activated_ids_for_correction)
+    except Exception:
+        pass
     # ── Synthesis engine — generalise from beliefs on novel queries ──────
     try:
         from nex_synthesis_engine import synthesize as _synth

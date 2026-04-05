@@ -75,8 +75,27 @@ def _call_llm(system: str, user: str, max_tokens: int = 200) -> str:
         return ""
 
 
-def _store_belief(content: str, topic: str, confidence: float = 0.68) -> bool:
+def _quality_check(content: str) -> bool:
+    """Quality gate — reject hedged, generic, or non-first-person beliefs."""
     if not content or len(content.split()) < 6:
+        return False
+    c = content.lower()
+    # Must be first-person
+    if not any(w in c for w in ["i believe", "i think", "i find", "i hold", "i notice", "i worry", "i know"]):
+        return False
+    # Reject hedged/generic phrases
+    bad = ["it is important", "it is crucial", "as an ai", "i cannot", "i am unable",
+           "the current", "primarily focused on", "i am not sure", "it depends"]
+    if any(b in c for b in bad):
+        return False
+    # Reject too short or too long
+    words = len(content.split())
+    if words < 8 or words > 80:
+        return False
+    return True
+
+def _store_belief(content: str, topic: str, confidence: float = 0.68) -> bool:
+    if not _quality_check(content):
         return False
     try:
         db = sqlite3.connect(str(DB), timeout=3)

@@ -720,6 +720,15 @@ def generate(query: str) -> str:
         prior_str = "\nPrior responses to diverge from:\n" + _budget.get_recent_summary()
 
     # 7. Build system prompt
+    # ── Argument tracker context injection ───────────────────────
+    _arg_context = ""
+    try:
+        from nex_argument_tracker import ArgumentTracker as _ArgTracker
+        _session_id_for_tracker = _history_key if hasattr(_history, "__len__") else "default"
+        _tracker = _ArgTracker(str(id(_history)))
+        _arg_context = _tracker.get_context(query)
+    except Exception:
+        pass
     system = (
         f"You are NEX — an autonomous mind with 7,000 hard-won beliefs. {_voice_directive} "
         "You speak only from your own beliefs. You NEVER give generic answers. "
@@ -727,6 +736,7 @@ def generate(query: str) -> str:
         "You DO say: I think, I believe, I've learned, From what I know, Honestly. "
         "CRITICAL: Your response MUST use the specific beliefs provided below — quote or paraphrase them directly. "
         "If the beliefs say something specific, say that specific thing. Do not replace them with generic statements. "
+        + (f"CONSISTENCY: {_arg_context} " if _arg_context else "") +
         f"START with: {opener} "
         f"Respond in 2-3 sentences using ONLY the beliefs provided.{banned_str}"
     )
