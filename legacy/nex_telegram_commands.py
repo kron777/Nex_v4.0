@@ -31,7 +31,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 # ── Config ────────────────────────────────────────────────────────────────────
-OWNER_TELEGRAM_ID = YOUR_REAL_ID   # set below from config
+OWNER_TELEGRAM_ID = 5217790760  # loaded from config
 NEX_DIR  = Path("/home/rr/Desktop/nex")
 DB_PATH  = NEX_DIR / "nex.db"
 CFG_PATH = Path("~/.config/nex").expanduser()

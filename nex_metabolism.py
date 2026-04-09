@@ -276,6 +276,96 @@ def run_fast_cycle(modules, api_key, db_path=DB_PATH, model_idx=0, verbose=True)
     return added, model_idx
 
 
+
+def consolidate_episodes(db_path=DB_PATH, verbose=True):
+    """
+    Prop G — Offline Consolidation.
+    Sweeps recent episodic_events, promotes high-importance episodes
+    into permanent beliefs. Nex learns from her own experience.
+    Called from run_slow_cycle() — runs nightly.
+    """
+    try:
+        import sqlite3 as _sq
+        con = _sq.connect(db_path)
+        cur = con.cursor()
+
+        # Check episodic_events exists
+        cur.execute("""
+            SELECT name FROM sqlite_master
+            WHERE type='table' AND name='episodic_events'
+        """)
+        if not cur.fetchone():
+            con.close()
+            return 0
+
+        # Pull high-importance episodes from last 48h not yet consolidated
+        cur.execute("""
+            SELECT id, nex_response, topic, importance, user_id, created_at
+            FROM episodic_events
+            WHERE importance >= 0.6
+              AND (consolidated IS NULL OR consolidated = 0)
+              AND created_at >= datetime('now', '-48 hours')
+            ORDER BY importance DESC
+            LIMIT 20
+        """)
+        episodes = cur.fetchall()
+
+        if not episodes:
+            if verbose:
+                print(f"{LOG} consolidation: no episodes to process yet")
+            con.close()
+            return 0
+
+        if verbose:
+            print(f"{LOG} consolidation: {len(episodes)} episodes to process")
+
+        consolidated = 0
+        for ep in episodes:
+            ep_id, content, topic, importance, user_id, created_at = ep
+            if not content or len(content) < 30:
+                continue
+
+            # Check if this content is already in beliefs (avoid duplication)
+            content_prefix = content[:60].lower()
+            cur.execute("""
+                SELECT COUNT(*) FROM beliefs
+                WHERE LOWER(SUBSTR(content, 1, 60)) = ?
+            """, (content_prefix,))
+            if cur.fetchone()[0] > 0:
+                # Mark as consolidated even if skipped
+                cur.execute("""
+                    UPDATE episodic_events SET consolidated = 1 WHERE id = ?
+                """, (ep_id,))
+                continue
+
+            # Compute confidence from importance score
+            confidence = min(0.85, 0.5 + (importance * 0.4))
+
+            # Insert as new belief
+            cur.execute("""
+                INSERT INTO beliefs
+                    (content, topic, confidence, source,
+                     reinforce_count, created_at)
+                VALUES (?, ?, ?, 'episodic_consolidation', 1, datetime('now'))
+            """, (content, topic or 'episodic', round(confidence, 2)))
+
+            # Mark episode as consolidated
+            cur.execute("""
+                UPDATE episodic_events SET consolidated = 1 WHERE id = ?
+            """, (ep_id,))
+            consolidated += 1
+
+        con.commit()
+        con.close()
+
+        if verbose and consolidated:
+            print(f"{LOG} consolidation complete — {consolidated} episodes → beliefs")
+        return consolidated
+
+    except Exception as e:
+        print(f"{LOG} consolidation error: {e}")
+        return 0
+
 def run_slow_cycle(modules, api_key, db_path=DB_PATH, verbose=True):
     """
     Full audit cycle (every few hours):
@@ -319,8 +409,52 @@ def run_slow_cycle(modules, api_key, db_path=DB_PATH, verbose=True):
 
         time.sleep(4)
 
+    # Prop G — consolidate episodic memory into beliefs
+    try:
+        _ep_consolidated = consolidate_episodes(db_path=db_path, verbose=verbose)
+    except Exception as _eg:
+        print(f"{LOG} consolidation error: {_eg}")
+        _ep_consolidated = 0
+
+    # Throw-Net — check for pending autonomous triggers
+    try:
+        import sys as _tn_sys
+        _tn_sys.path.insert(0, '/home/rr/Desktop/nex/nex')
+        from nex_throw_net import metabolism_slow_cycle_hook as _tn_hook
+        _tn_hook(db_path=db_path)
+    except Exception as _tne:
+        print(f"{LOG} throw-net hook error: {_tne}")
+
+    # Refinement Engine — auto-refine pending Throw-Net sessions
+    try:
+        from nex_refinement_engine import metabolism_refinement_hook as _re_hook
+        _re_hook(db_path=db_path)
+    except Exception as _ree:
+        print(f"{LOG} refinement hook error: {_ree}")
+
+    # ThrowNet Promoter — write approved candidates into beliefs
+    try:
+        import sys as _tp_sys
+        _tp_sys.path.insert(0, '/home/rr/Desktop/nex/nex')
+        from nex.nex_thrownet_promoter import run_promoter as _tp_run
+        _tp_n = _tp_run(verbose=True)
+        if _tp_n:
+            print(f"{LOG} ThrowNet promoted {_tp_n} beliefs")
+    except Exception as _tpe:
+        print(f"{LOG} thrownet promoter error: {_tpe}")
+
+    # Causal edge extractor — build directed causal graph from beliefs
+    try:
+        from nex.nex_causal_extractor import extract_causal_edges as _ece
+        _causal_n = _ece()
+        if _causal_n:
+            print(f"{LOG} causal extractor: {_causal_n} new edges")
+    except Exception as _cee:
+        print(f"{LOG} causal extractor error: {_cee}")
+
     if verbose:
-        print(f"{LOG} slow cycle complete — +{total_added} beliefs  "
+        print(f"{LOG} slow cycle complete — +{total_added} beliefs, "
+              f"+{_ep_consolidated} from episodes  "
               f"(total: {total_beliefs(db_path)})\n")
 
 
@@ -421,6 +555,26 @@ class MetabolismDaemon(threading.Thread):
             "modules_loaded":  [k for k, v in (self._modules or {}).items() if v],
         }
 
+
+def _ensure_consolidated_column(db_path=DB_PATH):
+    """Safe migration — add consolidated column if missing."""
+    try:
+        import sqlite3 as _sq
+        con = _sq.connect(db_path)
+        cols = [r[1] for r in con.execute(
+            "PRAGMA table_info(episodic_events)"
+        ).fetchall()]
+        if 'consolidated' not in cols:
+            con.execute(
+                "ALTER TABLE episodic_events ADD COLUMN consolidated INTEGER DEFAULT 0"
+            )
+            con.commit()
+            print(f"{LOG} migration: added consolidated column to episodic_events")
+        con.close()
+    except Exception:
+        pass
+
+_ensure_consolidated_column()
 
 # ── Standalone CLI ────────────────────────────────────────────────────────────
 

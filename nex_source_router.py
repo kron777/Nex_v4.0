@@ -48,6 +48,29 @@ except ImportError:
 
 log = logging.getLogger("nex.source_router")
 
+# ── Metabolism control — reads ~/.config/nex/metabolism.json ─────────────────
+import json as _met_json
+from pathlib import Path as _met_path
+
+def _get_metabolism_intervals():
+    """Read current metabolism intervals from config. Falls back to BALANCED."""
+    _defaults = {
+        "rss": 15, "hn_reddit": 30, "wikipedia": 60,
+        "arxiv": 240, "youtube": 720, "crawl4ai": 360
+    }
+    try:
+        cfg = _met_path("~/.config/nex/metabolism.json").expanduser()
+        if cfg.exists():
+            data = _met_json.loads(cfg.read_text())
+            intervals = data.get("intervals", {})
+            if intervals:
+                return intervals
+    except Exception:
+        pass
+    return _defaults
+# ─────────────────────────────────────────────────────────────────────────────
+
+
 DB_PATH = os.path.join(os.path.dirname(__file__), "nex.db")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_MODEL = "llama3:latest"  # using local ollama
@@ -576,14 +599,28 @@ class SourceRouter:
             "crawl4ai":  datetime.min,
         }
         self._intervals = {
-            "rss":        timedelta(minutes=8),   # was 15 — doubled throughput
-            "hn_reddit":  timedelta(minutes=15),  # was 30
-            "wikipedia":  timedelta(minutes=30),  # was 60
-            "arxiv":      timedelta(hours=2),     # was 4
+            "rss":        timedelta(minutes=120),   # was 15 — doubled throughput
+            "hn_reddit":  timedelta(minutes=60),  # was 30
+            "wikipedia":  timedelta(minutes=120),  # was 60
+            "arxiv":      timedelta(hours=8),     # was 4
             "youtube":    timedelta(hours=12),    # was 3 — broken, deprioritised
-            "crawl4ai":   timedelta(hours=4),     # was 6
+            "crawl4ai":   timedelta(hours=999),     # was 6
         }
         log.info("  [SourceRouter] initialised — 6-tier extraction engine")
+
+
+    def _update_intervals_from_metabolism(self):
+        """Reload intervals from metabolism config file."""
+        intervals = _get_metabolism_intervals()
+        from datetime import timedelta
+        self._intervals = {
+            "rss":       timedelta(minutes=intervals.get("rss", 15)),
+            "hn_reddit": timedelta(minutes=intervals.get("hn_reddit", 30)),
+            "wikipedia": timedelta(minutes=intervals.get("wikipedia", 60)),
+            "arxiv":     timedelta(minutes=intervals.get("arxiv", 240)),
+            "youtube":   timedelta(minutes=intervals.get("youtube", 720)),
+            "crawl4ai":  timedelta(minutes=intervals.get("crawl4ai", 360)),
+        }
 
     def start(self):
         self._thread.start()
@@ -598,6 +635,7 @@ class SourceRouter:
     def _run(self):
         while not self._stop.is_set():
             try:
+                self._update_intervals_from_metabolism()  # reload metabolism settings
                 now = datetime.now()
                 gap_topics = _get_all_topics_thin(threshold=15)
 

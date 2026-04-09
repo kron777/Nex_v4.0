@@ -812,6 +812,47 @@ def scheduler_config():
 # ══════════════════════════════════════════════════════════════════════════════
 # STARTUP
 # ══════════════════════════════════════════════════════════════════════════════
+
+# ── AGI Bridge: nightly provenance erosion ──────────────────────────────────
+def run_provenance_erosion():
+    """Erode source attribution from well-reinforced beliefs nightly."""
+    try:
+        from nex_provenance_erosion import run_erosion_cycle
+        stats = run_erosion_cycle()
+        print(f"  [Erosion] {stats.get('eroded',0)} beliefs advanced through provenance stages")
+    except Exception as e:
+        print(f"  [Erosion] error: {e}")
+
+# ── AGI Bridge: nightly emergent want scan ───────────────────────────────────
+def run_emergent_want_scan():
+    """Scan belief graph for emergent wants nightly."""
+    try:
+        from nex_emergent_wants import scan_and_propose
+        proposals = scan_and_propose()
+        if proposals:
+            print(f"  [EmergentWant] {len(proposals)} want(s) proposed")
+    except Exception as e:
+        print(f"  [EmergentWant] error: {e}")
+
+
+# ── AGI Bridge #4: Behavioural self-model (weekly) ───────────────────────────
+def run_behavioural_self_model():
+    try:
+        import sys; sys.path.insert(0, "/home/rr/Desktop/nex")
+        from nex_behavioural_self_model import run_behavioural_analysis
+        run_behavioural_analysis()
+    except Exception as e:
+        print(f"  [BSM] error: {e}")
+
+# ── AGI Bridge #5: Self-evolution audit (weekly) ─────────────────────────────
+def run_self_evolution():
+    try:
+        import sys; sys.path.insert(0, "/home/rr/Desktop/nex")
+        from nex_self_evolution import run_evolution_audit
+        run_evolution_audit()
+    except Exception as e:
+        print(f"  [Evo] error: {e}")
+
 if __name__ == "__main__":
     EXPORT_PATH.mkdir(parents=True, exist_ok=True)
 

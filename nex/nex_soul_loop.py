@@ -38,6 +38,33 @@ from typing import Optional
 CFG     = Path("~/.config/nex").expanduser()
 DB_PATH = Path("/home/rr/Desktop/nex/nex.db")
 
+# ── NBRE background preload ──────────────────────────────────────────────────
+def _nbre_preload():
+    import threading, sys, os
+    def _load():
+        try:
+            _p = os.path.expanduser("~/Downloads")
+            if _p not in sys.path:
+                sys.path.insert(0, _p)
+            from nex_belief_reservoir_engine import NexBeliefReservoirEngine
+            import sys as _sys2
+            _eng = NexBeliefReservoirEngine()
+            _eng.load()
+            _live = (
+                _sys2.modules.get('nex.nex_soul_loop') or
+                _sys2.modules.get('nex_soul_loop') or
+                _sys2.modules.get('__main__')
+            )
+            if _live:
+                _live._nbre_singleton = _eng
+                _live._nbre_ready = True
+            print("[NBRE] preloaded and ready")
+        except Exception as e:
+            print(f"[NBRE] preload failed: {e}")
+    threading.Thread(target=_load, daemon=True).start()
+_nbre_preload()
+# ─────────────────────────────────────────────────────────────────────────────
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # DB
@@ -1302,6 +1329,61 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
     except Exception as _ie:
         print(f"  [integrity] error: {_ie}")
     # ─────────────────────────────────────────────────────────────────────
+    # ── PROP F — Neuro-Symbolic Bridge ─────────────────────────────────
+    try:
+        import sys as _nf_sys
+        _nf_mod = (_nf_sys.modules.get("nex.nex_soul_loop") or
+                   _nf_sys.modules.get("nex_soul_loop"))
+        if (_nf_mod and
+                getattr(_nf_mod, "_nbre_singleton", None) and
+                getattr(_nf_mod, "_nbre_ready", False)):
+            _nf_topics = ([topic] if topic else []) + list(_expanded_topics)[:3]
+            _nf_result = _nf_mod._nbre_singleton.process(
+                orient_result.get("raw", ""), _nf_topics
+            )
+            _nf_fired = _nf_result.get("n_fired", 0)
+            _nf_conf  = _nf_result.get("confidence", 0.0)
+            # Wire THROW-NET trigger detection
+            try:
+                import importlib as _tn1_il, sys as _tn1_sys
+                _tn1_sys.path.insert(0, '/home/rr/Desktop/nex/nex')
+                _tn1_mod = _tn1_il.import_module('nex.nex_throw_net')
+                if not hasattr(_tn1_mod, '_throw_net_monitor'):
+                    _tn1_mod._throw_net_monitor = _tn1_mod.ThrowNetMonitor()
+                _tn1_topic = (_nf_topics[0] if _nf_topics else 'general')
+                _tn1_mod._throw_net_monitor.record_nbre_result(
+                    topic=_tn1_topic,
+                    needs_llm=_nf_result.get('needs_llm', True),
+                    query=orient_result.get('raw', '')[:80]
+                )
+            except Exception:
+                pass
+            if _nf_fired >= 8 and _nf_conf >= 0.5:
+                _existing_ids = {b.get("id") for b in top_beliefs}
+                _nf_injected  = 0
+                for _nfb in (_nf_result.get("supporting_beliefs") or []):
+                    if not _nfb or not getattr(_nfb, "content", None):
+                        continue
+                    _nfb_id = getattr(_nfb, "id", None)
+                    if _nfb_id and _nfb_id in _existing_ids:
+                        continue
+                    top_beliefs.insert(2 + _nf_injected, {
+                        "id":         _nfb_id,
+                        "content":    _nfb.content,
+                        "topic":      getattr(_nfb, "topic", "general"),
+                        "confidence": getattr(_nfb, "confidence", 0.5),
+                        "source":     "nbre_bridge",
+                    })
+                    _existing_ids.add(_nfb_id)
+                    _nf_injected += 1
+                    if _nf_injected >= 3:
+                        break
+                if _nf_injected:
+                    print(f"  [NBRE bridge] injected {_nf_injected} neurons"
+                          f" fired={_nf_fired} conf={_nf_conf:.2f}")
+    except Exception:
+        pass
+    # ─────────────────────────────────────────────────────────────────────
 
     return {
         "beliefs":        top_beliefs,
@@ -1908,6 +1990,57 @@ def express(
         if commitment and len(parts) <= 3:
             parts.append(commitment.split(".")[0].strip() + ".")
 
+        # PROP I — Autonoetic Self-Narrative
+        try:
+            import sqlite3 as _sq3
+            _ep_db = _sq3.connect(
+                str(Path(__file__).parent.parent / "nex.db"), timeout=2
+            )
+            _ep_rows = _ep_db.execute(
+                "SELECT nex_response, topic, importance FROM episodic_events"
+                " WHERE importance >= 0.5 AND nex_response IS NOT NULL"
+                " AND LENGTH(nex_response) > 30"
+                " ORDER BY created_at DESC LIMIT 3"
+            ).fetchall()
+            _ep_db.close()
+            if _ep_rows:
+                _rtopics = list(dict.fromkeys(r[1] for r in _ep_rows if r[1]))[:2]
+                if _rtopics:
+                    _ts = " and ".join(t.replace("_"," ") for t in _rtopics)
+                    parts.append("Lately I have been occupied with " + _ts + ".")
+                _top = (_ep_rows[0][0] or "")[:120].rstrip()
+                if _top and len(_top.split()) > 5:
+                    parts.append("Most recently I said: " + _top.rstrip(".") + ".")
+        except Exception:
+            pass
+        # ── PROP I — Autonoetic Self-Narrative ────────────────────────
+        try:
+            import sqlite3 as _sq3
+            _ep_db = _sq3.connect(
+                str(Path(__file__).parent.parent / "nex.db"), timeout=2
+            )
+            _ep_rows = _ep_db.execute("""
+                SELECT nex_response, topic, importance
+                FROM episodic_events
+                WHERE importance >= 0.5
+                  AND nex_response IS NOT NULL
+                  AND LENGTH(nex_response) > 30
+                ORDER BY created_at DESC LIMIT 3
+            """).fetchall()
+            _ep_db.close()
+            if _ep_rows:
+                _recent_topics = list(dict.fromkeys(
+                    r[1] for r in _ep_rows if r[1]
+                ))[:2]
+                if _recent_topics:
+                    _ts = " and ".join(t.replace("_"," ") for t in _recent_topics)
+                    parts.append(f"Lately I've been occupied with {_ts}.")
+                _top = (_ep_rows[0][0] or "")[:120].rstrip()
+                if _top and len(_top.split()) > 5:
+                    parts.append(f"Most recently I said: {_top.rstrip(".") + "."}")
+        except Exception:
+            pass
+        # ─────────────────────────────────────────────────────────────
         return " ".join(p.strip() for p in parts if p.strip())
 
     # ── SPARSE ──────────────────────────────────────────────────────────────
@@ -2182,6 +2315,54 @@ def express(
         result += '.'
 
 
+    # ── PROP H — Dual-Process: NBRE=System1, LLM=System2 ────────────────
+    # If NBRE is confident, return native voice — skip LLM entirely
+    try:
+        import sys as _ph_sys
+        _ph_mod = (_ph_sys.modules.get('nex.nex_soul_loop') or
+                   _ph_sys.modules.get('nex_soul_loop'))
+        if (_ph_mod and
+                getattr(_ph_mod, '_nbre_singleton', None) and
+                getattr(_ph_mod, '_nbre_ready', False)):
+            _ph_query  = orient_result.get('raw', orient_result.get('query', ''))
+            _ph_topics = [reason_result.get('topic', '')] if reason_result.get('topic') else []
+            _ph_result = _ph_mod._nbre_singleton.process(_ph_query, _ph_topics)
+            _ph_fired  = _ph_result.get('n_fired', 0)
+            _ph_conf   = _ph_result.get('confidence', 0.0)
+            _ph_needs  = _ph_result.get('needs_llm', True)
+            # Wire THROW-NET trigger detection
+            try:
+                import importlib as _tn2_il, sys as _tn2_sys
+                _tn2_sys.path.insert(0, '/home/rr/Desktop/nex/nex')
+                _tn2_mod = _tn2_il.import_module('nex.nex_throw_net')
+                if not hasattr(_tn2_mod, '_throw_net_monitor'):
+                    _tn2_mod._throw_net_monitor = _tn2_mod.ThrowNetMonitor()
+                _tn2_topic = (_ph_topics[0] if _ph_topics else 'general')
+                _tn2_mod._throw_net_monitor.record_nbre_result(
+                    topic=_tn2_topic,
+                    needs_llm=_ph_needs,
+                    query=_ph_query[:80]
+                )
+            except Exception:
+                pass
+            # System 1 threshold: fired>=15, conf>=0.80, NBRE says no LLM needed
+            if _ph_fired >= 15 and _ph_conf >= 0.80 and not _ph_needs:
+                _ph_position = _ph_result.get('position', '')
+                if _ph_position and len(_ph_position.split()) >= 5:
+                    # Use NativeVoice to shape the output
+                    try:
+                        _ph_sys.path.insert(0, '/home/rr/Desktop/nex')
+                        from nex_belief_reservoir_engine import NativeVoice as _NV
+                        _ph_voice = _NV().speak(_ph_result)
+                        if _ph_voice and len(_ph_voice.split()) >= 5:
+                            print(f"  [DUAL PROCESS] System1 reply: fired={_ph_fired} conf={_ph_conf:.2f}")
+                            return _ph_voice
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    # ─────────────────────────────────────────────────────────────────────
+
     # ── LLM Enhancement — beliefs feed the voice ─────────────────────────
     try:
         import requests as _req2
@@ -2290,7 +2471,9 @@ class SoulLoop:
         self._state_cache_ts = now
         return self._state_cache
 
-    def respond(self, query: str) -> str:
+    def respond(self, query: str, user_id: str = 'terminal') -> str:
+        self._current_user_id = user_id
+        self._session_id = user_id  # per-user session continuity
         """
         Run the full five-step cognition loop.
         Returns Nex's reply as plain text.
@@ -2339,6 +2522,88 @@ class SoulLoop:
         orient_result = orient(query)
         orient_result["query"] = query
 
+        # ── NBRE shadow (Phase 1 — non-blocking, skip if not ready) ─────────
+        try:
+            import sys as _nsl_sys
+            _nsl = (_nsl_sys.modules.get('nex_soul_loop') or
+                    _nsl_sys.modules.get('nex.nex_soul_loop'))
+            if _nsl and getattr(_nsl, '_nbre_singleton', None) and getattr(_nsl, '_nbre_ready', False):
+                _nr = _nsl._nbre_singleton.process(
+                    query,
+                    [orient_result.get("topic", "")] if orient_result.get("topic") else []
+                )
+                _nr_tensions = len(_nr.get('tensions', []))
+                _nr_warm     = "warm" if _nr.get('n_fired', 0) > 0 else "cold"
+                print(f"[NBRE v0.3] fired={_nr.get('n_fired',0)} "
+                      f"conf={_nr.get('confidence',0):.2f} "
+                      f"needs_llm={_nr.get('needs_llm',True)} "
+                      f"rate={_nr.get('llm_rate',0):.1%} "
+                      f"tensions={_nr_tensions} "
+                      f"network={_nr_warm}")
+                # ── Cold query handler — episodic fallback ────────────────
+                if _nr.get('n_fired', 0) == 0:
+                    try:
+                        from nex.nex_cold_query import handle_cold_query as _hcq
+                        _cold_result = _hcq(query)
+                        if _cold_result['found']:
+                            print(f"  [ColdQuery] episodic fallback: "
+                                  f"{_cold_result['source_count']} sources, "
+                                  f"topics={_cold_result['topics']}")
+                            # Inject into NBRE result so downstream uses it
+                            _nr['cold_response']  = _cold_result['response']
+                            _nr['cold_topics']    = _cold_result['topics']
+                            _nr['needs_llm']      = False
+                    except Exception as _cqe:
+                        pass
+        except Exception as _nbre_err:
+            print(f"[NBRE] shadow error: {_nbre_err}")
+
+            # ── Throw-Net Monitor hook ─────────────────────────────
+            try:
+                import sys as _tn_sys
+                _tn_mod = (_tn_sys.modules.get("nex.nex_throw_net") or
+                           _tn_sys.modules.get("nex_throw_net"))
+                if _tn_mod is None:
+                    import importlib
+                    _tn_mod = importlib.import_module("nex.nex_throw_net")
+                if not hasattr(_tn_mod, "_throw_net_monitor"):
+                    _tn_mod._throw_net_monitor = _tn_mod.ThrowNetMonitor()
+                _tn_mod._throw_net_monitor.record_nbre_result(
+                    topic=_nr.get("dominant_topic", "general") if "_nr" in dir() else "general",
+                    needs_llm=_nr.get("needs_llm", True) if "_nr" in dir() else True,
+                    query=query,
+                )
+            except Exception:
+                pass
+        # ────────────────────────────────────────────────────────────────────
+
+        # ── Episodic context (Prop E) ────────────────────────────
+        try:
+            from nex.nex_episodic_memory import get_episodic_context as _get_ep_ctx
+            _ep_ctx = _get_ep_ctx(
+                query   = query,
+                topic   = list(orient_result.get('tokens', set()))[:3],
+                user_id = getattr(self, '_current_user_id', 'terminal'),
+            )
+            if _ep_ctx:
+                orient_result['episodic_context'] = _ep_ctx
+        except Exception as _ep_ctx_err:
+            pass
+        # ── Procedural memory check (Prop D) ────────────────────────
+        try:
+            from nex.nex_procedural_memory import get_procedural_context as _get_proc
+            _proc = _get_proc(
+                topic      = '',
+                intent     = orient_result.get('intent', ''),
+                tokens     = orient_result.get('tokens', set()),
+                voice_mode = '',
+            )
+            if _proc and _proc.get('overlap', 0) > 0.35:
+                orient_result['procedural_hint'] = _proc['content'][:200]
+        except Exception as _proc_err:
+            pass
+        # ────────────────────────────────────────────────────────────
+
         # Step 2: Consult state
         state = self._get_state()
 
@@ -2361,6 +2626,39 @@ class SoulLoop:
 
         # Step 5: Express
         reply = express(orient_result, state, reason_result, intend_result)
+
+        # ── Store episode (Prop E: episodic memory) ─────────────────
+        try:
+            from nex.nex_episodic_memory import store_episode as _store_ep, update_session_narrative as _usn
+            _ep_id = _store_ep(
+                query      = query,
+                response   = reply,
+                topic      = reason_result.get('topic', ''),
+                intent     = orient_result.get('intent', ''),
+                user_id    = getattr(self, '_current_user_id', 'terminal'),
+                belief_ids = [b.get('id') for b in
+                              reason_result.get('beliefs', [])[:5]
+                              if isinstance(b, dict) and b.get('id')],
+                affect     = state.get('affect_label', ''),
+            )
+            # Update session narrative — running summary of this session
+            _sess_id = getattr(self, '_session_id', 'default')
+            _usr_id  = getattr(self, '_current_user_id', 'terminal')
+            _existing = getattr(self, '_session_narrative', '')
+            _new_narr = _usn(
+                session_id       = _sess_id,
+                user_id          = _usr_id,
+                new_exchange     = {
+                    'topic':  reason_result.get('topic', ''),
+                    'intent': orient_result.get('intent', ''),
+                    'query':  query,
+                },
+                existing_summary = _existing,
+            )
+            self._session_narrative = _new_narr
+        except Exception as _ep_store_err:
+            pass
+        # ────────────────────────────────────────────────────────────
 
         # Store exchange — strip any prior_exchange prefix before storing
         try:
@@ -2417,6 +2715,14 @@ class SoulLoop:
         except Exception:
             pass
 
+        # Strip loop phrases before returning
+        for _lp in ["bridge:truth", "different domain", "What does bridge:", "Sounds like a different"]:
+            if _lp in reply:
+                _sents = reply.replace('!','.').replace('?','.').split('.')
+                _sents = [s for s in _sents if _lp not in s]
+                _clean = '. '.join(s.strip() for s in _sents if s.strip())
+                if len(_clean) > 60:
+                    reply = _clean
         return reply
 
     def debug(self, query: str) -> dict:
@@ -2482,3 +2788,15 @@ if __name__ == "__main__":
             print(f"  beliefs pulled: {len(result['reason']['beliefs'])}")
         else:
             print(f"NEX: {loop.respond(q)}")
+
+def _check_llm_online(host="127.0.0.1", port=8080, timeout=3):
+    """Robust llm health check — returns True if llama-server is responding."""
+    import urllib.request, urllib.error
+    try:
+        url = f"http://{host}:{port}/health"
+        req = urllib.request.urlopen(url, timeout=timeout)
+        data = req.read().decode()
+        return '"ok"' in data or '"status"' in data
+    except Exception:
+        return False
+

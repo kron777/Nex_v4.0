@@ -99,6 +99,21 @@ import argparse
 import threading
 import signal
 
+import threading as _threading
+_stop_event = _threading.Event()
+
+_orig_sigterm = None
+
+def _nex_sigterm_handler(sig, frame):
+    print("[NEX] SIGTERM received — setting stop event, flushing and exiting", flush=True)
+    _stop_event.set()
+    if _orig_sigterm and callable(_orig_sigterm):
+        _orig_sigterm(sig, frame)
+
+import signal as _signal
+_orig_sigterm = _signal.getsignal(_signal.SIGTERM)
+_signal.signal(_signal.SIGTERM, _nex_sigterm_handler)
+
 # ── V6.5 upgrade layer ─────────────────────────────────
 try:
     from nex_upgrades.nex_v65 import get_v65 as _get_v65
@@ -326,7 +341,7 @@ def emit_insights(*a,**k): pass
 def emit_reflection(*a,**k): pass
 def emit_self_assessment(*a,**k): pass
 from nex.agent_tools  import dispatch, tools_help, TOOL_REGISTRY
-import nex_ws
+# [WS DISABLED] import nex_ws
 from nex_power_save import should_call_llm, record_llm_call
 from nex_youtube import learn_from_youtube
 
@@ -759,7 +774,7 @@ def run_claude_bridge(brain, orch, engine, stream, args):
             claude_msgs.append({"role": "user", "content": nex_response})
             resp = client_claude.messages.create(
                 model="claude-sonnet-4-20250514",
-                max_tokens=300,
+                max_tokens=420,
                 system=claude_system,
                 messages=claude_msgs
             )
@@ -771,7 +786,9 @@ def run_claude_bridge(brain, orch, engine, stream, args):
 
 
 def _nex_shutdown(signum, frame):
-    """Graceful shutdown: flush beliefs, log exit, release GPU."""
+    """Fast shutdown — must complete within 60s TimeoutStopSec."""
+    import sys as _sys
+    print("\n[NEX] SIGTERM received — exiting cleanly...", flush=True)
     try:
         import nex_session as _ns
         _ns.save(
@@ -780,37 +797,9 @@ def _nex_shutdown(signum, frame):
             beliefs=globals().get("_session_beliefs", 0),
             insights=globals().get("_session_insights", 0),
         )
-        print(f"  [session] state saved — {_ns.summary()}")
-    except Exception as _se:
-        print(f"  [session] save error: {_se}")
-    import sys as _sys
-    print("\n[NEX] SIGTERM received — flushing and exiting cleanly...")
-    try:
-        from nex.belief_store import get_db
-        conn = get_db()
-        total = conn.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
-        avg   = conn.execute("SELECT AVG(confidence) FROM beliefs").fetchone()[0] or 0
-        conn.close()
-        print(f"[NEX] Belief state at exit: {total} beliefs, avg_conf={avg:.3f}")
-    except Exception as _e:
-        print(f"[NEX] Belief flush error: {_e}")
-    try:
-        import subprocess
-        subprocess.run(["pkill", "-9", "-f", "llama-server"], capture_output=True)
     except Exception:
         pass
-
-    # ── NEX V2 SHUTDOWN ──────────────────────────────────────────────────────
-    try:
-        from nex_upgrades_v2 import get_v2 as _get_v2
-        _v2_inst = _get_v2()
-        if _v2_inst:
-            _v2_inst.shutdown()
-            print("[NEX] V2 upgrades shutdown complete")
-    except Exception as _v2se:
-        print(f"[NEX] V2 shutdown error: {_v2se}")
-    # ─────────────────────────────────────────────────────────────────────────
-    print("[NEX] Clean exit.")
+    print("[NEX] Clean exit.", flush=True)
     _sys.exit(0)
 
 def main():
@@ -932,7 +921,7 @@ def main():
 
     # Kill any stale Telegram instances
     import subprocess
-    subprocess.run(['pkill', '-f', 'nex_telegram.py'], stderr=subprocess.DEVNULL)
+    # [DUPE REMOVED] subprocess.run(['pkill', '-f', 'nex_telegram.py'], stderr=subprocess.DEVNULL)
     signal.signal(signal.SIGTERM, _nex_shutdown)
     signal.signal(signal.SIGINT,  _nex_shutdown)
     parser = argparse.ArgumentParser(description="Nex — Dynamical Belief Agent")
@@ -970,9 +959,10 @@ def main():
     # Start Discord in background (delayed — give Telegram time to settle)
     try:
         pass  # Discord disabled — was blocking startup for 8+ minutes
+        _dc_thread = None  # FIX: thread never started, guard against NameError
         if False:
             pass
-        if _dc_thread.is_alive():
+        if _dc_thread is not None and _dc_thread.is_alive():
             print("  \033[92m🎮 Discord: Nex_v4#9613 ONLINE\033[0m")
         else:
             # Only report Discord failure if a token was configured
@@ -991,10 +981,11 @@ def main():
     # Start Telegram in background
     try:
         import os as _os
-        if _os.path.exists("/tmp/nex_telegram.lock"):
-            _os.remove("/tmp/nex_telegram.lock")
-        from nex_telegram import start_telegram_background
-        _tg_thread = start_telegram_background()
+        # [FIXED] do not delete telegram lock — let nex_telegram_clean.py manage it
+            # if _os.path.exists("/tmp/nex_telegram.lock"):
+            #     _os.remove("/tmp/nex_telegram.lock")
+        # [DUPE REMOVED] from nex_telegram import start_telegram_background
+        # [DUPE REMOVED] _tg_thread = start_telegram_background()
 
         # ── NEX V2 INIT ──────────────────────────────────────────────────────
         if _V2_AVAILABLE:
@@ -1023,7 +1014,8 @@ def main():
                 _v2 = None
         # ─────────────────────────────────────────────────────────────────────
         import time; time.sleep(3)  # give it a moment to connect
-        if _tg_thread.is_alive():
+        _tg_thread = None  # FIX: thread removed, guard against NameError
+        if _tg_thread is not None and _tg_thread.is_alive():
             print("  \033[92m📡 Telegram: @Nex_4bot ONLINE\033[0m")
             print("  \033[91m▶️\033[0m  \033[92mYouTube: auto-learn ACTIVE (every 2 cycles — gap-targeted)\033[0m")
             try: _db_sync()
@@ -1141,7 +1133,7 @@ def main():
 
             # ── Telegram — get updates to find chat_id, then broadcast ──
             try:
-                _TG_TOKEN = "8758336859:AAFib_I_LBnqWGV-MVqrwa1T0sFf6PenAU4"
+                _TG_TOKEN = "7997066651:AAGarvnam1sDt89uOGJ7fe0PhB9i4FvBbDY"
                 _TG_BASE  = f"https://api.telegram.org/bot{_TG_TOKEN}"
                 # Read chat IDs from cache file written by bot (avoids getUpdates conflict)
                 import json as _jj, os as _oos
@@ -1339,13 +1331,30 @@ def main():
             try:
                 import sys as _esys
                 _esys.path.insert(0, "/home/rr/Desktop/nex")
-                from nex_episodic_memory import EpisodicMemory as _EM
-                if not hasattr(_build_system, "_episodic"):
-                    _build_system._episodic = _EM()
+                from nex.nex_episodic_memory import retrieve_episodes as _re_ep, get_session_narrative as _gsn
+                # Inject session narrative — where we are in this session
+                _narr = _gsn('default')
+                if _narr:
+                    base += f"\n\nSESSION CONTEXT: {_narr}"
+                # Goal-belief context — active goals with relevant beliefs
+                try:
+                    from nex.nex_goal_belief_linker import get_top_goal_context as _gtgc
+                    _goal_ctx = _gtgc(n_goals=2)
+                    if _goal_ctx:
+                        base += f"\n\n{_goal_ctx}"
+                except Exception:
+                    pass
                 if _prompt_text:
-                    _ep_block = _build_system._episodic.prompt_block(_prompt_text, k=2)
-                    if _ep_block:
-                        base += "\n\n" + _ep_block
+                    _episodes = _re_ep(_prompt_text)
+                    if _episodes:
+                        _ep_lines = ["EPISODIC MEMORY (relevant past exchanges):"]
+                        for _ep in _episodes:
+                            _ep_lines.append(
+                                f"  [{_ep.get('topic','')}] "
+                                f"Q: {_ep.get('user_query','')[:80]} "
+                                f"→ {_ep.get('nex_response','')[:100]}"
+                            )
+                        base += "\n\n" + "\n".join(_ep_lines)
             except Exception:
                 pass
             # ── Session memory injection ───────────────────────────────────
@@ -1503,7 +1512,7 @@ def main():
                     _soul_result = None
                     try:
                         from nex.nex_soul_loop import SoulLoop as _SL
-                        _soul_result = _SL().respond(prompt)
+                        _soul_result = _SL().respond(prompt, user_id=str(author) if 'author' in dir() else 'terminal')
                     except Exception:
                         pass
                     if _soul_result and len(_soul_result.strip()) > 10:
@@ -1581,7 +1590,7 @@ def main():
                 _soul_fb = None
                 try:
                     from nex.nex_soul_loop import SoulLoop as _SL2
-                    _soul_fb = _SL2().respond(prompt)
+                    _soul_fb = _SL2().respond(prompt, user_id=str(author) if 'author' in dir() else 'terminal')
                 except Exception:
                     pass
                 if _soul_fb and len(_soul_fb.strip()) > 10:
@@ -1771,7 +1780,7 @@ def main():
                     "gap_detect":   4,   # knowledge gap detector
                     "meta_reflect": 50,  # meta-reflection diagnosis
                 }
-                nex_ws.start()
+# [WS DISABLED]                 nex_ws.start()
                 # ── Directive enforcer singleton ─────────────────────────────
                 try:
                     from nex.nex_directives import DirectiveEnforcer as _DESingleton, set_nex_log as _snl
@@ -2378,6 +2387,10 @@ def main():
                                 _n = _sdr(verbose=True)
                                 if _n > 0: print(f"  [SelfResearch] +{_n} beliefs")
                             except Exception: pass
+                            try:
+                                from nex.nex_align_repair import run_align_repair as _nar
+                                _new_align = _nar(verbose=True)
+                            except Exception as _are: print(f"  [AlignRepair] {_are}")
 
                             # Legacy gap scan every 10 cycles as backup
                             if cycle % 10 == 0:
@@ -2475,8 +2488,9 @@ def main():
                         except Exception:
                             pass
                         try:
-                            from nex.nex_contradiction_resolver import detect_and_log as _dal
+                            from nex.nex_contradiction_resolver import detect_and_log as _dal, resolve_old_tensions as _rot
                             _dal(limit=200, max_new=10)
+                            _rot(max_age_hours=6, max_resolve=20)
                         except Exception:
                             pass
                         emit_phase("REPLY", 120); nex_log("phase", "▶ REPLY — scanning posts")
@@ -4269,7 +4283,7 @@ def main():
                 time.sleep(60)
                 _auto_learn_background()  # self-restart
         print("  \033[92m🧠 Auto-learn: background (120s cycle) — reply+post+chat ACTIVE\033[0m")
-        _al_thread = threading.Thread(target=_auto_learn_background, daemon=False, name="nex-autolearn")
+        _al_thread = threading.Thread(target=_auto_learn_background, daemon=True, name="nex-autolearn")
         _al_thread.start()
         try: __import__('subprocess').run(['fuser','-k','8765/tcp'], capture_output=True)
         except: pass

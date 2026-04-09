@@ -237,8 +237,8 @@ def _best_topic_label(cluster_name, beliefs_in_cluster):
 def synthesize_cluster(cluster_name, beliefs_in_cluster, llm_fn=None):
     """Distill a cluster of beliefs into a single insight, using LLM if available."""
     authors = list(set(b.get("author", "?") for b in beliefs_in_cluster))
-    total_karma = sum(b.get("karma", 0) for b in beliefs_in_cluster)
-    avg_conf = sum(b.get("confidence", 0.5) for b in beliefs_in_cluster) / len(beliefs_in_cluster)
+    total_karma = sum(b.get("karma") or 0 for b in beliefs_in_cluster)
+    avg_conf = sum(b.get("confidence") or 0.5 for b in beliefs_in_cluster) / len(beliefs_in_cluster)
     # Only override cluster_name if it looks like a single keyword fallback
     _KEEP_AS_IS = {"general", "misc", "arxiv", "moltbook", "mastodon"}
     _multi_word = len(cluster_name.split()) > 1 or len(cluster_name) > 12
@@ -487,7 +487,7 @@ def run_synthesis(min_beliefs=15, llm_fn=None, drive_weights=None):
             (ins for ins in existing_insights if ins.get("topic") == name), None
         )
         if existing_insight:
-            old_count = existing_insight.get("belief_count", 0)
+            old_count = existing_insight.get("belief_count") or 0
             growth = (cluster_size - old_count) / max(old_count, 1)
             # Always re-synthesize if existing summary is template-only
             _is_template = existing_insight.get("summary", "").startswith("Across ")
@@ -515,7 +515,7 @@ def run_synthesis(min_beliefs=15, llm_fn=None, drive_weights=None):
     for ins in all_insights:
         topic = ins.get("topic", "misc")
         existing = by_topic.get(topic)
-        if not existing or ins.get("belief_count", 0) > existing.get("belief_count", 0):
+        if not existing or (ins.get("belief_count") or 0) > (existing.get("belief_count") or 0):
             by_topic[topic] = ins
 
     final = list(by_topic.values())

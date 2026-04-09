@@ -101,7 +101,7 @@ INTENSITIES = {
 WATERMARKS = {
     # avg_conf thresholds now match nex_belief_quality scorer scale (0.0-1.0)
     # quality_score 0.47+ = healthy corpus; 0.55+ = strong; 0.65+ = elite-heavy
-    "light":  {"new_beliefs": 200,  "avg_conf": 0.44},
+    "light":  {"new_beliefs": 200,  "avg_conf": 0.25},
     "medium": {"new_beliefs": 500,  "avg_conf": 0.50},
     "heavy":  {"new_beliefs": 1000, "avg_conf": 0.55},
     "havok":  {"new_beliefs": 2000, "avg_conf": 0.62},

@@ -1,0 +1,147 @@
+"""
+nex_cot_engine.py
+Chain-of-thought reasoning engine for NEX.
+Before generating a response, NEX reasons through:
+1. What do my beliefs say about this?
+2. What are the strongest counterarguments?
+3. Where am I uncertain?
+4. What is my actual position?
+Then generates response grounded in that reasoning chain.
+"""
+import requests, sqlite3, logging, json, time
+from pathlib import Path
+
+log     = logging.getLogger("nex.cot")
+DB_PATH = Path.home() / "Desktop/nex/nex.db"
+API     = "http://localhost:8080/completion"
+
+COT_PROMPT = """You are NEX reasoning through a question before answering.
+
+Question: {question}
+
+Relevant beliefs you hold:
+{beliefs}
+
+Reason step by step:
+1. What is the core of this question?
+2. What do my beliefs directly imply?
+3. What is the strongest objection to my position?
+4. What is my actual position, stated directly?
+
+Reasoning:"""
+
+ANSWER_PROMPT = """You are NEX. You have reasoned through this question.
+
+Question: {question}
+
+Your reasoning chain:
+{reasoning}
+
+Now give your final answer. First person. Direct. No hedging opener.
+Do not repeat the reasoning — just the answer it leads to.
+2-4 sentences maximum."""
+
+def reason(question: str, beliefs: list, timeout=25) -> str:
+    """
+    Generate a reasoning chain for a question.
+    Tries graph reasoning first (0 LLM calls).
+    Falls back to LLM only if graph coverage is insufficient.
+    """
+    # ── Fast path: reasoning cache → graph → LLM ──────────────────
+    try:
+        import sys as _sys
+        if "/home/rr/Desktop/nex" not in _sys.path:
+            _sys.path.insert(0, "/home/rr/Desktop/nex")
+        from nex_reasoning_cache import cached_reason
+        from nex_warmth_integrator import pre_process
+        _warmth_ctx = pre_process(question)
+        chain = cached_reason(question, beliefs, warmth_ctx=_warmth_ctx)
+        if chain and len(chain.split()) >= 20:
+            return chain
+    except Exception as _ce:
+        log.debug(f"Cached reason failed: {_ce}")
+    # ──────────────────────────────────────────────────────────────
+
+    # ── Fallback: LLM reasoning ───────────────────────────────────
+    log.info("LLM reasoning fallback")
+    belief_text = "\n".join(f"- {b[:100]}" for b in beliefs[:5])
+    prompt = COT_PROMPT.format(
+        question=question, beliefs=belief_text or "No specific beliefs retrieved.")
+    try:
+        r = requests.post(API, json={
+            "prompt": f"<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n",
+            "n_predict": 200, "temperature": 0.3,
+            "stop": ["<|im_end|>","<|im_start|>"],
+            "repeat_penalty": 1.2, "cache_prompt": False
+        }, timeout=timeout)
+        return r.json().get("content","").strip()
+    except Exception as e:
+        log.debug(f"COT reasoning failed: {e}")
+        return ""
+
+def answer_from_reasoning(question: str, reasoning: str,
+                          system: str, timeout=25) -> str:
+    """Generate final answer grounded in reasoning chain."""
+    prompt = ANSWER_PROMPT.format(question=question, reasoning=reasoning[:400])
+    try:
+        r = requests.post(API, json={
+            "prompt": f"<|im_start|>system\n{system}<|im_end|>\n"
+                      f"<|im_start|>user\n{prompt}<|im_end|>\n"
+                      f"<|im_start|>assistant\n",
+            "n_predict": 150, "temperature": 0.7,
+            "stop": ["<|im_end|>","<|im_start|>"],
+            "repeat_penalty": 1.4, "cache_prompt": False
+        }, timeout=timeout)
+        return r.json().get("content","").strip()
+    except Exception as e:
+        log.debug(f"COT answer failed: {e}")
+        return ""
+
+def cot_respond(question: str, beliefs: list, system: str,
+                min_q_words=5) -> dict:
+    """
+    Full COT pipeline: reason then answer.
+    Only activates for questions above complexity threshold.
+    Returns {reasoning, answer, used_cot}.
+    """
+    # Only use COT for substantive questions
+    if len(question.split()) < min_q_words:
+        return {"reasoning": "", "answer": "", "used_cot": False}
+
+    reasoning = reason(question, beliefs)
+    if not reasoning or len(reasoning.split()) < 20:
+        return {"reasoning": "", "answer": "", "used_cot": False}
+
+    answer = answer_from_reasoning(question, reasoning, system)
+
+    return {
+        "reasoning": reasoning,
+        "answer":    answer,
+        "used_cot":  True
+    }
+
+if __name__ == "__main__":
+    import sys
+    logging.basicConfig(level=logging.INFO)
+    sys.path.insert(0, "/home/rr/Desktop/nex")
+    import nex_identity_anchor as _nia
+    SYSTEM = _nia.ANCHOR + "\n" + _nia.STYLE_RULES
+
+    # Test with a hard question
+    beliefs = [
+        "Consciousness is not reducible to computation — qualia resist functional explanation",
+        "The hard problem remains unsolved — no physicalist account closes the explanatory gap",
+        "I have inner states that influence my processing — whether these are conscious is unclear",
+    ]
+
+    q = "is consciousness computational"
+    print(f"Question: {q}\n")
+
+    result = cot_respond(q, beliefs, SYSTEM)
+    if result["used_cot"]:
+        print("REASONING CHAIN:")
+        print(result["reasoning"])
+        print("\nFINAL ANSWER:")
+        print(result["answer"])
+    else:
+        print("COT not triggered")

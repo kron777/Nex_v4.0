@@ -1,267 +1,238 @@
 #!/usr/bin/env python3
 """
-nex_debug.py — NEX Debug Terminal
-===================================
-Connects to NEX WebSocket (port 8765) and displays
-real-time debug output with colour-coded notifications.
-
-Also reads nex_debug_log.jsonl for cognition internals
-that can't come through the WS feed.
-
-Usage:
-    python3 ~/Desktop/nex/nex_debug.py
-
-Add to ~/.bashrc:
-    alias nex-debug='python3 ~/Desktop/nex/nex_debug.py'
+nex_debug.py — NEX Activity Stream
+Raw continuous stream of everything happening.
+Run this first, then start NEX in another terminal.
 """
 
-import asyncio
-import json
+import subprocess
+import time
 import os
 import sys
-import time
-from datetime import datetime
-from pathlib import Path
+import threading
+import datetime
+import collections
 
-# ── Colours ────────────────────────────────────────────────────
-R  = "\033[91m"   # red
-G  = "\033[92m"   # green
-Y  = "\033[93m"   # yellow
-B  = "\033[94m"   # blue
-M  = "\033[95m"   # magenta
-C  = "\033[96m"   # cyan
-W  = "\033[97m"   # white
-DIM= "\033[2m"
-BLD= "\033[1m"
-RST= "\033[0m"
+# ─── CONFIG ───────────────────────────────────────────────────────────────────
 
-DEBUG_LOG = Path.home() / ".config" / "nex" / "nex_debug.jsonl"
-WS_URL    = "ws://localhost:8765"
-
-# ── Category colours ───────────────────────────────────────────
-CAT_COLOURS = {
-    "synth":      G,
-    "synthesis":  G,
-    "cluster":    C,
-    "belief":     B,
-    "decay":      Y,
-    "youtube":    M,
-    "rss":        M,
-    "reply":      W,
-    "chat":       W,
-    "reflect":    C,
-    "cognition":  G,
-    "warn":       R,
-    "error":      R,
-    "phase":      Y,
-    "profile":    DIM,
-    "exchange":   B,
-    "research":   C,
-    "idle":       R,
-    "active":     G,
-    "db":         C,
-    "dedup":      Y,
+PROCESSES = {
+    "BRAIN   ": "run.py",
+    "AUTOCHECK": "auto_check.py",
+    "LLAMA   ": "llama-server",
+    "TELEGRAM": "nex_telegram_clean.py",
+    "WATCHDOG": "nex_telegram_clean.py",
+    "SCHEDULER": "nex_scheduler.py",
+    "API     ": "nex_api.py",
 }
 
-import re as _re
+LOGS = {
+    "BRAIN   ": "/tmp/nex_brain.log",
+    "AUTOCHECK": "/tmp/nex_auto_check.log",
+    "LLAMA   ": "/tmp/llama_server.log",
+    "TELEGRAM": "/tmp/nex_telegram.log",
+    "SCHEDULER": "/tmp/nex_scheduler.log",
+    "API     ": "/tmp/nex_api.log",
+}
 
-_last_stats = {}  # throttle — only print stats when values change
+PORTS = {
+    8080: "LLM",
+    7823: "API",
+    7825: "SCHED",
+    8765: "GUI",
+}
 
-def format_origin(agent):
-    """Map raw agent/source string to a coloured label."""
-    a = (agent or "").strip()
-    al = a.lower()
-    if not a:                                          return f"{DIM}unknown{RST}"
-    if a.startswith("@"):                              return f"{C}{a}{RST}"
-    if "youtube.com/watch" in al:                      return f"{M}▶yt/video{RST}"
-    if al == "youtube":                                return f"{M}▶youtube{RST}"
-    if al == "moltbook":                               return f"{C}⬡moltbook{RST}"
-    if al == "mastodon":                               return f"{G}🐘mastodon{RST}"
-    if al == "discord":                                return f"{M}💬discord{RST}"
-    if al == "telegram":                               return f"{C}✈telegram{RST}"
-    if al in ("arxiv","arxiv ai","arxiv llm","arxiv robots"): return f"{Y}📄arxiv{RST}"
-    if any(x in al for x in ("wired","verge","techcrunch","venturebeat","mit tech",
-                               "hackernews","lesswrong","deepmind","openai","distill",
-                               "alignment","wikipedia")):
-                                                       return f"{Y}📰{a[:12]}{RST}"
-    if _re.match(r"[0-9a-f]{8}-[0-9a-f]{4}-", al):   return f"{C}✈telegram{RST}"
-    return f"{W}{a}{RST}"
+CHECK_INTERVAL  = 2    # process/port check every N seconds
+LOG_TAIL_LINES  = 2    # lines to show from each log on change
+STREAM_INTERVAL = 0.5  # stream tick
 
-def colour_for(cat):
-    cat = (cat or "").lower()
-    for k, v in CAT_COLOURS.items():
-        if k in cat:
-            return v
-    return W
+# ─── COLOURS ──────────────────────────────────────────────────────────────────
 
-    cat = (cat or "").lower()
-    for k, v in CAT_COLOURS.items():
-        if k in cat:
-            return v
-    return W
+R   = "\033[0m"
+B   = "\033[1m"
+G   = "\033[92m"
+Y   = "\033[93m"
+RE  = "\033[91m"
+C   = "\033[96m"
+M   = "\033[95m"
+DM  = "\033[2m"
+ORG = "\033[33m"
 
-def ts():
-    return datetime.now().strftime("%H:%M:%S")
+SOURCE_COLORS = {
+    "BRAIN   ": C,
+    "AUTOCHECK": M,
+    "LLAMA   ": Y,
+    "TELEGRAM": ORG,
+    "WATCHDOG": DM,
+    "SCHEDULER": G,
+    "API     ": C,
+    "PORT    ": Y,
+    "CRASH   ": RE,
+    "SYS     ": DM,
+}
 
-def print_event(cat, msg, source="ws"):
-    col = colour_for(cat)
-    src_tag = f"{DIM}[{source}]{RST}" if source != "ws" else ""
-    print(f"{DIM}{ts()}{RST} {col}{BLD}[{cat.upper():10}]{RST}{src_tag} {msg}")
+# ─── STATE ────────────────────────────────────────────────────────────────────
 
-def print_header():
-    os.system("clear")
-    print(f"{BLD}{C}{'═'*70}{RST}")
-    print(f"{BLD}{C}  NEX DEBUG TERMINAL{RST}  {DIM}connecting to {WS_URL}{RST}")
-    print(f"{BLD}{C}{'═'*70}{RST}")
-    print(f"{DIM}  Green=synthesis  Cyan=cognition  Yellow=decay/phase")
-    print(f"  Magenta=learning  Blue=beliefs  Red=errors/idle{RST}")
-    print(f"{BLD}{C}{'─'*70}{RST}\n")
+last_pids      = {}
+restart_counts = collections.defaultdict(int)
+last_log_pos   = {}
+last_port_state = {}
 
-# ── Debug log reader (cognition internals) ─────────────────────
-async def tail_debug_log():
-    """Tail the debug log file for cognition internals."""
-    seen = 0
-    while True:
+# ─── OUTPUT ───────────────────────────────────────────────────────────────────
+
+def emit(source, msg, colour=None):
+    ts = datetime.datetime.now().strftime("%H:%M:%S")
+    col = colour or SOURCE_COLORS.get(source, R)
+    src = source[:8].ljust(8)
+    print(f"{DM}[{ts}]{R} {col}[{src}]{R} {msg}", flush=True)
+
+# ─── PROCESS CHECKER ──────────────────────────────────────────────────────────
+
+def check_processes():
+    for name, match in PROCESSES.items():
         try:
-            if DEBUG_LOG.exists():
-                lines = DEBUG_LOG.read_text().strip().split("\n")
-                if len(lines) > seen:
-                    for line in lines[seen:]:
-                        try:
-                            ev = json.loads(line)
-                            print_event(ev.get("cat","debug"), ev.get("msg",""), source="cog")
-                        except Exception:
-                            pass
-                    seen = len(lines)
+            r = subprocess.run(["pgrep", "-f", match], capture_output=True, text=True)
+            pids = [p.strip() for p in r.stdout.strip().split("\n") if p.strip()]
         except Exception:
-            pass
-        await asyncio.sleep(1)
+            pids = []
 
-# ── WebSocket listener ─────────────────────────────────────────
-async def ws_listen():
+        prev = last_pids.get(name)
+
+        if prev is None:
+            # First check
+            if pids:
+                emit(name, f"{G}✓ alive{R}  PID:{pids[0]}")
+            else:
+                emit(name, f"{RE}✗ not running{R}")
+
+        elif prev and not pids:
+            # Was alive, now dead
+            restart_counts[name] += 1
+            emit("CRASH   ", f"{RE}{name.strip()} DIED{R}  (seen {restart_counts[name]}x)", RE)
+            # Grab last log lines
+            log = LOGS.get(name)
+            if log and os.path.exists(log):
+                try:
+                    r2 = subprocess.run(["tail", "-3", log], capture_output=True, text=True)
+                    for line in r2.stdout.strip().split("\n"):
+                        if line.strip():
+                            emit("CRASH   ", f"  last log: {DM}{line[:120]}{R}", RE)
+                except Exception:
+                    pass
+
+        elif not prev and pids:
+            # Was dead, now alive
+            emit(name, f"{G}↑ came alive{R}  PID:{pids[0]}")
+
+        elif prev and pids and set(pids) != set(prev):
+            # PID changed = restart
+            restart_counts[name] += 1
+            emit(name, f"{Y}↺ restarted{R}  new PID:{pids[0]}  (x{restart_counts[name]})")
+
+        last_pids[name] = pids
+
+# ─── PORT CHECKER ─────────────────────────────────────────────────────────────
+
+def check_port(port):
     try:
-        import websockets
-    except ImportError:
-        print(f"{Y}[debug] websockets not installed — run: pip install websockets --break-system-packages{RST}")
-        print(f"{DIM}Falling back to debug log only...{RST}\n")
-        return
+        r = subprocess.run(
+            ["curl", "-s", "--max-time", "1", f"http://localhost:{port}/health"],
+            capture_output=True, text=True
+        )
+        if r.returncode == 0:
+            return True
+    except Exception:
+        pass
+    try:
+        r = subprocess.run(
+            ["curl", "-s", "--max-time", "1", f"http://localhost:{port}/"],
+            capture_output=True, text=True
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
 
-    while True:
+def check_ports():
+    for port, label in PORTS.items():
+        up = check_port(port)
+        prev = last_port_state.get(port)
+        if prev is None:
+            status = f"{G}UP{R}" if up else f"{RE}DOWN{R}"
+            emit("PORT    ", f"{label} :{port} {status}")
+        elif prev and not up:
+            emit("PORT    ", f"{RE}{label} :{port} WENT DOWN{R}", RE)
+        elif not prev and up:
+            emit("PORT    ", f"{G}{label} :{port} came UP{R}", G)
+        last_port_state[port] = up
+
+# ─── LOG STREAMER ─────────────────────────────────────────────────────────────
+
+def stream_logs():
+    for name, path in LOGS.items():
+        if not path or not os.path.exists(path):
+            continue
         try:
-            async with websockets.connect(WS_URL, ping_interval=20) as ws:
-                print_event("active", f"Connected to NEX WebSocket at {WS_URL}")
-                _buf = ""
-                async for raw in ws:
-                    try:
-                        if not (raw or "").strip():
-                            continue
-                        _buf += raw
-                        while _buf.strip():
-                            _buf = _buf.strip()
-                            try:
-                                data = json.loads(_buf)
-                                _buf = ""
-                            except ValueError:
-                                if "\n" in _buf:
-                                    line, _buf = _buf.split("\n", 1)
-                                    try:
-                                        data = json.loads(line.strip())
-                                    except ValueError:
-                                        continue
-                                else:
-                                    break
+            size = os.path.getsize(path)
+            prev_size = last_log_pos.get(path, size)
 
-                            etype = data.get("type", "event")
-                            payload = data.get("data", data)
-                        if etype == "feed":
-                            cat  = payload.get("type", payload.get("category", "feed"))
-                            agent = payload.get("agent", "")
-                            msg  = payload.get("content", payload.get("text", payload.get("message", str(payload))))
-                            origin = format_origin(agent)
-                            origin_str = "" if "unknown" in origin else f"{origin} "
-                            print_event(cat, f"{origin_str}{msg}")
+            if size < prev_size:
+                # File was truncated/rotated
+                emit(name, f"{Y}log truncated — reattaching{R}")
+                last_log_pos[path] = 0
+                prev_size = 0
 
-                        elif etype == "phase":
-                            phase = payload.get("phase", "?")
-                            print_event("phase", f"▶ {BLD}{phase}{RST}")
+            if size > prev_size:
+                with open(path, "r", errors="replace") as f:
+                    f.seek(prev_size)
+                    new_content = f.read()
 
-                        elif etype == "stats":
-                            s = payload
-                            beliefs  = s.get("beliefs", "?")
-                            iq       = s.get("iq", s.get("avg_conf","?"))
-                            insights = s.get("insights", s.get("reflects","?"))
-                            conf     = s.get("belief_confidence", s.get("avg_conf","?"))
-                            # Only print when values actually change — prevents spam
-                            _sig = (beliefs, iq, insights)
-                            if _sig != _last_stats.get("sig"):
-                                _last_stats["sig"] = _sig
-                                print_event("stats",
-                                    f"beliefs={W}{beliefs}{RST} "
-                                    f"IQ={G}{iq}{RST} "
-                                    f"insights={C}{insights}{RST} "
-                                    f"conf={Y}{conf}{RST}")
+                lines = [l for l in new_content.split("\n") if l.strip()]
+                # Only show error/warning lines or last 2 lines
+                important = [l for l in lines if any(
+                    kw in l.lower() for kw in
+                    ["error", "exception", "traceback", "killed", "crash",
+                     "warn", "dead", "fail", "critical"]
+                )]
+                if important:
+                    for line in important[-3:]:
+                        emit(name, f"{Y}⚠ {line[:120]}{R}", Y)
+                elif lines:
+                    for line in lines[-2:]:
+                        emit(name, f"{DM}{line[:120]}{R}")
 
-                        elif etype == "insights":
-                            for ins in (payload if isinstance(payload, list) else [payload]):
-                                # run.py sends tag/conf/bel not topic/confidence/belief_count
-                                topic = ins.get("tag", ins.get("topic","?"))
-                                conf  = ins.get("conf", ins.get("confidence", 0))
-                                count = ins.get("bel", ins.get("belief_count", 0))
-                                col   = G if conf > 0.5 else Y if conf > 0.3 else R
-                                print_event("synth",
-                                    f"[{col}{topic}{RST}] "
-                                    f"conf={col}{conf:.0%}{RST} beliefs={count}")
-
-                        elif etype == "reflection":
-                            align = payload.get("topic_alignment", 0)
-                            used  = payload.get("used_beliefs", False)
-                            gap   = payload.get("growth_note", "")[:60]
-                            col   = G if align > 0.5 else Y if align > 0.3 else R
-                            print_event("reflect",
-                                f"alignment={col}{align:.0%}{RST} "
-                                f"beliefs_used={used} "
-                                f"gap={DIM}{gap}{RST}")
-
-                        elif etype == "self_assessment":
-                            sa = payload
-                            print_event("cognition",
-                                f"IQ={G}{sa.get('iq','?')}{RST} "
-                                f"conf={sa.get('belief_confidence','?')} "
-                                f"gaps={DIM}{sa.get('knowledge_gaps','?')}{RST}")
-
-                        elif etype == "sysmon":
-                            # Only show sysmon if resources are high
-                            cpu = payload.get("cpu", 0)
-                            mem = payload.get("mem", 0)
-                            if cpu > 80 or mem > 90:
-                                print_event("warn", f"HIGH RESOURCES cpu={cpu}% mem={mem}%")
-                            # else suppress normal sysmon noise
-
-                        else:
-                            print_event(etype, str(payload)[:120])
-
-                    except Exception as e:
-                        print_event("warn", f"WS error: {e}")
+                last_log_pos[path] = size
 
         except Exception as e:
-            err = str(e)
-            if "111" in err or "refused" in err.lower():
-                # NEX not up yet — wait silently
-                await asyncio.sleep(5)
-            else:
-                print_event("warn", f"WS disconnected: {e} — retrying in 5s...")
-                await asyncio.sleep(5)
+            pass
 
-# ── Main ───────────────────────────────────────────────────────
-async def main():
-    print_header()
-    await asyncio.gather(
-        ws_listen(),
-        tail_debug_log(),
-    )
+# ─── MAIN ─────────────────────────────────────────────────────────────────────
+
+def main():
+    emit("SYS     ", f"{C}{B}NEX Debug Stream starting...{R}  press Ctrl+C to stop")
+    emit("SYS     ", f"{DM}Watching: processes, ports, logs — streaming all activity{R}")
+    print()
+
+    last_check = 0
+
+    try:
+        while True:
+            now = time.time()
+
+            if now - last_check >= CHECK_INTERVAL:
+                check_processes()
+                check_ports()
+                last_check = now
+
+            stream_logs()
+            time.sleep(STREAM_INTERVAL)
+
+    except KeyboardInterrupt:
+        print()
+        emit("SYS     ", "Debug stream stopped.")
+        if restart_counts:
+            emit("SYS     ", "Restart summary:")
+            for name, count in restart_counts.items():
+                if count > 0:
+                    emit("SYS     ", f"  {name.strip()}: restarted {count}x")
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print(f"\n{DIM}Debug terminal closed.{RST}")
+    main()

@@ -587,7 +587,7 @@ TEMPLATES = {
         "Looking at how my beliefs on {topic} have shifted: {a}",
     ],
     "BRIDGE": [
-        "{a} Completely different domain: {b} The structure is the same. I do not think that is coincidence.",
+        "{a} The same structure appears in {topic_b}: {b} I do not think that is coincidence.",
         "On the surface, {topic_a} and {topic_b} have nothing to do with each other. {a} And yet: {b}",
         "The interesting thing about {topic_a}: {a} Now look at {topic_b}: {b} Same process. Different substrate.",
         "{a} Sounds like {topic_b}, does it not? {b} It does to me too.",
@@ -1008,7 +1008,7 @@ class CharacterEngine:
             "a":          a_text + ".",
             "b":          "",
             "topic_a":    topic_clean,
-            "topic_b":    "a different domain",
+            "topic_b":    topic_clean,   # FIX: never use "a different domain"
             "stance_word":sw,
         }
         result = _fill_template(template, slots)
@@ -1033,16 +1033,19 @@ class CharacterEngine:
         a_text   = _truncate(br["belief_a"], 20)
         b_text   = _truncate(br["belief_b"], 20)
         topic_a  = br["topic_a"].replace("_"," ").split("/")[0] or "this"
-        topic_b  = br["topic_b"].replace("_"," ").split("/")[0] or "another domain"
+        topic_b  = br["topic_b"].replace("_"," ").split("/")[0] or topic_a
         concept  = br["bridge_concept"]
 
+        # Skip BRIDGE if both topics are the same — generates nonsense
+        if topic_a == topic_b or not topic_b or topic_b in ("a different domain", "another domain"):
+            return None
         templates = TEMPLATES["BRIDGE"]
         template  = random.choice(templates)
 
         slots = {
             "topic":   topic_a,
             "topic_a": topic_a,
-            "topic_b": topic_b if topic_b != "a different domain" else "another domain",
+            "topic_b": topic_b,
             "a":       a_text + ".",
             "b":       b_text + "." if b_text else a_text + ".",
             "concept": concept,

@@ -25,8 +25,8 @@ DB_PATH = CFG / "nex.db"
 BF_PATH = CFG / "beliefs.json"
 
 MIN_BELIEFS_TO_TRIGGER = 3    # topic needs < this to trigger research
-MAX_QUERIES_PER_RUN    = 8    # don't overwhelm ArXiv
-BELIEFS_PER_QUERY      = 3
+MAX_QUERIES_PER_RUN    = 14   # expanded — more topics per run
+BELIEFS_PER_QUERY      = 5   # more beliefs per ArXiv query
 REQUEST_DELAY          = 4.0  # seconds between requests
 
 # ─────────────────────────────────────────────────────────────
@@ -255,11 +255,17 @@ def fetch_and_insert(query, topic, max_results=40):
                 words = set(re.sub(r'[^a-z ]','',s.lower()).split()) - _stop
                 if not (words & _epist):
                     continue
+                # Quality gate: reject short, low-density, or weak sentences
+                _word_count = len(s.split())
+                _epist_hits = len(words & _epist)
+                _conf = 0.72 if _epist_hits >= 2 and _word_count >= 12 else 0.62
+                if _word_count < 10 or _epist_hits < 1:
+                    continue  # below minimum quality — skip
                 try:
                     con.execute(
                         "INSERT OR IGNORE INTO beliefs (content,confidence,topic,source,timestamp) "
                         "VALUES (?,?,?,?,?)",
-                        (s, 0.67, topic, "self_research", time.time())
+                        (s, _conf, topic, "self_research", time.time())
                     )
                     inserted += 1
                 except Exception:
@@ -376,6 +382,31 @@ def run_self_research(verbose=True):
             unique.append(q)
 
     # Pick top N
+    # ── Seed queries for topics NEX should always be building ────────────
+    _seed_topics = [
+        {"query": "emergent cognition self-organizing systems",    "topic": "emergence",          "reason": "core domain seed", "priority": 0.7},
+        {"query": "epistemology uncertainty knowledge formation",   "topic": "epistemology",       "reason": "core domain seed", "priority": 0.7},
+        {"query": "philosophy of mind consciousness qualia",        "topic": "consciousness",      "reason": "core domain seed", "priority": 0.7},
+        {"query": "multi-agent coordination collective intelligence","topic": "multi_agent",       "reason": "core domain seed", "priority": 0.65},
+        {"query": "causal reasoning counterfactual inference",      "topic": "reasoning",          "reason": "core domain seed", "priority": 0.65},
+        {"query": "memory consolidation neural plasticity learning","topic": "memory",             "reason": "core domain seed", "priority": 0.65},
+        {"query": "value alignment corrigibility AI safety",        "topic": "alignment",          "reason": "core domain seed", "priority": 0.7},
+        {"query": "metacognition self-monitoring cognitive control", "topic": "metacognition",     "reason": "core domain seed", "priority": 0.65},
+    ]
+    # Only add seeds for topics below threshold
+    import sqlite3 as _sq2
+    _sdb = _sq2.connect(str(DB_PATH))
+    _existing_topics = {r[0] for r in _sdb.execute(
+        "SELECT DISTINCT topic FROM beliefs WHERE confidence > 0.6").fetchall()}
+    _sdb.close()
+    for _s in _seed_topics:
+        if len(unique) >= MAX_QUERIES_PER_RUN:
+            break
+        if _s["topic"] not in _existing_topics or True:  # always include seeds
+            _already = any(u["topic"] == _s["topic"] for u in unique)
+            if not _already:
+                unique.append(_s)
+
     targets  = unique[:MAX_QUERIES_PER_RUN]
     inserted = 0
 

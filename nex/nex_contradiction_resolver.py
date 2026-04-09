@@ -126,18 +126,81 @@ def detect_and_log(limit: int = 500, max_new: int = 10) -> int:
             if cur.fetchone()[0] > 0:
                 continue
 
-            topic = (b1["tags"][0] if b1["tags"] else list(overlap)[0])
+            _raw_topic = (b1["tags"][0] if b1["tags"] else list(overlap)[0])
+            # Filter stopword and short topics — these generate noise not signal
+            _TOPIC_STOP = {
+                "the","a","an","is","are","was","not","and","or","but",
+                "in","of","to","for","with","at","by","from","if","so",
+                "what","how","why","when","who","this","that","it","its",
+                "problem","process","learn","data","system","context",
+                "model","human","domain","recent","valid","togeth","like",
+                "bas","understand","agent","none","what","social","when",
+            }
+            if len(_raw_topic) < 4 or _raw_topic.lower() in _TOPIC_STOP:
+                continue  # skip low-quality topic
+            topic = _raw_topic
             desc  = f"{b1['content'][:80]} ↔ {b2['content'][:80]}"
+            _energy = min(1.0, 0.4 + (len(overlap) * 0.06))
             cur.execute("""
-                INSERT INTO tensions (topic, description, belief_a_id, belief_b_id, detected_at)
-                VALUES (?, ?, ?, ?, ?)
-            """, (topic, desc, b1["id"], b2["id"], datetime.now(timezone.utc).isoformat()))
+                INSERT INTO tensions (topic, description, belief_a_id, belief_b_id, detected_at, energy)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (topic, desc, b1["id"], b2["id"], datetime.now(timezone.utc).isoformat(), _energy))
             print(f"  [resolver] Tension logged [{topic}]: {desc[:90]}...")
             found += 1
 
     con.commit()
     con.close()
     return found
+
+
+
+def resolve_old_tensions(max_age_hours: int = 6, max_resolve: int = 20) -> int:
+    """
+    Mark tensions as resolved if either belief has since been updated/removed,
+    or if the tension is older than max_age_hours with no escalation.
+    Called after detect_and_log() each cycle.
+    """
+    if not DB.exists():
+        return 0
+    con = sqlite3.connect(DB)
+    cur = con.cursor()
+    _ensure_tensions_table(cur)
+
+    cur.execute("""
+        SELECT t.id, t.belief_a_id, t.belief_b_id, t.detected_at
+        FROM tensions t
+        WHERE t.resolved = 0
+        ORDER BY t.detected_at ASC
+        LIMIT ?
+    """, (max_resolve * 4,))
+    rows = cur.fetchall()
+
+    resolved = 0
+    for tid, aid, bid, detected_at in rows:
+        if resolved >= max_resolve:
+            break
+        # Resolve if either belief no longer exists
+        cur.execute("SELECT COUNT(*) FROM beliefs WHERE id IN (?, ?)", (aid, bid))
+        still_exist = cur.fetchone()[0]
+        if still_exist < 2:
+            cur.execute("UPDATE tensions SET resolved=1 WHERE id=?", (tid,))
+            resolved += 1
+            continue
+        # Resolve if tension is older than max_age_hours
+        try:
+            from datetime import datetime, timezone, timedelta
+            age = datetime.now(timezone.utc) - datetime.fromisoformat(detected_at).replace(tzinfo=timezone.utc)
+            if age > timedelta(hours=max_age_hours):
+                cur.execute("UPDATE tensions SET resolved=1 WHERE id=?", (tid,))
+                resolved += 1
+        except Exception:
+            pass
+
+    con.commit()
+    con.close()
+    if resolved:
+        print(f"  [resolver] Resolved {resolved} old tensions")
+    return resolved
 
 
 if __name__ == "__main__":

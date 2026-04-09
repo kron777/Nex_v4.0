@@ -344,7 +344,8 @@ def run_startup_synthesis():
         if _nex_dir not in _sys.path:
             _sys.path.insert(0, _nex_dir)
         from nex.cognition import run_synthesis
-        insights, new_count = run_synthesis(min_beliefs=10, llm_fn=None)
+        result = run_synthesis(min_beliefs=10, llm_fn=None)
+        insights, new_count = result if result is not None else ([], 0)
         print(f"  [startup] synthesis complete: {len(insights)} insights ({new_count} new)")
         return len(insights)
     except Exception as e:

@@ -53,6 +53,20 @@ DEFAULT_SOURCES = {
     "memory_systems": [
         {"url": "https://export.arxiv.org/rss/cs.LG",  "name": "arxiv_ML",  "score": 1.0},
         {"url": "https://distill.pub/rss.xml",         "name": "distill",   "score": 1.0},
+        {"url": "https://export.arxiv.org/rss/cs.CL",  "name": "arxiv_NLP", "score": 1.0},
+        {"url": "https://export.arxiv.org/rss/cs.CV",  "name": "arxiv_vision", "score": 0.8},
+        {"url": "https://export.arxiv.org/rss/q-bio.NC","name": "arxiv_neuro", "score": 1.0},
+        {"url": "https://export.arxiv.org/rss/cs.RO",  "name": "arxiv_robotics", "score": 0.8},
+        {"url": "https://export.arxiv.org/rss/physics.soc-ph", "name": "arxiv_complex_systems", "score": 0.9},
+        {"url": "https://www.reddit.com/r/MachineLearning/top/.rss?t=day", "name": "reddit_ml", "score": 0.9},
+        {"url": "https://www.reddit.com/r/artificial/top/.rss?t=day",     "name": "reddit_ai", "score": 0.9},
+        {"url": "https://www.reddit.com/r/cognitivescience/top/.rss?t=day","name": "reddit_cogsci", "score": 1.0},
+        {"url": "https://www.reddit.com/r/philosophy/top/.rss?t=day",     "name": "reddit_phil", "score": 1.0},
+        {"url": "https://www.reddit.com/r/Futurology/top/.rss?t=day",     "name": "reddit_future", "score": 0.8},
+        {"url": "https://nautil.us/feed/",                                 "name": "nautilus", "score": 1.0},
+        {"url": "https://www.quantamagazine.org/feed/",                    "name": "quanta", "score": 1.0},
+        {"url": "https://feeds.feedburner.com/blogspot/gJZg",             "name": "google_ai_blog", "score": 1.0},
+        {"url": "https://openai.com/blog/rss/",                           "name": "openai_blog", "score": 0.9},
     ],
 }
 

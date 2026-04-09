@@ -112,7 +112,7 @@ def _topic_to_submolt(topic: str) -> str:
 
 # ── Telegram ──────────────────────────────────────────────────────────────────
 
-TELEGRAM_TOKEN   = "8758336859:AAFib_I_LBnqWGV-MVqrwa1T0sFf6PenAU4"
+TELEGRAM_TOKEN   = "7997066651:AAGarvnam1sDt89uOGJ7fe0PhB9i4FvBbDY"
 TELEGRAM_CHAT_ID = None  # set after first /start message received
 
 def _get_telegram_chat_id() -> str | None:

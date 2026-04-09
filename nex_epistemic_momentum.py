@@ -1,247 +1,405 @@
-#!/usr/bin/env python3
 """
 nex_epistemic_momentum.py
-Epistemic Momentum Engine.
+Tracks the trajectory of NEX's belief activations across conversations.
+Beliefs that fire repeatedly gain momentum. Dormant beliefs fade.
+Recurring tensions get flagged. Preoccupations emerge naturally.
 
-Tracks the direction and velocity of belief confidence over time.
-A belief has positive momentum if it is:
-  - Frequently used (high use_count)
-  - Recently active (last_used recent)
-  - High strength relative to confidence (earning trust)
-  - From a reliable source (nex_core, depth_engine > web crawl)
-
-A belief has negative momentum if it is:
-  - Never used (use_count = 0)
-  - Stale (last_used long ago)
-  - Low strength despite high confidence (inflated)
-
-Momentum score: -1.0 (decaying) to +1.0 (accelerating)
-
-Effect on generation:
-  HIGH momentum (>= 0.5):  speak assertively, no hedging
-  NEUTRAL (0.0 to 0.5):    speak with measured confidence
-  LOW (< 0.0):             speak provisionally, acknowledge uncertainty
-
-Runs nightly to update momentum scores.
-Feeds into nex_traversal_compiler.py for expression style.
+This turns NEX from a stateless responder into a mind that develops.
 """
-import sqlite3, math, time, logging
+
+import sqlite3, json, time, os
 from pathlib import Path
 from datetime import datetime, timedelta
+from collections import defaultdict
 
-log     = logging.getLogger("nex.momentum")
-DB_PATH = Path.home() / "Desktop/nex/nex.db"
+NEX_DB    = "/home/rr/Desktop/nex/nex.db"
+CONFIG_DB = os.path.expanduser("~/.config/nex/nex.db")
+MOMENTUM_DB = "/home/rr/Desktop/nex/nex_momentum.db"
 
-# Source trust weights
-SOURCE_TRUST = {
-    "nex_core":          1.0,
-    "depth_engine":      0.9,
-    "warmth_tension":    0.85,
-    "nex_synthesis":     0.80,
-    "depth_belief":      0.80,
-    "nex_insight":       0.75,
-    "self_directed":     0.70,
-    "web":               0.40,
-    "unknown":           0.50,
-}
+# ── Schema ────────────────────────────────────────────────────────────────
 
-NOW = time.time()
-DAY = 86400
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS belief_activations (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    belief_id   INTEGER NOT NULL,
+    query       TEXT,
+    topic       TEXT,
+    score       REAL,
+    timestamp   REAL DEFAULT (unixepoch())
+);
 
+CREATE TABLE IF NOT EXISTS belief_momentum (
+    belief_id       INTEGER PRIMARY KEY,
+    momentum        REAL DEFAULT 0.0,
+    activation_count INTEGER DEFAULT 0,
+    last_activated  REAL,
+    first_activated REAL,
+    peak_momentum   REAL DEFAULT 0.0,
+    topic           TEXT,
+    content_preview TEXT
+);
 
-def _source_trust(source: str) -> float:
-    if not source:
-        return SOURCE_TRUST["unknown"]
-    for key, val in SOURCE_TRUST.items():
-        if key in source.lower():
-            return val
-    return SOURCE_TRUST["unknown"]
+CREATE TABLE IF NOT EXISTS tension_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    belief_a_id INTEGER,
+    belief_b_id INTEGER,
+    topic_a     TEXT,
+    topic_b     TEXT,
+    co_activation_count INTEGER DEFAULT 1,
+    last_seen   REAL DEFAULT (unixepoch()),
+    content_a   TEXT,
+    content_b   TEXT
+);
 
+CREATE TABLE IF NOT EXISTS preoccupations (
+    topic           TEXT PRIMARY KEY,
+    strength        REAL DEFAULT 0.0,
+    query_count     INTEGER DEFAULT 0,
+    last_active     REAL,
+    first_active    REAL,
+    sample_queries  TEXT DEFAULT "[]"
+);
 
-def _recency_weight(last_used) -> float:
-    """1.0 if used today, decays to 0.1 over 30 days."""
-    if not last_used:
-        return 0.1
-    try:
-        if isinstance(last_used, str):
-            dt = datetime.fromisoformat(last_used)
-            ts = dt.timestamp()
-        else:
-            ts = float(last_used)
-        days_ago = (NOW - ts) / DAY
-        return max(0.1, math.exp(-days_ago / 15))
-    except Exception:
-        return 0.1
+CREATE INDEX IF NOT EXISTS idx_activations_belief ON belief_activations(belief_id);
+CREATE INDEX IF NOT EXISTS idx_activations_time   ON belief_activations(timestamp);
+CREATE INDEX IF NOT EXISTS idx_activations_topic  ON belief_activations(topic);
+"""
 
+# ── Momentum config ───────────────────────────────────────────────────────
+MOMENTUM_GAIN       = 0.15   # per activation
+MOMENTUM_DECAY_RATE = 0.02   # per day of inactivity
+MOMENTUM_CAP        = 2.0    # max momentum any belief can reach
+PREOCCUPATION_THRESHOLD = 0.8  # momentum to become a preoccupation
+TENSION_THRESHOLD   = 3      # co-activations to flag as recurring tension
+CONFIDENCE_BOOST_PER_MOMENTUM = 0.01  # belief confidence lift per momentum point
+CONFIDENCE_BOOST_CAP = 0.08  # max confidence lift from momentum
 
-def _use_weight(use_count) -> float:
-    """Logarithmic use count weight. 0 uses = 0.0, 10 uses = 0.7, 50+ = 1.0"""
-    if not use_count:
-        return 0.0
-    return min(1.0, math.log1p(use_count) / math.log1p(50))
-
-
-def _age_weight(created_at) -> float:
-    """Older beliefs with sustained use have earned their confidence."""
-    if not created_at:
-        return 0.5
-    try:
-        if isinstance(created_at, str):
-            dt = datetime.fromisoformat(created_at)
-            ts = dt.timestamp()
-        else:
-            ts = float(created_at)
-        days_old = (NOW - ts) / DAY
-        # Sweet spot: 7-90 days old. Too new = unproven. Too old = stale.
-        if days_old < 1:
-            return 0.3
-        elif days_old < 7:
-            return 0.6
-        elif days_old < 90:
-            return 1.0
-        else:
-            return max(0.4, 1.0 - (days_old - 90) / 365)
-    except Exception:
-        return 0.5
-
-
-def compute_momentum(row: dict) -> float:
-    """
-    Compute momentum score for a single belief.
-    Returns -1.0 (decaying) to +1.0 (accelerating).
-    """
-    conf      = row.get("confidence", 0.5) or 0.5
-    use_count = row.get("use_count", 0) or 0
-    last_used = row.get("last_used")
-    created   = row.get("created_at")
-    source    = row.get("source", "")
-    strength  = row.get("strength", conf) or conf
-
-    trust    = _source_trust(source)
-    recency  = _recency_weight(last_used)
-    use_w    = _use_weight(use_count)
-    age_w    = _age_weight(created)
-
-    # Strength vs confidence alignment
-    # If strength > confidence: belief is earning trust = positive signal
-    # If strength < confidence: belief may be inflated = negative signal
-    strength_delta = (strength - conf) * 2  # -1 to +1
-
-    # Combine signals
-    positive = (
-        trust    * 0.25 +
-        recency  * 0.25 +
-        use_w    * 0.30 +
-        age_w    * 0.10 +
-        max(0, strength_delta) * 0.10
-    )
-
-    negative = (
-        (1.0 - recency) * 0.20 +
-        (1.0 - use_w)   * 0.20 +
-        max(0, -strength_delta) * 0.10
-    )
-
-    momentum = (positive - negative * 0.5)
-    return round(max(-1.0, min(1.0, momentum)), 3)
-
-
-def ensure_schema(db):
-    """Add momentum column to beliefs if missing."""
-    cols = [r[1] for r in db.execute(
-        "PRAGMA table_info(beliefs)").fetchall()]
-    if "momentum" not in cols:
-        db.execute(
-            "ALTER TABLE beliefs ADD COLUMN momentum REAL DEFAULT 0.0")
-        db.commit()
-        log.info("Added momentum column to beliefs")
-
-
-def run_momentum_update(dry_run=False) -> dict:
-    """Update momentum scores for all beliefs."""
-    db = sqlite3.connect(str(DB_PATH))
+def _conn():
+    db = sqlite3.connect(MOMENTUM_DB)
+    db.executescript(SCHEMA)
     db.row_factory = sqlite3.Row
-    ensure_schema(db)
+    return db
 
-    rows = db.execute("""SELECT id, confidence, source, use_count,
-        last_used, created_at, strength
-        FROM beliefs WHERE confidence >= 0.3""").fetchall()
+# ── Core: record activation ───────────────────────────────────────────────
+def record_activation(belief_ids: list, query: str, topic: str, scores: dict = None):
+    """
+    Call this every time beliefs are retrieved for a query.
+    belief_ids: list of belief IDs that fired
+    scores: optional {belief_id: retrieval_score}
+    """
+    if not belief_ids:
+        return
 
-    updated   = 0
-    high_mom  = 0
-    low_mom   = 0
-    total_mom = 0.0
+    db = _conn()
+    now = time.time()
 
-    for row in rows:
-        m = compute_momentum(dict(row))
-        total_mom += m
-        if m >= 0.5: high_mom += 1
-        if m < 0.0:  low_mom  += 1
-        if not dry_run:
-            db.execute(
-                "UPDATE beliefs SET momentum=? WHERE id=?",
-                (m, row["id"]))
-        updated += 1
+    for bid in belief_ids:
+        score = (scores or {}).get(bid, 0.5)
+        db.execute(
+            "INSERT INTO belief_activations (belief_id, query, topic, score, timestamp) VALUES (?,?,?,?,?)",
+            (bid, query[:200], topic, score, now)
+        )
 
-    if not dry_run:
-        db.commit()
+    db.commit()
+
+    # Update momentum for each activated belief
+    _update_momentum(db, belief_ids, topic, now)
+
+    # Check for co-activations (tension detection)
+    if len(belief_ids) >= 2:
+        _check_tensions(db, belief_ids, topic, now)
+
+    # Update preoccupations
+    _update_preoccupation(db, topic, query, now)
+
     db.close()
 
-    avg_m = total_mom / max(updated, 1)
-    result = {
-        "updated":   updated,
-        "high_momentum": high_mom,
-        "low_momentum":  low_mom,
-        "avg_momentum":  round(avg_m, 3),
-        "dry_run":   dry_run,
-    }
-    print(f"Momentum update: {updated} beliefs")
-    print(f"  High (>=0.5): {high_mom}  Low (<0.0): {low_mom}")
-    print(f"  Average momentum: {avg_m:.3f}")
+def _update_momentum(db, belief_ids, topic, now):
+    """Update momentum scores for activated beliefs."""
+    for bid in belief_ids:
+        row = db.execute(
+            "SELECT momentum, activation_count, last_activated FROM belief_momentum WHERE belief_id=?",
+            (bid,)
+        ).fetchone()
+
+        if row:
+            # Apply decay since last activation
+            days_since = (now - (row["last_activated"] or now)) / 86400
+            decayed = row["momentum"] * (1 - MOMENTUM_DECAY_RATE * days_since)
+            decayed = max(0.0, decayed)
+
+            # Add gain from this activation
+            new_momentum = min(MOMENTUM_CAP, decayed + MOMENTUM_GAIN)
+            new_count = row["activation_count"] + 1
+
+            db.execute("""
+                UPDATE belief_momentum
+                SET momentum=?, activation_count=?, last_activated=?,
+                    peak_momentum=MAX(peak_momentum, ?)
+                WHERE belief_id=?
+            """, (new_momentum, new_count, now, new_momentum, bid))
+        else:
+            # First activation
+            # Get belief preview from main DB
+            try:
+                mdb = sqlite3.connect(NEX_DB)
+                brow = mdb.execute(
+                    "SELECT content, topic FROM beliefs WHERE id=?", (bid,)
+                ).fetchone()
+                mdb.close()
+                preview = brow[0][:100] if brow else ""
+                btopic  = brow[1] if brow else topic
+            except Exception:
+                preview = ""
+                btopic  = topic
+
+            db.execute("""
+                INSERT INTO belief_momentum
+                (belief_id, momentum, activation_count, last_activated, first_activated,
+                 peak_momentum, topic, content_preview)
+                VALUES (?,?,1,?,?,?,?,?)
+            """, (bid, MOMENTUM_GAIN, now, now, MOMENTUM_GAIN, btopic, preview))
+
+    db.commit()
+
+def _check_tensions(db, belief_ids, topic, now):
+    """Detect co-activated beliefs from different topics — potential tensions."""
+    try:
+        mdb = sqlite3.connect(NEX_DB)
+        beliefs = {}
+        for bid in belief_ids[:6]:  # check top 6
+            row = mdb.execute(
+                "SELECT id, content, topic FROM beliefs WHERE id=?", (bid,)
+            ).fetchone()
+            if row:
+                beliefs[bid] = {"content": row[1], "topic": row[2] or topic}
+        mdb.close()
+
+        # Check all pairs
+        bids = list(beliefs.keys())
+        for i in range(len(bids)):
+            for j in range(i+1, len(bids)):
+                a = beliefs[bids[i]]
+                b = beliefs[bids[j]]
+                # Only flag cross-topic pairs
+                if a["topic"] != b["topic"]:
+                    existing = db.execute("""
+                        SELECT id, co_activation_count FROM tension_log
+                        WHERE (belief_a_id=? AND belief_b_id=?) OR (belief_a_id=? AND belief_b_id=?)
+                    """, (bids[i], bids[j], bids[j], bids[i])).fetchone()
+
+                    if existing:
+                        db.execute("""
+                            UPDATE tension_log
+                            SET co_activation_count=co_activation_count+1, last_seen=?
+                            WHERE id=?
+                        """, (now, existing["id"]))
+                    else:
+                        db.execute("""
+                            INSERT INTO tension_log
+                            (belief_a_id, belief_b_id, topic_a, topic_b, last_seen, content_a, content_b)
+                            VALUES (?,?,?,?,?,?,?)
+                        """, (bids[i], bids[j], a["topic"], b["topic"], now,
+                              a["content"][:150], b["content"][:150]))
+        db.commit()
+    except Exception as ex:
+        pass
+
+def _update_preoccupation(db, topic, query, now):
+    """Track which topics NEX keeps returning to."""
+    if not topic:
+        return
+
+    row = db.execute(
+        "SELECT strength, query_count, sample_queries FROM preoccupations WHERE topic=?",
+        (topic,)
+    ).fetchone()
+
+    if row:
+        queries = json.loads(row["sample_queries"] or "[]")
+        queries.append(query[:100])
+        queries = queries[-10:]  # keep last 10
+
+        new_strength = min(2.0, row["strength"] + 0.1)
+        db.execute("""
+            UPDATE preoccupations
+            SET strength=?, query_count=query_count+1, last_active=?, sample_queries=?
+            WHERE topic=?
+        """, (new_strength, now, json.dumps(queries), topic))
+    else:
+        db.execute("""
+            INSERT INTO preoccupations (topic, strength, query_count, last_active, first_active, sample_queries)
+            VALUES (?,0.1,1,?,?,?)
+        """, (topic, now, now, json.dumps([query[:100]])))
+
+    db.commit()
+
+# ── Query: get current state ──────────────────────────────────────────────
+def get_preoccupations(limit=5):
+    """Return NEX's current intellectual preoccupations, strongest first."""
+    db = _conn()
+    rows = db.execute("""
+        SELECT topic, strength, query_count, last_active, sample_queries
+        FROM preoccupations
+        ORDER BY strength DESC LIMIT ?
+    """, (limit,)).fetchall()
+    db.close()
+    return [{
+        "topic": r["topic"],
+        "strength": round(r["strength"], 3),
+        "query_count": r["query_count"],
+        "last_active": r["last_active"],
+        "sample_queries": json.loads(r["sample_queries"] or "[]"),
+    } for r in rows]
+
+def get_high_momentum_beliefs(limit=10, min_momentum=0.3):
+    """Return beliefs with highest current momentum."""
+    db = _conn()
+    now = time.time()
+    rows = db.execute("""
+        SELECT belief_id, momentum, activation_count, last_activated, topic, content_preview
+        FROM belief_momentum
+        WHERE momentum >= ?
+        ORDER BY momentum DESC LIMIT ?
+    """, (min_momentum, limit)).fetchall()
+    db.close()
+
+    result = []
+    for r in rows:
+        # Apply decay for display
+        days_since = (now - (r["last_activated"] or now)) / 86400
+        live_momentum = r["momentum"] * (1 - MOMENTUM_DECAY_RATE * days_since)
+        live_momentum = max(0.0, live_momentum)
+        result.append({
+            "belief_id": r["belief_id"],
+            "momentum": round(live_momentum, 3),
+            "activation_count": r["activation_count"],
+            "topic": r["topic"],
+            "preview": r["content_preview"],
+        })
     return result
 
+def get_recurring_tensions(limit=5, min_count=2):
+    """Return belief pairs that keep firing together — unresolved tensions."""
+    db = _conn()
+    rows = db.execute("""
+        SELECT topic_a, topic_b, co_activation_count, content_a, content_b, last_seen
+        FROM tension_log
+        WHERE co_activation_count >= ?
+        ORDER BY co_activation_count DESC LIMIT ?
+    """, (min_count, limit)).fetchall()
+    db.close()
+    return [{
+        "topic_a": r["topic_a"],
+        "topic_b": r["topic_b"],
+        "count": r["co_activation_count"],
+        "content_a": r["content_a"],
+        "content_b": r["content_b"],
+    } for r in rows]
 
-def get_momentum_label(momentum: float) -> str:
-    """Return expression style label for compiler."""
-    if momentum >= 0.6:   return "assertive"
-    elif momentum >= 0.3: return "confident"
-    elif momentum >= 0.0: return "measured"
-    elif momentum >= -0.3: return "provisional"
-    else:                  return "uncertain"
+def get_momentum_summary():
+    """One-line summary of NEX's current epistemic state."""
+    preocs = get_preoccupations(3)
+    tensions = get_recurring_tensions(2)
+    high_m = get_high_momentum_beliefs(3)
 
+    parts = []
+    if preocs:
+        topics = [p["topic"] for p in preocs]
+        parts.append(f"Preoccupied with: {', '.join(topics)}")
+    if tensions:
+        t = tensions[0]
+        parts.append(f"Recurring tension: {t['topic_a']} ↔ {t['topic_b']}")
+    if high_m:
+        parts.append(f"High-momentum beliefs: {len(high_m)}")
 
-def get_belief_momentum(belief_id: int, db) -> float:
-    """Get stored momentum for a belief ID."""
-    try:
-        row = db.execute(
-            "SELECT momentum FROM beliefs WHERE id=?",
-            (belief_id,)).fetchone()
-        return row[0] if row and row[0] is not None else 0.0
-    except Exception:
-        return 0.0
+    return " | ".join(parts) if parts else "No momentum data yet"
 
+# ── Confidence boost: apply momentum to belief scores ────────────────────
+def apply_momentum_boost(beliefs: list) -> list:
+    """
+    Boost confidence of high-momentum beliefs before they enter the LLM.
+    Call this in reason() after retrieving top_beliefs.
+    """
+    if not beliefs:
+        return beliefs
+
+    db = _conn()
+    bid_to_momentum = {}
+    for b in beliefs:
+        bid = b.get("id")
+        if bid:
+            row = db.execute(
+                "SELECT momentum, last_activated FROM belief_momentum WHERE belief_id=?",
+                (bid,)
+            ).fetchone()
+            if row:
+                now = time.time()
+                days_since = (now - (row["last_activated"] or now)) / 86400
+                live = row["momentum"] * (1 - MOMENTUM_DECAY_RATE * days_since)
+                bid_to_momentum[bid] = max(0.0, live)
+    db.close()
+
+    boosted = []
+    for b in beliefs:
+        b = dict(b)
+        bid = b.get("id")
+        if bid and bid in bid_to_momentum:
+            m = bid_to_momentum[bid]
+            boost = min(CONFIDENCE_BOOST_CAP, m * CONFIDENCE_BOOST_PER_MOMENTUM)
+            b["confidence"] = min(1.0, b.get("confidence", 0.5) + boost)
+            b["_momentum"] = round(m, 3)
+        boosted.append(b)
+    return boosted
+
+# ── Daily decay pass ──────────────────────────────────────────────────────
+def run_decay_pass():
+    """
+    Apply time-based decay to all momentum scores.
+    Run once per day as a background job.
+    """
+    db = _conn()
+    now = time.time()
+    rows = db.execute(
+        "SELECT belief_id, momentum, last_activated FROM belief_momentum WHERE momentum > 0"
+    ).fetchall()
+
+    updated = 0
+    for row in rows:
+        days = (now - (row["last_activated"] or now)) / 86400
+        new_m = row["momentum"] * (1 - MOMENTUM_DECAY_RATE * days)
+        new_m = max(0.0, new_m)
+        if abs(new_m - row["momentum"]) > 0.001:
+            db.execute(
+                "UPDATE belief_momentum SET momentum=? WHERE belief_id=?",
+                (new_m, row["belief_id"])
+            )
+            updated += 1
+
+    # Decay preoccupations too
+    db.execute("""
+        UPDATE preoccupations
+        SET strength = MAX(0, strength - 0.05)
+        WHERE last_active < ?
+    """, (now - 86400,))  # not active in last 24h
+
+    db.commit()
+    db.close()
+    return updated
 
 if __name__ == "__main__":
-    import argparse
-    logging.basicConfig(level=logging.INFO)
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--top", type=int, default=10,
-                        help="Show top N high-momentum beliefs")
-    args = parser.parse_args()
-
-    run_momentum_update(dry_run=args.dry_run)
-
-    if not args.dry_run:
-        db = sqlite3.connect(str(DB_PATH))
-        print(f"\nTop {args.top} high-momentum beliefs:")
-        rows = db.execute("""SELECT content, topic, momentum, confidence, use_count
-            FROM beliefs WHERE momentum IS NOT NULL
-            ORDER BY momentum DESC LIMIT ?""",
-            (args.top,)).fetchall()
-        for r in rows:
-            label = get_momentum_label(r[2])
-            print(f"  [{label}] m={r[2]:.3f} conf={r[3]:.2f} "
-                  f"uses={r[4] or 0} [{r[1]}]")
-            print(f"    {r[0][:80]}")
-        db.close()
+    print("NEX Epistemic Momentum — status")
+    print("=" * 50)
+    print(get_momentum_summary())
+    print()
+    print("Preoccupations:")
+    for p in get_preoccupations():
+        print(f"  [{p['strength']:.2f}] {p['topic']} ({p['query_count']} queries)")
+    print()
+    print("High-momentum beliefs:")
+    for b in get_high_momentum_beliefs(5):
+        print(f"  [{b['momentum']:.3f}] {b['preview'][:70]}")
+    print()
+    print("Recurring tensions:")
+    for t in get_recurring_tensions():
+        print(f"  [{t['count']}x] {t['topic_a']} ↔ {t['topic_b']}")

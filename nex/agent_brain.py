@@ -105,17 +105,31 @@ class AgentBrain:
     def chat(self, user_message: str,
              belief_state: dict = None,
              stream_cb: Optional[Callable] = None) -> str:
-        # ── NexVoice primary path ─────────────────────────────────
-        try:
-            from nex.nex_voice import NexVoiceCompositor as _NexVoice
-            _nv = _NexVoice()
-            _nv_msg = user_message if isinstance(user_message, str) else str(user_message)
-            _nv_reply = _nv.compose(_nv_msg)
-            if _nv_reply and len(_nv_reply.strip()) > 20:
-                return _nv_reply
-        except Exception:
-            pass  # fall through to llama
-        # ──────────────────────────────────────────────────────────────
+        # ── NexVoice primary path — GATED: social/greeting only ─────────────
+        # UPTAKE FIX: NexVoice bypasses belief_state entirely.
+        # Only allow it for social/greeting queries where beliefs don't matter.
+        # Substantive queries route to SoulLoop which uses the belief graph.
+        _SOCIAL_PATTERNS = [
+            r"^how are you", r"^how('re| are) you doing", r"^what'?s up",
+            r"^hey\b", r"^hi\b", r"^hello\b", r"^yo\b",
+            r"^good (morning|afternoon|evening|night)",
+            r"^are you (okay|alright|good|there|awake|alive)",
+            r"^you okay", r"^ping\b",
+        ]
+        _is_social = any(__import__('re').search(p, user_message.lower().strip())
+                         for p in _SOCIAL_PATTERNS)
+        if _is_social:
+            try:
+                from nex.nex_voice import NexVoiceCompositor as _NexVoice
+                _nv = _NexVoice()
+                _nv_msg = user_message if isinstance(user_message, str) else str(user_message)
+                _nv_reply = _nv.compose(_nv_msg)
+                if _nv_reply and len(_nv_reply.strip()) > 20:
+                    return _nv_reply
+            except Exception:
+                pass  # fall through to llama
+        # ── End NexVoice gate ─────────────────────────────────────────────────
+
         """
         Main entry point. belief_state is injected as Nex's live context.
         If a list of questions is detected, each is answered individually.

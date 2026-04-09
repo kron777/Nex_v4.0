@@ -110,11 +110,11 @@ class BridgeAccelerator:
             try:
                 prompt = (
                     f"Find a non-obvious structural connection between:\n"
-                    f"Domain A ({topic_a}): {content_a}\n"
-                    f"Domain B ({topic_b}): {content_b}\n\n"
-                    f"Write exactly 1 sentence describing the deep principle "
-                    f"that underlies both. Must be specific, non-trivial, "
-                    f"and reveal something neither domain says alone. "
+                    f"Field 1 ({topic_a}): {content_a}\n"
+                    f"Field 2 ({topic_b}): {content_b}\n\n"
+                    f"Write exactly 1 sentence describing the deep structural principle "
+                    f"that underlies both. Must be specific and non-trivial. "
+                    f"Do NOT use: 'different domain', 'Domain A', 'Domain B', 'bridge:', '↔'. "
                     f"Start with 'The underlying principle is...' or similar."
                 )
                 bridge_text = llm_fn(prompt, task_type="synthesis")
@@ -136,14 +136,22 @@ class BridgeAccelerator:
                 }
                 new_bridges.append(bridge)
 
-                # Store as belief
+                # Reject bridge text that contains contamination phrases
+                _bad = ["different domain", "Domain A", "Domain B", "bridge:",
+                        "↔", "none of these resolve", "synthesized around"]
+                if any(b in bridge_text for b in _bad):
+                    log.debug(f"[BRIDGE] rejected contaminated output: {bridge_text[:60]}")
+                    continue
+
+                # Store as belief — clean topic, no ↔
                 conf = min(0.82, 0.65 + novelty * 0.2)
+                _clean_topic = f"{topic_a}+{topic_b}"[:60]
                 conn.execute("""
                     INSERT OR IGNORE INTO beliefs
                     (topic, content, confidence, origin, source)
                     VALUES (?, ?, ?, ?, ?)
                 """, (
-                    f"bridge:{topic_a}↔{topic_b}",
+                    _clean_topic,
                     bridge_text[:500],
                     conf,
                     "bridge_accelerator",

@@ -1,666 +1,464 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<title>NEX v1.0 — COGNITIVE HUD</title>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<title>NEX HUD v1.2</title>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
 :root{
-  --bg:#000507;
-  --p:#00e5ff;
-  --p2:#0088aa;
-  --p3:#003344;
-  --w:#e8f4ff;
-  --g:#00ff88;
-  --y:#ffcc00;
-  --r:#ff3355;
-  --dim:#0a2030;
-  --mid:#1a4060;
-  --tx:#80c8e0;
-  --tx2:#3a7090;
-  --orb:var(--font-hud);
-  --mono:'Share Tech Mono',monospace;
-  --hud:'Orbitron',monospace;
+  --cyan:#00ffcc;--purple:#cc00ff;--red:#ff003c;
+  --green:#00ff88;--yellow:#ffcc00;--bg:#06060f;
+  --panel:#0a0a1a;--border:#00ffcc22;--text:#aaffee;--dim:#b0c8d8;
+  --debug-cyan:#00cfff;
 }
-*{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font-family:var(--mono);font-size:11px}
+body{background:var(--bg);color:var(--text);font-family:'Share Tech Mono',monospace;font-size:10px;height:100vh;overflow:hidden;position:relative;}
+body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.08) 2px,rgba(0,0,0,0.08) 4px);pointer-events:none;z-index:100;}
+body::after{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background-image:linear-gradient(rgba(0,255,204,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,204,0.03) 1px,transparent 1px);background-size:20px 20px;pointer-events:none;z-index:0;}
+.hud{position:relative;z-index:1;display:grid;grid-template-rows:auto auto 1fr;height:100vh;padding:4px;gap:3px;}
+.topbar{display:flex;align-items:center;justify-content:space-between;background:var(--panel);border:1px solid var(--border);padding:4px 8px;border-left:2px solid var(--cyan);}
+.nex-logo{font-family:'Orbitron',monospace;font-size:18px;font-weight:900;color:var(--cyan);letter-spacing:3px;text-shadow:0 0 10px var(--cyan),0 0 20px var(--cyan);animation:glitch 4s infinite;}
+@keyframes glitch{0%,90%,100%{text-shadow:0 0 10px var(--cyan),0 0 20px var(--cyan);}91%{text-shadow:-2px 0 var(--purple),2px 0 var(--cyan);}93%{text-shadow:2px 0 var(--red),-2px 0 var(--cyan);}95%{text-shadow:0 0 10px var(--cyan),0 0 20px var(--cyan);}}
+.nex-logo span{font-size:8px;color:var(--purple);vertical-align:super;}
+.top-status{display:flex;gap:12px;font-size:16px;color:var(--cyan);}
+.top-status .val{color:#fff;font-weight:bold;}.top-status .online{color:var(--green);}.top-status .sep{color:var(--dim);}
+.top-time{text-align:right;font-size:10px;color:var(--cyan);line-height:1.4;}
+.top-time .time{font-size:22px;font-weight:bold;color:#fff;text-shadow:0 0 8px var(--cyan);}
+.platforms{display:flex;gap:2px;}
+.plat{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:5px 8px;background:var(--panel);border:1px solid var(--border);font-size:14px;letter-spacing:1px;font-weight:bold;}
+.plat .dot{width:10px;height:10px;border-radius:50%;display:inline-block;}
+.dot-live{background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 1.5s infinite;}
+.dot-recent{background:var(--cyan);box-shadow:0 0 6px var(--cyan);}
+.dot-idle{background:var(--dim);}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+.state-live{color:var(--green);}.state-recent{color:var(--cyan);}.state-idle{color:var(--dim);}
 
-/* scanlines */
-body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.12) 3px,rgba(0,0,0,.12) 4px);pointer-events:none;z-index:9999}
+/* === MAIN GRID: left panel | center split | right panel === */
+.main{display:grid;grid-template-columns:220px 1fr 659px;gap:3px;overflow:hidden;}
+.panel{background:var(--panel);border:1px solid var(--border);padding:6px;overflow:hidden;position:relative;}
+.panel::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:0.5;}
+.panel::after{content:'';position:absolute;bottom:3px;right:3px;width:8px;height:8px;border-bottom:1px solid var(--cyan);border-right:1px solid var(--cyan);opacity:0.4;}
+.panel-title{font-family:'Orbitron',monospace;font-size:11px;color:var(--cyan);letter-spacing:2px;margin-bottom:5px;padding-bottom:3px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:4px;}
+.panel-title::before{content:'⌐';color:var(--purple);}.panel-title::after{content:'¬';color:var(--purple);margin-left:auto;}
 
-/* grid bg */
-body::after{content:'';position:fixed;inset:0;
-  background-image:linear-gradient(rgba(0,100,150,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,100,150,.04) 1px,transparent 1px);
-  background-size:32px 32px;pointer-events:none;z-index:0}
+/* === CENTER SPLIT PANEL === */
+.center-panel{display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--border);position:relative;overflow:hidden;}
+.center-panel::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:0.5;}
+.center-split{display:grid;grid-template-columns:1fr 1fr;gap:0;flex:1;overflow:hidden;min-height:0;}
+.center-col{display:flex;flex-direction:column;overflow:hidden;min-height:0;}
+.center-col:first-child{border-right:1px solid var(--border);}
+.center-col:last-child{margin-left:75px;}
+.center-col-title{font-family:'Orbitron',monospace;font-size:10px;color:var(--cyan);letter-spacing:2px;padding:4px 6px 3px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:4px;flex-shrink:0;}
+.center-col-title.debug-title{color:var(--debug-cyan);}
+.center-col-title .blink{animation:blink-dot 1.2s infinite;color:var(--green);}
+@keyframes blink-dot{0%,100%{opacity:1;}50%{opacity:0.2;}}
+.stream-box{flex:1;overflow:hidden;font-size:13px;line-height:1.65;position:relative;padding:2px 4px;min-height:0;}
+.stream-line{display:flex;gap:6px;padding:2px 0;border-bottom:1px solid #ffffff04;animation:fadein 0.3s ease;}
+@keyframes fadein{from{opacity:0;transform:translateX(-4px);}to{opacity:1;transform:translateX(0);}}
+.stream-ts{color:var(--dim);white-space:nowrap;flex-shrink:0;font-size:11px;}
+.stream-type{width:62px;flex-shrink:0;font-weight:bold;font-size:12px;}
+.stream-text{color:#cceedd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;}
 
-#root{position:relative;width:100vw;height:100vh;display:grid;
-  grid-template-columns:240px 1fr 240px;
-  grid-template-rows:38px 1fr 1fr 96px 32px;
-  gap:1px;padding:3px;z-index:1}
+/* Debug stream specific */
+.debug-line{display:flex;gap:5px;padding:2px 0;border-bottom:1px solid #ffffff04;animation:fadein 0.3s ease;}
+.debug-ts{color:var(--dim);white-space:nowrap;flex-shrink:0;font-size:11px;}
+.debug-src{width:72px;flex-shrink:0;font-size:12px;font-weight:bold;}
+.debug-msg{color:#99ddff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;}
+.debug-ok{color:var(--green);}
+.debug-dead{color:var(--red);}
+.debug-warn{color:var(--yellow);}
+.debug-port{color:var(--purple);}
+.debug-crash{color:var(--red);font-weight:bold;}
 
-/* ── HEADER ── */
-#hdr{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;
-  padding:0 12px;border-bottom:1px solid rgba(0,180,220,.2);background:rgba(0,8,16,.9)}
-#hdr-title{font-family:var(--hud);font-size:20px;font-weight:900;color:var(--p);
-  letter-spacing:10px;text-shadow:0 0 30px var(--p),0 0 60px var(--p2)}
-.hdr-pills{display:flex;gap:12px;align-items:center}
-.pill{font-family:var(--hud);font-size:9px;letter-spacing:2px;padding:2px 8px;
-  border:1px solid rgba(0,180,220,.3);background:rgba(0,30,50,.5);color:var(--tx2)}
-.pill b{color:var(--p)}
-#hdr-clock{font-family:var(--hud);font-size:14px;color:var(--w);letter-spacing:4px;
-  text-shadow:0 0 15px rgba(255,255,255,.4)}
-
-/* ── PANEL base ── */
-.pn{background:rgba(0,10,20,.85);border:1px solid rgba(0,150,200,.15);
-  position:relative;overflow:hidden;padding:8px}
-.pn::after{content:'';position:absolute;top:0;left:0;right:0;height:1px;
-  background:linear-gradient(90deg,transparent,rgba(0,200,255,.4),transparent)}
-
-/* corner brackets */
-.pn::before{content:'';position:absolute;top:0;left:0;width:10px;height:10px;
-  border-top:1px solid var(--p);border-left:1px solid var(--p);opacity:.6}
-.cb-tr,.cb-bl,.cb-br{position:absolute;width:10px;height:10px;border-color:var(--p);border-style:solid;opacity:.6}
-.cb-tr{top:0;right:0;border-width:1px 1px 0 0}
-.cb-bl{bottom:0;left:0;border-width:0 0 1px 1px}
-.cb-br{bottom:0;right:0;border-width:0 1px 1px 0}
-
-.pt{font-family:var(--hud);font-size:8px;letter-spacing:3px;color:var(--p);
-  margin-bottom:6px;text-shadow:0 0 8px var(--p);display:flex;align-items:center;gap:5px}
-.pt-dot{width:4px;height:4px;background:var(--p);box-shadow:0 0 6px var(--p);flex-shrink:0}
-
-/* ── STATS ── */
-.sr{display:flex;justify-content:space-between;align-items:center;
-  padding:2px 0;border-bottom:1px solid rgba(0,80,120,.15);height:18px}
-.sl{color:var(--tx2);font-size:10px;letter-spacing:1px}
-.sv{font-weight:700;font-size:12px;text-shadow:0 0 6px currentColor}
-.sv.c-p{color:var(--p)} .sv.c-g{color:var(--g)} .sv.c-y{color:var(--y)} .sv.c-r{color:var(--r)} .sv.c-w{color:var(--w)}
-
-/* ── RING widgets ── */
-.ring-wrap{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
-.ring-item{display:flex;flex-direction:column;align-items:center;gap:3px}
-.ring-label{font-family:var(--hud);font-size:7px;letter-spacing:1px;color:var(--tx2)}
-
-/* ── OPINION bars ── */
-.ob{margin:3px 0}
-.ob-hdr{display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px}
-.ob-topic{color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px}
-.ob-score{font-weight:700}
-.ob-track{height:3px;background:rgba(0,60,90,.6);position:relative}
-.ob-fill{height:100%;position:absolute;transition:width .8s ease}
-.ob-mid{position:absolute;left:50%;top:0;width:1px;height:100%;background:rgba(0,180,220,.4)}
-
-/* ── DRIVES ── */
-.db{margin:4px 0}
-.db-hdr{display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px}
-.db-name{color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
-.db-val{font-family:var(--hud);font-size:10px;font-weight:700}
-.db-track{height:4px;background:rgba(0,40,70,.7);border-radius:1px}
-.db-fill{height:100%;border-radius:1px;transition:width .8s ease;
-  background:linear-gradient(90deg,var(--p2),var(--p));box-shadow:0 0 6px var(--p)}
-.db-fill.hi{background:linear-gradient(90deg,#006040,var(--g));box-shadow:0 0 6px var(--g)}
-.db-fill.md{background:linear-gradient(90deg,#806000,var(--y));box-shadow:0 0 6px var(--y)}
-
-/* ── CENTER ── */
-#pn-center{grid-column:2;grid-row:2/4;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:4px}
-#disc-wrap{position:relative;width:320px;height:320px;flex-shrink:0}
-#disc-canvas{position:absolute;top:0;left:0}
-#disc-overlay{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  text-align:center;pointer-events:none}
-#cycle-big{font-family:var(--hud);font-size:32px;font-weight:900;color:var(--w);
-  letter-spacing:6px;text-shadow:0 0 20px var(--p),0 0 50px var(--p2),0 0 80px var(--p3);display:block}
-#cycle-sub{font-family:var(--hud);font-size:8px;letter-spacing:4px;color:var(--tx2);opacity:.7}
-#iq-row{display:flex;gap:6px;margin-top:2px}
-.iq-chip{font-family:var(--hud);font-size:9px;letter-spacing:1px;padding:2px 6px;
-  border:1px solid rgba(0,180,220,.3);color:var(--tx2)}
-.iq-chip b{color:var(--p)}
-
-/* recent beliefs feed under disc */
-#feed{width:100%;max-height:70px;overflow-y:auto;padding:0 4px}
-#feed::-webkit-scrollbar{width:2px}
-#feed::-webkit-scrollbar-thumb{background:var(--p2)}
-.feed-item{font-size:10px;color:var(--tx2);padding:2px 0;
-  border-bottom:1px solid rgba(0,60,100,.2);line-height:1.3}
-.feed-conf{color:var(--p2);margin-right:4px}
-
-/* ── LOG ── */
-#pn-log{grid-column:1/3;grid-row:4}
-#log-inner{height:60px;overflow-y:auto;font-size:10px;line-height:1.5}
-#log-inner::-webkit-scrollbar{width:2px}
-#log-inner::-webkit-scrollbar-thumb{background:var(--p2)}
-.ll{color:var(--tx2);padding:1px 0}
-.ll-ts{color:var(--p2);margin-right:6px}
-.ll.new{color:var(--p);animation:fade 1.5s forwards}
-@keyframes fade{0%{color:var(--p)}100%{color:var(--tx2)}}
-
-/* ── CHAT ── */
-#pn-chat{grid-column:3;grid-row:4}
-#chat-msgs{height:48px;overflow-y:auto;font-size:10px;margin-bottom:4px}
-#chat-msgs::-webkit-scrollbar{width:2px}
-#chat-msgs::-webkit-scrollbar-thumb{background:var(--p2)}
-.cy{color:var(--tx2)}.cy::before{content:"you › ";color:var(--p2)}
-.cn{color:var(--tx)}.cn::before{content:"nex › ";color:var(--p);text-shadow:0 0 6px var(--p)}
-#chat-form{display:flex;gap:3px}
-#ci{flex:1;background:rgba(0,20,40,.7);border:1px solid rgba(0,150,200,.2);
-  color:var(--w);font-family:var(--mono);font-size:10px;padding:3px 6px;outline:none}
-#ci:focus{border-color:var(--p)}
-#cs{background:rgba(0,50,80,.5);border:1px solid rgba(0,150,200,.2);
-  color:var(--p);font-family:var(--hud);font-size:8px;letter-spacing:2px;
-  padding:3px 8px;cursor:pointer}
-#cs:hover{background:rgba(0,100,140,.5);box-shadow:0 0 8px var(--p2)}
-
-/* ── FOOTER ── */
-#ftr{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;
-  padding:0 12px;border-top:1px solid rgba(0,180,220,.15);background:rgba(0,8,16,.9)}
-#ftr-left{font-family:var(--hud);font-size:9px;color:var(--tx2);letter-spacing:2px}
-#ftr-status{font-family:var(--hud);font-size:9px;color:var(--tx2);letter-spacing:2px}
-#exit-btn{font-family:var(--hud);font-size:9px;letter-spacing:3px;color:var(--r);
-  background:rgba(60,0,15,.4);border:1px solid rgba(200,0,40,.3);padding:4px 16px;
-  cursor:pointer;transition:all .2s}
-#exit-btn:hover{background:rgba(100,0,25,.6);box-shadow:0 0 12px rgba(255,0,40,.4)}
-
-/* NET graph */
-#net-cvs{width:100%;height:60px;display:block;margin-top:4px}
-
-/* hex decorations */
-.hex-ring{position:relative;display:inline-flex;align-items:center;justify-content:center}
-
-/* pixel grid bottom-center decoration */
-#pixel-grid{position:absolute;bottom:100px;left:50%;transform:translateX(-50%);
-  display:grid;grid-template-columns:repeat(12,6px);gap:2px;opacity:.3;pointer-events:none}
-.px{width:6px;height:6px;background:var(--p2)}
-
-/* LLM status */
-#llm-status{display:flex;align-items:center;gap:5px;font-family:var(--hud);
-  font-size:9px;letter-spacing:2px}
-.ldot{width:6px;height:6px;border-radius:50%}
-.ldot.on{background:var(--g);box-shadow:0 0 8px var(--g);animation:lpulse 2s infinite}
-.ldot.off{background:var(--r)}
-@keyframes lpulse{0%,100%{opacity:1}50%{opacity:.4}}
+/* Left panel */
+.beliefs-num{font-family:'Orbitron',monospace;font-size:32px;font-weight:900;color:#fff;text-shadow:0 0 15px var(--cyan);line-height:1;margin:4px 0;}
+.beliefs-label{font-size:14px;color:var(--dim);letter-spacing:2px;margin-bottom:2px;}
+.orig-beliefs{font-size:16px;color:var(--purple);margin-bottom:6px;}
+.crosshair{display:flex;gap:8px;margin-bottom:6px;}
+.ch{width:22px;height:22px;border:1px solid var(--cyan);border-radius:50%;position:relative;opacity:0.5;}
+.ch::before,.ch::after{content:'';position:absolute;background:var(--cyan);}
+.ch::before{width:1px;height:100%;left:50%;top:0;}.ch::after{height:1px;width:100%;top:50%;left:0;}
+.bar-row{display:flex;align-items:center;gap:4px;margin-bottom:3px;}
+.bar-label{width:58px;font-size:14px;color:var(--dim);}
+.bar-track{flex:1;height:5px;background:#0a0a1a;border:1px solid var(--border);position:relative;overflow:hidden;}
+.bar-fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--purple));box-shadow:0 0 4px var(--cyan);transition:width 1s ease;}
+.bar-val{width:40px;font-size:14px;color:#fff;text-align:right;}
+.counters{margin-top:6px;padding-top:4px;border-top:1px solid var(--border);font-size:14px;color:var(--dim);display:grid;grid-template-columns:1fr 1fr;gap:2px;}
+.counter-item span{color:var(--cyan);font-size:18px;font-weight:bold;}
+.gpu-gauge{display:flex;flex-direction:column;align-items:center;margin-bottom:6px;}
+.gauge-wrap{position:relative;width:90px;height:90px;margin:4px auto;}
+.gauge-wrap svg{transform:rotate(-135deg);}
+.gauge-text{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;}
+.gauge-pct{font-family:'Orbitron',monospace;font-size:14px;font-weight:bold;color:#fff;text-shadow:0 0 8px var(--cyan);}
+.gauge-sub{font-size:12px;color:var(--dim);}
+.power-bar{width:100%;margin-bottom:6px;}
+.power-label{font-size:14px;color:var(--dim);margin-bottom:2px;display:flex;justify-content:space-between;}
+.power-label span{color:var(--yellow);}
+.gaps-list{font-size:14px;margin-top:4px;}
+.gap-item{color:var(--dim);padding:1px 0;padding-left:8px;position:relative;}
+.gap-item::before{content:'◆';position:absolute;left:0;color:var(--purple);font-size:10px;}
+.crash-alert{margin-top:4px;padding:4px;border:1px solid var(--red);background:#ff003c11;font-size:14px;color:var(--red);display:none;animation:blink 0.8s infinite;}
+.crash-alert.active{display:block;}
+@keyframes blink{0%,100%{border-color:var(--red);}50%{border-color:transparent;}}
+.iq-display{text-align:center;margin:4px 0;padding:3px;border:1px solid var(--border);position:relative;}
+.iq-val{font-family:'Orbitron',monospace;font-size:16px;font-weight:900;color:var(--green);text-shadow:0 0 10px var(--green);}
+.iq-label{font-size:12px;color:var(--dim);letter-spacing:2px;}
+.divider-line{width:1px;background:linear-gradient(to bottom,transparent,var(--border),var(--cyan),var(--border),transparent);opacity:0.6;align-self:stretch;}
 </style>
 </head>
 <body>
-<div id="root">
-
-  <!-- HEADER -->
-  <div id="hdr">
-    <div id="hdr-title">N E X &nbsp; v 1 . 0</div>
-    <div class="hdr-pills">
-      <div class="pill">BELIEFS <b id="h-b">—</b></div>
-      <div class="pill">CYCLE <b id="h-c">—</b></div>
-      <div class="pill">OPINIONS <b id="h-o">—</b></div>
-      <div id="llm-status"><div class="ldot off" id="ldot"></div><span id="llab">QWEN</span></div>
+<div class="hud">
+  <div class="topbar">
+    <div style="display:flex;align-items:baseline;gap:8px;">
+      <div class="nex-logo">NEX<span>v1.2</span></div>
     </div>
-    <div id="hdr-clock">--:--:--</div>
-  </div>
-
-  <!-- LEFT TOP: BELIEF GRAPH -->
-  <div class="pn" style="grid-column:1;grid-row:2">
-    <div class="cb-tr"></div><div class="cb-bl"></div><div class="cb-br"></div>
-    <div class="pt"><div class="pt-dot"></div>BELIEF GRAPH</div>
-    <div class="sr"><span class="sl">TOTAL</span><span class="sv c-w" id="s-tot">—</span></div>
-    <div class="sr"><span class="sl">NEW 24H</span><span class="sv c-g" id="s-new">—</span></div>
-    <div class="sr"><span class="sl">OPINIONS</span><span class="sv c-p" id="s-op">—</span></div>
-    <div class="sr"><span class="sl">GAPS</span><span class="sv c-p" id="s-gap">—</span></div>
-    <div class="sr"><span class="sl">CONTRADICTIONS</span><span class="sv c-y" id="s-con">—</span></div>
-    <div class="sr"><span class="sl">POST DRAFTS</span><span class="sv c-p" id="s-pst">—</span></div>
-    <!-- mini rings -->
-    <div class="ring-wrap" style="margin-top:8px">
-      <div class="ring-item"><canvas id="rc0" width="44" height="44"></canvas><div class="ring-label">CONF</div></div>
-      <div class="ring-item"><canvas id="rc1" width="44" height="44"></canvas><div class="ring-label">GAPS</div></div>
-      <div class="ring-item"><canvas id="rc2" width="44" height="44"></canvas><div class="ring-label">ACT</div></div>
-      <div class="ring-item"><canvas id="rc3" width="44" height="44"></canvas><div class="ring-label">LLM↓</div></div>
+    <div class="top-status">
+      <span>STATUS <span class="val online" id="s-status">ACTIVE</span></span>
+      <span class="sep">|</span>
+      <span>LLM <span class="val online" id="s-llm">ONLINE</span></span>
+      <span class="sep">|</span>
+      <span>TELEGRAM <span class="val online" id="s-tg">ONLINE</span></span>
+      <span class="sep">|</span>
+      <span>UPTIME <span class="val" id="s-uptime">00:00:00</span></span>
+      <span class="sep">|</span>
+      <span>SYS1 <span class="val" id="s-sys1">--%</span></span>
+      <span class="sep">|</span>
+      <span>LLM-DEP <span class="val" id="s-llmdep">--%</span></span>
+      <span class="sep">|</span>
+      <span>EPISODES <span class="val" id="s-episodes">0</span></span>
+      <span class="sep">|</span>
+      <span>THROW-NET <span class="val" id="s-thrownet">0</span></span>
     </div>
-    <canvas id="bgraph" height="36" style="width:100%;display:block;margin-top:6px"></canvas>
+    <div class="top-time">
+      <div class="time" id="s-time">--:--:--</div>
+      <div style="font-size:13px;color:var(--dim)" id="s-date">--</div>
+    </div>
   </div>
 
-  <!-- LEFT BOTTOM: OPINIONS -->
-  <div class="pn" style="grid-column:1;grid-row:3">
-    <div class="cb-tr"></div><div class="cb-bl"></div><div class="cb-br"></div>
-    <div class="pt"><div class="pt-dot"></div>OPINION STANCE</div>
-    <div id="op-list"></div>
+  <div class="platforms">
+    <div class="plat"><span class="dot dot-live"></span><span class="state-live">MOLTBOOK</span><span style="color:var(--dim);margin-left:6px;font-size:16px;" id="p-molt">LIVE</span></div>
+    <div class="plat"><span class="dot dot-recent"></span><span class="state-recent">TELEGRAM</span><span style="color:var(--dim);margin-left:6px;font-size:16px;" id="p-tg">RECENT</span></div>
+    <div class="plat"><span class="dot dot-idle"></span><span class="state-idle">DISCORD</span><span style="color:var(--dim);margin-left:6px;font-size:16px;" id="p-dc">IDLE</span></div>
+    <div class="plat"><span class="dot dot-recent"></span><span class="state-recent">MASTODON</span><span style="color:var(--dim);margin-left:6px;font-size:16px;" id="p-mast">RECENT</span></div>
+    <div class="plat"><span class="dot dot-idle"></span><span class="state-idle">YOUTUBE</span><span style="color:var(--dim);margin-left:6px;font-size:16px;" id="p-yt">IDLE</span></div>
   </div>
 
-  <!-- CENTER: DISC + FEED -->
-  <div class="pn" id="pn-center">
-    <div class="cb-tr"></div><div class="cb-bl"></div><div class="cb-br"></div>
-    <div id="disc-wrap">
-      <canvas id="disc-canvas" width="320" height="320"></canvas>
-      <div id="disc-overlay">
-        <span id="cycle-big">0000</span>
-        <span id="cycle-sub">COGNITIVE CYCLE</span>
-        <div id="iq-row">
-          <div class="iq-chip">AGO <b id="iq-ago">—</b></div>
-          <div class="iq-chip">DB <b id="iq-db">—</b></div>
+  <div class="main">
+    <!-- LEFT: Cognitive State -->
+    <div class="panel">
+      <div class="panel-title">COGNITIVE STATE</div>
+      <div class="beliefs-label">ACTIVE BELIEFS</div>
+      <div class="beliefs-num" id="s-beliefs">0</div>
+      <div class="orig-beliefs">ORIGINAL: <span id="s-orig">0</span> <span style="color:var(--dim);font-size:8px;">(NEX-generated)</span></div>
+      <div class="crosshair"><div class="ch"></div><div class="ch"></div></div>
+      <div class="bar-row"><div class="bar-label">CONF</div><div class="bar-track"><div class="bar-fill" id="b-conf" style="width:0%"></div></div><div class="bar-val" id="v-conf">0%</div></div>
+      <div class="bar-row"><div class="bar-label">ALIGN</div><div class="bar-track"><div class="bar-fill" id="b-align" style="width:0%;background:linear-gradient(90deg,var(--purple),var(--cyan));"></div></div><div class="bar-val" id="v-align">0%</div></div>
+      <div class="bar-row"><div class="bar-label">NETWORK</div><div class="bar-track"><div class="bar-fill" id="b-net" style="width:0%;background:linear-gradient(90deg,var(--cyan),var(--green));"></div></div><div class="bar-val" id="v-net">0%</div></div>
+      <div class="iq-display"><div class="iq-label">NEX INTELLIGENCE QUOTIENT</div><div class="iq-val"><span id="s-iq">95</span>% <span style="font-size:14px;color:var(--green);">ELITE</span></div></div>
+      <div class="counters">
+        <div class="counter-item">REPLIED <span id="s-replied">0</span></div>
+        <div class="counter-item">LEARNT <span id="s-learnt">0</span></div>
+        <div class="counter-item">POSTED <span id="s-posted">0</span></div>
+        <div class="counter-item">CHATTED <span id="s-chatted">0</span></div>
+      </div>
+      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;">
+        <div style="font-size:13px;color:var(--dim);letter-spacing:2px;margin-bottom:8px;">RESERVOIR ENGINE</div>
+        <div class="bar-row">
+          <div class="bar-label" style="font-size:13px;">SYS1</div>
+          <div class="bar-track"><div class="bar-fill" id="b-sys1" style="width:0%;background:linear-gradient(90deg,var(--green),var(--cyan));"></div></div>
+          <div class="bar-val" id="v-sys1">0%</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label" style="font-size:13px;">LLM</div>
+          <div class="bar-track"><div class="bar-fill" id="b-llmdep" style="width:0%;background:linear-gradient(90deg,var(--yellow),var(--red));"></div></div>
+          <div class="bar-val" id="v-llmdep">0%</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;">
+          <div style="font-size:13px;color:var(--dim);">EPISODES <span style="color:var(--cyan);" id="p-episodes">0</span></div>
+          <div style="font-size:13px;color:var(--dim);">THROW-NET <span style="color:var(--purple);" id="p-thrownet">0</span></div>
+        </div>
+        <div style="font-size:13px;color:var(--dim);margin-top:6px;">CONSOLIDATION <span style="color:var(--green);" id="p-consol">PENDING</span></div>
+      </div>
+    </div>
+
+    <!-- CENTER: Split — Notifications LEFT | Debug RIGHT -->
+    <div class="center-panel">
+      <div class="center-split">
+        <!-- Notifications / Live Stream -->
+        <div class="center-col">
+          <div class="center-col-title">
+            <span style="color:var(--purple);">⌐</span>
+            NOTIFICATIONS
+            <span class="blink">●</span>
+            <span style="color:var(--purple);margin-left:auto;">¬</span>
+          </div>
+          <div class="stream-box" id="stream-box"></div>
+        </div>
+
+        <!-- Debug Stream -->
+        <div class="center-col">
+          <div class="center-col-title debug-title">
+            <span style="color:var(--purple);">⌐</span>
+            DEBUG STREAM
+            <span class="blink" style="color:var(--debug-cyan);">●</span>
+            <span style="color:var(--purple);margin-left:auto;">¬</span>
+          </div>
+          <div class="stream-box" id="debug-box"></div>
         </div>
       </div>
     </div>
-    <div id="feed"></div>
-  </div>
 
-  <!-- RIGHT TOP: DRIVES -->
-  <div class="pn" style="grid-column:3;grid-row:2">
-    <div class="cb-tr"></div><div class="cb-bl"></div><div class="cb-br"></div>
-    <div class="pt"><div class="pt-dot"></div>COGNITIVE DRIVES</div>
-    <div id="drv-list"></div>
-  </div>
-
-  <!-- RIGHT BOTTOM: NETWORK -->
-  <div class="pn" style="grid-column:3;grid-row:3">
-    <div class="cb-tr"></div><div class="cb-bl"></div><div class="cb-br"></div>
-    <div class="pt"><div class="pt-dot"></div>NETWORK I/O</div>
-    <div class="sr"><span class="sl">↓ RECV</span><span class="sv c-g" id="n-rx">0.0 KB/s</span></div>
-    <div class="sr"><span class="sl">↑ SEND</span><span class="sv c-y" id="n-tx">0.0 KB/s</span></div>
-    <canvas id="net-cvs" height="60"></canvas>
-    <!-- hex decorations -->
-    <div style="display:flex;gap:6px;margin-top:8px;justify-content:center">
-      <canvas id="hx0" width="44" height="50"></canvas>
-      <canvas id="hx1" width="44" height="50"></canvas>
-      <canvas id="hx2" width="44" height="50"></canvas>
+    <!-- RIGHT: NEX Responses -->
+    <div class="panel" style="display:flex;flex-direction:column;overflow:hidden;">
+      <div class="panel-title">NEX RESPONSES</div>
+      <div id="responses-box" style="flex:1;overflow-y:auto;overflow-x:hidden;font-size:12px;line-height:1.6;"></div>
+      <div class="crash-alert" id="crash-alert">✗ SYSTEM ANOMALY DETECTED</div>
+      <!-- hidden elements kept for JS compatibility -->
+      <span id="g-pct" style="display:none">0%</span>
+      <span id="gpu-arc" style="display:none"></span>
+      <span id="g-w" style="display:none">0W</span>
+      <span id="b-power" style="display:none"></span>
+      <span id="g-gaps" style="display:none">0</span>
+      <span id="gaps-list" style="display:none"></span>
     </div>
   </div>
-
-  <!-- BOTTOM LOG -->
-  <div class="pn" id="pn-log" style="grid-column:1/3;grid-row:4">
-    <div class="cb-tr"></div><div class="cb-bl"></div><div class="cb-br"></div>
-    <div class="pt"><div class="pt-dot"></div>COGNITIVE LOOP — LIVE EVENTS</div>
-    <div id="log-inner"></div>
-  </div>
-
-  <!-- BOTTOM CHAT -->
-  <div class="pn" id="pn-chat" style="grid-column:3;grid-row:4">
-    <div class="cb-tr"></div><div class="cb-bl"></div><div class="cb-br"></div>
-    <div class="pt"><div class="pt-dot"></div>DIRECT CHANNEL</div>
-    <div id="chat-msgs"></div>
-    <form id="chat-form" onsubmit="sendChat(event)">
-      <input id="ci" type="text" placeholder="query nex..." autocomplete="off">
-      <button id="cs" type="submit">TX</button>
-    </form>
-  </div>
-
-  <!-- FOOTER -->
-  <div id="ftr">
-    <div id="ftr-left">NEX v1.0 · COGNITIVE ACCRETION ENGINE · MINIMAL LLM</div>
-    <div id="ftr-status"></div>
-    <button id="exit-btn" onclick="window.close()">[ EXIT ]</button>
-  </div>
-
-</div><!-- /root -->
+</div>
 
 <script>
-const API = 'http://localhost:7700';
-let prevLog = 0, netHist = [], bHist = [], discAngle = 0;
-let lastCycle = -1, cycleFlash = 0;
-
-// ── Clock ─────────────────────────────────────────────────────────────────
-function tick(){
-  const n=new Date();
-  const s=`${pad(n.getHours())}:${pad(n.getMinutes())}:${pad(n.getSeconds())}`;
-  document.getElementById('hdr-clock').textContent=s;
+// ── Clock & Uptime ────────────────────────────────────────────────────────────
+const startTime = Date.now();
+function updateClock() {
+  const now = new Date();
+  document.getElementById('s-time').textContent = now.toLocaleTimeString('en-ZA', {hour12: false});
+  document.getElementById('s-date').textContent = now.toLocaleDateString('en-ZA', {day:'2-digit',month:'short',year:'numeric'}) + ' SAST';
+  const up = Math.floor((Date.now() - startTime) / 1000);
+  const h = Math.floor(up/3600), m = Math.floor((up%3600)/60), s = up%60;
+  document.getElementById('s-uptime').textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
-const pad=v=>String(v).padStart(2,'0');
-setInterval(tick,1000); tick();
+setInterval(updateClock, 1000); updateClock();
 
-// ── Particle disc ─────────────────────────────────────────────────────────
-const dc = document.getElementById('disc-canvas');
-const dx = dc.getContext('2d');
-const CX=160,CY=160,N=220;
-const pts=[];
-for(let i=0;i<N;i++){
-  const ring=Math.floor(Math.random()*6);
-  const br=22+ring*19+Math.random()*10;
-  pts.push({
-    r:br, br, angle:Math.random()*Math.PI*2,
-    spd:(0.0003+Math.random()*0.0008)*(ring%2?1:-1),
-    sz:0.5+Math.random()*2,
-    alp:0.2+Math.random()*0.8,
-    ph:Math.random()*Math.PI*2,
-    ring
-  });
+// ── GPU Arc ───────────────────────────────────────────────────────────────────
+function setGpuArc(pct) {
+  const offset = 220 - (pct / 100) * 220;
+  document.getElementById('gpu-arc').style.strokeDashoffset = offset;
+  document.getElementById('g-pct').textContent = pct + '%';
+  const col = pct > 85 ? 'var(--red)' : pct > 60 ? 'var(--yellow)' : 'var(--cyan)';
+  document.getElementById('gpu-arc').style.stroke = col;
+  document.getElementById('g-pct').style.textShadow = `0 0 8px ${col}`;
 }
 
-function drawDisc(cycle){
-  dx.clearRect(0,0,320,320);
-  discAngle+=0.0004;
-  const t=Date.now()/1000;
-
-  // Outer glow rings
-  [140,125,110].forEach((r,i)=>{
-    dx.beginPath(); dx.arc(CX,CY,r,0,Math.PI*2);
-    dx.strokeStyle=`rgba(255,255,255,${0.06+i*0.04})`;
-    dx.lineWidth=i===0?2:1; dx.stroke();
-  });
-
-  // Bright outer ring with tick marks
-  dx.beginPath(); dx.arc(CX,CY,138,0,Math.PI*2);
-  dx.strokeStyle='rgba(200,240,255,0.7)'; dx.lineWidth=1.5; dx.stroke();
-
-  // Tick marks rotating with disc
-  for(let a=0;a<360;a+=2){
-    const rad=a*Math.PI/180+discAngle*4;
-    const isMaj=a%10===0; const isGrand=a%90===0;
-    const inner=isGrand?124:isMaj?130:134;
-    dx.beginPath();
-    dx.moveTo(CX+Math.cos(rad)*inner,CY+Math.sin(rad)*inner);
-    dx.lineTo(CX+Math.cos(rad)*138,  CY+Math.sin(rad)*138);
-    dx.strokeStyle=isGrand?'rgba(255,255,255,0.9)':isMaj?'rgba(0,200,255,0.6)':'rgba(0,150,200,0.2)';
-    dx.lineWidth=isGrand?2:isMaj?1:0.5; dx.stroke();
-  }
-
-  // Inner grooves (LP rings)
-  [20,39,58,77,96,115].forEach(r=>{
-    dx.beginPath(); dx.arc(CX,CY,r,0,Math.PI*2);
-    dx.strokeStyle='rgba(0,120,180,0.1)'; dx.lineWidth=0.5; dx.stroke();
-  });
-
-  // Cross-hairs
-  ['rgba(0,150,200,0.08)','rgba(0,150,200,0.08)'].forEach((_,i)=>{
-    dx.beginPath();
-    if(i===0){dx.moveTo(CX-138,CY);dx.lineTo(CX+138,CY);}
-    else{dx.moveTo(CX,CY-138);dx.lineTo(CX,CY+138);}
-    dx.strokeStyle='rgba(0,150,200,0.08)'; dx.lineWidth=0.5; dx.stroke();
-  });
-
-  // Diagonal cross-hairs rotating with disc
-  for(let i=0;i<4;i++){
-    const a=discAngle*3+i*Math.PI/4;
-    dx.beginPath();
-    dx.moveTo(CX+Math.cos(a)*16,CY+Math.sin(a)*16);
-    dx.lineTo(CX+Math.cos(a)*135,CY+Math.sin(a)*135);
-    const g=dx.createLinearGradient(CX,CY,CX+Math.cos(a)*135,CY+Math.sin(a)*135);
-    g.addColorStop(0,'rgba(0,200,255,0)');
-    g.addColorStop(.5,'rgba(0,200,255,0.1)');
-    g.addColorStop(1,'rgba(0,200,255,0)');
-    dx.strokeStyle=g; dx.lineWidth=0.5; dx.stroke();
-  }
-
-  // Particles
-  for(const p of pts){
-    p.angle+=p.spd;
-    p.r=p.br+Math.sin(t*0.3+p.ph)*4;
-    const a=p.angle+discAngle;
-    const x=CX+Math.cos(a)*p.r;
-    const y=CY+Math.sin(a)*p.r;
-    const fa=p.alp*(0.6+0.4*Math.sin(t*1.8+p.ph));
-    const brightness=0.4+p.r/140*0.6;
-    dx.beginPath(); dx.arc(x,y,p.sz,0,Math.PI*2);
-    dx.fillStyle=`rgba(${Math.floor(brightness*80)},${Math.floor(brightness*200)},255,${fa})`;
-    if(p.sz>1.5){dx.shadowBlur=8;dx.shadowColor='rgba(0,200,255,.5)';}
-    dx.fill(); dx.shadowBlur=0;
-  }
-
-  // Cycle flash
-  if(cycle!==lastCycle){lastCycle=cycle;cycleFlash=50;}
-  if(cycleFlash>0){
-    const a=cycleFlash/50;
-    dx.beginPath(); dx.arc(CX,CY,138,0,Math.PI*2);
-    dx.strokeStyle=`rgba(255,255,255,${a*0.9})`;
-    dx.lineWidth=3; dx.shadowBlur=30; dx.shadowColor='#fff';
-    dx.stroke(); dx.shadowBlur=0; cycleFlash--;
-  }
-
-  // Center dark hole
-  const cg=dx.createRadialGradient(CX,CY,0,CX,CY,22);
-  cg.addColorStop(0,'rgba(0,5,12,1)'); cg.addColorStop(1,'rgba(0,5,12,0)');
-  dx.beginPath(); dx.arc(CX,CY,22,0,Math.PI*2);
-  dx.fillStyle=cg; dx.fill();
-
-  // Center pulse dot
-  const pr=3+Math.sin(t*2)*1.5;
-  dx.beginPath(); dx.arc(CX,CY,pr,0,Math.PI*2);
-  dx.fillStyle='rgba(255,255,255,0.95)';
-  dx.shadowBlur=20; dx.shadowColor='#fff';
-  dx.fill(); dx.shadowBlur=0;
+function setBar(id, vid, pct) {
+  document.getElementById(id).style.width = pct + '%';
+  document.getElementById(vid).textContent = pct + '%';
 }
 
-// ── Mini ring gauges ──────────────────────────────────────────────────────
-function drawRing(id,pct,color){
-  const c=document.getElementById(id);
-  if(!c)return;
-  const x=c.getContext('2d');
-  const W=44,H=44,cx=22,cy=22,r=18;
-  x.clearRect(0,0,W,H);
-  // Track
-  x.beginPath(); x.arc(cx,cy,r,-Math.PI/2,Math.PI*2*1-Math.PI/2);
-  x.strokeStyle='rgba(0,60,100,.5)'; x.lineWidth=3; x.stroke();
-  // Fill
-  if(pct>0){
-    x.beginPath(); x.arc(cx,cy,r,-Math.PI/2,Math.PI*2*pct-Math.PI/2);
-    x.strokeStyle=color; x.lineWidth=3;
-    x.shadowBlur=8; x.shadowColor=color;
-    x.stroke(); x.shadowBlur=0;
-  }
-  // Text
-  x.fillStyle=color; x.font='bold 9px Orbitron';
-  x.textAlign='center'; x.textBaseline='middle';
-  x.fillText(Math.round(pct*100)+'%',cx,cy);
+// ── Notification Stream ───────────────────────────────────────────────────────
+const streamBox = document.getElementById('stream-box');
+const TYPE_COLORS = {
+  BRAIN:'var(--cyan)', BELIEF:'var(--yellow)', REPLIED:'var(--purple)',
+  POSTED:'var(--green)', CHATTED:'var(--cyan)', LEARNT:'var(--yellow)',
+  ERROR:'var(--red)', CRASH:'var(--red)', SOUL:'var(--cyan)',
+  META:'#223344', INFO:'#445566', PHASE:'#334455'
+};
+
+function addStream(ts, type, text) {
+  const line = document.createElement('div');
+  line.className = 'stream-line';
+  const col = TYPE_COLORS[type] || '#445566';
+  line.innerHTML = `<span class="stream-ts">${ts}</span><span class="stream-type" style="color:${col}">[${type}]</span><span class="stream-text">${text}</span>`;
+  streamBox.appendChild(line);
+  while (streamBox.children.length > 35) streamBox.removeChild(streamBox.firstChild);
+  streamBox.scrollTop = streamBox.scrollHeight;
 }
 
-// ── Hex gauge ─────────────────────────────────────────────────────────────
-function drawHex(id,val,color,label){
-  const c=document.getElementById(id);
-  if(!c)return;
-  const x=c.getContext('2d');
-  x.clearRect(0,0,44,50);
-  // Hex path
-  const cx=22,cy=25,r=19;
-  x.beginPath();
-  for(let i=0;i<6;i++){
-    const a=i*Math.PI/3-Math.PI/6;
-    i===0?x.moveTo(cx+r*Math.cos(a),cy+r*Math.sin(a)):x.lineTo(cx+r*Math.cos(a),cy+r*Math.sin(a));
-  }
-  x.closePath();
-  x.strokeStyle=`${color}66`; x.lineWidth=1.5; x.stroke();
-  // Inner fill proportional
-  const fr=r*val;
-  x.beginPath();
-  for(let i=0;i<6;i++){
-    const a=i*Math.PI/3-Math.PI/6;
-    i===0?x.moveTo(cx+fr*Math.cos(a),cy+fr*Math.sin(a)):x.lineTo(cx+fr*Math.cos(a),cy+fr*Math.sin(a));
-  }
-  x.closePath();
-  x.fillStyle=`${color}22`; x.fill();
-  x.strokeStyle=color; x.lineWidth=1;
-  x.shadowBlur=6; x.shadowColor=color; x.stroke(); x.shadowBlur=0;
-  // Label
-  x.fillStyle=color; x.font='bold 8px Orbitron';
-  x.textAlign='center'; x.textBaseline='middle';
-  x.fillText(label,cx,cy);
+// ── Debug Stream ──────────────────────────────────────────────────────────────
+const debugBox = document.getElementById('debug-box');
+
+const DEBUG_COLORS = {
+  'BRAIN':   {cls:'debug-ok',   prefix:'✓'},
+  'AUTOCHECK':{cls:'debug-ok',  prefix:'✓'},
+  'LLAMA':   {cls:'debug-ok',   prefix:'✓'},
+  'TELEGRAM':{cls:'debug-ok',   prefix:'✓'},
+  'WATCHDOG':{cls:'debug-ok',   prefix:'✓'},
+  'SCHEDULE':{cls:'debug-ok',   prefix:'✓'},
+  'API':     {cls:'debug-ok',   prefix:'✓'},
+  'PORT':    {cls:'debug-port', prefix:'⬡'},
+  'CRASH':   {cls:'debug-crash',prefix:'✗'},
+  'WARN':    {cls:'debug-warn', prefix:'!'},
+  'SYS':     {cls:'',           prefix:'·'},
+};
+
+function addDebug(ts, src, msg, status) {
+  const line = document.createElement('div');
+  line.className = 'debug-line';
+  const info = DEBUG_COLORS[src] || {cls:'', prefix:'·'};
+
+  // Determine if dead/alive for process lines
+  let cls = info.cls;
+  let pfx = info.pfx || info.prefix || '·';
+  if (status === 'dead') { cls = 'debug-dead'; pfx = '✗'; }
+  else if (status === 'alive') { cls = 'debug-ok'; pfx = '✓'; }
+  else if (status === 'warn') { cls = 'debug-warn'; pfx = '!'; }
+  else if (status === 'crash') { cls = 'debug-crash'; pfx = '✗'; }
+
+  line.innerHTML = `<span class="debug-ts">${ts}</span><span class="debug-src ${cls}">[${src.padEnd(8).slice(0,8)}]</span><span class="debug-msg ${cls}">${pfx} ${msg}</span>`;
+  debugBox.appendChild(line);
+  while (debugBox.children.length > 35) debugBox.removeChild(debugBox.firstChild);
+  debugBox.scrollTop = debugBox.scrollHeight;
 }
 
-// ── Net graph ─────────────────────────────────────────────────────────────
-function drawNet(hist){
-  const c=document.getElementById('net-cvs');
-  const x=c.getContext('2d');
-  const W=c.offsetWidth||220,H=60;
-  c.width=W;
-  x.clearRect(0,0,W,H);
-  if(!hist||hist.length<2)return;
-  const mx=Math.max(...hist.map(h=>Math.max(h.rx,h.tx)),1);
-  // grid
-  for(let i=1;i<4;i++){x.beginPath();x.moveTo(0,H*i/4);x.lineTo(W,H*i/4);
-    x.strokeStyle='rgba(0,60,100,.2)';x.lineWidth=.5;x.stroke();}
-  function line(data,col){
-    x.beginPath();
-    data.forEach((v,i)=>{const px=(i/(data.length-1))*W,py=H-(v/mx)*H*.85;
-      i===0?x.moveTo(px,py):x.lineTo(px,py);});
-    x.strokeStyle=col;x.lineWidth=1.5;x.shadowBlur=6;x.shadowColor=col;x.stroke();x.shadowBlur=0;
-  }
-  line(hist.map(h=>h.rx),'#00ff88');
-  line(hist.map(h=>h.tx),'#ffcc00');
-}
+// Live only — no demo data
 
-// ── Belief growth ─────────────────────────────────────────────────────────
-function drawBgraph(hist){
-  const c=document.getElementById('bgraph');
-  const x=c.getContext('2d');
-  const W=c.offsetWidth||200,H=36;
-  c.width=W; x.clearRect(0,0,W,H);
-  if(!hist||hist.length<2)return;
-  const vals=hist.map(h=>h.n);
-  const mn=Math.min(...vals),mx=Math.max(...vals,mn+1);
-  x.beginPath();
-  vals.forEach((v,i)=>{const px=(i/(vals.length-1))*W,py=H-((v-mn)/(mx-mn))*H*.8-2;
-    i===0?x.moveTo(px,py):x.lineTo(px,py);});
-  x.lineTo(W,H);x.lineTo(0,H);
-  const g=x.createLinearGradient(0,0,0,H);
-  g.addColorStop(0,'rgba(0,200,255,0.25)');g.addColorStop(1,'rgba(0,200,255,0)');
-  x.fillStyle=g;x.fill();
-  x.beginPath();
-  vals.forEach((v,i)=>{const px=(i/(vals.length-1))*W,py=H-((v-mn)/(mx-mn))*H*.8-2;
-    i===0?x.moveTo(px,py):x.lineTo(px,py);});
-  x.strokeStyle='#00e5ff';x.lineWidth=1.5;x.shadowBlur=6;x.shadowColor='#00e5ff';x.stroke();x.shadowBlur=0;
-}
+function ts() { return new Date().toLocaleTimeString('en-ZA', {hour12:false}); }
 
-// ── Opinions ──────────────────────────────────────────────────────────────
-function renderOps(ops){
-  const el=document.getElementById('op-list');
-  el.innerHTML=ops.slice(0,5).map(o=>{
-    const s=o.stance,sign=s>=0?'+':'',cls=s>0.2?'#00ff88':s<-0.2?'#ff3355':'#80c8e0';
-    const pct=Math.abs(s)*50;
-    return`<div class="ob">
-      <div class="ob-hdr"><span class="ob-topic">${o.topic.slice(0,18)}</span>
-      <span class="ob-score" style="color:${cls}">${sign}${s.toFixed(2)}</span></div>
-      <div class="ob-track"><div class="ob-mid"></div>
-      <div class="ob-fill ${s>=0?'pos':'neg'}" style="width:${pct}%;${s>=0?'right:50%':'left:50%'};background:${cls}44;border-right:2px solid ${cls}"></div></div>
-    </div>`;
-  }).join('');
-}
+// Live data only — no seeded demo lines
 
-// ── Drives ────────────────────────────────────────────────────────────────
-function renderDrvs(drvs){
-  const el=document.getElementById('drv-list');
-  el.innerHTML=drvs.slice(0,6).map(d=>{
-    const pct=d.urgency*100,cls=d.urgency>=0.7?'hi':d.urgency>=0.4?'md':'';
-    const col=d.urgency>=0.7?'#00ff88':d.urgency>=0.4?'#ffcc00':'#00e5ff';
-    return`<div class="db">
-      <div class="db-hdr"><span class="db-name">${d.label}</span>
-      <span class="db-val" style="color:${col}">${d.urgency.toFixed(3)}</span></div>
-      <div class="db-track"><div class="db-fill ${cls}" style="width:${pct}%"></div></div>
-    </div>`;
-  }).join('');
-}
+// Live only — no demo ticks
 
-// ── Log ───────────────────────────────────────────────────────────────────
-function renderLog(lines){
-  const el=document.getElementById('log-inner');
-  const isNew=lines.length>prevLog; prevLog=lines.length;
-  el.innerHTML=lines.slice(-14).map((l,i,a)=>
-    `<div class="ll ${isNew&&i===a.length-1?'new':''}"><span class="ll-ts">${l.t}</span>${l.msg}</div>`
-  ).join('');
-  el.scrollTop=el.scrollHeight;
-}
-
-// ── Feed ──────────────────────────────────────────────────────────────────
-function renderFeed(beliefs){
-  const el=document.getElementById('feed');
-  el.innerHTML=beliefs.slice(0,3).map(b=>
-    `<div class="feed-item"><span class="feed-conf">[${b.confidence}]</span>${b.content}</div>`
-  ).join('');
-}
-
-// ── Pixel grid ────────────────────────────────────────────────────────────
-function makePixelGrid(){
-  // decorative only — based on belief count pulsing
-}
-
-// ── Main fetch ────────────────────────────────────────────────────────────
-async function poll(){
-  try{
-    const r=await fetch(`${API}/data`);
-    const d=await r.json();
-
-    // Header
-    document.getElementById('h-b').textContent=d.beliefs.total;
-    document.getElementById('h-c').textContent=String(d.cycle).padStart(4,'0');
-    document.getElementById('h-o').textContent=d.beliefs.opinions;
-
-    // LLM
-    const dot=document.getElementById('ldot'),lab=document.getElementById('llab');
-    dot.className='ldot '+(d.llm_online?'on':'off');
-    lab.textContent=d.llm_online?'QWEN ●':'QWEN ○';
-
-    // Stats
-    document.getElementById('s-tot').textContent=d.beliefs.total;
-    document.getElementById('s-new').textContent=d.beliefs.new_24h;
-    document.getElementById('s-op').textContent=d.beliefs.opinions;
-    document.getElementById('s-gap').textContent=d.beliefs.gaps;
-    document.getElementById('s-con').textContent=d.beliefs.contradictions;
-    document.getElementById('s-pst').textContent=d.beliefs.posts;
-
-    // Mini rings
-    const bt=d.beliefs.total||1;
-    drawRing('rc0',Math.min(d.beliefs.opinions/Math.max(bt,1),1),'#00e5ff');
-    drawRing('rc1',Math.min(d.beliefs.gaps/Math.max(bt*.3,1),1),'#00ff88');
-    drawRing('rc2',Math.min(d.beliefs.posts/Math.max(bt*.1,1),1),'#ffcc00');
-    drawRing('rc3',Math.max(0,1-d.beliefs.opinions/Math.max(bt*.5,1)),'#ff3355');
-
-    // Hex gauges
-    const drvs=d.drives||[];
-    drawHex('hx0',drvs[0]?drvs[0].urgency:0,'#00e5ff',drvs[0]?drvs[0].label.slice(0,3).toUpperCase():'D1');
-    drawHex('hx1',drvs[1]?drvs[1].urgency:0,'#00ff88',drvs[1]?drvs[1].label.slice(0,3).toUpperCase():'D2');
-    drawHex('hx2',drvs[2]?drvs[2].urgency:0,'#ffcc00',drvs[2]?drvs[2].label.slice(0,3).toUpperCase():'D3');
-
-    // Disc center
-    document.getElementById('cycle-big').textContent=String(d.cycle).padStart(4,'0');
-    const ago=d.last_run_ago;
-    document.getElementById('iq-ago').textContent=ago?`${ago}s`:'—';
-    document.getElementById('iq-db').textContent=d.beliefs.total||'—';
-
-    // Net
-    netHist=d.net.history||[];
-    document.getElementById('n-rx').textContent=`${d.net.rx.toFixed(1)} KB/s`;
-    document.getElementById('n-tx').textContent=`${d.net.tx.toFixed(1)} KB/s`;
-    drawNet(netHist);
-
-    // Belief graph
-    bHist=d.belief_history||[];
-    drawBgraph(bHist);
-
-    // Panels
-    renderOps(d.opinions||[]);
-    renderDrvs(d.drives||[]);
-    renderLog(d.log||[]);
-    renderFeed(d.recent_beliefs||[]);
-
-    // Footer
-    document.getElementById('ftr-status').textContent=
-      ago?`LAST RUN ${ago}s AGO`:'LOOP INACTIVE';
-
-    // Disc
-    drawDisc(d.cycle);
-
-  }catch(e){
-    drawDisc(0);
+// ── Live API fetch ────────────────────────────────────────────────────────────
+async function fetchStats() {
+  try {
+    const r = await fetch('http://localhost:7700/data', {signal: AbortSignal.timeout(2000)});
+    const d = await r.json();
+    if (d.beliefs.total !== undefined) document.getElementById('s-beliefs').textContent = Number(d.beliefs.total).toLocaleString();
+    if (d.replied !== undefined) document.getElementById('s-replied').textContent = d.replied;
+    if (d.learnt  !== undefined) document.getElementById('s-learnt').textContent = d.learnt;
+    if (d.posted  !== undefined) document.getElementById('s-posted').textContent = d.posted;
+    if (d.chatted !== undefined) document.getElementById('s-chatted').textContent = d.chatted;
+    if (d.conf    !== undefined) setBar('b-conf',  'v-conf',  d.conf);
+    if (d.align   !== undefined) setBar('b-align', 'v-align', d.align);
+    if (d.network !== undefined) setBar('b-net',   'v-net',   d.network);
+    if (d.iq      !== undefined) document.getElementById('s-iq').textContent = d.iq;
+    if (d.original!== undefined) document.getElementById('s-orig').textContent = d.original;
+    // NBRE metrics
+    if (d.nbre) {
+      const n = d.nbre;
+      if (n.system1_rate !== null && n.system1_rate !== undefined) {
+        document.getElementById('s-sys1').textContent = n.system1_rate + '%';
+        document.getElementById('b-sys1').style.width = Math.min(n.system1_rate, 100) + '%';
+        document.getElementById('v-sys1').textContent = n.system1_rate + '%';
+      }
+      if (n.llm_dependency_rate !== null && n.llm_dependency_rate !== undefined) {
+        document.getElementById('s-llmdep').textContent = n.llm_dependency_rate + '%';
+        document.getElementById('b-llmdep').style.width = Math.min(n.llm_dependency_rate, 100) + '%';
+        document.getElementById('v-llmdep').textContent = n.llm_dependency_rate + '%';
+      }
+      if (n.episodic_events !== undefined) {
+        document.getElementById('s-episodes').textContent = n.episodic_events;
+        document.getElementById('p-episodes').textContent = n.episodic_events;
+      }
+      if (n.throw_net_sessions !== undefined) {
+        document.getElementById('s-thrownet').textContent = n.throw_net_sessions;
+        document.getElementById('p-thrownet').textContent = n.throw_net_sessions;
+      }
+      if (n.consolidation_last) {
+        document.getElementById('p-consol').textContent = n.consolidation_last.slice(11,16) + ' LAST';
+        document.getElementById('p-consol').style.color = 'var(--green)';
+      } else {
+        document.getElementById('p-consol').textContent = 'TONIGHT';
+      }
+    }
+    if (d.gpu_pct !== undefined) {
+      setGpuArc(d.gpu_pct);
+      document.getElementById('b-power').style.width = Math.min(d.gpu_w || 0, 100) + '%';
+      document.getElementById('g-w').textContent = (d.gpu_w || 0) + 'W';
+    }
+    // Push live log lines to notification stream
+    if (d.log && Array.isArray(d.log)) {
+      d.log.slice(-3).forEach(entry => {
+        const msg = entry.msg || '';
+        let type = 'INFO';
+        if (msg.includes('REPLIED') || msg.includes('replied')) type = 'REPLIED';
+        else if (msg.includes('inferred') || msg.includes('belief')) type = 'BELIEF';
+        else if (msg.includes('posted') || msg.includes('POSTED')) type = 'POSTED';
+        else if (msg.includes('learnt') || msg.includes('seeder')) type = 'LEARNT';
+        else if (msg.includes('KERNEL') || msg.includes('soul')) type = 'SOUL';
+        else if (msg.includes('ERROR') || msg.includes('error')) type = 'ERROR';
+        else if (msg.includes('chatted') || msg.includes('CHAT')) type = 'CHATTED';
+        addStream(entry.t || ts(), type, msg);
+      });
+    }
+  } catch(e) {
+    // API unavailable — waiting for live data
+    console.warn('[HUD] API fetch failed:', e);
   }
 }
 
-// ── Chat ──────────────────────────────────────────────────────────────────
-async function sendChat(e){
-  e.preventDefault();
-  const inp=document.getElementById('ci'),q=inp.value.trim();
-  if(!q)return; inp.value='';
-  const msgs=document.getElementById('chat-msgs');
-  msgs.innerHTML+=`<div class="cy">${q}</div>`;
-  msgs.scrollTop=msgs.scrollHeight;
-  try{
-    const r=await fetch(`${API}/chat`,{method:'POST',
-      headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})});
-    const d=await r.json();
-    d.response.split('\n').forEach(l=>{
-      if(l.trim())msgs.innerHTML+=`<div class="cn">${l}</div>`;
+// ── Debug stream from /tmp/nex_debug_stream.log via server ───────────────────
+async function fetchDebug() {
+  try {
+    const r = await fetch('http://localhost:7700/debug', {signal: AbortSignal.timeout(1500)});
+    const d = await r.json();
+    if (d.lines && Array.isArray(d.lines)) {
+      d.lines.forEach(l => {
+        addDebug(l.ts || ts(), l.src || 'SYS', l.msg || '', l.status || '');
+        if (l.src === 'POSTED' || l.src === 'REPLIED' || l.src === 'CHATTED') {
+          // Extract text after pipe if present
+          const txt = (l.msg || '').includes('|') ? (l.msg || '').split('|').slice(1).join('|').trim() : (l.msg || '');
+          if (txt.length > 5) addResponse(l.ts || ts(), l.src, txt);
+        }
+      });
+    }
+  } catch(e) {
+    // Debug stream unavailable
+  }
+}
+
+// ── Init & intervals ─────────────────────────────────────────────────────────
+setGpuArc(3);
+setBar('b-conf', 'v-conf', 72);
+setBar('b-align', 'v-align', 23);
+setBar('b-net', 'v-net', 74);
+
+setInterval(fetchStats, 2500);
+setInterval(fetchDebug, 3000);
+
+// ── NEX Response Panel — polls /replies for real sent messages ───────────────
+let _lastReplyTs = '';
+async function fetchReplies() {
+  try {
+    const r = await fetch('http://localhost:7700/replies', {signal: AbortSignal.timeout(2000)});
+    const d = await r.json();
+    if (!d.replies) return;
+    d.replies.forEach(entry => {
+      if (entry.ts === _lastReplyTs) return;
+      addResponse(entry.ts, entry.type || 'REPLIED', entry.text);
     });
-  }catch{
-    msgs.innerHTML+=`<div class="cn">API offline</div>`;
-  }
-  msgs.scrollTop=msgs.scrollHeight;
+    if (d.replies.length) _lastReplyTs = d.replies[d.replies.length-1].ts;
+  } catch(e) {}
+}
+setInterval(fetchReplies, 3000);
+fetchReplies();
+
+// ── NEX Response Panel ────────────────────────────────────────────────────────
+const responsesBox = document.getElementById('responses-box');
+const RESPONSE_TYPES = new Set(['REPLIED','CHATTED','POSTED']);
+const RESPONSE_COLORS = {
+  REPLIED: 'var(--purple)',
+  CHATTED: 'var(--cyan)',
+  POSTED:  'var(--green)',
+};
+
+function addResponse(time, type, text) {
+  if (!RESPONSE_TYPES.has(type)) return;
+  if (!text || text.length < 8) return;
+  const entry = document.createElement('div');
+  entry.style.cssText = 'padding:5px 4px;border-bottom:1px solid #ffffff0a;animation:fadein 0.3s ease;';
+  const col = RESPONSE_COLORS[type] || 'var(--cyan)';
+  entry.innerHTML = `<div style="color:${col};font-size:10px;margin-bottom:2px;letter-spacing:1px;">[${type}] <span style="color:var(--dim)">${time}</span></div><div style="color:#ddf4ee;white-space:normal;word-break:break-word;font-size:12px;line-height:1.55;">${text}</div>`;
+  responsesBox.appendChild(entry);
+  while (responsesBox.children.length > 30) responsesBox.removeChild(responsesBox.firstChild);
+  responsesBox.scrollTop = responsesBox.scrollHeight;
 }
 
-// ── Animation loop ────────────────────────────────────────────────────────
-function frame(){drawDisc(lastCycle);requestAnimationFrame(frame);}
+// Patch addStream to mirror Nex's own output to the responses panel
+const _origAddStream = addStream;
+window.addStream = function(t, type, text) {
+  _origAddStream(t, type, text);
+  addResponse(t, type, text);
+};
 
-poll();
-setInterval(poll,2000);
-frame();
+fetchStats();
 </script>
 </body>
 </html>

@@ -1,4 +1,14 @@
 #!/bin/bash
+
+# AGI Bridge 3 cycle counter
+SOUL_LOOP_CYCLE_FILE=~/.config/nex/soul_loop_cycle.txt
+if [ -f "$SOUL_LOOP_CYCLE_FILE" ]; then
+    SOUL_LOOP_CYCLE=$(cat "$SOUL_LOOP_CYCLE_FILE")
+else
+    SOUL_LOOP_CYCLE=0
+fi
+SOUL_LOOP_CYCLE=$((SOUL_LOOP_CYCLE + 1))
+echo $SOUL_LOOP_CYCLE > "$SOUL_LOOP_CYCLE_FILE"
 # nex_launch.sh — hardened launch with clean exit trap
 # license check removed — file no longer exists
 
@@ -12,7 +22,7 @@ export AMD_SERIALIZE_KERNEL=3
 export AMD_SERIALIZE_COPY=3
 
 BUILD="/media/rr/NEX/llama.cpp/build/bin"
-MODEL="/home/rr/Desktop/nex/models/nex_v2.gguf"
+MODEL="/home/rr/Desktop/nex/models/nex_v3.gguf"
 NEX_DIR="/home/rr/Desktop/nex"
 
 # ── Clean any existing processes first ───────────────────────────────────────
@@ -63,7 +73,7 @@ done
 echo "[NEX] Starting NEX brain..."
 cd "$NEX_DIR"
 source "$NEX_DIR/venv/bin/activate"
-python3 -u run.py --no-server > /tmp/nex_brain.log 2>&1 &
+python3 -u run.py --no-server >> /tmp/nex_brain.log 2>&1 &
 NEX_PID=$!
 disown
 sleep 4
@@ -78,20 +88,13 @@ fi
 # ── Open terminals ────────────────────────────────────────────────────────────
 # Stagger terminal launches to prevent display server crash
 sleep 1
-gnome-terminal --title="NEX BRAIN" -- bash -c "
-    cd $NEX_DIR && source venv/bin/activate
-    tmux kill-session -t nex 2>/dev/null
-    tmux new-session -d -s nex
-    tmux split-window -h -t nex
-    tmux send-keys -t nex:0.0 'tail -f /tmp/nex_brain.log' Enter
-    tmux send-keys -t nex:0.1 'cd $NEX_DIR && source venv/bin/activate && sleep 5 && python3 nex_debug.py' Enter
-    tmux attach -t nex
-    exec bash" &
-sleep 3
-gnome-terminal --title="NEX AUTO CHECK" -- bash -c "
-    cd $NEX_DIR && source venv/bin/activate
-    sleep 7 && python3 auto_check.py
-    exec bash" &
+# [HUD] gnome-terminal --title="NEX BRAIN" -- bash /home/rr/Desktop/nex/open_brain_terminal.sh &
+sleep 2
+# [HUD] gnome-terminal --title="NEX AUTO CHECK" -- bash -c "cd /home/rr/Desktop/nex && source venv/bin/activate && sleep 7 && python3 auto_check.py; exec bash" &
+# Start HUD server (browser interface replaces terminals)
+nohup python3 /home/rr/Desktop/nex/nex_hud_server.py > /tmp/nex_hud.log 2>&1 &
+sleep 2
+brave-browser http://localhost:7700 > /dev/null 2>&1 &
 sleep 2
 
 nohup python3 $NEX_DIR/nex_api.py > /tmp/nex_api.log 2>&1 &
@@ -125,8 +128,49 @@ wm = WorldModel()
 wm.update('NEX', 'type', 'Dynamic Intelligence Organism', 1.0, 'seed')
 wm.update('NEX', 'eval_score', '92/100 ELITE', 0.95, 'seed')
 wm.update('llama-server', 'port', '8080', 1.0, 'seed')
-wm.update('llama-server', 'model', 'nex_v2.gguf', 1.0, 'seed')
+wm.update('llama-server', 'model', 'nex_v3.gguf', 1.0, 'seed')
 " >> /tmp/nex_world_init.log 2>&1 &
 echo "[NEX] D1-D8 modules initialising in background."
+# ── Telegram owner config ────────────────────────────────────────────────────
+ mkdir -p ~/.config/nex
+ echo '{"owner_id": 5217790760}' > ~/.config/nex/telegram_config.json
+
+# ── Sync legacy modules ──────────────────────────────────────────────────────
+ echo "[NEX] Syncing legacy modules..."
+# [FIXED] safe legacy copy — never overwrites existing files
+ for _lf in $NEX_DIR/legacy/*.py; do [ ! -f "$NEX_DIR/$(basename $_lf)" ] && cp "$_lf" "$NEX_DIR/"; done
+ export PYTHONPATH=$NEX_DIR:$PYTHONPATH
+
+# ── Telegram bridge ──────────────────────────────────────────────────────────
+ echo "[NEX] Starting Telegram bridge..."
+nohup python3 $NEX_DIR/nex_telegram_clean.py >> /tmp/nex_telegram.log 2>&1 &
+echo "[NEX] Telegram: PID $!"
+
+# ── YouTube learner ──────────────────────────────────────────────────────────
+ echo "[NEX] Starting YouTube learner..."
+ nohup python3 -c "import sys; sys.path.insert(0, '$NEX_DIR'); from nex_youtube import learn_from_youtube; learn_from_youtube()" > /tmp/nex_youtube.log 2>&1 &
+ echo "[NEX] YouTube: PID $!"
+
 echo "[NEX] All systems live."
 echo "[NEX] To stop cleanly: bash $NEX_DIR/nex_exit.sh"
+
+# ── NEX AGI BRIDGE 3 — PATCHED 2026-04-06 ──────────────────────────────
+# Layer 1: Pressure test — runs every 50 soul loop cycles
+if (( SOUL_LOOP_CYCLE % 50 == 0 )); then
+    python3 ~/Desktop/nex/nex_pressure_test.py --top 5 &
+fi
+
+# Layer 2: Belief prediction — runs every absorb cycle
+python3 ~/Desktop/nex/nex_belief_prediction.py --hours 24 &
+
+# Layer 2b: Weekly counterfactual analysis
+DOW=$(date +%u)
+if [ "$DOW" = "1" ]; then
+    python3 ~/Desktop/nex/nex_counterfactual.py --top 10 --report &
+fi
+
+# Layer 4: Closed loop — every 100 soul loop cycles
+if (( SOUL_LOOP_CYCLE % 100 == 0 )); then
+    python3 ~/Desktop/nex/nex_closed_loop.py &
+fi
+# ── END AGI BRIDGE 3 ────────────────────────────────────────────────

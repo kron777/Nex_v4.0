@@ -1,7 +1,6 @@
 #!/bin/bash
-# nex_watchdog.sh — NEX v4.0 watchdog (systemd-aware)
+# nex_watchdog.sh — NEX v4.0 watchdog (simplified)
 NEX_DIR="/home/rr/Desktop/nex"
-
 while true; do
     # Watch llama-server via systemd
     if ! curl -s http://localhost:8080/health > /dev/null 2>&1; then
@@ -9,26 +8,28 @@ while true; do
         sudo systemctl restart nex-llama
         sleep 15
     fi
-
-    # Watch nex_api
-    if ! curl -s http://localhost:7823/api/version > /dev/null 2>&1; then
-        echo "[watchdog] nex_api down, restarting..."
-        pkill -f "nex_api.py" 2>/dev/null
-        sleep 1
+    # Watch run.py (the real brain)
+    if ! pgrep -f "run.py" > /dev/null 2>&1; then
+        echo "[watchdog] run.py DEAD - restarting brain..."
         cd $NEX_DIR && source venv/bin/activate
-        nohup python3 $NEX_DIR/nex_api.py > /tmp/nex_api.log 2>&1 &
+        nohup python3 -u $NEX_DIR/run.py --no-server >> /tmp/nex_brain.log 2>&1 &
+        sleep 15
+    fi
+        # Watch nex_telegram_clean (raw HTTP — no PTB conflicts)
+    if ! pgrep -f "nex_telegram_clean.py" > /dev/null 2>&1; then
+        echo "[watchdog] nex_telegram_clean DEAD - restarting..."
+        cd $NEX_DIR && source venv/bin/activate
+        rm -f /tmp/nex_telegram.lock
+        nohup python3 $NEX_DIR/nex_telegram_clean.py >> /tmp/nex_telegram.log 2>&1 &
+        sleep 15
+    fi
+    fi
+    # Watch auto_check
+    if ! pgrep -f "auto_check.py" > /dev/null 2>&1; then
+        echo "[watchdog] auto_check DEAD - restarting..."
+        cd $NEX_DIR && source venv/bin/activate
+        nohup python3 $NEX_DIR/auto_check.py > /tmp/nex_auto_check.log 2>&1 &
         sleep 5
     fi
-
-    # Watch nex_scheduler
-    if ! curl -s http://localhost:7825/scheduler/status > /dev/null 2>&1; then
-        echo "[watchdog] nex_scheduler down, restarting..."
-        pkill -f "nex_scheduler.py" 2>/dev/null
-        sleep 1
-        cd $NEX_DIR && source venv/bin/activate
-        nohup python3 $NEX_DIR/nex_scheduler.py > /tmp/nex_scheduler.log 2>&1 &
-        sleep 5
-    fi
-
     sleep 10
 done

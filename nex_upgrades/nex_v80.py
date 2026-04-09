@@ -552,7 +552,12 @@ class AggressiveCompression:
     MIN_CLUSTER = 20
 
     def __init__(self):
-        self.last_run = 0.0
+        import os as _agc_os
+        self._ts_path = _agc_os.path.expanduser("~/.config/nex/.agc_last_run")
+        try:
+            self.last_run = float(open(self._ts_path).read().strip())
+        except Exception:
+            self.last_run = 0.0
         self.merges   = 0
         self.compressed_clusters = 0
 
@@ -566,6 +571,10 @@ class AggressiveCompression:
         if time.time() - self.last_run < self.INTERVAL:
             return
         self.last_run = time.time()
+        try:
+            open(self._ts_path,'w').write(str(self.last_run))
+        except Exception:
+            pass
         try:
             # Pass 1: merge high-similarity same-topic beliefs
             with _db() as c:

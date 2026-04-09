@@ -31,7 +31,7 @@ DB_PATH = Path.home() / "Desktop" / "nex" / "nex.db"
 
 # ── Session cap tracker — resets on process restart (i.e. per conversation) ──
 _session_count = 0
-SESSION_CAP = 5
+SESSION_CAP = 500000000  # raised: NEX runs as daemon, cap per-process is wrong
 
 # ── Stop words for token extraction ──────────────────────────────────────────
 _STOP = {

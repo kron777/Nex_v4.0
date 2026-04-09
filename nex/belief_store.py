@@ -26,7 +26,7 @@ except Exception:
 
 
 CONFIG_DIR = os.path.expanduser("~/.config/nex")
-DB_PATH    = os.path.join(CONFIG_DIR, "nex.db")
+DB_PATH    = os.path.expanduser("~/Desktop/nex/nex.db")  # UPTAKE FIX: aligned with soul_loop
 CHROMA_DIR = os.path.join(CONFIG_DIR, "chroma")
 
 # ── ChromaDB setup ────────────────────────────────────────────────────────────

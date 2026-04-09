@@ -206,6 +206,10 @@ class DecisiveBeliefUpdateSystem:
         if time.time() - self.last_run < self.INTERVAL:
             return
         self.last_run = time.time()
+        try:
+            open(self._ts_path, 'w').write(str(self.last_run))
+        except Exception:
+            pass
         result = self._mutate()
         if result:
             _log(f"[DBUS] {result['action']} {result['topic']!r} "
@@ -533,14 +537,20 @@ class SignalDeduplicationCore:
 class AggressiveBeliefMergeV2:
     """Merge mid-conf clusters (0.4–0.7): 5 weak → 1 stronger.
     Track merge lineage. Target: -20% beliefs, +confidence."""
-    INTERVAL   = 1800  # fix10: raised from 600 — run every 30min not 10min
+    INTERVAL   = 7200  # raised to 2 hours — prevent belief collapse
     MID_LOW    = 0.40
-    MID_HIGH   = 0.70
-    CLUSTER_SZ = 8  # fix10: raised from 5 — fewer merges per cycle
+    MID_HIGH   = 0.65  # lower ceiling — protect higher conf beliefs
+    CLUSTER_SZ = 15  # raised — only merge large clusters
     CONF_BOOST = 0.03  # fix10: reduced from 0.08 — prevents artificial conf spikes
 
     def __init__(self):
-        self.last_run = 0.0
+        # Persist last_run across restarts — prevents running on every restart
+        import os as _abm_os
+        self._ts_path = _abm_os.path.expanduser("~/.config/nex/.abmv2_last_run")
+        try:
+            self.last_run = float(open(self._ts_path).read().strip())
+        except Exception:
+            self.last_run = 0.0
         self.merges   = 0
         self.lineage: deque[dict] = deque(maxlen=50)
         self._before  = 0

@@ -120,3 +120,17 @@ if __name__ == "__main__":
     parser.add_argument("--n", type=int, default=1)
     args = parser.parse_args()
     run_curiosity_cycle(topics=args.topics, n_questions=args.n)
+
+
+class _CuriosityEngineCompat:
+    """Compatibility wrapper so run.py can call get_curiosity_engine()."""
+    def run_cycle(self, cycle=0):
+        try:
+            return run_curiosity_cycle()
+        except Exception as e:
+            return {}
+
+_compat_instance = _CuriosityEngineCompat()
+
+def get_curiosity_engine():
+    return _compat_instance
