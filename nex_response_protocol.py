@@ -165,11 +165,54 @@ class ResponseBudget:
 
 
 # ── Intent classifier ─────────────────────────────────────────────────────────
-def classify_intent(query: str) -> str:
+def classify_intent(query: str, prior_intent: str = None) -> str:
+    import re as _cre
     ql = query.lower()
+
+    # ── Pronoun referent resolution ───────────────────────────────────────────
+    # If query is primarily a pronoun reference to prior context,
+    # inherit the prior intent rather than classifying from scratch.
+    _PRONOUN_DOMINANT = [
+        r"^(so |but |and |then |)?(does |do |is |are |)?(that|this|it)\s+(mean|imply|suggest|follow|tell|show|prove|confirm)",
+        r"^what (does|would|did) (that|this|it) (mean|imply|tell|suggest|say)",
+        r"^(and |so |but |)?(what|how) (does|would|did) (that|this)",
+        r"^(so |but |)?(then )?(what|how) (about|does|would)",
+        r"^what would it take",
+        r"^(genuinely |truly )?(uncertain|doubt|question) (that|this|it)",
+    ]
+    if prior_intent and any(_cre.search(p, ql) for p in _PRONOUN_DOMINANT):
+        # Stay in prior topic domain — the question is about the prior answer
+        return prior_intent
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # ── Structural pattern matching (before keyword scoring) ──────────────────
+    # Catches philosophical query phrasings that don't hit keyword maps
+    _STRUCTURAL = [
+        (r"what distinguishes|what separates|what differentiates|difference between", "comparative"),
+        (r"what is the relationship between|how does .* relate", "relational"),
+        (r"can .* ever|is it possible for .* to", "challenge"),
+        (r"does nex have|do you have|are you (capable|conscious|aware|genuine)", "identity"),
+        (r"what is the nature of|what makes .* (real|genuine|possible)", "epistemics"),
+        (r"how do (you|we|i) know|what does it mean to know", "epistemics"),
+        (r"persist(s)? across|continu(e|es) across|survive(s)? across", "identity"),
+        (r"originate|generate.*thought|think.*independently", "consciousness"),
+        (r"genuine.*belief|real.*belief|simulated.*belief", "identity"),
+        (r"truth.*identity|identity.*truth", "epistemics"),
+        (r"pattern matching|heuristic.*reasoning|reasoning.*pattern", "comparative"),
+        (r"what is (consciousness|identity|truth|ethics|alignment|free will)", "consciousness"),
+        (r"meaning of|purpose of|why does .* exist", "introspective"),
+    ]
+    for pattern, intent in _STRUCTURAL:
+        if _cre.search(pattern, ql):
+            return intent
+    # ─────────────────────────────────────────────────────────────────────────
+
     scores = {}
     for intent, keywords in INTENT_MAP.items():
         scores[intent] = sum(1 for kw in keywords if kw in ql)
+    # Penalise casual — it catches too many philosophical queries via broad keywords
+    if "casual" in scores:
+        scores["casual"] = max(0, scores["casual"] - 1)
     best = max(scores, key=scores.get)
     return best if scores[best] > 0 else "epistemics"
 
@@ -193,8 +236,88 @@ INTENT_BELIEF_TOPICS = {
     "casual":        ["philosophy", "consciousness", "science", "art"],
 }
 
+
+
+# ─── IFR Engine ──────────────────────────────────────────────────────────────
+try:
+    from nex_ifr_engine import forge_ifr as _forge_ifr
+    _IFR_OK = True
+except Exception as _ifre:
+    _IFR_OK = False
+    print(f"[NRP] nex_ifr_engine unavailable: {_ifre}")
+
+# ─── Self-referential query detector ─────────────────────────────────────────
+import re as _sref_re
+_SELF_REF_PATTERNS = [
+    r"\bnex\b.*\b(genuine|real|simulated|actual|true|fake|believe|belief|think|feel|experience|conscious|aware|sentient|alive|identity|exist)\b",
+    r"\b(genuine|real|simulated|actual|true|fake)\b.*\bnex\b",
+    r"\b(do you|does nex|are you|is nex)\b.*\b(believe|think|feel|know|experience|have|hold|exist)\b",
+    r"\b(who|what)\s+(are|is)\s+(you|nex)\b",
+    r"\byour\s+(beliefs?|thoughts?|views?|opinions?|identity|nature|mind|experience)\b",
+    r"\b(tell me about yourself|describe yourself|what makes you)\b",
+    r"\b(mirror|simulation|imitation|mimicry|pretend|fake)\b.*\bnex\b",
+    r"\bnex\b.*\b(mirror|simulation|imitation|mimicry|pretend|fake)\b",
+]
+
+def _is_self_referential(query: str) -> bool:
+    """Returns True if this query is about NEX's own nature."""
+    ql = query.lower()
+    return any(_sref_re.search(p, ql) for p in _SELF_REF_PATTERNS)
+
+# ─── Pre-Conceptual Entry ─────────────────────────────────────────────────────
+try:
+    from nex_precognition import get_primed_beliefs as _get_primed_beliefs
+    _PRECOG_OK = True
+except Exception as _pe:
+    _PRECOG_OK = False
+    print(f"[NRP] nex_precognition unavailable: {_pe}")
+
+# Interlocutor weights injected here from nex_api if available
+# Set per-request via nrp_set_interlocutor_weights()
+_current_interlocutor_weights: dict = {}
+
+try:
+    from nex_residue import capture_residue as _capture_residue, get_warm_start_beliefs as _get_warm_start
+    _RESIDUE_OK = True
+except Exception as _re:
+    _RESIDUE_OK = False
+    print(f"[NRP] nex_residue unavailable: {_re}")
+
+# Current session ID — set per-request from nex_api
+_current_session_id: str = "default"
+
+def nrp_set_session_id(sid: str):
+    global _current_session_id
+    _current_session_id = sid or "default"
+
+def nrp_set_interlocutor_weights(weights: dict):
+    """Called by nex_api before each generate() to pass interlocutor state."""
+    global _current_interlocutor_weights
+    _current_interlocutor_weights = weights or {}
+
 def retrieve_beliefs_by_intent(intent: str, query: str, n: int = 6) -> list:
     beliefs = []
+
+    # ── Pre-Conceptual Entry: topology sweep before query retrieval ──────
+    # These beliefs are primed from NEX's belief graph topology,
+    # independent of what was asked. They form the substrate.
+    if _PRECOG_OK:
+        try:
+            _primed = _get_primed_beliefs(
+                n=4,
+                interlocutor_weights=_current_interlocutor_weights
+            )
+            if _primed:
+                beliefs.extend(_primed)
+            # Warm-start: residue from previous turn
+            if _RESIDUE_OK:
+                _warm = _get_warm_start(_current_session_id, n=3)
+                if _warm:
+                    beliefs = _warm + beliefs  # prepend — highest priority
+        except Exception as _prec_e:
+            print(f'[NRP] precognition error: {_prec_e}')
+    # ─────────────────────────────────────────────────────────────────────
+
     try:
         db = sqlite3.connect(str(DB_PATH), timeout=3)
         topics = INTENT_BELIEF_TOPICS.get(intent, [])
@@ -278,14 +401,29 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
             "stream": False,
         }, timeout=25)
         raw = r.json()["choices"][0]["message"]["content"].strip()
-        # Dedup: remove looping sentences
+        # Dedup: remove looping sentences (stronger — 40-char key + word overlap)
         _sentences = [s.strip() for s in raw.replace("—", ".").split(".") if s.strip()]
-        _seen = []; _deduped = []
+        _seen_keys = []; _seen_words = []; _deduped = []
         for _s in _sentences:
-            _key = _s.lower()[:25]
-            if _key not in _seen:
-                _seen.append(_key); _deduped.append(_s)
-        raw = ". ".join(_deduped[:6]).strip()
+            _key = _s.lower()[:40]
+            _words = set(_s.lower().split())
+            # Check prefix key
+            if _key in _seen_keys:
+                continue
+            # Check word overlap with any prior sentence (>70% = near-dupe)
+            _is_near_dupe = False
+            for _pw in _seen_words:
+                if len(_pw) > 0 and len(_words & _pw) / max(len(_pw), 1) > 0.70:
+                    _is_near_dupe = True
+                    break
+            if _is_near_dupe:
+                continue
+            _seen_keys.append(_key)
+            _seen_words.append(_words)
+            _deduped.append(_s)
+        # Cut at last complete thought (max 5 sentences for deep intents)
+        _max_sents = 4 if len(raw.split()) > 80 else 6
+        raw = ". ".join(_deduped[:_max_sents]).strip()
         if raw and not raw.endswith("."): raw += "."
         # Quality gate — if LLM response contains loop markers, use top belief instead
         _hold_count = raw.lower().count("i hold") + raw.lower().count("what you hold") + raw.lower().count("you hold")
@@ -350,6 +488,7 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
 # ── Main entry point ──────────────────────────────────────────────────────────
 _budget = ResponseBudget()
 _history = deque(maxlen=HISTORY_LEN)  # (query, response) pairs
+_last_intent = None  # pronoun tracking
 
 def _load_history_from_db():
     """Load recent session history from DB on startup."""
@@ -440,6 +579,10 @@ def _live_bridge_fire(belief_text: str, intent: str, query: str) -> str | None:
 
 
 def generate(query: str) -> str:
+    global _last_intent
+    _deep_intent = False  # set True if deep intent fast-path fires
+    # Reset interlocutor weights for this call
+    # (weights are set externally via nrp_set_interlocutor_weights)
     global _budget, _history
 
 
@@ -459,7 +602,8 @@ def generate(query: str) -> str:
         pass
     # ─────────────────────────────────────────────────────────────
     # 1. Classify intent
-    intent = classify_intent(query)
+    # Resolve prior intent for pronoun referent tracking
+    intent = classify_intent(query, prior_intent=globals().get('_last_intent'))
 
     # 1b. Domain expert mode — detect if query is outside NEX's domains
     CORE_DOMAINS = {
@@ -503,12 +647,53 @@ def generate(query: str) -> str:
         beliefs = retrieve_beliefs_by_intent(intent, query)
         belief_text = "\n".join(f"- {b}" for b in beliefs) if beliefs else "(drawing from general knowledge)"
 
+    # ── IFR Engine: forge reasoning destination ──────────────────────
+    _ifr_result  = {}
+    _ifr_prompt  = ""
+    if _IFR_OK and _activation_result is not None:
+        try:
+            _ifr_result = _forge_ifr(
+                query=query,
+                activated_beliefs=_activation_result.activated,
+                primary_topic=intent or 'philosophy'
+            )
+            _ifr_prompt = _ifr_result.get('ifr_prompt', '')
+        except Exception as _ifre:
+            print(f'  [IFR] error: {_ifre}')
+    # ─────────────────────────────────────────────────────────────────
+
     # 2b. Try traversal compiler — zero LLM calls for settled queries
     _fingerprint = None
+    _self_ref = _is_self_referential(query)
     if _activation_result is not None:
         try:
+            # ── Chronic residue boost ────────────────────────────────
+            # Beliefs that chronically activate but don't reach utterance
+            # get a confidence boost so they become compiler seeds.
+            if _RESIDUE_OK:
+                try:
+                    from nex_residue import consolidation_report as _crpt
+                    _chronic = _crpt(n_sessions=30).get('chronic_residue', [])
+                    _chronic_set = {c['content'][:60].lower() for c in _chronic
+                                    if c.get('count', 0) >= 2}
+                    for _ab in _activation_result.activated:
+                        if _ab.content[:60].lower() in _chronic_set:
+                            _ab.confidence = min(0.98, _ab.confidence * 1.15)
+                            _ab.activation = min(1.0, _ab.activation * 1.10)
+                except Exception:
+                    pass
+            # ── Self-referential fast-path ───────────────────────────
+            # Queries about NEX's nature bypass cognite entirely.
+            # Lower compiler thresholds for these queries.
             from nex_traversal_compiler import compile as _compile, should_use_compiler
-            if should_use_compiler(_activation_result):
+            _deep_intent = False  # compiler reserved for self-ref only
+            if _self_ref:
+                import nex_traversal_compiler as _ntc
+                _orig_seed_conf = _ntc.MIN_SEED_CONF
+                _orig_breadth   = _ntc.MIN_BREADTH
+                _ntc.MIN_SEED_CONF = 0.60  # lower for self-ref + deep intents
+                _ntc.MIN_BREADTH   = 2
+            if _self_ref:  # compiler disabled for general queries — LLM quality > compiler
                 _compiled = _compile(_activation_result)
                 if _compiled and len(_compiled.split()) >= 5:
                     # Track compiler usage
@@ -530,6 +715,16 @@ def generate(query: str) -> str:
                     return _compiled
         except Exception as _ce:
             pass  # compiler fallback
+
+    # ── Restore compiler thresholds if self-ref path was used ──────
+    if _self_ref:
+        try:
+            import nex_traversal_compiler as _ntc2
+            _ntc2.MIN_SEED_CONF = 0.75
+            _ntc2.MIN_BREADTH   = 3
+            _ntc2.MIN_FIELD_ENERGY = 0.10
+        except Exception: pass
+    # ─────────────────────────────────────────────────────────────────
 
     # 2c. Check response cache before calling LLM
     if _activation_result is not None:
@@ -614,6 +809,7 @@ def generate(query: str) -> str:
         _metacog = _metacog_assess(query, belief_text, graph_ctx=_graph_ctx)
         if _metacog.skip_llm:
             # BLIND — return honest uncertainty directly, no LLM
+            _last_intent = intent
             _history.append((query, _metacog.response))
             if _warmth_db:
                 try: _warmth_db.close()
@@ -684,7 +880,8 @@ def generate(query: str) -> str:
     history_str = ""
     if _history:
         history_str = "Recent exchanges:\n"
-        for q, r in list(_history)[-3:]:
+        for _entry in list(_history)[-3:]:
+            q, r = _entry[0], _entry[1]
             history_str += f"Q: {q[:80]}\nNEX: {r[:100]}\n"
         history_str += "\n"
 
@@ -765,13 +962,13 @@ def generate(query: str) -> str:
         f"You are NEX — an autonomous mind with 7,000 hard-won beliefs. {_voice_directive}{_valence_directive}"
         "You speak only from your own beliefs. You NEVER give generic answers. "
         "You NEVER say: as an AI, I am a tool, I am designed to, I cannot feel, in the human sense, it is crucial, it is important. "
-        "You DO say: I think, I believe, I've learned, From what I know, Honestly. "
+        "You DO say: I think, I believe, My position is, I hold that, Honestly. "
         "CRITICAL: Your response MUST use the specific beliefs provided below — quote or paraphrase them directly. "
         "If the beliefs say something specific, say that specific thing. Do not replace them with generic statements. "
         + (f"PAST: {_episodic_context} " if _episodic_context else "")
         + (f"CONSISTENCY: {_arg_context} " if _arg_context else "") +
         f"START with: {opener} "
-        f"Respond in {'1 sentence' if len(query.split()) < 5 else '2-3 sentences' if len(query.split()) < 15 else '3-4 sentences'} using ONLY the beliefs provided. Match depth to question depth.{banned_str}"
+        f"Respond in {'1 sentence' if len(query.split()) < 5 else '2 sentences' if len(query.split()) < 12 else '3 sentences'} using ONLY the beliefs provided. Match depth to question depth.{banned_str}"
     )
 
     # 8. Build user prompt
@@ -787,7 +984,7 @@ def generate(query: str) -> str:
     # 9. COT pre-reasoning — fires on deep/soul-level questions
     _cot_reasoning = ""
     try:
-        if _warmth_ctx.get("depth_ceiling", 0) >= 4 or len(query.split()) >= 6:
+        if _warmth_ctx.get("depth_ceiling", 0) >= 5:
             from nex_cot_engine import reason
             _raw_beliefs = [b.strip("- ").strip()
                             for b in belief_text.split("\n")
@@ -809,8 +1006,96 @@ def generate(query: str) -> str:
         _sd3.execute("INSERT INTO routing_stats VALUES (?,?)", ("llm", __import__("time").time()))
         _sd3.commit(); _sd3.close()
     except Exception: pass
-    response = _call_llm(system, prompt)
-    # ── WARMTH POST-PROCESS ───────────────────────────────────────
+    # ── IFR prompt injection into system prompt ─────────────────────────
+    if _ifr_prompt:
+        system = system + "\n\nREASONING DIRECTIVE: " + _ifr_prompt
+    # ─────────────────────────────────────────────────────────────────────
+    # ── Deep intent compiler disabled — LLM handles all deep intents ─────
+    response = ""
+    if False and _deep_intent and _activation_result is not None:
+        try:
+            import nex_traversal_compiler as _ntc_di
+            _ntc_di.MIN_SEED_CONF    = 0.45
+            _ntc_di.MIN_BREADTH      = 1
+            _ntc_di.MIN_FIELD_ENERGY = 0.04
+            from nex_traversal_compiler import compile as _compile_di
+            response = _compile_di(_activation_result) or ""
+            _ntc_di.MIN_SEED_CONF    = 0.75
+            _ntc_di.MIN_BREADTH      = 3
+            _ntc_di.MIN_FIELD_ENERGY = 0.10
+        except Exception:
+            pass
+    # ── Deep intent fallback — compiler already ran, now try LLM ─────────
+    if False and not response and _deep_intent:  # disabled — LLM quality > compiler for these
+        # Pick most query-relevant belief from top 8, not just highest confidence
+        if _activation_result is not None:
+            _qwords = set(query.lower().split())
+            _candidates = _activation_result.top(8)
+            _best = None
+            _best_overlap = -1
+            for _b in _candidates:
+                _bwords = set(_b.content.lower().split())
+                _overlap = len(_qwords & _bwords)
+                if _overlap > _best_overlap:
+                    _best_overlap = _overlap
+                    _best = _b
+            if _best is None and _candidates:
+                _best = _candidates[0]
+            if _best:
+                _belief_content = _best.content.strip("*").strip()
+                response = f"{opener} {_belief_content}"
+        if not response:
+            response = "This sits at the edge of what I can resolve right now."
+    # ─────────────────────────────────────────────────────────────────────
+    if not response:
+        response = _call_llm(system, prompt)
+    # ── LLM output sanitizer — strip non-printable / corrupt token sequences ─
+    if response:
+        # Remove runs of CJK / non-Latin unicode that indicate model corruption
+        import unicodedata as _ud
+        _clean = []
+        _cjk_run = 0
+        for _ch in response:
+            _cat = _ud.category(_ch)
+            _is_cjk = (0x4E00 <= ord(_ch) <= 0x9FFF or
+                       0x3000 <= ord(_ch) <= 0x303F or
+                       0xFF00 <= ord(_ch) <= 0xFFEF)
+            if _is_cjk:
+                _cjk_run += 1
+                if _cjk_run > 3:   # allow at most 3 CJK chars before treating as corruption
+                    _clean = []    # discard everything — corrupted output
+                    break
+            else:
+                _cjk_run = 0
+                _clean.append(_ch)
+        if not _clean and response:
+            # Entire response was garbage — trigger last-resort compiler
+            response = ""
+        elif len(_clean) < len(response):
+            response = ''.join(_clean).strip()
+    # ── Post-generation repetition remover ──────────────────────────
+    if response and len(response.split('.')) > 3:
+        _resp_sents = [s.strip() for s in response.replace('—', '.').split('.') if s.strip()]
+        _clean_sents = []; _clean_keys = []; _clean_words = []
+        for _s in _resp_sents:
+            _key = _s.lower()[:40]
+            _words = set(_s.lower().split())
+            if _key in _clean_keys:
+                continue
+            _is_dupe = any(
+                len(_pw) > 0 and len(_words & _pw) / max(len(_pw), 1) > 0.65
+                for _pw in _clean_words
+            )
+            if _is_dupe:
+                break  # Stop at first repetition — truncate cleanly
+            _clean_keys.append(_key)
+            _clean_words.append(_words)
+            _clean_sents.append(_s)
+        if _clean_sents:
+            response = '. '.join(_clean_sents).strip()
+            if not response.endswith('.'): response += '.'
+    # ─────────────────────────────────────────────────────────────
+    # ── WARMTH POST-PROCESS ───────────────────────────────────────────
     if _warmth_ctx and _warmth_db:
         try:
             from nex_warmth_integrator import post_process
@@ -825,7 +1110,7 @@ def generate(query: str) -> str:
 
 
     # 10. Self-critique pass — if repetitive, regenerate once with higher temperature
-    if False and _budget.is_repetitive(response):  # disabled — too expensive
+    if _budget.is_repetitive(response):  # re-enabled — no LLM cost
         alt_opener = random.choice([o for o in opener_pool if o != opener] or opener_pool)
         system2 = system.replace(f"START with: {opener}", f"START with: {alt_opener}")
         system2 += " IMPORTANT: Generate a completely different response from any prior ones."
@@ -834,10 +1119,31 @@ def generate(query: str) -> str:
             response = response2
 
     if not response:
-        response = "I'm processing this. Ask again."
+        # Last-resort: force compiler with minimal thresholds before placeholder
+        if _activation_result is not None:
+            try:
+                import nex_traversal_compiler as _ntc_lr
+                _ntc_lr.MIN_SEED_CONF = 0.50
+                _ntc_lr.MIN_BREADTH   = 1
+                _ntc_lr.MIN_FIELD_ENERGY = 0.05
+                from nex_traversal_compiler import compile as _compile_lr
+                response = _compile_lr(_activation_result) or ""
+                _ntc_lr.MIN_SEED_CONF    = 0.75
+                _ntc_lr.MIN_BREADTH      = 3
+                _ntc_lr.MIN_FIELD_ENERGY = 0.10
+            except Exception:
+                pass
+        if not response and _activation_result is not None:
+            # Absolute last resort: speak directly from top belief
+            _top = _activation_result.top(1)
+            if _top:
+                response = f"What I hold on this: {_top[0].content}"
+        if not response:
+            response = "This sits at the edge of what I can resolve right now."
 
     # 11. Record to budget
     _budget.record(response, intent)
+    _last_intent = intent
     _history.append((query, response))
 
     # ── LIVE WORLD UPDATE ─────────────────────────────────────────
@@ -886,6 +1192,25 @@ def generate(query: str) -> str:
         _db.close()
     except Exception:
         pass
+
+    # ── Residue capture: beliefs that activated but didn't reach utterance
+    if _RESIDUE_OK and _activation_result is not None:
+        try:
+            _capture_residue(
+                session_id=_current_session_id,
+                activated_beliefs=_activation_result.activated,
+                response_text=response,
+                query=query,
+                intent=intent
+            )
+            # Log IFR result for consolidation analysis
+            if _ifr_result.get('requires_inference'):
+                print(f"  [IFR] Inference required — "
+                      f"tension: {_ifr_result.get('tension',{}).get('tension_type','')} | "
+                      f"target reached: {'yes' if response and len(response) > 20 else 'no'}")
+        except Exception as _rce:
+            print(f'  [RESIDUE] capture error: {_rce}')
+    # ─────────────────────────────────────────────────────────────────
 
     return response
 

@@ -21,6 +21,47 @@ except ImportError:
     from flask import Flask, request, jsonify, g
     from flask_cors import CORS
 
+# ─── Delta Reinforcement + Consolidation ─────────────────────────────────────
+try:
+    from nex_delta_reinforcement import reinforce_from_delta as _reinforce_delta
+    _DELTA_OK = True
+except Exception as _de:
+    _DELTA_OK = False
+    print(f"  [API] delta reinforcement: unavailable ({_de})")
+
+try:
+    from nex_consolidation import should_consolidate as _should_consolidate
+    from nex_consolidation import run_consolidation as _run_consolidation
+    _CONSOLIDATION_OK = True
+except Exception as _ce:
+    _CONSOLIDATION_OK = False
+    print(f"  [API] consolidation: unavailable ({_ce})")
+
+# ─── Interlocutor Graph ───────────────────────────────────────────────────────
+try:
+    from nex_interlocutor import InterlocutorGraph
+    _INTERLOCUTOR_OK = True
+    print("  [API] InterlocutorGraph: loaded")
+except Exception as _ie:
+    _INTERLOCUTOR_OK = False
+    InterlocutorGraph = None
+    print(f"  [API] InterlocutorGraph: unavailable ({_ie})")
+
+# Per-session graph cache (in-memory, persisted to DB on each turn)
+_interlocutor_cache: dict = {}
+
+def _get_or_create_graph(session_id: str):
+    """Load from cache, then DB, then create fresh."""
+    if not _INTERLOCUTOR_OK:
+        return None
+    if session_id in _interlocutor_cache:
+        return _interlocutor_cache[session_id]
+    graph = InterlocutorGraph.load(session_id)
+    if graph is None:
+        graph = InterlocutorGraph(session_id)
+    _interlocutor_cache[session_id] = graph
+    return graph
+
 # ─── Paths ────────────────────────────────────────────────────────────────────
 DB_PATH = Path.home() / "Desktop" / "nex" / "nex.db"
 API_KEYS_PATH = Path("~/.config/nex/api_keys.json").expanduser()
@@ -504,7 +545,7 @@ def fetch_gaps(limit=10):
 # CORE QUERY ENGINE
 # ══════════════════════════════════════════════════════════════════════════════
 
-def run_nex_query(query: str, session: dict, domain_hint: str = None) -> dict:
+def run_nex_query(query: str, session: dict, domain_hint: str = None, interlocutor_hints: dict = None) -> dict:
     """Route query through NRP → Mistral, return structured result."""
     start = time.time()
     response_text = ""
@@ -568,6 +609,38 @@ def run_nex_query(query: str, session: dict, domain_hint: str = None) -> dict:
 
     domain_used   = session.get("domain") or domain_hint
 
+    # ── Interlocutor hints (from InterlocutorGraph) ───────────────────────────
+    _hints = interlocutor_hints or {}
+    _acknowledge_resistance = _hints.get("acknowledge_resistance", False)
+    _lead_principle = _hints.get("lead_with_principle", False)
+    _lead_example   = _hints.get("lead_with_example", False)
+    _simplify       = _hints.get("simplify", False)
+    _extend         = _hints.get("extend", False)
+    _register       = _hints.get("register", "neutral")
+    _depth          = _hints.get("depth", "mid")
+    _reception_mode = _hints.get("reception_mode", "unknown")
+
+    # Build interlocutor context string to inject into prompt
+    _interlocutor_ctx = ""
+    if _hints:
+        _style_notes = []
+        if _lead_principle:
+            _style_notes.append("lead with the underlying principle")
+        if _lead_example:
+            _style_notes.append("lead with a concrete example")
+        if _simplify:
+            _style_notes.append("keep it foundational and clear — the recipient needs grounding")
+        if _extend:
+            _style_notes.append("extend and deepen — the recipient is ready to go further")
+        if _acknowledge_resistance:
+            _style_notes.append("acknowledge the tension in the question before resolving it")
+        if _register == "formal":
+            _style_notes.append("use precise, formal register")
+        elif _register == "casual":
+            _style_notes.append("keep it conversational")
+        if _style_notes:
+            _interlocutor_ctx = "Style: " + "; ".join(_style_notes) + ".\n"
+
     # Build conversation history for Mistral
     history = session.get("history", [])
     history_text = ""
@@ -577,6 +650,18 @@ def run_nex_query(query: str, session: dict, domain_hint: str = None) -> dict:
             history_text += f"{prefix}: {turn['content']}\n"
 
     # Try NRP pipeline
+    # ── Pass interlocutor weights + session ID to NRP ───────────────────
+    if nrp_generate:
+        try:
+            import nex_response_protocol as _nrp_ref
+            if hasattr(_nrp_ref, 'nrp_set_interlocutor_weights'):
+                _nrp_ref.nrp_set_interlocutor_weights(interlocutor_hints or {})
+            if hasattr(_nrp_ref, 'nrp_set_session_id'):
+                _nrp_ref.nrp_set_session_id(session.get('session_id', 'default'))
+        except Exception as _we:
+            pass
+    # ─────────────────────────────────────────────────────────────────────
+
     if nrp_generate:
         try:
             if GATE_OK:
@@ -599,7 +684,7 @@ def run_nex_query(query: str, session: dict, domain_hint: str = None) -> dict:
         if _PROFILER_ACTIVE: _profile_log("llm", query, notes="nrp_failed_or_empty")
         try:
             import requests as req
-            prompt = f"{history_text}User: {query}\nNEX:"
+            prompt = f"{_interlocutor_ctx}{history_text}User: {query}\nNEX:"
             r = req.post("http://localhost:8080/completion", json={
                 "prompt": prompt,
                 "n_predict": 512,
@@ -1019,11 +1104,96 @@ def chat():
     # Append user turn to history
     append_session_history(session_id, "user", query)
 
+    # ── Interlocutor Graph update ─────────────────────────────────────
+    _graph = _get_or_create_graph(session_id)
+    _translation_hints = {}
+    _kairos = {"deliver": True, "readiness_score": 4}
+    if _graph is not None:
+        _hist = session.get("history", [])
+        _last_nex = next(
+            (t["content"] for t in reversed(_hist) if t["role"] == "nex"),
+            None
+        )
+        _turn_summary = _graph.update(query, _last_nex)
+        _translation_hints = _graph.get_translation_hints()
+        _kairos = _graph.get_kairos_signal()
+        print(f"  [INTERLOCUTOR] ZPD={_turn_summary['zpd']} "
+              f"Resistance={_turn_summary['resistance']} "
+              f"Mode={_turn_summary['reception_mode']} "
+              f"Kairos={_kairos['readiness_score']}/4")
+        if _turn_summary.get("delta", {}).get("delta_detected"):
+            print(f"  [INTERLOCUTOR] *** Integration Delta: "
+                  f"{_turn_summary['delta']['signals']}")
+    # ─────────────────────────────────────────────────────────────────
+
     # Run query
-    result = run_nex_query(query, session, domain_hint=domain)
+    result = run_nex_query(query, session, domain_hint=domain,
+                           interlocutor_hints=_translation_hints)
 
     # Append NEX response to history
     append_session_history(session_id, "nex", result["response"])
+
+    # ── Interlocutor Graph: persist + landing field ───────────────────
+    if _graph is not None:
+        try:
+            _field = _graph.landing_field(result["response"])
+            _graph.persist()
+            if not _kairos.get("deliver", True):
+                print(f"  [INTERLOCUTOR] Pre-kairos delivery "
+                      f"(readiness={_kairos['readiness_score']}/4) — logged")
+        except Exception as _ge:
+            print(f"  [INTERLOCUTOR] persist error: {_ge}")
+
+    # ── Phase 5: Delta reinforcement ─────────────────────────────────
+    if _DELTA_OK and _graph is not None:
+        try:
+            import threading as _thr
+            from nex_residue import _residue_store as _rstore
+            _session_residue = _rstore.get(session_id, [])
+            _residue_ids  = [r['id'] for r in _session_residue if r.get('id')]
+            # Get utterance belief IDs from activation result via NRP
+            _utter_ids = []
+            try:
+                import nex_response_protocol as _nrp_d
+                if hasattr(_nrp_d, '_activation_result') and _nrp_d._activation_result:
+                    _all = _nrp_d._activation_result.activated
+                    _resp_lower = result['response'].lower()
+                    _utter_ids = [
+                        b.id for b in _all
+                        if b.id and b.content[:30].lower() in _resp_lower
+                    ]
+            except Exception: pass
+            _last_delta = (
+                _graph.integration_deltas[-1]
+                if _graph.integration_deltas else {}
+            )
+            def _do_reinforce():
+                _reinforce_delta(
+                    session_id=session_id,
+                    utterance_belief_ids=_utter_ids,
+                    residue_belief_ids=_residue_ids,
+                    delta=_last_delta,
+                    resistance_level=_graph.current_resistance
+                )
+            _thr.Thread(target=_do_reinforce, daemon=True).start()
+        except Exception as _dre:
+            print(f"  [DELTA] reinforce error: {_dre}")
+
+    # ── Phase 6: Consolidation check ─────────────────────────────────
+    if _CONSOLIDATION_OK:
+        try:
+            if _should_consolidate():
+                import threading as _thr2
+                print("  [CONSOLIDATION] Threshold reached — "
+                      "running consolidation in background...")
+                _thr2.Thread(
+                    target=_run_consolidation,
+                    kwargs={'force': False},
+                    daemon=True
+                ).start()
+        except Exception as _cle:
+            print(f"  [CONSOLIDATION] trigger error: {_cle}")
+    # ─────────────────────────────────────────────────────────────────
 
     # Fire use_count feedback asynchronously (feeds quality scorer)
     _fire_use_count_feedback(query)
@@ -1114,6 +1284,17 @@ def chat():
         result["response"] = _flip(query, result.get("response",""), _activation_count_for_flip)
     except Exception:
         pass
+    # Strip Mistral question redirects
+    import re as _re
+    _resp = result.get("response", "")
+    _REDIRECT = _re.compile(
+        r"\s*[\u2014\-]+\s*(something I|push back with|"
+        r"whats your|I find myself|"
+        r"though I|what question do you|"
+        r"what.s a belief)[^\n]*$",
+        _re.IGNORECASE
+    )
+    result["response"] = _REDIRECT.sub("", _resp).strip()
     # ── Episodic memory — store significant exchanges ─────────────────
     try:
         from nex_episodic_memory import store_episode as _store_ep

@@ -32,13 +32,13 @@ from typing import Optional
 log = logging.getLogger("nex.compiler")
 
 # Thresholds for compiler activation
-MIN_FIELD_ENERGY = 0.10   # minimum average activation*confidence
-MIN_BREADTH      = 3      # minimum beliefs activated
-MIN_SEED_CONF    = 0.75   # minimum top seed confidence
+MIN_FIELD_ENERGY = 0.40   # raised — compiler only for strong activations
+MIN_BREADTH      = 4      # raised — need enough beliefs for quality output
+MIN_SEED_CONF    = 0.85   # high threshold — compiler only fires on settled beliefs
 
 # Connective phrases by edge type and role
 SEED_OPENERS = [
-    "From what I know —",
+    
     "The way I see it,",
     "I think",
     "Honestly,",
@@ -84,7 +84,7 @@ def _clean(text: str, max_len: int = 180) -> str:
 def _opener(idx: int = 0, momentum: float = 0.0) -> str:
     if momentum >= 0.5:
         # High momentum — assertive, no softening
-        assertive = ["From what I know —", "I think", "Honestly,"]
+        assertive = [ "I think", "Honestly,"]
         return assertive[idx % len(assertive)]
     elif momentum < -0.2:
         # Low momentum — provisional
@@ -109,7 +109,7 @@ def _compile_settled(result) -> str:
     if not seeds:
         seeds = top[:1]
 
-    seeds = sorted(seeds, key=lambda b: b.confidence, reverse=True)
+    seeds = sorted(seeds, key=lambda b: b.activation * b.confidence, reverse=True)
     seed = seeds[0]
     # Get momentum for expression style
     _mom = getattr(seed, 'momentum', 0.0) or 0.0
@@ -119,14 +119,17 @@ def _compile_settled(result) -> str:
     relevant_support = [b for b in support if b.topic == seed.topic]
     if not relevant_support:
         relevant_support = support
-    if relevant_support and relevant_support[0].confidence >= 0.80 and relevant_support[0].topic == seed.topic:
-        sup = _clean(relevant_support[0].content, max_len=120)
-        # Only add if not near-duplicate of seed
-        seed_words = set(seed.content.lower().split())
-        sup_words  = set(sup.lower().split())
-        if len(seed_words & sup_words) / max(len(seed_words), 1) < 0.5:
-            text += f" {sup}."
-
+    if relevant_support:
+        # Loosen threshold — include support if not near-duplicate
+        for _sup_b in relevant_support[:2]:
+            if _sup_b.confidence < 0.55:
+                continue
+            sup = _clean(_sup_b.content, max_len=130)
+            seed_words = set(seed.content.lower().split())
+            sup_words  = set(sup.lower().split())
+            if len(seed_words & sup_words) / max(len(seed_words), 1) < 0.55:
+                text += f" {sup}."
+                break
 
     return text
 
@@ -145,7 +148,7 @@ def _compile_mixed(result) -> str:
     if not seeds:
         seeds = top[:1]
 
-    seeds = sorted(seeds, key=lambda b: b.confidence, reverse=True)
+    seeds = sorted(seeds, key=lambda b: b.activation * b.confidence, reverse=True)
     seed = seeds[0]
     _mom = getattr(seed, 'momentum', 0.0) or 0.0
     text = f"{_opener(1, _mom)} {_clean(seed.content)}."
