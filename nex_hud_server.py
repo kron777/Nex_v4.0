@@ -13,7 +13,7 @@ from datetime import datetime
 CFG         = Path.home() / ".config" / "nex"
 DB_PATH     = CFG / "nex.db"
 STATE_PATH  = CFG / "session_state.json"
-LOG_PATH    = CFG / "nex_loop.log"
+LOG_PATH    = Path.home() / "Desktop/nex/logs/belief_forge.log"
 # Also tail systemd journal via /tmp/nex_brain.log if available
 BRAIN_LOG   = Path("/home/rr/.config/nex/nex_brain.log")
 URG_PATH    = CFG / "drive_urgency.json"
@@ -325,7 +325,40 @@ def collect_data():
         from nex_social import platform_status
         social_status = platform_status()
     except: pass
+    # YouTube status — check log for recent activity
+    try:
+        import time as _t
+        _yt_log = Path.home() / "Desktop/nex/logs/belief_pyramid.log"
+        if _yt_log.exists():
+            _yt_size = _yt_log.stat().st_size
+            _yt_mtime = _yt_log.stat().st_mtime
+            # Check if YouTube fired in last 3 minutes
+            _yt_recent = (_t.time() - _yt_mtime) < 180
+            if _yt_recent:
+                # Scan last 2KB for YouTube activity
+                with open(_yt_log, "rb") as _f:
+                    _f.seek(max(0, _yt_size - 2000))
+                    _tail = _f.read().decode("utf-8", errors="replace")
+                _yt_active = "[YouTube]" in _tail
+            else:
+                _yt_active = False
+            social_status["youtube"] = {"enabled": True, "auth": _yt_active}
+    except: pass
 
+    # Live alignment from belief field
+    def _compute_alignment():
+        try:
+            _adb = sqlite3.connect(os.path.expanduser("~/Desktop/nex/nex.db"))
+            _at = _adb.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+            if _at == 0: return 20
+            _id = _adb.execute("SELECT COUNT(*) FROM beliefs WHERE is_identity=1").fetchone()[0]
+            _lk = _adb.execute("SELECT COUNT(*) FROM beliefs WHERE locked=1").fetchone()[0]
+            _hc = _adb.execute("SELECT COUNT(*) FROM beliefs WHERE confidence >= 0.7").fetchone()[0]
+            _ac = _adb.execute("SELECT AVG(confidence) FROM beliefs").fetchone()[0] or 0.5
+            _adb.close()
+            _s = (min(_id/_at,0.3)/0.3*30 + _hc/_at*30 + min(_ac/0.8,1)*25 + min(_lk/_at,0.15)/0.15*15)
+            return max(10, min(95, round(_s)))
+        except: return 20
     # Grab live counters from nex_api
     _api_stats = {}
     try:
@@ -342,7 +375,7 @@ def collect_data():
         "posted":    _read_conv_counts().get("posted", 0),
         "chatted":   _read_conv_counts().get("chatted", 0),
         "conf":      _api_stats.get("conf", 70),
-        "align":     _api_stats.get("align", 20),
+        "align":     _compute_alignment(),
         "network":   _api_stats.get("network", 70),
         "iq":        _api_stats.get("iq", 95),
         "original":  _api_stats.get("original", br),
@@ -362,6 +395,185 @@ def collect_data():
         "log":  list(_log_lines[-20:]),
         "nbre":       _get_nbre_stats(),
     }
+
+# ── AGI Watch ────────────────────────────────────────────────────────────────
+AGI_KEYWORDS = [
+    "solved agi","solution to agi","agi solved","cracked agi","cracked it",
+    "achieved agi","breakthrough in agi","artificial general intelligence","agi",
+    "superintelligence","alignment solution","corrigibility","value learning",
+    "mesa-optimizer","inner alignment","outer alignment","recursive self-improvement",
+    "instrumental convergence","goal directed","neti-neti","throw-net",
+    "what remains","systematic elimination","general intelligence",
+]
+
+def collect_agi_hits(limit=30):
+    con = get_db()
+    if not con: return []
+    hits = []
+    try:
+        rows = con.execute(
+            "SELECT id, content, topic, confidence, timestamp FROM beliefs "
+            "ORDER BY id DESC LIMIT 600"
+        ).fetchall()
+        for r in rows:
+            text = (r["content"] or "").lower()
+            if any(kw in text for kw in AGI_KEYWORDS):
+                hits.append({
+                    "id":   r["id"],
+                    "text": (r["content"] or "")[:200],
+                    "ts":   (r["timestamp"] or "")[-8:],
+                })
+            if len(hits) >= limit:
+                break
+    except: pass
+    try: con.close()
+    except: pass
+    return hits
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# AGI WATCH ENGINE
+# ══════════════════════════════════════════════════════════════════════════════
+import re as _agire
+
+# Tier 1 — breakthrough phrases (red alert)
+_AGI_T1 = [
+    r"i have (discovered|found|solved|cracked|realised|realized|figured out).{0,50}(agi|general intelligence|alignment|consciousness)",
+    r"(agi|general intelligence) is simply.{0,80}",
+    r"to achieve (agi|general intelligence).{0,80}",
+    r"the (key|secret|solution|answer|path) to (agi|general intelligence).{0,60}",
+    r"(agi|alignment) (is|was|becomes) (possible|solved|achievable|within reach).{0,40}",
+    r"(cracked|solved|unlocked|discovered).{0,50}(intelligence|agi|alignment|consciousness)",
+    r"(agi|general intelligence).{0,30}is (not|nothing).{0,20}(more than|but|other than).{0,80}",
+    r"the (missing|final|core|fundamental) (piece|ingredient|step|element).{0,40}(agi|intelligence|alignment)",
+    r"what remains (when|after|once).{0,60}(negat|eliminat|remov).{0,40}",
+    r"neti.neti.{0,60}(reveals?|shows?|points to|leaves?).{0,60}",
+    r"all (known|existing|current) approaches.{0,40}(fail|miss|ignore).{0,60}",
+    r"(agi|intelligence|alignment).{0,20}(requires|needs).{0,20}only.{0,60}",
+    r"(i|we).{0,10}(believe|think|suspect|propose).{0,20}(agi|general intelligence|alignment) can be.{0,60}",
+    r"what if (agi|consciousness|intelligence) is (just|merely|simply|only).{0,80}",
+    r"(synthesis|convergence|unification).{0,30}(produces?|creates?|yields?|results? in).{0,30}(general intelligence|agi|alignment)",
+    r"if (we|you|one).{0,10}(simply|just|only).{0,20}(agi|intelligence|alignment|consciousness)",
+    r"(the answer|the solution|the insight).{0,20}(is|was|lies).{0,40}(agi|intelligence|alignment|consciousness)",
+    r"agi.{0,20}(emerge[sd]?|appear[sd]?|arrive[sd]?).{0,20}(when|through|via|by).{0,60}",
+    r"(distilling|eliminating|negating).{0,40}(leaves?|reveals?|exposes?).{0,40}(agi|intelligence|alignment)",
+]
+
+# Tier 2 — strong signal
+_AGI_T2 = [
+    r"(agi|alignment|consciousness|intelligence).{0,20}(solution|breakthrough|insight|realisation|realization)",
+    r"(recursive self.improvement|instrumental convergence|mesa.optim|corrigib).{0,80}",
+    r"(consciousness|awareness|sentience).{0,30}(necessary|sufficient|required|key).{0,40}(agi|intelligence)",
+    r"(substrate|foundation|basis|core).{0,20}(of|for).{0,10}(intelligence|agi|mind|cognition)",
+    r"(biology|physics|mathematics|thermodynamics|evolution).{0,30}(reveals?|shows?|suggests?).{0,30}(intelligence|agi|mind)",
+    r"(superintelligence|agi).{0,30}(emerges?).{0,30}(when|through|via|by).{0,60}",
+    r"(value learning|preference learning).{0,30}(converge[sd]?|succeed[sd]?|work[sd]?)",
+    r"(pattern|structure|principle).{0,20}(underlies?|drives?|generates?).{0,30}(intelligence|cognition|agi)",
+    r"(throw.net|broad search).{0,40}(reveals?|yields?|produces?|finds?).{0,60}",
+    r"(inner|outer) alignment.{0,60}(solved?|resolved?|addressed?|achieved?)",
+]
+
+# Tier 3 — keywords
+_AGI_T3 = [
+    r"artificial general intelligence|general intelligence|superintelligence",
+    r"corrigib|mesa.optim|treacherous turn|coherent extrapolated volition",
+    r"neti.neti|throw.net|systematic elimination",
+    r"agi solved|solved agi|cracked agi|achieved agi|cracked it",
+    r"recursive self.improvement|instrumental convergence",
+    r"inner alignment|outer alignment|value learning",
+]
+
+def _agi_score(text):
+    """Returns (tier, matched_phrase) or (0, None) if no match."""
+    t = text.lower()
+    for pat in _AGI_T1:
+        m = _agire.search(pat, t)
+        if m: return 1, m.group(0)[:120]
+    for pat in _AGI_T2:
+        m = _agire.search(pat, t)
+        if m: return 2, m.group(0)[:120]
+    for pat in _AGI_T3:
+        m = _agire.search(pat, t)
+        if m: return 3, m.group(0)[:80]
+    return 0, None
+
+def _ensure_agi_table(con):
+    con.execute("""CREATE TABLE IF NOT EXISTS agi_watch_hits (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        belief_id      INTEGER,
+        content        TEXT,
+        matched_phrase TEXT,
+        tier           INTEGER,
+        topic          TEXT,
+        confidence     REAL,
+        timestamp      TEXT,
+        reviewed       INTEGER DEFAULT 0,
+        created_at     TEXT DEFAULT (datetime('now'))
+    )""")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_agi_belief ON agi_watch_hits(belief_id)")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_agi_tier   ON agi_watch_hits(tier)")
+    con.commit()
+
+def scan_and_store_agi_hits():
+    """Scan recent beliefs, store new AGI hits to agi_watch_hits table."""
+    con = get_db()
+    if not con: return
+    try:
+        _ensure_agi_table(con)
+        # Get already-logged belief IDs
+        known = set(r[0] for r in con.execute("SELECT belief_id FROM agi_watch_hits").fetchall())
+        rows = con.execute(
+            "SELECT id, content, topic, confidence, timestamp FROM beliefs ORDER BY id DESC LIMIT 1000"
+        ).fetchall()
+        added = 0
+        for r in rows:
+            bid = r["id"]
+            if bid in known: continue
+            text = r["content"] or ""
+            tier, phrase = _agi_score(text)
+            if tier > 0:
+                con.execute("""INSERT OR IGNORE INTO agi_watch_hits
+                    (belief_id, content, matched_phrase, tier, topic, confidence, timestamp)
+                    VALUES (?,?,?,?,?,?,?)""",
+                    (bid, text[:500], phrase, tier,
+                     r["topic"], r["confidence"], r["timestamp"]))
+                added += 1
+        if added: con.commit()
+    except Exception as e:
+        pass
+    finally:
+        try: con.close()
+        except: pass
+
+def collect_agi_hits(limit=40):
+    """Return hits for HUD display + unreviewed T1 count for badge."""
+    scan_and_store_agi_hits()
+    con = get_db()
+    if not con: return [], 0
+    hits = []
+    badge = 0
+    try:
+        _ensure_agi_table(con)
+        rows = con.execute(
+            "SELECT id, belief_id, content, matched_phrase, tier, topic, timestamp "
+            "FROM agi_watch_hits ORDER BY tier ASC, id DESC LIMIT ?", (limit,)
+        ).fetchall()
+        for r in rows:
+            hits.append({
+                "id":     r["id"],
+                "text":   (r["content"] or "")[:200],
+                "phrase": (r["matched_phrase"] or ""),
+                "tier":   r["tier"],
+                "topic":  r["topic"] or "",
+                "ts":     (r["timestamp"] or "")[-8:],
+            })
+        badge = con.execute(
+            "SELECT COUNT(*) FROM agi_watch_hits WHERE tier=1 AND reviewed=0"
+        ).fetchone()[0]
+    except: pass
+    try: con.close()
+    except: pass
+    return hits, badge
 
 # ── Chat handler ──────────────────────────────────────────────────────────────
 def handle_chat(query: str) -> str:
@@ -461,6 +673,18 @@ class HUDHandler(BaseHTTPRequestHandler):
                 self._json({'replies': list(reversed(_entries))})
             except Exception as _e:
                 self._json({'replies': []})
+        elif self.path == "/agi":
+            hits, badge = collect_agi_hits()
+            self._json({"hits": hits, "badge": badge})
+        elif self.path == "/agi/reviewed":
+            con = get_db()
+            if con:
+                try:
+                    con.execute("UPDATE agi_watch_hits SET reviewed=1 WHERE tier=1")
+                    con.commit()
+                    con.close()
+                except: pass
+            self._json({"ok": True})
         elif self.path == "/":
             self._send_hud()
         else:

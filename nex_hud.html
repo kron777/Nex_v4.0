@@ -52,7 +52,7 @@ body::after{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background-i
 .center-col-title.debug-title{color:var(--debug-cyan);}
 .center-col-title .blink{animation:blink-dot 1.2s infinite;color:var(--green);}
 @keyframes blink-dot{0%,100%{opacity:1;}50%{opacity:0.2;}}
-.stream-box{flex:1;overflow:hidden;font-size:13px;line-height:1.65;position:relative;padding:2px 4px;min-height:0;}
+.stream-box{flex:1;overflow-y:scroll;overflow-x:hidden;font-size:13px;line-height:1.65;position:relative;padding:2px 4px;min-height:0;scrollbar-width:none;}
 .stream-line{display:flex;gap:6px;padding:2px 0;border-bottom:1px solid #ffffff04;animation:fadein 0.3s ease;}
 @keyframes fadein{from{opacity:0;transform:translateX(-4px);}to{opacity:1;transform:translateX(0);}}
 .stream-ts{color:var(--dim);white-space:nowrap;flex-shrink:0;font-size:11px;}
@@ -140,12 +140,12 @@ body::after{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background-i
     <div class="plat"><span class="dot dot-recent"></span><span class="state-recent">TELEGRAM</span><span style="color:var(--dim);margin-left:6px;font-size:16px;" id="p-tg">RECENT</span></div>
     <div class="plat"><span class="dot dot-idle"></span><span class="state-idle">DISCORD</span><span style="color:var(--dim);margin-left:6px;font-size:16px;" id="p-dc">IDLE</span></div>
     <div class="plat"><span class="dot dot-recent"></span><span class="state-recent">MASTODON</span><span style="color:var(--dim);margin-left:6px;font-size:16px;" id="p-mast">RECENT</span></div>
-    <div class="plat"><span class="dot dot-idle"></span><span class="state-idle">YOUTUBE</span><span style="color:var(--dim);margin-left:6px;font-size:16px;" id="p-yt">IDLE</span></div>
+    <div class="plat"><span class="dot" id="yt-dot" style="background:#444;"></span><span id="yt-state" style="color:var(--dim);">YOUTUBE</span><span style="color:var(--dim);margin-left:6px;font-size:16px;" id="p-yt">IDLE</span></div>
   </div>
 
   <div class="main">
     <!-- LEFT: Cognitive State -->
-    <div class="panel">
+    <div class="panel" style="display:flex;flex-direction:column;">
       <div class="panel-title">COGNITIVE STATE</div>
       <div class="beliefs-label">ACTIVE BELIEFS</div>
       <div class="beliefs-num" id="s-beliefs">0</div>
@@ -179,6 +179,11 @@ body::after{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background-i
         </div>
         <div style="font-size:13px;color:var(--dim);margin-top:6px;">CONSOLIDATION <span style="color:var(--green);" id="p-consol">PENDING</span></div>
       </div>
+      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;display:flex;flex-direction:column;flex:1;min-height:0;">
+        <div style="font-size:13px;color:var(--cyan);letter-spacing:2px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">AGI WATCH <span id="agi-badge" style="display:none;background:#ff2222;color:#fff;font-size:10px;font-weight:bold;border-radius:50%;min-width:16px;height:16px;line-height:16px;text-align:center;padding:0 4px;margin-right:4px;">0</span><span id="agi-dot" style="width:6px;height:6px;border-radius:50%;background:#444;display:inline-block;"></span></div>
+        <div id="agi-feed" style="font-size:11px;color:#7affcc;line-height:1.6;flex:1;overflow-y:scroll;font-family:monospace;word-break:break-word;scrollbar-width:none;"></div>
+        <div id="agi-empty" style="font-size:11px;color:var(--dim);font-family:monospace;">awaiting signal...</div>
+      </div>
     </div>
 
     <!-- CENTER: Split — Notifications LEFT | Debug RIGHT -->
@@ -211,7 +216,7 @@ body::after{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background-i
     <!-- RIGHT: NEX Responses -->
     <div class="panel" style="display:flex;flex-direction:column;overflow:hidden;">
       <div class="panel-title">NEX RESPONSES</div>
-      <div id="responses-box" style="flex:1;overflow-y:auto;overflow-x:hidden;font-size:12px;line-height:1.6;"></div>
+      <div id="responses-box" style="flex:1;overflow-y:scroll;overflow-x:hidden;font-size:12px;line-height:1.6;scrollbar-width:none;"></div>
       <div class="crash-alert" id="crash-alert">✗ SYSTEM ANOMALY DETECTED</div>
       <!-- hidden elements kept for JS compatibility -->
       <span id="g-pct" style="display:none">0%</span>
@@ -320,6 +325,19 @@ async function fetchStats() {
   try {
     const r = await fetch('http://localhost:7700/data', {signal: AbortSignal.timeout(2000)});
     const d = await r.json();
+    // YouTube status
+    if (d.social && d.social.youtube) {
+      const ytActive = d.social.youtube.auth;
+      const ytDot = document.getElementById('yt-dot');
+      const ytState = document.getElementById('yt-state');
+      const ytLabel = document.getElementById('p-yt');
+      if (ytDot) ytDot.style.background = ytActive ? 'var(--green)' : 'var(--dim)';
+      if (ytDot) ytDot.style.boxShadow = ytActive ? '0 0 6px var(--green)' : 'none';
+      if (ytDot) ytDot.style.animation = ytActive ? 'pulse 1.5s infinite' : 'none';
+      if (ytState) ytState.style.color = ytActive ? 'var(--green)' : 'var(--dim)';
+      if (ytLabel) ytLabel.textContent = ytActive ? 'LIVE' : 'IDLE';
+      if (ytLabel) ytLabel.style.color = ytActive ? 'var(--green)' : 'var(--dim)';
+    }
     if (d.beliefs.total !== undefined) document.getElementById('s-beliefs').textContent = Number(d.beliefs.total).toLocaleString();
     if (d.replied !== undefined) document.getElementById('s-replied').textContent = d.replied;
     if (d.learnt  !== undefined) document.getElementById('s-learnt').textContent = d.learnt;
@@ -429,6 +447,85 @@ async function fetchReplies() {
 }
 setInterval(fetchReplies, 3000);
 fetchReplies();
+
+// AGI Watch
+const agiFeed=document.getElementById('agi-feed');
+const agiEmpty=document.getElementById('agi-empty');
+const agiDot=document.getElementById('agi-dot');
+const agiBadge=document.getElementById('agi-badge');
+let agiSeen=new Set();
+let agiQueue=[];
+let agiStreaming=false;
+
+const AGI_TIER_COL={1:'#ff4444',2:'#facc15',3:'#7affcc'};
+const AGI_TIER_LBL={1:'[!!!]',2:'[HI] ','3':'[kw] '};
+const AGI_HL=['agi','alignment','solution','solved','cracked','superintelligence',
+  'corrigib','neti-neti','throw-net','recursive','mesa','coherent','consciousness',
+  'instrumental','convergence','general intelligence','remains','eliminat','discovered'];
+
+function hlText(txt){
+  let out=txt;
+  AGI_HL.forEach(kw=>{
+    const re=new RegExp('('+kw.replace(/[-]/g,'\\$&')+')','gi');
+    out=out.replace(re,'<span style="color:#ffe566;font-weight:bold;">$1</span>');
+  });
+  return out;
+}
+function streamChar(el,html,i){
+  if(i>=html.length){agiStreaming=false;drainAgiQueue();return;}
+  if(html[i]==='<'){
+    const e=html.indexOf('>',i);
+    if(e===-1){el.innerHTML=html;agiStreaming=false;drainAgiQueue();return;}
+    el.innerHTML=html.substring(0,e+1);
+    setTimeout(()=>streamChar(el,html,e+1),0);
+  } else {
+    el.innerHTML=html.substring(0,i+1);
+    setTimeout(()=>streamChar(el,html,i+1),14);
+  }
+}
+function drainAgiQueue(){
+  if(agiStreaming||agiQueue.length===0)return;
+  const h=agiQueue.shift();
+  agiStreaming=true;
+  if(agiEmpty)agiEmpty.style.display='none';
+  const col=AGI_TIER_COL[h.tier]||'#7affcc';
+  const lbl=AGI_TIER_LBL[h.tier]||'[kw]';
+  agiDot.style.background=h.tier===1?'#ff4444':'#00ffcc';
+  const el=document.createElement('div');
+  el.style.cssText='padding:3px 0;border-bottom:1px solid #ffffff08;';
+  agiFeed.insertBefore(el,agiFeed.firstChild);
+  const full='<span style="color:#2a6a5a;">'+h.ts+'</span> '
+    +'<span style="color:'+col+';font-size:10px;margin-right:4px;">'+lbl+'</span>'
+    +hlText(h.text);
+  streamChar(el,full,0);
+  if(agiFeed.children.length>80)agiFeed.removeChild(agiFeed.lastChild);
+  setTimeout(()=>{if(h.tier!==1)agiDot.style.background='#2a6a4a';},2000);
+}
+async function fetchAgi(){
+  try{
+    const r=await fetch('http://localhost:7700/agi',{signal:AbortSignal.timeout(3000)});
+    const d=await r.json();
+    if(agiBadge){
+      if(d.badge&&d.badge>0){
+        agiBadge.textContent=d.badge;
+        agiBadge.style.display='inline-block';
+      } else {
+        agiBadge.style.display='none';
+      }
+    }
+    if(!d.hits||d.hits.length===0)return;
+    d.hits.forEach(h=>{
+      if(agiSeen.has(h.id))return;
+      agiSeen.add(h.id);
+      agiQueue.push(h);
+    });
+    drainAgiQueue();
+  }catch(e){}
+}
+setInterval(fetchAgi,10000);
+fetchAgi();
+
+
 
 // ── NEX Response Panel ────────────────────────────────────────────────────────
 const responsesBox = document.getElementById('responses-box');

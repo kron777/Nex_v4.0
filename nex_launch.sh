@@ -148,7 +148,19 @@ echo "[NEX] Telegram: PID $!"
 
 # ── YouTube learner ──────────────────────────────────────────────────────────
  echo "[NEX] Starting YouTube learner..."
- nohup python3 -c "import sys; sys.path.insert(0, '$NEX_DIR'); from nex_youtube import learn_from_youtube; learn_from_youtube()" > /tmp/nex_youtube.log 2>&1 &
+ nohup python3 - <<'PYEOF' > /tmp/nex_youtube.log 2>&1 &
+import sys, time
+sys.path.insert(0, '$NEX_DIR')
+from nex_youtube import learn_from_youtube
+cycle = 0
+while True:
+    try:
+        learn_from_youtube(llm_fn=None, cycle=cycle)
+    except Exception as e:
+        print(f"YouTube error: {e}")
+    cycle += 1
+    time.sleep(120)
+PYEOF
  echo "[NEX] YouTube: PID $!"
 
 echo "[NEX] All systems live."
