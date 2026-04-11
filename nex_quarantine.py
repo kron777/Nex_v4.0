@@ -538,7 +538,13 @@ except Exception:
 def check(content: str, source: str = "unknown", topic: str = "",
           confidence: float = 0.7) -> CheckResult:
     """Convenience wrapper — drop-in for any INSERT guard."""
-    return get_engine().check(content, source, topic, confidence)
+    result = get_engine().check(content, source, topic, confidence)
+    if result.allowed and _SIPHON_OK:
+        try:
+            _siphon_belief(content, topic, confidence, source)
+        except Exception:
+            pass
+    return result
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────

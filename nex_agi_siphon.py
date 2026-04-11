@@ -180,7 +180,16 @@ class AGISiphon:
         Call this after QuarantineEngine.check() returns allowed=True.
         """
         # Basic length/quality gates
+        # Exclusion filters — malformed or low-quality patterns
         if not content or len(content) < MIN_LENGTH or len(content) > MAX_LENGTH:
+            return False
+        if topic in ('deleted', 'quarantine', ''):
+            return False
+        import re as _re
+        if _re.match(r'What does .{3,40} have to do with', content):
+            return False
+        if content.startswith("What does"):
+            return False
             return False
 
         word_count = len(content.split())
