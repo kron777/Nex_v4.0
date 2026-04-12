@@ -405,6 +405,8 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
         raw = r.json().get("content", "").strip()
         # Strip DeepSeek-R1 thinking blocks from output
         raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
+        # Also strip orphaned opening tags if </think> missing
+        raw = re.sub(r'<think>.*$', '', raw, flags=re.DOTALL).strip()
         raw = re.sub(r'\[Start thinking\].*?\[End thinking\]', '', raw, flags=re.DOTALL).strip()
         # Fix thinking bleed — odd ". such as" / ". however" fragments
         raw = re.sub(r'\.\s+([a-z])', lambda m: '. ' + m.group(1).upper(), raw)
