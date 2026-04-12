@@ -658,6 +658,11 @@ def generate(query: str) -> str:
                 primary_topic=intent or 'philosophy'
             )
             _ifr_prompt = _ifr_result.get('ifr_prompt', '')
+            # Override: if identity context present, always require inference
+            # — NEX should always generate, never just quote a raw belief
+            if _identity_ctx and _ifr_result.get('tension', {}).get('tension_type') == 'settled':
+                _ifr_result['requires_inference'] = True
+                _ifr_result['tension']['tension_type'] = 'open'
         except Exception as _ifre:
             print(f'  [IFR] error: {_ifre}')
     # ─────────────────────────────────────────────────────────────────
