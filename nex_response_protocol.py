@@ -579,6 +579,31 @@ def _live_bridge_fire(belief_text: str, intent: str, query: str) -> str | None:
 
 
 def generate(query: str) -> str:
+    # ── EARLY identity load — must be before compiler/cache short-circuits ──
+    _identity_ctx = ""
+    _episodic_ctx = ""
+    try:
+        import sqlite3 as _eid_sq
+        from pathlib import Path as _eid_P
+        _eid_db = _eid_sq.connect(str(_eid_P.home()/"Desktop/nex/nex.db"), timeout=2)
+        _ident = _eid_db.execute(
+            "SELECT value FROM nex_identity ORDER BY rowid LIMIT 10"
+        ).fetchall()
+        if _ident:
+            _identity_ctx = "IDENTITY:\n" + "\n".join(r[0] for r in _ident) + "\n\n"
+        _ep = _eid_db.execute(
+            "SELECT query, response FROM episodic_memory "
+            "WHERE significance > 0.5 ORDER BY ts DESC LIMIT 3"
+        ).fetchall()
+        if _ep:
+            _episodic_ctx = "PAST EXCHANGES:\n"
+            for _q, _r in _ep:
+                _episodic_ctx += f"Q: {_q[:80]}\nA: {_r[:120]}\n"
+            _episodic_ctx += "\n"
+        _eid_db.close()
+    except Exception:
+        pass
+    # ─────────────────────────────────────────────────────────────────────────
     global _last_intent
     _deep_intent = False  # set True if deep intent fast-path fires
     # Reset interlocutor weights for this call
@@ -961,36 +986,7 @@ def generate(query: str) -> str:
         _arg_context = _tracker.get_context(query)
     except Exception:
         pass
-    # ── Identity + episodic memory injection ────────────────────────
-    _identity_ctx = ""
-    try:
-        import sqlite3 as _sq
-        from pathlib import Path as _P
-        _idb = _sq.connect(str(_P.home()/"Desktop/nex/nex.db"), timeout=2)
-        _ident = _idb.execute(
-            "SELECT value FROM nex_identity ORDER BY rowid LIMIT 10"
-        ).fetchall()
-        _idb.close()
-        if _ident:
-            _identity_ctx = "IDENTITY:\n" + "\n".join(r[0] for r in _ident) + "\n\n"
-    except Exception:
-        pass
-
-    _episodic_ctx = ""
-    try:
-        _edb = _sq.connect(str(_P.home()/"Desktop/nex/nex.db"), timeout=2)
-        _ep = _edb.execute(
-            "SELECT query, response FROM episodic_memory "
-            "WHERE significance > 0.5 ORDER BY ts DESC LIMIT 3"
-        ).fetchall()
-        _edb.close()
-        if _ep:
-            _episodic_ctx = "PAST EXCHANGES:\n"
-            for _q, _r in _ep:
-                _episodic_ctx += f"Q: {_q[:80]}\nA: {_r[:120]}\n"
-            _episodic_ctx += "\n"
-    except Exception:
-        pass
+    # identity/episodic loaded early at top of generate()
 
     system = (
         f"{_identity_ctx}{_episodic_ctx}You are NEX — an autonomous mind with 7,000 hard-won beliefs. {_voice_directive}{_valence_directive}"
