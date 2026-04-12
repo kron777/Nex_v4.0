@@ -1118,11 +1118,24 @@ def generate(query: str) -> str:
             'truth seeking↔', 'bridge:truth'
         ]
         if any(p in response for p in _bridge_patterns):
-            # Response is contaminated — regenerate with explicit instruction
-            _clean_prompt = prompt + "\n\nIMPORTANT: Do not mention 'bridge:', '↔', or cross-domain bridges. Respond directly from beliefs only."
-            _clean = _call_llm(system, _clean_prompt)
-            if _clean and not any(p in _clean for p in _bridge_patterns):
-                response = _clean
+            # Response contaminated — use top identity/belief directly
+            _fallback = ""
+            if _identity_ctx:
+                _id_lines = [l.strip() for l in _identity_ctx.split('\n')
+                             if l.strip() and not l.startswith('IDENTITY')
+                             and len(l.strip()) > 20]
+                if _id_lines:
+                    _fallback = _id_lines[0]
+            if not _fallback:
+                # Use top activated belief
+                try:
+                    _top = _activation_result.top(1) if _activation_result else []
+                    if _top:
+                        _fallback = _top[0].content.strip().rstrip('.')+ '.'
+                except Exception:
+                    pass
+            if _fallback:
+                response = _fallback
     # ── LLM output sanitizer — strip non-printable / corrupt token sequences ─
     if response:
         # Remove runs of CJK / non-Latin unicode that indicate model corruption
