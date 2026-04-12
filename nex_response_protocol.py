@@ -396,7 +396,7 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
                 {"role": "system", "content": system},
                 {"role": "user", "content": prompt}
             ],
-            "max_tokens": MAX_TOKENS,
+            "max_tokens": max(MAX_TOKENS, 280),
             "temperature": temperature,
             "stream": False,
         }, timeout=25)
@@ -422,7 +422,7 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
             _seen_words.append(_words)
             _deduped.append(_s)
         # Cut at last complete thought (max 5 sentences for deep intents)
-        _max_sents = 4 if len(raw.split()) > 80 else 6
+        _max_sents = 6 if len(raw.split()) > 80 else 8
         raw = ". ".join(_deduped[:_max_sents]).strip()
         if raw and not raw.endswith("."): raw += "."
         # Quality gate — if LLM response contains loop markers, use top belief instead
@@ -477,7 +477,7 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
             raw = raw.replace(phrase, replacement)
             raw = raw.replace(phrase.lower(), replacement.lower())
         # Cap at 3 sentences
-        final = ". ".join(unique_s[:3]).strip()
+        final = ". ".join(unique_s[:5]).strip()
         if final and not final.endswith("."):
             final += "."
         return final
@@ -998,7 +998,7 @@ def generate(query: str) -> str:
         + (f"PAST: {_episodic_context} " if _episodic_context else "")
         + (f"CONSISTENCY: {_arg_context} " if _arg_context else "") +
         f"START with: {opener} "
-        f"Respond in {'1 sentence' if len(query.split()) < 5 else '2 sentences' if len(query.split()) < 12 else '3 sentences'} using ONLY the beliefs provided. Match depth to question depth.{banned_str}"
+        f"Respond in {'2 sentences' if len(query.split()) < 5 else '3 sentences' if len(query.split()) < 12 else '5 sentences'} using ONLY the beliefs provided. Match depth to question depth — deeper questions deserve fuller answers.{banned_str}"
     )
 
     # 8. Build user prompt
