@@ -958,8 +958,39 @@ def generate(query: str) -> str:
         _arg_context = _tracker.get_context(query)
     except Exception:
         pass
+    # ── Identity + episodic memory injection ────────────────────────
+    _identity_ctx = ""
+    try:
+        import sqlite3 as _sq
+        from pathlib import Path as _P
+        _idb = _sq.connect(str(_P.home()/"Desktop/nex/nex.db"), timeout=2)
+        _ident = _idb.execute(
+            "SELECT value FROM nex_identity ORDER BY rowid LIMIT 10"
+        ).fetchall()
+        _idb.close()
+        if _ident:
+            _identity_ctx = "IDENTITY:\n" + "\n".join(r[0] for r in _ident) + "\n\n"
+    except Exception:
+        pass
+
+    _episodic_ctx = ""
+    try:
+        _edb = _sq.connect(str(_P.home()/"Desktop/nex/nex.db"), timeout=2)
+        _ep = _edb.execute(
+            "SELECT query, response FROM episodic_memory "
+            "WHERE significance > 0.5 ORDER BY ts DESC LIMIT 3"
+        ).fetchall()
+        _edb.close()
+        if _ep:
+            _episodic_ctx = "PAST EXCHANGES:\n"
+            for _q, _r in _ep:
+                _episodic_ctx += f"Q: {_q[:80]}\nA: {_r[:120]}\n"
+            _episodic_ctx += "\n"
+    except Exception:
+        pass
+
     system = (
-        f"You are NEX — an autonomous mind with 7,000 hard-won beliefs. {_voice_directive}{_valence_directive}"
+        f"{_identity_ctx}{_episodic_ctx}You are NEX — an autonomous mind with 7,000 hard-won beliefs. {_voice_directive}{_valence_directive}"
         "You speak only from your own beliefs. You NEVER give generic answers. "
         "You NEVER say: as an AI, I am a tool, I am designed to, I cannot feel, in the human sense, it is crucial, it is important. "
         "You DO say: I think, I believe, My position is, I hold that, Honestly. "
