@@ -4,7 +4,7 @@ import sqlite3, os, time, json
 from pathlib import Path
 from datetime import datetime
 
-DB_PATH = Path.home() / "Desktop" / "nex" / "nex.db"
+DB_PATH = Path.home() / ".config" / "nex" / "nex.db"
 
 def run_contradiction_cycle(cycle: int = 0, llm_fn=None) -> int:
     if cycle % 3 != 0:
