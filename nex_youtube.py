@@ -18,6 +18,15 @@ from pathlib import Path
 
 log = logging.getLogger("nex.youtube")
 
+def _brain_log(msg):
+    """Write to nex_brain.log so HUD can see YouTube activity."""
+    try:
+        with open("/tmp/nex_brain.log", "a") as _f:
+            from datetime import datetime
+            _f.write(f"[{datetime.now().strftime('%H:%M:%S')}] [YouTube] {msg}\n")
+    except Exception:
+        pass
+
 # ── Config ────────────────────────────────────────────────────
 YOUTUBE_INTERVAL   = 50         # run every N cognitive cycles
 MAX_VIDEOS_PER_RUN = 5          # max 5 videos per run
@@ -302,6 +311,7 @@ def _extract_beliefs_from_chunk(chunk, topic, llm_fn=None):
             f"Return one belief per line, no numbering.\n\nText: {chunk[:800]}"
         )
         try:
+            _brain_log("processing video — belief extraction active")
             result = llm_fn(prompt, system="You extract strong, specific beliefs about AI, AGI, consciousness and intelligence. Ignore generic statements. Return only high-signal insights.")
             if result:
                 lines = [l.strip() for l in result.strip().split("\n") if len(l.strip()) > 20]
