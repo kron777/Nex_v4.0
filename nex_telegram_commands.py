@@ -407,77 +407,6 @@ async def cmd_version(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ── Registration helper ───────────────────────────────────────────────────────
 
-
-async def cmd_thrownet(update, context):
-    """Run Throw-Net on a constraint. Usage: /thrownet your constraint here"""
-    from telegram.ext import ContextTypes
-    args = ' '.join(context.args) if context.args else ''
-    if not args:
-        await update.message.reply_text(
-            "Usage: /thrownet <constraint>\n"
-            "Example: /thrownet Nex cannot reason causally about beliefs"
-        )
-        return
-    await update.message.reply_text(f"🧠 Throw-Net running on: {args[:80]}...")
-    try:
-        import sys
-        sys.path.insert(0, '/home/rr/Desktop/nex/nex')
-        from nex_throw_net import handle_thrownet_command
-        result = handle_thrownet_command(args)
-        await update.message.reply_text(result[:4000])
-    except Exception as e:
-        await update.message.reply_text(f"Throw-Net error: {str(e)[:200]}")
-
-async def cmd_approve_tn(update, context):
-    """Approve a Throw-Net session. Usage: /approve_tn <session_id>"""
-    if not context.args:
-        await update.message.reply_text("Usage: /approve_tn <session_id>")
-        return
-    try:
-        session_id = int(context.args[0])
-        notes = ' '.join(context.args[1:]) if len(context.args) > 1 else ''
-        from nex_throw_net import handle_approve_command
-        result = handle_approve_command(session_id, notes)
-        await update.message.reply_text(result[:2000])
-    except Exception as e:
-        await update.message.reply_text(f"Approve error: {str(e)[:200]}")
-
-async def cmd_tn_sessions(update, context):
-    """Show recent Throw-Net sessions. Usage: /tn_sessions"""
-    try:
-        from nex_throw_net import handle_sessions_command
-        result = handle_sessions_command(limit=5)
-        await update.message.reply_text(result[:4000])
-    except Exception as e:
-        await update.message.reply_text(f"Sessions error: {str(e)[:200]}")
-
-
-async def cmd_refine_tn(update, context):
-    """Refine a Throw-Net session. Usage: /refine_tn <session_id>"""
-    args = ' '.join(context.args) if context.args else ''
-    if not args:
-        await update.message.reply_text("Usage: /refine_tn <session_id>")
-        return
-    await update.message.reply_text(f"🔬 Refining session {args}...")
-    try:
-        import sys
-        sys.path.insert(0, '/home/rr/Desktop/nex/nex')
-        from nex_refinement_engine import handle_refine_command
-        result = handle_refine_command(args)
-        await update.message.reply_text(result[:4000])
-    except Exception as e:
-        await update.message.reply_text(f"Refine error: {str(e)[:200]}")
-
-async def cmd_auto_refine(update, context):
-    """Auto-refine all pending sessions. Usage: /auto_refine"""
-    await update.message.reply_text("🔬 Auto-refining pending sessions...")
-    try:
-        from nex_refinement_engine import handle_auto_refine_command
-        result = handle_auto_refine_command()
-        await update.message.reply_text(result)
-    except Exception as e:
-        await update.message.reply_text(f"Auto-refine error: {str(e)[:200]}")
-
 def register_commands(app):
     """
     Register all new commands with a Telegram Application instance.
@@ -504,9 +433,4 @@ def register_commands(app):
     app.add_handler(CommandHandler("status",   cmd_status_v2))
     app.add_handler(CommandHandler("beliefs",  cmd_beliefs_v2))
 
-    app.add_handler(CommandHandler("thrownet",    cmd_thrownet))
-    app.add_handler(CommandHandler("approve_tn",  cmd_approve_tn))
-    app.add_handler(CommandHandler("tn_sessions", cmd_tn_sessions))
-    app.add_handler(CommandHandler("refine_tn",   cmd_refine_tn))
-    app.add_handler(CommandHandler("auto_refine",  cmd_auto_refine))
-    print("  [telegram_commands] registered 16 commands")
+    print("  [telegram_commands] registered 11 commands")

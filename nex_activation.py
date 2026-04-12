@@ -144,7 +144,7 @@ class ActivationEngine:
             "SELECT id, content, topic, confidence, COALESCE(momentum,0.0) as momentum, "
             "COALESCE(ontology_score,0.5) as ontology_score, "
             "COALESCE(use_count,0) as use_count "
-            "FROM beliefs WHERE length(content) > 20"
+            "FROM beliefs WHERE length(content) > 20 AND confidence > 0.09"
         ).fetchall()
         for row in rows:
             b = dict(row)

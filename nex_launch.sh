@@ -92,6 +92,9 @@ sleep 1
 sleep 2
 # [HUD] gnome-terminal --title="NEX AUTO CHECK" -- bash -c "cd /home/rr/Desktop/nex && source venv/bin/activate && sleep 7 && python3 auto_check.py; exec bash" &
 # Start HUD server (browser interface replaces terminals)
+# Start ring buffer daemon
+python3 /home/rr/Desktop/nex/nex_buf_daemon.py > /tmp/nex_buf.log 2>&1 &
+sleep 1
 nohup python3 /home/rr/Desktop/nex/nex_hud_server.py > /tmp/nex_hud.log 2>&1 &
 sleep 2
 brave-browser http://localhost:7700 > /dev/null 2>&1 &

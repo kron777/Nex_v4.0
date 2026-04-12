@@ -108,7 +108,7 @@ def _write_belief(db: sqlite3.Connection, content: str, topic: str) -> Optional[
     try:
         from datetime import datetime as _dt, timezone as _tz
         cur = db.execute(
-            "INSERT INTO beliefs (content, confidence, topic, source, created_at, "
+            "INSERT OR IGNORE INTO beliefs (content, confidence, topic, source, created_at, "
             "is_identity) VALUES (?, ?, ?, ?, ?, ?)",
             (
                 content,

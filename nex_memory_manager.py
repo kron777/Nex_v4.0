@@ -1,78 +1,46 @@
-#!/usr/bin/env python3
-"""nex_memory_manager.py — compresses, deduplicates, and archives old beliefs."""
-import sqlite3, os, time, json
-from pathlib import Path
+"""
+nex_memory_manager.py — Memory compression for run.py
+Prunes low-confidence, stale beliefs to keep DB lean.
+"""
+import sqlite3, os, logging
+from datetime import datetime, timedelta
+log = logging.getLogger("nex_memory_manager")
+_DB = os.path.expanduser("~/Desktop/nex/nex.db")
 
-DB_PATH = Path.home() / ".config" / "nex" / "nex.db"
-
-def run_memory_compression(cycle=0, llm_fn=None):
-    if cycle % 10 != 0:
+def run_memory_compression(cycle: int = 0, llm_fn=None, db_path: str = _DB) -> int:
+    """
+    Called every cycle by run.py.
+    Returns number of beliefs cleaned/archived.
+    Only runs every 50 cycles to avoid constant churn.
+    """
+    if cycle % 50 != 0:
         return 0
     try:
-        con = sqlite3.connect(DB_PATH)
+        con = sqlite3.connect(db_path)
         cur = con.cursor()
-
-        # 1. Find near-duplicate beliefs (same topic, very similar content)
-        cur.execute("SELECT id, content, topic, confidence FROM beliefs WHERE confidence > 0.3 ORDER BY topic, confidence DESC")
-        rows = cur.fetchall()
-
-        topic_groups = {}
-        for bid, content, topic, conf in rows:
-            t = str(topic or "general")
-            if not content:             # guard: skip NULL content rows
-                continue
-            if t.startswith("[") or t.startswith("{"): continue
-            topic_groups.setdefault(t, []).append((bid, content, conf))
-
-        merged = 0
-        for topic, group in topic_groups.items():
-            if len(group) < 3: continue
-            # Find beliefs with very high word overlap
-            for i in range(len(group)):
-                for j in range(i+1, len(group)):
-                    a_words = set(group[i][1].lower().split())
-                    b_words = set(group[j][1].lower().split())
-                    if not a_words or not b_words: continue
-                    overlap = len(a_words & b_words) / max(len(a_words), len(b_words))
-                    if overlap > 0.75:
-                        # Keep higher confidence, delete lower
-                        keep_id = group[i][0] if group[i][2] >= group[j][2] else group[j][0]
-                        del_id  = group[j][0] if keep_id == group[i][0] else group[i][0]
-                        cur.execute("DELETE FROM beliefs WHERE id = ?", (del_id,))
-                        merged += 1
-
-        # 2. Archive very old low-confidence beliefs
-        cutoff = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 7*24*3600))
-        cur.execute("DELETE FROM beliefs WHERE confidence < 0.35 AND timestamp < ? AND human_validated = 0 AND origin NOT IN ('dream_cycle','insight_synthesis','contradiction_engine')", (cutoff,))
-        archived = cur.rowcount
-
-        # 3. Decay stale beliefs — increment decay_score for unreferenced beliefs
-        stale_cutoff = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 14*24*3600))
+        # Archive beliefs that are very low confidence AND old AND rarely reinforced
+        cutoff = (datetime.now() - timedelta(days=7)).isoformat()
         cur.execute("""
-            UPDATE beliefs SET decay_score = decay_score + 1
-            WHERE (last_referenced IS NULL OR last_referenced < ?)
-            AND timestamp < ?
-            AND confidence < 0.6
-            AND human_validated = 0
-        """, (stale_cutoff, stale_cutoff))
-        decayed = cur.rowcount
-        if decayed > 0:
-            print(f"  [MEMORY] incremented decay_score on {decayed} stale beliefs")
-
-        # 3. Apply source reliability weighting to new beliefs
-        try:
-            from nex_source_reliability import adjust_belief_confidence
-            cur.execute("SELECT id, confidence, source FROM beliefs WHERE origin = \"auto_learn\" AND confidence = 0.65 LIMIT 200")
-            to_adjust = cur.fetchall()
-            for bid, conf, source in to_adjust:
-                new_conf = adjust_belief_confidence(conf, source or "unknown")
-                cur.execute("UPDATE beliefs SET confidence = ? WHERE id = ?", (new_conf, bid))
-        except Exception: pass
-
+            DELETE FROM beliefs
+            WHERE confidence < 0.25
+              AND reinforce_count < 2
+              AND (timestamp < ? OR timestamp IS NULL)
+              AND topic NOT IN ('identity', 'core_values', 'soul', 'self')
+        """, (cutoff,))
+        cleaned = cur.rowcount
+        con.commit()
+        # Decay unreinforced beliefs slightly
+        cur.execute("""
+            UPDATE beliefs
+            SET confidence = MAX(0.1, confidence * 0.98)
+            WHERE reinforce_count < 1
+              AND timestamp < ?
+        """, (cutoff,))
         con.commit()
         con.close()
-        print(f"  [MEMORY] merged {merged} duplicates, archived {archived} old beliefs")
-        return merged + archived
+        if cleaned > 0:
+            log.info(f"Memory compression: removed {cleaned} stale beliefs")
+        return cleaned
     except Exception as e:
-        print(f"  [MEMORY ERROR] {e}")
+        log.warning(f"run_memory_compression: {e}")
         return 0

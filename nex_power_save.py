@@ -5,7 +5,7 @@ Original module missing. This stub allows full operation.
 All calls permitted, no throttling.
 """
 
-def should_call_llm(context: str = "") -> bool:
+def should_call_llm(context: str = "", tension: float = 0.5, **kwargs) -> bool:
     """Always permit LLM calls — no power save active."""
     return True
 

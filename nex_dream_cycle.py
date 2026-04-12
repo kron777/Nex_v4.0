@@ -309,7 +309,7 @@ def _compression_pass(intuitions, llm_fn=None, max_compress=5):
             t1 = item["b1"]["topic"]
             t2 = item["b2"]["topic"]
             prompt = (
-                f"Two beliefs from distinct fields:\n"
+                f"Two beliefs from different domains:\n"
                 f"Domain 1 ({t1}): {b1_text}\n"
                 f"Domain 2 ({t2}): {b2_text}\n\n"
                 f"Write ONE sentence that captures the non-obvious insight "

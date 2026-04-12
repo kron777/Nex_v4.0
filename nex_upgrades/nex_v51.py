@@ -356,7 +356,7 @@ class EnhancedEventBus:
 class AdvancedBeliefStore:
     """Enhanced belief storage with indexing and intelligent management."""
     
-    def __init__(self, max_beliefs: int = 1000):
+    def __init__(self, max_beliefs: int = 3000):
         self.beliefs: Dict[str, BeliefData] = {}
         self.max_beliefs = max_beliefs
         self.word_index: Dict[str, Set[str]] = defaultdict(set)
@@ -906,7 +906,7 @@ class ConfigManager:
                 'rate_limit_per_second': 100
             },
             'belief_store': {
-                'max_beliefs': 1000,
+                'max_beliefs': 3000,
                 'decay_rate': 0.01,
                 'similarity_threshold': 0.7
             },

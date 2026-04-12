@@ -421,18 +421,21 @@ def query_beliefs(topic=None, min_confidence=0.0, limit=10):
             rows = conn.execute("""
                 SELECT * FROM beliefs
                 WHERE (content LIKE ? OR topic = ?) AND confidence >= ?
-                ORDER BY confidence DESC LIMIT ?
+                ORDER BY (COALESCE(synthesis_depth,0) * 0.1 + confidence) DESC LIMIT ?
             """, (f"%{topic}%", topic, min_confidence, limit * 2)).fetchall()
         else:
             rows = conn.execute("""
                 SELECT * FROM beliefs
                 WHERE confidence >= ?
-                ORDER BY confidence DESC LIMIT ?
+                ORDER BY (COALESCE(synthesis_depth,0) * 0.1 + confidence) DESC LIMIT ?
             """, (min_confidence, limit * 2)).fetchall()
         for r in rows:
             results.append(dict(r))
     finally:
         conn.close()
+
+    # 3a. Boost synthesis depth — depth=3 beliefs surface first
+    results.sort(key=lambda x: x.get("confidence", 0.5) + (x.get("synthesis_depth") or 0) * 0.15, reverse=True)
 
     # 3. Deduplicate by first 80 chars
     seen = set()

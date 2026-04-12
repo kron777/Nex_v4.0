@@ -556,6 +556,7 @@ class DriftCorrectionTrigger:
                     UPDATE beliefs
                     SET confidence = MAX(confidence - 0.03, 0.05), last_referenced = ?
                     WHERE confidence < 0.22
+                      AND locked = 0
                       AND topic NOT LIKE '%identity%'
                       AND topic NOT LIKE '%truth%'
                       AND topic NOT LIKE '%contradiction%'

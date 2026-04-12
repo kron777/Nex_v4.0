@@ -276,7 +276,8 @@ class BeliefKillSystem:
     Target: -30% belief count. Prevent slow bloat return."""
     INTERVAL    = 300
     MAX_IDLE    = 20    # cycles without use
-    MIN_RC      = 1     # minimum reinforcement count to survive
+    MIN_RC      = 1
+    BIRTH_GRACE = 30    # cycles before eligible for kill
     TARGET_REDUCTION = 0.30
 
     def __init__(self):
@@ -294,18 +295,19 @@ class BeliefKillSystem:
 
                 idle_threshold = max(0, current_cycle - self.MAX_IDLE)
                 result = c.execute("""
-                    DELETE FROM beliefs WHERE id IN (
+                    DELETE FROM beliefs WHERE locked=0 AND synthesis_depth=0 AND id IN (
                         SELECT id FROM beliefs
                         WHERE locked=0
                           AND confidence < 0.30
                           AND reinforce_count <= ?
                           AND (last_used_cycle = 0 OR last_used_cycle < ?)
+                          AND birth_cycle > 0 AND birth_cycle < ?
                           AND topic NOT IN
                             ('truth_seeking','contradiction_resolution',
                              'uncertainty_honesty','nex_identity')
                         LIMIT 80
                     )
-                """, (self.MIN_RC, idle_threshold))
+                """, (self.MIN_RC, idle_threshold, max(0, current_cycle - self.BIRTH_GRACE)))
                 killed = result.rowcount if hasattr(result, 'rowcount') else 0
                 # commit handled by _db() context manager
 
@@ -378,7 +380,7 @@ class ContradictionResolutionEngineV2:
                         UPDATE beliefs SET confidence=MIN(confidence+0.05,0.95)
                         WHERE id=?
                     """, (winner,))
-                    c.execute("DELETE FROM beliefs WHERE id=?", (loser,))
+                    c.execute("DELETE FROM beliefs WHERE id=? AND locked=0 AND synthesis_depth=0", (loser,))
                     # commit handled by _db() context manager
 
                 del self._age[key]

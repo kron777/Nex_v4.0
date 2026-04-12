@@ -263,9 +263,10 @@ def fetch_and_insert(query, topic, max_results=40):
                     continue  # below minimum quality — skip
                 try:
                     con.execute(
-                        "INSERT OR IGNORE INTO beliefs (content,confidence,topic,source,timestamp) "
-                        "VALUES (?,?,?,?,?)",
-                        (s, _conf, topic, "self_research", time.time())
+                        """INSERT OR IGNORE INTO belief_embryos
+                           (raw_text, source, topic, source_quality, stage)
+                           VALUES (?, ?, ?, ?, 'embryo')""",
+                        (s, "self_research", topic, _conf)
                     )
                     inserted += 1
                 except Exception:
@@ -301,7 +302,7 @@ def rebuild_json():
                 "confidence": round(float(r["confidence"] or 0.5), 4),
                 "tags":       [r["topic"]] if r["topic"] else [],
                 "source":     r["source"] or "self_research",
-                "timestamp":  float(r["timestamp"] or time.time()),
+                "timestamp":  float(r["timestamp"]) if str(r["timestamp"] or "").replace(".","").isdigit() else time.time(),
             })
     tmp = BF_PATH.parent / "beliefs.json.tmp"
     tmp.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding='utf-8')

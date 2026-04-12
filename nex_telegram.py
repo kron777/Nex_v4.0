@@ -80,7 +80,7 @@ except Exception as _e:
 
 # ── Config ──
 
-BOT_TOKEN = "7997066651:AAFM3a3IujcnwzGQk1lpMJj1JctH2d0JBGw"
+BOT_TOKEN = "8758336859:AAFib_I_LBnqWGV-MVqrwa1T0sFf6PenAU4"
 CONFIG_DIR = os.path.expanduser("~/.config/nex")
 LOG_PATH = os.path.join(CONFIG_DIR, "telegram.log")
 

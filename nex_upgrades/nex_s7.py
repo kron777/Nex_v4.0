@@ -817,7 +817,7 @@ class CognitiveBudget:
 
     def __init__(
         self,
-        max_beliefs_per_cycle:     int = 15,
+        max_beliefs_per_cycle:     int = 25,
         max_reflections_per_cycle: int = 8,
         max_cycles_per_minute:     int = 12,
     ):

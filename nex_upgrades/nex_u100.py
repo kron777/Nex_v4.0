@@ -174,7 +174,7 @@ class DecisiveBeliefUpdateSystem:
             elif conf < 0.15:
                 # Near-death — delete
                 with _db() as c:
-                    c.execute("DELETE FROM beliefs WHERE id=?", (bid,))
+                    c.execute("DELETE FROM beliefs WHERE id=? AND locked=0 AND synthesis_depth=0", (bid,))
                     # commit handled by _db() context manager
                 entry = {"cycle": self.total, "action": "delete",
                          "belief_id": bid, "topic": row["topic"],
@@ -537,10 +537,10 @@ class SignalDeduplicationCore:
 class AggressiveBeliefMergeV2:
     """Merge mid-conf clusters (0.4–0.7): 5 weak → 1 stronger.
     Track merge lineage. Target: -20% beliefs, +confidence."""
-    INTERVAL   = 7200  # raised to 2 hours — prevent belief collapse
+    INTERVAL   = 999999  # disabled — replaced by nex_belief_engine  # raised to 2 hours — prevent belief collapse
     MID_LOW    = 0.40
     MID_HIGH   = 0.65  # lower ceiling — protect higher conf beliefs
-    CLUSTER_SZ = 15  # raised — only merge large clusters
+    CLUSTER_SZ = 30  # raised — only merge large clusters
     CONF_BOOST = 0.03  # fix10: reduced from 0.08 — prevents artificial conf spikes
 
     def __init__(self):
@@ -560,6 +560,9 @@ class AggressiveBeliefMergeV2:
             return
         self.last_run = time.time()
         try:
+            open(self._ts_path, "w").write(str(self.last_run))
+        except: pass
+        try:
             with _db() as c:
                 self._before = c.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
                 rows = c.execute("""
@@ -569,7 +572,7 @@ class AggressiveBeliefMergeV2:
                     FROM beliefs
                     WHERE confidence BETWEEN ? AND ? AND locked=0
                     GROUP BY topic HAVING n >= ?
-                    ORDER BY n DESC LIMIT 10
+                    ORDER BY n DESC LIMIT 3
                 """, (self.MID_LOW, self.MID_HIGH, self.CLUSTER_SZ)).fetchall()
 
             for r in rows:
@@ -578,7 +581,7 @@ class AggressiveBeliefMergeV2:
                 new_conf = min(0.90, r["ac"] + self.CONF_BOOST)
                 with _db() as c:
                     c.execute(
-                        f"DELETE FROM beliefs WHERE id IN ({','.join('?'*len(ids))})",
+                        f"DELETE FROM beliefs WHERE locked=0 AND synthesis_depth=0 AND id IN ({','.join('?'*len(ids))})",
                         tuple(ids))
                     c.execute("""
                         INSERT OR IGNORE INTO beliefs

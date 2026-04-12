@@ -2716,7 +2716,7 @@ class SoulLoop:
             pass
 
         # Strip loop phrases before returning
-        for _lp in ["bridge:truth", "different domain", "What does bridge:", "Sounds like a different"]:
+        for _lp in ["bridge:truth", "different domain", "What does bridge:", "Sounds like a different", "↔", "bridge:cognitive", "bridge:alignment", "bridge:truth-seeking", "have to do with a different", "The interesting thing about bridge"]:
             if _lp in reply:
                 _sents = reply.replace('!','.').replace('?','.').split('.')
                 _sents = [s for s in _sents if _lp not in s]

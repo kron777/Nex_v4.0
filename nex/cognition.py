@@ -1715,7 +1715,9 @@ class BeliefIndex:
                 data = np.load(self._CACHE_PATH, allow_pickle=True)
                 self._matrix = data["matrix"]
                 self._texts  = list(data["texts"])
-                print(f"[BeliefIndex] loaded {len(self._texts)} embeddings from disk cache")
+                if not getattr(self, "_cache_logged", False):
+                    print(f"[BeliefIndex] loaded {len(self._texts)} embeddings from disk cache")
+                    self._cache_logged = True
         except Exception as e:
             print(f"[BeliefIndex] disk cache load failed (will rebuild): {e}")
 

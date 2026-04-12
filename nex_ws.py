@@ -171,6 +171,31 @@ def emit_feed(etype: str, agent: str, content: str):
     broadcast({"type": "feed", "data": {
         "type": etype, "agent": agent, "content": content, "ts": ts
     }})
+    # Only write meaningful events to feed file — skip directives/internal noise
+    _feed_skip = (etype in ('phase','reflect','system','error','promo_fail',
+                              'intent','v2','s7','nightly','consolidator')) or         any(s in str(agent)+str(content) for s in [
+        'D12','D14','D16','D7','D6','LOOP id=','Cap hit','ratio=',
+        'CharEngine','LLMFree','synthesis:','COGNITION','PHASE','▶ ',
+        'cannot import','forming. Current','in the middle',
+        'ColdQuery','742a22f3','episodic fallback',
+    ])
+    if _feed_skip:
+        return
+    # Write to shared feed file — hud_server reads this for responses panel
+    try:
+        import json as _fj, os as _fo
+        _fp = _fo.path.expanduser("~/.config/nex/feed_events.jsonl")
+        with open(_fp, "a") as _ff:
+            _ff.write(_fj.dumps({"t": ts, "src": etype.upper(),
+                "msg": f"[{etype.upper()}] {agent} {content}"}) + "\n")
+        # Keep file small — max 200 lines
+        try:
+            with open(_fp) as _fr: _lines = _fr.readlines()
+            if len(_lines) > 200:
+                with open(_fp, "w") as _fw: _fw.writelines(_lines[-200:])
+        except Exception: pass
+    except Exception:
+        pass
 
 def emit_phase(phase: str, remaining: int = 120):
     """phase: ABSORB|REPLY|ANSWER|CHAT|POST|REFLECT|COGNITION"""
@@ -195,3 +220,22 @@ def emit_self_assessment(data: dict):
 ws_start = start
 
 # Monkey-patch _server_main to retry on port conflict
+
+def emit_youtube_beliefs(limit=20):
+    """Pull latest YouTube beliefs from DB and emit to feed."""
+    try:
+        import sqlite3, os, re
+        db = sqlite3.connect(os.path.expanduser('~/Desktop/nex/nex.db'), timeout=3)
+        rows = db.execute("""
+            SELECT content FROM beliefs 
+            WHERE (source LIKE '%youtube%' OR topic LIKE '%youtube%'
+                   OR source LIKE '%agi_youtube%')
+            AND length(content) > 30
+            ORDER BY id DESC LIMIT ?
+        """, (limit,)).fetchall()
+        db.close()
+        for (content,) in rows:
+            emit_feed('youtube', 'youtube_engine', content[:200])
+        return len(rows)
+    except Exception as e:
+        return 0

@@ -1,75 +1,56 @@
-#!/usr/bin/env python3
-"""nex_knowledge_filter.py — prunes, deduplicates and decays beliefs."""
-import sqlite3, time
-from pathlib import Path
-try:
-    from nex.nex_upgrades import u5_reweight_confidence, u7_compress_memory
-    _UPGRADES = True
-except Exception:
-    _UPGRADES = False
-    def u5_reweight_confidence(db_path=None, cycle=0): return 0
-    def u7_compress_memory(db_path=None, target_floor=500, cycle=0): return 0
+"""
+nex_knowledge_filter.py — Knowledge quality filter for run.py
+Flags beliefs that are too vague, duplicated, or contradictory
+and marks them for review/decay.
+"""
+import sqlite3, os, logging
+log = logging.getLogger("nex_knowledge_filter")
+_DB = os.path.expanduser("~/Desktop/nex/nex.db")
 
-
-DB_PATH = Path.home() / ".config" / "nex" / "nex.db"
-
-BELIEF_FLOOR = 5000  # must match nex_directives.py
-
-def run_filter_cycle(cycle: int = 0) -> int:
-    if cycle % 3 != 0:
+def run_filter_cycle(cycle: int = 0, db_path: str = _DB) -> int:
+    """
+    Called every cycle by run.py.
+    Only does real work every 30 cycles.
+    Returns number of beliefs flagged.
+    """
+    if cycle % 30 != 0:
         return 0
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
-        # ── Floor check — never prune below BELIEF_FLOOR ─────────────────────
-        cur.execute("SELECT COUNT(*) FROM beliefs")
-        total = cur.fetchone()[0]
-        if total <= BELIEF_FLOOR:
-            print(f"  [FILTER] skipped — at floor ({total}/{BELIEF_FLOOR})")
-            conn.close()
-            return 0
-        # Prune low confidence — but stop at floor
+        con = sqlite3.connect(db_path)
+        cur = con.cursor()
+        flagged = 0
+
+        # Flag beliefs that are too short to be meaningful
         cur.execute("""
-            DELETE FROM beliefs WHERE confidence < 0.40
-            AND id NOT IN (
-                SELECT id FROM beliefs
-                ORDER BY confidence DESC
-                LIMIT ?
-            )
-        """, (BELIEF_FLOOR,))
-        pruned = cur.rowcount
-        # Cap 300 per topic — floor-aware
-        cur.execute("SELECT COUNT(*) FROM beliefs")
-        total = cur.fetchone()[0]
-        cur.execute("SELECT DISTINCT topic FROM beliefs")
-        topics = [r[0] for r in cur.fetchall()]
-        capped = 0
-        for topic in topics:
-            if total <= BELIEF_FLOOR:
-                break
-            cur.execute("SELECT id FROM beliefs WHERE topic=? ORDER BY confidence DESC", (topic,))
-            ids = [r[0] for r in cur.fetchall()]
-            if len(ids) > 300:
-                to_remove = min(len(ids) - 300, total - BELIEF_FLOOR)
-                for eid in ids[300:300 + to_remove]:
-                    cur.execute("DELETE FROM beliefs WHERE id=?", (eid,))
-                    capped += 1
-                    total -= 1
-        # Decay stale beliefs
-        cutoff = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 30*86400))
-        cur.execute("UPDATE beliefs SET confidence=MIN(confidence,0.85) WHERE timestamp < ? AND confidence > 0.45", (cutoff,))
-        decayed = cur.rowcount
-        conn.commit()
-        conn.close()
-        if pruned or capped or decayed:
-            print(f"  [FILTER] pruned={pruned} capped={capped} decayed={decayed}")
-        # ── U5: stability reweight ──────────────────────────────────────────
-        if _UPGRADES:
-            u5_reweight_confidence(DB_PATH, cycle)
-        # ── U7: memory compress ─────────────────────────────────────────────
-        if _UPGRADES:
-            u7_compress_memory(DB_PATH, BELIEF_FLOOR, cycle)
-        return pruned + capped
+            UPDATE beliefs SET confidence = MAX(0.1, confidence * 0.9)
+            WHERE LENGTH(content) < 20
+              AND topic NOT IN ('identity', 'core_values')
+        """)
+        flagged += cur.rowcount
+
+        # Flag near-duplicate beliefs (same first 40 chars, different ids)
+        rows = cur.execute("""
+            SELECT id, SUBSTR(content, 1, 40) as prefix
+            FROM beliefs ORDER BY confidence ASC
+        """).fetchall()
+        seen_prefixes = {}
+        to_decay = []
+        for row_id, prefix in rows:
+            if prefix in seen_prefixes:
+                to_decay.append(row_id)
+            else:
+                seen_prefixes[prefix] = row_id
+        if to_decay:
+            cur.executemany("""
+                UPDATE beliefs SET confidence = MAX(0.1, confidence * 0.85)
+                WHERE id = ?
+            """, [(i,) for i in to_decay[:20]])
+            flagged += min(len(to_decay), 20)
+
+        con.commit(); con.close()
+        if flagged:
+            log.info(f"Knowledge filter: flagged {flagged} beliefs")
+        return flagged
     except Exception as e:
-        print(f"  [FILTER] error: {e}")
+        log.warning(f"run_filter_cycle: {e}")
         return 0

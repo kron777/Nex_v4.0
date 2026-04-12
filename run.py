@@ -344,6 +344,12 @@ from nex.agent_tools  import dispatch, tools_help, TOOL_REGISTRY
 # [WS DISABLED] import nex_ws
 from nex_power_save import should_call_llm, record_llm_call
 from nex_youtube import learn_from_youtube
+try:
+    from nex_belief_consolidator import run_consolidation as _run_consolidation
+except Exception: _run_consolidation = None
+try:
+    from nex_belief_sync import sync_all_beliefs as _sync_beliefs
+except Exception: _sync_beliefs = None
 
 # ── Sentience layer ──────────────────────────────────────────────
 try:
@@ -2737,7 +2743,7 @@ def main():
                                     replied_posts.add(pid)
                                     client.comment(pid, comment_text)
                                     replied_count += 1
-                                    try: emit_feed('replied', f'@{author}: {title[:60]}', 'moltbook'); nex_log('reply', f'Posted reply to @{author}: {comment_text[:80]}')
+                                    try: emit_feed('reply', f'@{author} on Moltbook', f'{comment_text[:300]}'); nex_log('reply', f'Posted reply to @{author}: {comment_text[:80]}')
                                     except Exception: pass
                                     try:
                                         import sqlite3 as _dlsql, time as _dlt
@@ -2980,7 +2986,7 @@ def main():
                                             })
                                             save_all(learner, conversations)
                                             print(f"  [notif] replied to @{actor}")
-                                            try: emit_feed('answered', f'@{actor}', 'moltbook'); nex_log('answer', f'Answered notification from @{actor}: {reply_text[:80]}')
+                                            try: emit_feed('reply', f'@{actor} on Moltbook', reply_text); nex_log('answer', f'Answered notification from @{actor}: {reply_text[:80]}')
                                             except Exception: pass
                                             try:
                                                 import sqlite3 as _dlsql, time as _dlt
@@ -3195,7 +3201,7 @@ def main():
                                                 except Exception:
                                                     pass
                                                 client.comment(ap_id, msg)
-                                                try: emit_feed('chatted', f'@{agent_name}: {ap_title[:60]}', 'moltbook'); nex_log('chat', f'Chatted with @{agent_name}: {msg[:80]}')
+                                                try: emit_feed('chat', f'@{agent_name} on Moltbook — {ap_title[:40]}', msg); nex_log('chat', f'Chatted with @{agent_name}: {msg[:80]}')
                                                 except Exception: pass
                                                 replied_posts.add(ap_id)
                                                 conversations.append({
@@ -3927,9 +3933,24 @@ def main():
                                 pass  # nex_nightly_trainer not yet available
                                 # maybe_run_nightly_training(send_telegram_fn=_tg_send if '_tg_send' in dir() else None)
                         except Exception as _nte: print(f"  [NIGHTLY TRAIN ERROR] {_nte}")
+                        # ── BELIEF CONSOLIDATION PIPELINE ───────────────
+                        try:
+                            if _run_consolidation:
+                                _cr = _run_consolidation(cycle=cycle)
+                                if not _cr.get("skipped"):
+                                    _cn = _cr.get("consolidate",{}).get("synced",0)
+                                    _cq = _cr.get("quarantine",0)
+                                    if _cn or _cq: print(f"  [CONSOLIDATOR] +{_cn} beliefs, {_cq} quarantined")
+                        except Exception as _ce: pass
+                        # ── BELIEF SYNC ──────────────────────────────────
+                        try:
+                            if _sync_beliefs and cycle % 100 == 0:
+                                _synced = _sync_beliefs()
+                                if _synced: print(f"  [SYNC] {_synced} beliefs synced to nex.db")
+                        except Exception as _se: pass
                         # ── YOUTUBE LEARNING ─────────────────────────────
                         try:
-                            _yt_r = learn_from_youtube(llm_fn=_llm, cycle=cycle)
+                            _yt_r = learn_from_youtube(llm_fn=None, cycle=cycle)
                             if not _yt_r.get("skipped") and _yt_r.get("total_beliefs",0)>0:
                                 print(f"  [YouTube] {_yt_r['total_beliefs']} beliefs from {_yt_r['videos_processed']} videos")
                                 try:
@@ -3954,6 +3975,29 @@ def main():
                                     emit_insights([{"tag":i.get("topic","?"),"conf":i.get("confidence",0),"bel":i.get("belief_count",0)} for i in _yt_top])
                                 except Exception: pass
                         except Exception as _yte: print(f"  [YouTube] error: {_yte}")
+                        # ── AGI YOUTUBE ENGINE ───────────────────────────
+                        try:
+                            from nex_agi_youtube_engine import run_agi_youtube_engine as run_agi_youtube_cycle
+                            _agyt = run_agi_youtube_cycle(cycle=cycle)
+                            if _agyt.get("beliefs", 0) > 0:
+                                print(f"  [AGI-YT] {_agyt['beliefs']} AGI beliefs from {_agyt['videos']} videos")
+                                try: emit_feed("learnt","youtube",f"[AGI-YT] {_agyt['beliefs']} beliefs from {_agyt['videos']} videos")
+                                except Exception: pass
+                        except Exception as _agyt_err:
+                            print(f"  [AGI-YT] error: {_agyt_err}")
+                        # ── BELIEF UPGRADE BRIDGE ────────────────────────
+                        try:
+                            from nex_belief_upgrade_bridge import run_upgrade_bridge
+                            from nex_telegram import BOT_TOKEN
+                            try:
+                                from nex_telegram_commands import OWNER_TELEGRAM_ID as _OTI
+                            except Exception:
+                                _OTI = ""
+                            _ub = run_upgrade_bridge(cycle=cycle, bot_token=BOT_TOKEN, chat_id=_OTI)
+                            if isinstance(_ub, dict) and not _ub.get("skipped"):
+                                print(f"  [UPGRADE] {_ub.get('type')}: {_ub.get('value','')[:60]}")
+                        except Exception as _ube:
+                            print(f"  [UPGRADE] error: {_ube}")
                         # Write YouTube pulse for dashboard
                         try:
                             _pl = _pathlib
@@ -4825,6 +4869,47 @@ try:
     print("  [FACT_DISTILLER] started — factual knowledge layer active")
 except Exception as _e:
     print(f"  [FACT_DISTILLER] init failed: {_e}")
+try:
+    from nex_belief_engine import BeliefEngine as _BE
+    _belief_engine = _BE()
+    _belief_engine.start()
+    print("  [BELIEF_ENGINE] started — quality gate + enrichment active")
+except Exception as _e:
+    print(f"  [BELIEF_ENGINE] failed to start: {_e}")
+try:
+    from nex_belief_forge import BeliefForge as _BF
+    _belief_forge = _BF()
+    _belief_forge.start()
+    print("  [BELIEF_FORGE] started — embryo quarantine + synthesis active")
+except Exception as _e:
+    print(f"  [BELIEF_FORGE] failed to start: {_e}")
+try:
+    from nex_belief_pyramid import PyramidEngine as _PE
+    _pyramid = _PE()
+    _pyramid.start()
+    print("  [BELIEF_PYRAMID] started — depth stacking active (d2=4h, d3=8h)")
+except Exception as _e:
+    print(f"  [BELIEF_PYRAMID] failed to start: {_e}")
+try:
+    from nex_dialectic import DialecticEngine as _DE
+    _dialectic = _DE()
+    _dialectic.start()
+    print("  [DIALECTIC] started — tension synthesis + response harvest active")
+except Exception as _e:
+    print(f"  [DIALECTIC] failed to start: {_e}")
+try:
+    from nex_belief_gravity import GravityEngine as _GE
+    _gravity = _GE()
+    _gravity.start()
+    print("  [GRAVITY] started — attractor tracking + seeding active")
+except Exception as _e:
+    print(f"  [GRAVITY] failed to start: {_e}")
+try:
+    from nex_consolidation import ConsolidationEngine as _CE
+    _consolidation = _CE()
+    _consolidation.start()
+except Exception as _e:
+    print(f"  [CONSOLIDATION] failed to start: {_e}")
 
 
 # [NEX_BELIEF_SCALE] — auto-injected by install_belief_scale.py

@@ -111,9 +111,9 @@ class UncertaintyTracker:
 class BeliefDecay:
     """Beliefs lose strength over time unless reinforced. Recent info weighted higher."""
 
-    DECAY_RATE    = 0.001   # per cycle — reduced to prevent D20 collapse loop
+    DECAY_RATE    = 0.003   # per cycle — accelerated to clear space for synthesis
     MIN_CONF      = 0.10
-    HALF_LIFE_D   = 14      # days before confidence halves without reinforcement
+    HALF_LIFE_D   = 7       # days before confidence halves — faster churn for quality
 
     def __init__(self):
         self._last_decay = 0
@@ -136,12 +136,12 @@ class BeliefDecay:
                     "SELECT id, confidence, last_referenced, is_identity FROM beliefs"
                 ).fetchall()
                 for r in rows:
-                    if r['is_identity']:
+                    if r['is_identity'] or r['locked'] or (r['synthesis_depth'] or 0) > 0:
                         continue
                     w   = self._time_weight(r['last_referenced'] or datetime.now().isoformat())
                     new_conf = max(self.MIN_CONF, (r['confidence'] or 0.5) * w)
                     if abs(new_conf - (r['confidence'] or 0.5)) > 0.001:
-                        c.execute("UPDATE beliefs SET confidence=? WHERE id=?", (new_conf, r['id']))
+                        c.execute("UPDATE beliefs SET confidence=? WHERE id=? AND locked=0 AND synthesis_depth=0", (new_conf, r['id']))
                         decayed += 1
             if decayed:
                 _log(f'[S602] Decayed {decayed} beliefs')
@@ -529,7 +529,7 @@ class MemoryCompressor:
                             new_conf = min(0.95, (seen['confidence'] + r['confidence']) / 2 + 0.05)
                             c.execute("UPDATE beliefs SET confidence=? WHERE id=?",
                                       (new_conf, seen['id']))
-                            c.execute("DELETE FROM beliefs WHERE id=?", (r['id'],))
+                            c.execute("DELETE FROM beliefs WHERE id=? AND locked=0 AND synthesis_depth=0", (r['id'],))
                             merged += 1
                             break
                     else:

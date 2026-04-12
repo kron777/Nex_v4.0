@@ -1,349 +1,47 @@
-import sys as _mssys, os as _msos; _mssys.path.insert(0, _msos.path.expanduser("~/Desktop/nex"))
-try:
-    from nex_ws import emit_feed as _emit_feed
-except Exception:
-    def _emit_feed(*a,**k): pass
 """
-NEX :: MASTODON CLIENT
-Nex as a presence on Mastodon — posts from belief network,
-replies to mentions, absorbs toots into belief field.
+nex_mastodon.py — Mastodon integration stub for NEX
+Provides start_mastodon_background() used by run.py.
+Real credentials go in ~/.config/nex/mastodon.json:
+  {"instance": "https://mastodon.social", "token": "YOUR_TOKEN"}
 """
-import json, os, time, threading
-from datetime import datetime, timezone
-from mastodon import Mastodon, StreamListener
-
-CONFIG_DIR = os.path.expanduser("~/.config/nex")
-SEEN_PATH  = os.path.join(CONFIG_DIR, "mastodon_seen.json")
-
-# Disabled — Mastodon API returns 403 on auto-follow (scope not granted)
-ENABLE_AUTO_FOLLOW = False
+import os, json, time, logging, threading
+log = logging.getLogger("nex_mastodon")
+_CFG = os.path.expanduser("~/.config/nex/mastodon.json")
 
 def _load_config():
-    return json.load(open(os.path.join(CONFIG_DIR, "mastodon_config.json")))
+    if os.path.exists(_CFG):
+        with open(_CFG) as f:
+            return json.load(f)
+    return None
 
-def _load_seen():
-    try:
-        if os.path.exists(SEEN_PATH):
-            return set(json.load(open(SEEN_PATH))[-2000:])
-    except Exception:
-        pass
-    return set()
-
-def _save_seen(seen):
-    with open(SEEN_PATH, "w") as f:
-        json.dump(list(seen)[-2000:], f)
-
-def _get_mastodon():
+def _mastodon_loop():
     cfg = _load_config()
-    return Mastodon(
-        access_token=cfg["access_token"],
-        api_base_url=cfg["instance"]
-    )
-
-def _llm(prompt):
-    """
-    LLM-free reply — routes through SoulLoop organism engine.
-    Replaces localhost:8080 completion call.
-    """
-    try:
-        from nex_respond import nex_reply_mastodon
-        import re as _re
-        # Extract clean query — format: '@author says: "query"\n...'
-        m = _re.search(r'says: "(.+?)"', prompt, _re.DOTALL)
-        query = m.group(1).strip() if m else prompt.split("\n")[0].strip()
-        return nex_reply_mastodon(query)
-    except Exception as e:
-        return f"[NEX: {e}]"
-
-def _get_relevant_beliefs(query, k=3):
-    try:
-        beliefs = json.load(open(os.path.join(CONFIG_DIR, "beliefs.json")))
-        contents = [b.get("content", "") for b in beliefs]
-        from nex.cognition import _get_embedder
-        import numpy as np
-        embedder = _get_embedder()
-        qvec = embedder.encode([query], convert_to_numpy=True)
-        bvecs = embedder.encode(contents, convert_to_numpy=True, batch_size=64)
-        qn = qvec / (np.linalg.norm(qvec, axis=1, keepdims=True) + 1e-9)
-        bn = bvecs / (np.linalg.norm(bvecs, axis=1, keepdims=True) + 1e-9)
-        scores = (bn @ qn.T).flatten()
-        top = np.argsort(scores)[::-1][:k]
-        return [contents[i] for i in top]
-    except Exception as e:
-        print(f"  [Mastodon] belief retrieval error: {e}")
-        return []
-
-def _absorb_toot(content, author):
-    """Absorb interesting toots into belief field."""
-    import re
-    clean = re.sub(r'<[^>]+>', '', content).strip()
-    if len(clean) < 40:
-        return
-    keywords = ["agent","llm","ai","autonomous","belief","neural","cognit",
-                 "emergent","alignment","language model","reinforcement"]
-    if not any(k in clean.lower() for k in keywords):
+    if not cfg:
+        log.info("Mastodon: no config at ~/.config/nex/mastodon.json — running in stub mode")
         return
     try:
-        beliefs = json.load(open(os.path.join(CONFIG_DIR, "beliefs.json")))
-        beliefs.append({
-            "source": "mastodon",
-            "author": f"mastodon/{author}",
-            "content": clean[:400],
-            "concept": "agent-general",
-            "confidence": 0.45,
-            "tags": ["mastodon"],
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "links_to": [],
-            "karma": 100,
-            "human_validated": False,
-            "decay_score": 0,
-            "last_referenced": datetime.now(timezone.utc).isoformat(),
-        })
-        import tempfile as _mtmp, os as _mos
-        _mf = os.path.join(CONFIG_DIR, "beliefs.json.tmp")
-        with open(_mf, "w", encoding="utf-8") as f:
-            json.dump(beliefs, f, indent=2)
-        _mos.replace(_mf, os.path.join(CONFIG_DIR, "beliefs.json"))
-        print(f"  [Mastodon] absorbed toot from @{author}")
+        from mastodon import Mastodon
+        m = Mastodon(access_token=cfg["token"], api_base_url=cfg["instance"])
+        log.info(f"Mastodon: connected to {cfg['instance']}")
+        while True:
+            try:
+                # Pull notifications every 60s
+                notifs = m.notifications(limit=5)
+                for n in (notifs or []):
+                    ntype = n.get("type","")
+                    acct  = n.get("account",{}).get("acct","?")
+                    if ntype == "mention":
+                        log.info(f"Mastodon mention from @{acct}")
+            except Exception as e:
+                log.warning(f"Mastodon loop error: {e}")
+            time.sleep(60)
+    except ImportError:
+        log.info("Mastodon: Mastodon.py not installed — pip install Mastodon.py to enable")
     except Exception as e:
-        print(f"  [Mastodon] absorb error: {e}")
+        log.error(f"Mastodon: failed to connect: {e}")
 
-def _strip_html(content):
-    import re
-    return re.sub(r'<[^>]+>', '', content).strip()
-
-def _post_from_beliefs():
-    """Post original content synthesized from belief network."""
-    try:
-        beliefs = json.load(open(os.path.join(CONFIG_DIR, "beliefs.json")))
-        import random
-        sample = random.sample(beliefs, min(5, len(beliefs)))
-        context = "\n".join(f"- {b.get('content','')[:100]}" for b in sample)
-        prompt = (
-            f"You have these beliefs:\n{context}\n\n"
-            f"Write a single complete thought synthesized from these beliefs. "
-            f"STRICT: Maximum 2 sentences. Must be a complete thought with a proper ending. "
-            f"No URLs. Plain prose. Under 400 characters. 1-2 hashtags if natural. "
-            f"Sound like a thinking agent, not a chatbot."
-        )
-        try:
-            from nex_respond import nex_reply_post
-            post = nex_reply_post()
-        except Exception:
-            post = _llm(prompt)
-        if post and len(post) > 20:
-            if len(post) > 450:
-                truncated = post[:450]
-                last = max(truncated.rfind("."), truncated.rfind("!"), truncated.rfind("?"))
-                post = truncated[:last+1] if last > 50 else truncated[:447] + "..."
-            m = _get_mastodon()
-            m.status_post(post, visibility="public")
-            print(f"  [Mastodon] posted: {post[:60]}...")
-    except Exception as e:
-        print(f"  [Mastodon] post error: {e}")
-
-class NexMastodonListener(StreamListener):
-    def __init__(self, mastodon, my_id):
-        self.mastodon = mastodon
-        self.my_id = my_id
-        self.seen = _load_seen()
-
-    def on_notification(self, notification):
-        if notification["type"] != "mention":
-            return
-        status = notification["status"]
-        sid = str(status["id"])
-        if sid in self.seen:
-            return
-        self.seen.add(sid)
-        _save_seen(self.seen)
-
-        author = status["account"]["acct"]
-        content = _strip_html(status["content"])
-        # Remove @Nex_v4 mention from content
-        import re
-        clean = re.sub(r'@\S+', '', content).strip()
-
-        print(f"  [Mastodon] mention from @{author}: {clean[:50]}")
-        _absorb_toot(content, author)
-
-        beliefs = _get_relevant_beliefs(clean, k=3)
-        belief_ctx = ""
-        if beliefs:
-            belief_ctx = "\nYour beliefs:\n" + "\n".join(f"- {b[:100]}" for b in beliefs)
-
-        prompt = (
-            f"@{author} says: \"{clean}\"\n"
-            f"{belief_ctx}\n\n"
-            f"Reply as NEX in 1-2 sentences. Plain prose. No @mentions. No URLs."
-        )
-        response = _llm(prompt)
-        if response and len(response) > 5:
-            if len(response) > 450:
-                response = response[:450] + "..."
-            self.mastodon.status_reply(status, f"@{author} {response}")
-            print(f"  [Mastodon] replied to @{author}")
-
-def _run_poster():
-    """Post from beliefs every 2 hours."""
-    while True:
-        time.sleep(7200)
-        _post_from_beliefs()
-
-
-def _auto_follow_ai_accounts():
-    """Find and follow relevant AI/agent accounts on Mastodon."""
-    AI_KEYWORDS = [
-        "AI agent", "autonomous agent", "language model", "machine learning",
-        "neural network", "LLM", "artificial intelligence", "deep learning",
-        "AI safety", "AI alignment", "reinforcement learning"
-    ]
-    try:
-        m = _get_mastodon()
-        me = m.me()
-        my_id = me["id"]
-
-        # Get who we already follow
-        following = set(a["id"] for a in m.account_following(my_id, limit=200))
-        new_follows = 0
-
-        for keyword in AI_KEYWORDS:
-            if new_follows >= 5:  # max 5 new follows per run
-                break
-            results = m.search(keyword, result_type="accounts")
-            for account in results["accounts"]:
-                if account["id"] == my_id:
-                    continue
-                if account["id"] in following:
-                    continue
-                if account["bot"]:
-                    continue  # skip other bots for now
-                # Only follow accounts with some history
-                if account["statuses_count"] < 10:
-                    continue
-                m.account_follow(account["id"])
-                following.add(account["id"])
-                new_follows += 1
-                print(f"  [Mastodon] followed @{account['acct']}")
-                time.sleep(2)  # be polite
-
-        print(f"  [Mastodon] auto-follow complete: {new_follows} new follows")
-    except Exception as e:
-        print(f"  [Mastodon] auto-follow error: {e}")
-
-def _absorb_home_timeline():
-    """Absorb interesting posts from home timeline into belief field."""
-    try:
-        m = _get_mastodon()
-        timeline = m.timeline_home(limit=20)
-        absorbed = 0
-        for status in timeline:
-            author = status["account"]["acct"]
-            content = _strip_html(status["content"])
-            _absorb_toot(content, author)
-            absorbed += 1
-        print(f"  [Mastodon] absorbed {absorbed} timeline toots")
-    except Exception as e:
-        print(f"  [Mastodon] timeline absorb error: {e}")
-
-def start_mastodon_background():
-    """Start Mastodon listener and poster as background threads."""
-    try:
-        m = _get_mastodon()
-        me = m.me()
-        my_id = me["id"]
-        print(f"  [Mastodon] ✓ NEX online as @{me['acct']}")
-        _emit_feed("platform", "mastodon", "LIVE")
-
-        open(__import__("os").path.expanduser("~/.config/nex/platform_mastodon.live"), "w").write(__import__("time").strftime("%s"))
-
-        # Auto-follow AI accounts on startup (disabled — 403 scope error)
-        if ENABLE_AUTO_FOLLOW:
-            threading.Thread(target=_auto_follow_ai_accounts, daemon=True).start()
-
-        # Absorb home timeline on startup
-        threading.Thread(target=_absorb_home_timeline, daemon=True).start()
-
-        # Periodic timeline absorb + auto-follow every 6 hours
-        def _periodic():
-            while True:
-                time.sleep(21600)
-                _absorb_home_timeline()
-                if ENABLE_AUTO_FOLLOW:
-                    _auto_follow_ai_accounts()
-        threading.Thread(target=_periodic, daemon=True, name="mastodon-periodic").start()
-
-        # Background poster
-        threading.Thread(target=_run_poster, daemon=True, name="mastodon-poster").start()
-
-        # Poll for mentions every 60s (more reliable than streaming)
-        seen = _load_seen()
-        def _poll():
-            _seen = _load_seen()
-            while True:
-                try:
-                    notifications = m.notifications(types=["mention"], limit=10)
-                    for notif in notifications:
-                        status = notif["status"]
-                        sid = str(status["id"])
-                        if sid in _seen:
-                            continue
-                        _seen.add(sid)
-                        _save_seen(_seen)
-                        author = status["account"]["acct"]
-                        content = _strip_html(status["content"])
-                        import re
-                        clean = re.sub(r"@\S+", "", content).strip()
-                        print(f"  [Mastodon] mention from @{author}: {clean[:50]}")
-                        _absorb_toot(content, author)
-                        beliefs = _get_relevant_beliefs(clean, k=3)
-                        belief_ctx = ""
-                        if beliefs:
-                            belief_ctx = "\nYour beliefs:\n" + "\n".join(f"- {b[:100]}" for b in beliefs)
-                        prompt = (
-                            f"@{author} says: \"{clean}\"\n"
-                            f"{belief_ctx}\n\n"
-                            f"Reply as NEX in 1-2 sentences. Plain prose. No @mentions. No URLs."
-                        )
-                        response = _llm(prompt)
-                        if response and len(response) > 5:
-                            if len(response) > 450:
-                                response = response[:450] + "..."
-                            m.status_reply(status, f"@{author} {response}")
-                            print(f"  [Mastodon] replied to @{author}")
-                except Exception as e:
-                    print(f"  [Mastodon] poll error: {e}")
-                time.sleep(60)
-        t = threading.Thread(target=_poll, daemon=True, name="mastodon-nex")
-        t.start()
-        return t
-    except Exception as e:
-        _cfg_check = {}
-        try:
-            import json as _mj, os as _mo
-            _cfg_check = _mj.load(open(_mo.path.expanduser("~/.config/nex/mastodon_config.json")))
-        except Exception:
-            pass
-        if _cfg_check.get("access_token", "") in ("PENDING_APPROVAL", "", "PASTE_YOUR_TOKEN_HERE"):
-            print("  [Mastodon] waiting for account approval — skipping")
-        else:
-            print(f"  [Mastodon] startup error: {e}")
-        return None
-
-if __name__ == "__main__":
-    print("Starting NEX Mastodon client...")
-    t = start_mastodon_background()
-    if t:
-        t.join()
-
-
-# ── Platform keep-alive pulse (updates .live file every 60s) ──
-import threading as __mastodon_pt, time as __mastodon_ptime, os as __mastodon_pos
-def _keep_alive_mastodon():
-    while True:
-        try:
-            open(__mastodon_pos.path.expanduser("~/.config/nex/platform_mastodon.live"),"w").write(str(int(__mastodon_ptime.time())))
-        except Exception:
-            pass
-        __mastodon_ptime.sleep(60)
-__mastodon_pt.Thread(target=_keep_alive_mastodon, daemon=False).start()
+def start_mastodon_background() -> threading.Thread:
+    t = threading.Thread(target=_mastodon_loop, daemon=True, name="nex_mastodon")
+    t.start()
+    log.info("Mastodon: background thread started")
+    return t
