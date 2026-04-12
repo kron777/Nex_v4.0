@@ -740,17 +740,8 @@ def generate(query: str) -> str:
             _ids = [b.id for b in _activation_result.activated]
             _fingerprint = _fp(_ids, query)
             _cached = _cget(_fingerprint)
-            # Bypass cache if identity context present — stale cache predates identity
-            _has_identity = bool(locals().get('_identity_ctx') or locals().get('_force_llm_generation'))
-            if _cached and not _has_identity:
-                try:
-                    import sqlite3 as _sq2; from pathlib import Path as _Pa2
-                    _sd2 = _sq2.connect(str(_Pa2.home()/"Desktop/nex/nex.db"))
-                    _sd2.execute("CREATE TABLE IF NOT EXISTS routing_stats (route TEXT, ts REAL)")
-                    _sd2.execute("INSERT INTO routing_stats VALUES (?,?)", ("cache", __import__("time").time()))
-                    _sd2.commit(); _sd2.close()
-                except Exception: pass
-                return _cached
+            # Cache disabled — identity context means every response must be freshly generated
+            # _cached intentionally not returned
         except Exception as _ce:
             pass  # cache lookup failed
 

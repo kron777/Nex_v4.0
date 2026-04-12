@@ -37,13 +37,13 @@ def run_light_training():
 
     cmd = [
         str(finetune_bin),
-        "--model-base", str(MODEL_PATH),
+        "-m", str(MODEL_PATH),
         "--train-data", str(TRAIN_JSON),
-        "--output-dir", str(TRAIN_DIR / "output"),
-        "--n-iter", "100",
-        "--batch", "4",
+        "-o", str(TRAIN_DIR / "output" / "nex_lora.gguf"),
         "--lora-r", "16",
         "--lora-alpha", "32",
+        "--epochs", "3",
+        "--batch", "4",
     ]
 
     print(f"[trainer] Running: {' '.join(cmd[:4])}...")
