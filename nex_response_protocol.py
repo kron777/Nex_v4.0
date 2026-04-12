@@ -694,9 +694,25 @@ def generate(query: str) -> str:
             print(f'  [IFR] error: {_ifre}')
     # ─────────────────────────────────────────────────────────────────
 
+    # Prepend identity to belief_text for self-referential queries
+    if _self_ref_identity:
+        belief_text = _self_ref_identity + "\n" + belief_text
+
     # 2b. Try traversal compiler — zero LLM calls for settled queries
     _fingerprint = None
     _self_ref = _is_self_referential(query)
+    # For self-referential queries, prepend identity statements to belief_text
+    if _self_ref and _identity_ctx:
+        _identity_beliefs = [l for l in _identity_ctx.split('\n')
+                             if l.strip() and not l.startswith('IDENTITY')]
+        _identity_inject = '\n'.join(f'- {l}' for l in _identity_beliefs[:5] if l.strip())
+        if _identity_inject:
+            # Will be prepended to belief_text after retrieval
+            _self_ref_identity = _identity_inject
+        else:
+            _self_ref_identity = ""
+    else:
+        _self_ref_identity = ""
     if _activation_result is not None:
         try:
             # ── Chronic residue boost ────────────────────────────────
