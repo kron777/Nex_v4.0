@@ -660,9 +660,11 @@ def generate(query: str) -> str:
             _ifr_prompt = _ifr_result.get('ifr_prompt', '')
             # Override: if identity context present, always require inference
             # — NEX should always generate, never just quote a raw belief
-            if _identity_ctx and _ifr_result.get('tension', {}).get('tension_type') == 'settled':
+            if locals().get('_identity_ctx') and _ifr_result.get('tension', {}).get('tension_type') == 'settled':
                 _ifr_result['requires_inference'] = True
                 _ifr_result['tension']['tension_type'] = 'open'
+            # Hard flag — checked downstream to force LLM call
+            _force_llm_generation = bool(locals().get('_identity_ctx'))
         except Exception as _ifre:
             print(f'  [IFR] error: {_ifre}')
     # ─────────────────────────────────────────────────────────────────
@@ -738,7 +740,9 @@ def generate(query: str) -> str:
             _ids = [b.id for b in _activation_result.activated]
             _fingerprint = _fp(_ids, query)
             _cached = _cget(_fingerprint)
-            if _cached:
+            # Bypass cache if identity context present — stale cache predates identity
+            _has_identity = bool(locals().get('_identity_ctx') or locals().get('_force_llm_generation'))
+            if _cached and not _has_identity:
                 try:
                     import sqlite3 as _sq2; from pathlib import Path as _Pa2
                     _sd2 = _sq2.connect(str(_Pa2.home()/"Desktop/nex/nex.db"))
@@ -812,8 +816,9 @@ def generate(query: str) -> str:
         except Exception:
             pass
         _metacog = _metacog_assess(query, belief_text, graph_ctx=_graph_ctx)
-        if _metacog.skip_llm:
+        if _metacog.skip_llm and not locals().get('_force_llm_generation'):
             # BLIND — return honest uncertainty directly, no LLM
+            # (bypassed when identity context present — NEX should always speak)
             _last_intent = intent
             _history.append((query, _metacog.response))
             if _warmth_db:

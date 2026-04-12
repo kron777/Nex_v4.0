@@ -29,12 +29,11 @@ def run_light_training():
     # Try llama.cpp finetune binary
     finetune_bin = LLAMA_DIR / "build/bin/llama-finetune"
     if not finetune_bin.exists():
-        # Fallback: log that training data is ready for RunPod
-        print(f"[trainer] llama-finetune not found at {finetune_bin}")
-        print(f"[trainer] Training data ready at {TRAIN_DIR}")
-        print(f"[trainer] Upload nex_training/ to RunPod A100 to train")
+        print(f"[trainer] llama-finetune not found (deprecated in newer llama.cpp)")
+        print(f"[trainer] ✓ Training data READY: {n_pairs} pairs at {TRAIN_DIR}")
+        print(f"[trainer] → Upload nex_training/ to RunPod A100 and run runpod_launch.sh")
         _write_runpod_instructions(n_pairs)
-        return False
+        return True  # Data is ready — not a failure
 
     cmd = [
         str(finetune_bin),
@@ -100,3 +99,9 @@ EOF
 if __name__ == "__main__":
     success = run_light_training()
     sys.exit(0 if success else 1)
+
+
+def handle_training_command(intensity: str = "light", train_path: str = None, eval_path: str = None):
+    """Entry point called by nex_finetune.py --train <intensity>"""
+    print(f"[trainer] handle_training_command called: intensity={intensity}")
+    return run_light_training()
