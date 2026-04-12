@@ -311,7 +311,7 @@ def _extract_beliefs_from_chunk(chunk, topic, llm_fn=None):
             f"Return one belief per line, no numbering.\n\nText: {chunk[:800]}"
         )
         try:
-            _brain_log("processing video — belief extraction active")
+            _brain_log(f"extracting from: {title[:60] if title else vid_id}")
             result = llm_fn(prompt, system="You extract strong, specific beliefs about AI, AGI, consciousness and intelligence. Ignore generic statements. Return only high-signal insights.")
             if result:
                 lines = [l.strip() for l in result.strip().split("\n") if len(l.strip()) > 20]
@@ -519,6 +519,7 @@ def learn_from_youtube(llm_fn=None, cycle=0):
         "results": results,
     }
     log.info(f"[YouTube] done — {videos_processed} videos, {total_beliefs} beliefs")
+    _brain_log(f"run complete — {videos_processed} videos scraped, {total_beliefs} new beliefs added")
     return summary
 
 

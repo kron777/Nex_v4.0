@@ -122,7 +122,8 @@ class HUD(BaseHTTPRequestHandler):
             self.end_headers()
             _skip = ['consolidator','ACCEPT on topic','Resolved 3','Locked top',
                      'LOOP id=','Cap hit','reinforce_minor','prune_boost',
-                     'NBRE bridge','fired=0','BeliefIndex','EMBODIED','high_load']
+                     'NBRE bridge','fired=0','BeliefIndex','EMBODIED','high_load',
+                     '[YouTube]','YouTube']
             _log = "/tmp/nex_brain.log"
             _off = os.path.getsize(_log) if os.path.exists(_log) else 0
             _eid = 0
