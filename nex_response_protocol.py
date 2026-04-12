@@ -396,7 +396,7 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
                 {"role": "system", "content": system},
                 {"role": "user", "content": prompt}
             ],
-            "max_tokens": min(INTENT_TOKENS.get(intent, MAX_TOKENS), 120),
+            "max_tokens": MAX_TOKENS,
             "temperature": temperature,
             "stream": False,
         }, timeout=25)
