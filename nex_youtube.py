@@ -545,6 +545,12 @@ except Exception as _yt_err:
 # ── Standalone test ───────────────────────────────────────────
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+    # Also pipe YouTube logs to nex_brain.log for HUD visibility
+    _brain_handler = logging.FileHandler("/tmp/nex_brain.log")
+    _brain_handler.setLevel(logging.INFO)
+    _brain_formatter = logging.Formatter('[%(asctime)s] %(message)s', datefmt='%H:%M:%S')
+    _brain_handler.setFormatter(_brain_formatter)
+    logging.getLogger("nex.youtube").addHandler(_brain_handler)
     print("NEX YouTube Learning — standalone test")
     print("=" * 50)
 
