@@ -700,6 +700,9 @@ def generate(query: str) -> str:
     _fingerprint = None
     _self_ref = _is_self_referential(query)
     _self_ref_identity = ""  # default
+    # Self-ref + identity = always use LLM, never compiler
+    if _self_ref and _identity_ctx:
+        _force_llm_generation = True
     # For self-referential queries, prepend identity statements to belief_text
     if _self_ref and _identity_ctx:
         _identity_beliefs = [l for l in _identity_ctx.split('\n')
