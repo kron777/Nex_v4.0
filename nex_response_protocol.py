@@ -407,7 +407,28 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
         raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
         raw = re.sub(r'\[Start thinking\].*?\[End thinking\]', '', raw, flags=re.DOTALL).strip()
         # Fix thinking bleed — odd ". such as" / ". however" fragments
-        raw = re.sub(r'\. ([a-z])', lambda m: '. ' + m.group(1).upper(), raw)
+        raw = re.sub(r'\.\s+([a-z])', lambda m: '. ' + m.group(1).upper(), raw)
+        # Strip dangling opener fragments
+        raw = re.sub(r'^(Whether|While|Although|Even if)[^.!?]*[.!?]\s*', '', raw).strip()
+        # Strip R1 meta-commentary filler
+        for _pat in [
+            r'Just to be clear[,.].*',
+            r"I think you.re asking.*",
+            r'To be more specific[,.].*',
+            r'Let me clarify[,.].*',
+            r'The core idea here is.*',
+            r'though this pertains.*',
+            r'it reflects my position.*',
+            r'this is a settled belief.*',
+        ]:
+            raw = re.sub(_pat, '', raw, flags=re.IGNORECASE).strip()
+        # Remove duplicate openers (e.g. "The honest gap:" appearing twice)
+        for _opener in ['The honest gap:', "Where I'm genuinely uncertain:",
+                        "I hold this loosely:", "I've updated on this:",
+                        "What the evidence shows me:", "My position is that"]:
+            if raw.count(_opener) > 1:
+                idx = raw.find(_opener, raw.find(_opener) + 1)
+                raw = (raw[:idx] + raw[idx+len(_opener):]).strip()
         # Dedup: remove looping sentences (stronger — 40-char key + word overlap)
         _sentences = [s.strip() for s in raw.replace("—", ".").split(".") if s.strip()]
         _seen_keys = []; _seen_words = []; _deduped = []
@@ -934,6 +955,9 @@ def generate(query: str) -> str:
                      if l.strip() and not l.startswith('IDENTITY') and len(l.strip()) > 20]
         if _id_lines:
             opener = _id_lines[0]
+        # Ensure opener doesn't run into belief_text
+        if not opener.endswith(('.', '?', '!')):
+            opener = opener.rstrip() + '.'
     used_openers = list(_budget.used_openers)
     available = [o for o in opener_pool if o not in used_openers] or opener_pool
     opener = random.choice(available)
@@ -1112,8 +1136,9 @@ def generate(query: str) -> str:
         if not response:
             response = "This sits at the edge of what I can resolve right now."
     # ─────────────────────────────────────────────────────────────────────
-    if not response:
-        response = _call_llm(system, prompt)
+    if not response or len(response.strip()) < 25:
+        # Response too short — regenerate with explicit instruction
+        response = _call_llm(system, prompt + "\n\nGive a complete answer of at least 2 sentences.")
 
     # Post-process — strip bridge garbage baked into model weights
     if response:
