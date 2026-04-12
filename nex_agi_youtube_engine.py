@@ -1,3 +1,4 @@
+import time
 #!/usr/bin/env python3
 """
 nex_agi_youtube_engine.py
@@ -16,6 +17,7 @@ Drop into ~/Desktop/nex/ and import from run.py or call standalone.
 
 import sqlite3, subprocess, json, re, time, logging
 from pathlib import Path
+from nex_youtube_rotator import yt_fetch, yt_status_string  # NEX IP rotator
 
 log = logging.getLogger("nex.agi_youtube")
 
@@ -23,7 +25,7 @@ DB_PATH   = Path.home() / ".config/nex/nex.db"
 SEEN_PATH = Path.home() / ".config/nex/agi_youtube_seen.json"
 YT_BIN    = "/home/rr/Desktop/nex/venv/bin/yt-dlp"
 
-MAX_VIDEOS      = 5
+MAX_VIDEOS      = 3
 MAX_BELIEFS     = 15   # per video — quality over quantity
 MIN_BELIEF_LEN  = 40
 MIN_STRENGTH    = 0.55 # discard weak beliefs
@@ -141,56 +143,38 @@ def _get_title(video_id):
         return video_id
 
 def _get_transcript(video_id):
+    """Fetch transcript via Tor to bypass IP ban, fallback to direct."""
+    from youtube_transcript_api import YouTubeTranscriptApi
+    from youtube_transcript_api.proxies import GenericProxyConfig
+
+    # Try via Tor first
     try:
-        from youtube_transcript_api import YouTubeTranscriptApi
-        ytt = YouTubeTranscriptApi()
+        pc = GenericProxyConfig(
+            http_url="socks5://127.0.0.1:9050",
+            https_url="socks5://127.0.0.1:9050"
+        )
+        api = YouTubeTranscriptApi(proxy_config=pc)
         try:
-            t = ytt.fetch(video_id, languages=["en","en-US","en-GB"])
-        except:
-            t = ytt.fetch(video_id)
-        text = " ".join(s.text for s in t)
-        text = re.sub(r'\[.*?\]', '', text)
-        text = re.sub(r'\s+', ' ', text).strip()
-        return text if len(text.split()) > 150 else None
+            segs = list(api.fetch(video_id, languages=["en","en-US","en-GB"]))
+        except Exception:
+            segs = list(api.fetch(video_id))
+        if segs:
+            log.info(f"[AGI-YT] Tor transcript OK: {video_id} ({len(segs)} segs)")
+            return " ".join(s.text for s in segs)
+    except Exception as e:
+        log.warning(f"[AGI-YT] Tor failed {video_id}: {e}")
+
+    # Fallback: direct (likely blocked)
+    try:
+        api2 = YouTubeTranscriptApi()
+        try:
+            segs = list(api2.fetch(video_id, languages=["en","en-US","en-GB"]))
+        except Exception:
+            segs = list(api2.fetch(video_id))
+        return " ".join(s.text for s in segs)
     except Exception as e:
         log.warning(f"[AGI-YT] transcript failed {video_id}: {e}")
-        return None
-
-# ── Core distillation ──────────────────────────────────────────────────────────
-
-DISTILL_PROMPT = """You are analysing a transcript for insights about AGI, consciousness, intelligence, and alignment.
-
-TRANSCRIPT (excerpt):
-{transcript}
-
-Your task: Extract the {n} STRONGEST, most specific claims or insights from this text that relate to:
-- What intelligence actually is
-- How AGI might or might not be achieved  
-- What consciousness requires
-- What current AI is missing
-- Novel cross-domain connections to intelligence
-
-Rules:
-- Each belief must be a SPECIFIC, DEFENSIBLE claim — not vague or generic
-- Prefer claims that would SURVIVE contradiction with other views
-- Discard claims that are obvious, trivial, or purely descriptive
-- Each belief on its own line, no numbering, no preamble
-- If the text has nothing relevant to AGI/intelligence/consciousness, respond with: IRRELEVANT
-
-Beliefs:"""
-
-SCORE_PROMPT = """Rate the strength of this belief for understanding AGI/intelligence on a scale 0.0-1.0.
-
-Belief: {belief}
-
-Criteria:
-- 0.9-1.0: Profound insight that reframes understanding of intelligence
-- 0.7-0.8: Strong specific claim that holds up under scrutiny  
-- 0.5-0.6: Reasonable but could be stronger or more specific
-- 0.3-0.4: Generic or weakly supported
-- 0.0-0.2: Trivial, obvious, or irrelevant
-
-Respond with ONLY a number like: 0.75"""
+        return ""
 
 def _distill_transcript(transcript, title, llm_fn=None):
     """Extract strong AGI-relevant beliefs from transcript."""
@@ -341,7 +325,7 @@ def run_agi_youtube_engine(llm_fn=None, cycle=0, max_videos=MAX_VIDEOS):
     # Always include 2 AGI-focused queries
     queries.extend(random.sample(AGI_SEARCH_QUERIES, min(3, len(AGI_SEARCH_QUERIES))))
     # Every other cycle add a throw-net query
-    if cycle % 2 == 0:
+    if cycle % 75 == 0:
         queries.append(random.choice(THROW_NET_QUERIES))
 
     # Collect candidate videos
@@ -369,6 +353,7 @@ def run_agi_youtube_engine(llm_fn=None, cycle=0, max_videos=MAX_VIDEOS):
     for vid_id, query in candidates[:max_videos]:
         log.info(f"[AGI-YT] processing: {vid_id} (from: {query[:40]})")
 
+        time.sleep(60)  # rate limit — avoid IP ban
         transcript = _get_transcript(vid_id)
         seen.add(vid_id)
 

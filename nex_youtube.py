@@ -19,10 +19,10 @@ from pathlib import Path
 log = logging.getLogger("nex.youtube")
 
 # ── Config ────────────────────────────────────────────────────
-YOUTUBE_INTERVAL   = 1         # run every N cognitive cycles
+YOUTUBE_INTERVAL   = 50         # run every N cognitive cycles
 MAX_VIDEOS_PER_RUN = 5          # max 5 videos per run
-MAX_BELIEFS_PER_VIDEO = 30      # capped to reduce noise
-MIN_TRANSCRIPT_WORDS = 200      # skip very short videos
+MAX_BELIEFS_PER_VIDEO = 8      # capped to reduce noise
+MIN_TRANSCRIPT_WORDS = 400      # skip very short videos
 
 # [PATCH v10.1] Richer query templates — rotated by cycle for variety
 # ── Throw-net query templates ─────────────────────────────────
@@ -212,16 +212,40 @@ def _search_videos(query, max_results=5):
 
 # ── Pull transcript ────────────────────────────────────────────
 def _get_transcript(video_id):
+    # Try Tor proxy first to bypass IP ban
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi as _YTA
+        from youtube_transcript_api.proxies import GenericProxyConfig
+        _pc = GenericProxyConfig(http_url='socks5://127.0.0.1:9050', https_url='socks5://127.0.0.1:9050')
+        _api = _YTA(proxy_config=_pc)
+        try:
+            t = _api.fetch(video_id, languages=["en","en-US","en-GB"])
+        except Exception:
+            t = _api.fetch(video_id)
+        return " ".join(s.text for s in t)
+    except Exception:
+        pass
+    # Fallback: direct
     import tempfile, glob, subprocess
     YT_DLP = "/home/rr/Desktop/nex/venv/bin/yt-dlp"
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
+            # Route through Tor proxy if available
+            _proxy_args = []
+            try:
+                import urllib.request
+                _opener = urllib.request.build_opener(urllib.request.ProxyHandler(
+                    {"http":"http://127.0.0.1:3128","https":"http://127.0.0.1:3128"}))
+                _opener.open("http://httpbin.org/ip", timeout=3)
+                _proxy_args = ["--proxy", "http://127.0.0.1:3128"]
+            except Exception:
+                pass
             cmd = [YT_DLP,
                 "https://www.youtube.com/watch?v=" + video_id,
                 "--write-auto-subs", "--sub-langs", "en",
                 "--skip-download", "--output", tmpdir + "/sub",
                 "--quiet", "--no-warnings",
-            ]
+            ] + _proxy_args
             subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             subs = glob.glob(tmpdir + "/*.vtt") + glob.glob(tmpdir + "/*.srt")
             if subs:
@@ -273,12 +297,12 @@ def _extract_beliefs_from_chunk(chunk, topic, llm_fn=None):
     """
     if llm_fn:
         prompt = (
-            f"Extract 3-5 factual beliefs from this text about '{topic}'. "
+            f"Extract 2-3 strong, specific beliefs from this text about '{topic}' that relate to AGI, intelligence, or consciousness. Skip generic facts. "
             f"Each belief should be a single clear statement. "
             f"Return one belief per line, no numbering.\n\nText: {chunk[:800]}"
         )
         try:
-            result = llm_fn(prompt, system="You extract factual beliefs from text. Be concise.")
+            result = llm_fn(prompt, system="You extract strong, specific beliefs about AI, AGI, consciousness and intelligence. Ignore generic statements. Return only high-signal insights.")
             if result:
                 lines = [l.strip() for l in result.strip().split("\n") if len(l.strip()) > 20]
                 return lines[:5]
@@ -312,7 +336,7 @@ def _store_beliefs(beliefs, source_url, topic):
             try:
                 db.execute(
                     "INSERT OR IGNORE INTO beliefs (content, confidence, source, topic) VALUES (?,?,?,?)",
-                    (content, 0.55, source_url, topic)
+                    (content, 0.72, source_url, topic)
                 )
                 if db.execute("SELECT changes()").fetchone()[0]:
                     stored += 1
@@ -401,20 +425,20 @@ def learn_from_youtube(llm_fn=None, cycle=0):
             break
 
         # [PATCH v10.1] rotate query template by cycle to avoid repetition
-        slot = (cycle * 10 + topic_idx) % 15
         import random as _rnd
+        slot = (cycle * 10 + topic_idx) % 10
         if slot < 6:
-            template = QUERY_TEMPLATES[cycle % len(QUERY_TEMPLATES)]
-            query = template.format(topic=topic)
-        elif slot < 9:
+            # 60% — AGI hunt (primary focus)
             query = _rnd.choice(AGI_HUNT_QUERIES)
             log.info(f"[YouTube] AGI-HUNT: {query}")
-        elif slot < 13:
+        elif slot < 8:
+            # 20% — topic-anchored with AGI framing
+            template = "{topic} artificial general intelligence implications"
+            query = template.format(topic=topic)
+        else:
+            # 20% — throw-net cross-domain
             query = _rnd.choice(THROW_NET_DOMAINS)
             log.info(f"[YouTube] THROW-NET: {query}")
-        else:
-            query = _rnd.choice(NETI_NETI_QUERIES)
-            log.info(f"[YouTube] NETI-NETI: {query}")
         video_ids = _search_videos(query, max_results=5)
 
         for vid_id in video_ids:
@@ -427,6 +451,11 @@ def learn_from_youtube(llm_fn=None, cycle=0):
             title = _get_title(vid_id)
             log.info(f"[YouTube] processing: {title} ({vid_id})")
 
+            # AGI relevance check — skip videos with no AGI signal
+            title_lower = (title or "").lower()
+            _AGI_SIGNALS = ["agi","intelligence","consciousness","alignment",
+                           "cognition","learning","neural","brain","mind",
+                           "reasoning","emergence","autonomous","sentient"]
             transcript = _get_transcript(vid_id)
             if not transcript:
                 continue
@@ -469,7 +498,7 @@ def learn_from_youtube(llm_fn=None, cycle=0):
             })
 
             print(f"  [YouTube] ✓ {title[:60]} → {stored} beliefs (topic: {topic})")
-            time.sleep(2)  # be polite
+            time.sleep(45)  # be polite — avoid IP ban
 
     _save_seen(seen)
 

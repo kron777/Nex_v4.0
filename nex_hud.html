@@ -309,7 +309,6 @@ function addDebug(ts, src, msg, status) {
   line.innerHTML = `<span class="debug-ts">${ts}</span><span class="debug-src ${cls}">[${src.padEnd(8).slice(0,8)}]</span><span class="debug-msg ${cls}">${pfx} ${msg}</span>`;
   debugBox.appendChild(line);
   while (debugBox.children.length > 35) debugBox.removeChild(debugBox.firstChild);
-  debugBox.scrollTop = debugBox.scrollHeight;
 }
 
 // Live only — no demo data
@@ -327,16 +326,21 @@ async function fetchStats() {
     const d = await r.json();
     // YouTube status
     if (d.social && d.social.youtube) {
+      const ytStatus = d.social.youtube.status_string || '';
       const ytActive = d.social.youtube.auth;
+      const ytBlocked = ytStatus.includes('BLOCKED');
+      const ytRecovering = ytStatus.includes('RECOVERING');
       const ytDot = document.getElementById('yt-dot');
       const ytState = document.getElementById('yt-state');
       const ytLabel = document.getElementById('p-yt');
-      if (ytDot) ytDot.style.background = ytActive ? 'var(--green)' : 'var(--dim)';
-      if (ytDot) ytDot.style.boxShadow = ytActive ? '0 0 6px var(--green)' : 'none';
+      const ytColor = ytBlocked ? 'var(--red,#f55)' : ytRecovering ? 'var(--yellow,#fa0)' : ytActive ? 'var(--green)' : 'var(--dim)';
+      const ytText = ytBlocked ? 'BLOCKED' : ytRecovering ? 'RECOVERING' : ytActive ? 'ACTIVE' : 'IDLE';
+      if (ytDot) ytDot.style.background = ytColor;
+      if (ytDot) ytDot.style.boxShadow = ytActive ? '0 0 6px ' + ytColor : 'none';
       if (ytDot) ytDot.style.animation = ytActive ? 'pulse 1.5s infinite' : 'none';
-      if (ytState) ytState.style.color = ytActive ? 'var(--green)' : 'var(--dim)';
-      if (ytLabel) ytLabel.textContent = ytActive ? 'LIVE' : 'IDLE';
-      if (ytLabel) ytLabel.style.color = ytActive ? 'var(--green)' : 'var(--dim)';
+      if (ytState) ytState.style.color = ytColor;
+      if (ytLabel) ytLabel.textContent = ytText;
+      if (ytLabel) ytLabel.style.color = ytColor;
     }
     if (d.beliefs.total !== undefined) document.getElementById('s-beliefs').textContent = Number(d.beliefs.total).toLocaleString();
     if (d.replied !== undefined) document.getElementById('s-replied').textContent = d.replied;
@@ -346,7 +350,7 @@ async function fetchStats() {
     if (d.conf    !== undefined) setBar('b-conf',  'v-conf',  d.conf);
     if (d.align   !== undefined) setBar('b-align', 'v-align', d.align);
     if (d.network !== undefined) setBar('b-net',   'v-net',   d.network);
-    if (d.iq      !== undefined) document.getElementById('s-iq').textContent = d.iq;
+    if (d.iq      !== undefined) document.getElementById('s-iq').textContent = String(d.iq).replace(/[^0-9]/g,'');
     if (d.original!== undefined) document.getElementById('s-orig').textContent = d.original;
     // NBRE metrics
     if (d.nbre) {
@@ -403,46 +407,40 @@ async function fetchStats() {
 }
 
 // ── Debug stream from /tmp/nex_debug_stream.log via server ───────────────────
+let _debugCursor = -1;
+let _dbgWin = [], _dbgWinCursor = 0;
 async function fetchDebug() {
   try {
-    const r = await fetch('http://localhost:7700/debug', {signal: AbortSignal.timeout(1500)});
+    const r = await fetch('http://localhost:7700/debug', {signal: AbortSignal.timeout(2000)});
     const d = await r.json();
-    if (d.lines && Array.isArray(d.lines)) {
-      d.lines.forEach(l => {
-        addDebug(l.ts || ts(), l.src || 'SYS', l.msg || '', l.status || '');
-        if (l.src === 'POSTED' || l.src === 'REPLIED' || l.src === 'CHATTED') {
-          // Extract text after pipe if present
-          const txt = (l.msg || '').includes('|') ? (l.msg || '').split('|').slice(1).join('|').trim() : (l.msg || '');
-          if (txt.length > 5) addResponse(l.ts || ts(), l.src, txt);
-        }
-      });
-    }
-  } catch(e) {
-    // Debug stream unavailable
-  }
+    const all = (d.lines || []).map(l => (l.msg||"").replace(/\u001b\[[0-9;]*m/g,"").trim()).filter(m => m.length > 4 && !m.startsWith("File \"/") && !m.startsWith("Traceback") && !m.includes("^^^^") && !m.startsWith("self.") && !m.startsWith("OSError") && !m.startsWith("Exception") && !m.startsWith("httpd"));
+    _dbgWin = all.slice(-20).reverse();
+    if (_dbgWinCursor >= _dbgWin.length) _dbgWinCursor = 0;
+    if (_dbgWin[_dbgWinCursor]) queueDebug('', 'SYS', _dbgWin[_dbgWinCursor], '');
+    _dbgWinCursor++;
+  } catch(e) {}
 }
-
-// ── Init & intervals ─────────────────────────────────────────────────────────
-setGpuArc(3);
-setBar('b-conf', 'v-conf', 72);
-setBar('b-align', 'v-align', 23);
-setBar('b-net', 'v-net', 74);
-
-setInterval(fetchStats, 2500);
-setInterval(fetchDebug, 3000);
+setInterval(fetchDebug, 1500);
+fetchDebug();
 
 // ── NEX Response Panel — polls /replies for real sent messages ───────────────
-let _lastReplyTs = '';
+let _replyWin = [], _replyCursor = 0, _replyLoaded = false;
 async function fetchReplies() {
   try {
     const r = await fetch('http://localhost:7700/replies', {signal: AbortSignal.timeout(2000)});
     const d = await r.json();
-    if (!d.replies) return;
-    d.replies.forEach(entry => {
-      if (entry.ts === _lastReplyTs) return;
-      addResponse(entry.ts, entry.type || 'REPLIED', entry.text);
-    });
-    if (d.replies.length) _lastReplyTs = d.replies[d.replies.length-1].ts;
+    if (!d.replies || !d.replies.length) return;
+    if (!_replyLoaded) {
+      _replyWin = d.replies.slice().reverse(); // oldest first
+      _replyLoaded = true;
+    }
+    // Ticker: one per fetch cycle
+    if (_replyWin[_replyCursor]) {
+      const e = _replyWin[_replyCursor];
+      if (e.text && e.text.length > 8) addResponse(e.ts || '', 'REPLIED', e.text);
+      _replyCursor++;
+    }
+    if (_replyCursor >= _replyWin.length) _replyCursor = 0;
   } catch(e) {}
 }
 setInterval(fetchReplies, 3000);
@@ -471,18 +469,49 @@ function hlText(txt){
   });
   return out;
 }
-function streamChar(el,html,i){
-  if(i>=html.length){agiStreaming=false;drainAgiQueue();return;}
+function streamChar(el,html,i,onDone){
+  if(i>=html.length){
+    if(onDone) onDone(); else { agiStreaming=false; drainAgiQueue(); }
+    return;
+  }
   if(html[i]==='<'){
     const e=html.indexOf('>',i);
-    if(e===-1){el.innerHTML=html;agiStreaming=false;drainAgiQueue();return;}
+    if(e===-1){el.innerHTML=html; if(onDone) onDone(); else {agiStreaming=false;drainAgiQueue();} return;}
     el.innerHTML=html.substring(0,e+1);
-    setTimeout(()=>streamChar(el,html,e+1),0);
+    setTimeout(()=>streamChar(el,html,e+1,onDone),0);
   } else {
     el.innerHTML=html.substring(0,i+1);
-    setTimeout(()=>streamChar(el,html,i+1),14);
+    setTimeout(()=>streamChar(el,html,i+1,onDone),5);
   }
 }
+
+// ── Universal panel streamer factory ─────────────────────────────────────────
+// Returns a push(html) function — each panel gets its own independent queue
+function makeStreamer(box, opts) {
+  const q = [];
+  let busy = false;
+  function drain() {
+    if (busy || q.length === 0) return;
+    busy = true;
+    const html = q.shift();
+    const el = document.createElement('div');
+    el.style.cssText = opts.style || '';
+    if (opts.prepend) box.insertBefore(el, box.firstChild);
+    else box.appendChild(el);
+    while (box.children.length > (opts.max || 60)) {
+      if (opts.prepend) box.removeChild(box.lastChild);
+      else box.removeChild(box.firstChild);
+    }
+    if (opts.scroll) box.scrollTop = box.scrollHeight;
+    streamChar(el, html, 0, () => { busy = false; setTimeout(drain, opts.gap || 100); });
+  }
+  return function(html) {
+    q.push(html);
+    if (q.length > (opts.max || 60)) q.shift();
+    drain();
+  };
+}
+
 function drainAgiQueue(){
   if(agiStreaming||agiQueue.length===0)return;
   const h=agiQueue.shift();
@@ -501,6 +530,108 @@ function drainAgiQueue(){
   if(agiFeed.children.length>80)agiFeed.removeChild(agiFeed.lastChild);
   setTimeout(()=>{if(h.tier!==1)agiDot.style.background='#2a6a4a';},2000);
 }
+
+// ── STREAM-BOX (col 1: NOTIFICATIONS/YOUTUBE) — AGI Watch pattern ──────────
+let streamQueue = [];
+let streamStreaming = false;
+
+function drainStreamQueue() {
+  if (streamStreaming || streamQueue.length === 0) return;
+  streamStreaming = true;
+  const item = streamQueue.shift();
+  if (streamBox.children.length > 60) streamBox.removeChild(streamBox.lastChild);
+  const el = document.createElement('div');
+  el.style.cssText = 'padding:3px 0;border-bottom:1px solid #ffffff06;';
+  streamBox.insertBefore(el, streamBox.firstChild);
+  const col = item.col || '#7affcc';
+  const full = '<span style="color:#2a6a5a;font-size:10px;">' + (item.t||'') + '</span> '
+    + '<span style="color:' + col + ';font-size:10px;letter-spacing:1px;margin-right:4px;">[' + (item.type||'INFO') + ']</span>'
+    + '<span style="color:#ddf4ee;font-size:12px;">' + (item.text||'') + '</span>';
+  // Use simple char ticker — immune to HTML tag parsing bugs
+  let _ci = 0;
+  function _tick() {
+    if (_ci >= full.length) { streamStreaming = false; _streamStuckAt = 0; setTimeout(drainStreamQueue, 80); return; }
+    if (full[_ci] === '<') {
+      const _e = full.indexOf('>', _ci);
+      el.innerHTML = full.substring(0, _e === -1 ? full.length : _e+1);
+      _ci = _e === -1 ? full.length : _e+1;
+    } else {
+      el.innerHTML = full.substring(0, _ci+1);
+      _ci++;
+    }
+    setTimeout(_tick, 5);
+  }
+  _tick();
+}
+
+// Override addStream to use queue
+function queueStream(t, type, text) {
+  const TYPE_COL = {YOUTUBE:'#4da6ff',BELIEF:'#facc15',REPLIED:'#cc88ff',
+    CHATTED:'#00ffcc',POSTED:'#00ff88',LEARNT:'#facc15',INFO:'#445566',
+    BRAIN:'#00ccff',ERROR:'#ff4444'};
+  streamQueue.push({t, type, text, col: TYPE_COL[type] || '#7affcc'});
+  if (streamQueue.length > 40) streamQueue.shift();
+  drainStreamQueue();
+}
+
+// Col 1: YouTube ticker — reads from /feed, shows YOUTUBE entries
+let ytCursor = 0, ytSeen = new Set();
+async function fetchCol1() {
+  try {
+    const r = await fetch('http://localhost:7700/feed', {signal: AbortSignal.timeout(2000)});
+    const d = await r.json();
+    const entries = d.entries || [];
+    while (ytCursor < entries.length) {
+      const e = entries[ytCursor++];
+      if (e.src !== 'YOUTUBE') continue;
+      let txt = (e.msg || '')
+        .replace(/\[YOUTUBE\]\s*/i, '')
+        .replace(/youtube_engine\s*/i, '')
+        .replace(/\[YouTube\]\s*/i, '')
+        .trim();
+      if (txt.length < 15) continue;
+      const key = txt.slice(0, 55);
+      if (ytSeen.has(key)) continue;
+      ytSeen.add(key);
+      queueStream(ts(), 'YOUTUBE', txt);
+      break; // one entry per fetch cycle
+    }
+    if (ytCursor >= entries.length) { ytCursor = 0; ytSeen.clear(); }
+  } catch(e) {}
+}
+setInterval(fetchCol1, 4000);
+fetchCol1();
+// Watchdog: track when streamStreaming was set, force-reset if stuck >5s
+let _streamStuckAt = 0;
+setInterval(()=>{
+  if(streamStreaming){
+    if(!_streamStuckAt) _streamStuckAt = Date.now();
+    else if(Date.now()-_streamStuckAt > 5000){
+      streamStreaming=false; _streamStuckAt=0; drainStreamQueue();
+    }
+  } else { _streamStuckAt=0; }
+}, 1000);
+
+// ── DEBUG-BOX (col 2: DEBUG STREAM) — AGI Watch pattern ─────────────────────
+let _debugLastTs = '';
+
+let _dbgQ = [], _dbgBusy = false;
+function _drainDbg() {
+  if (_dbgBusy || _dbgQ.length === 0) return;
+  _dbgBusy = true;
+  const msg = _dbgQ.shift();
+  const el = document.createElement('div');
+  el.style.cssText = 'padding:1px 0;font-family:monospace;font-size:11px;color:#7affcc;';
+  debugBox.insertBefore(el, debugBox.firstChild);
+  while (debugBox.children.length > 120) debugBox.removeChild(debugBox.lastChild);
+  streamChar(el, msg, 0, () => { _dbgBusy = false; setTimeout(_drainDbg, 20); });
+}
+function queueDebug(t, src2, msg, status) {
+  _dbgQ.push(msg);
+  if (_dbgQ.length > 60) _dbgQ.shift();
+  _drainDbg();
+}
+
 async function fetchAgi(){
   try{
     const r=await fetch('http://localhost:7700/agi',{signal:AbortSignal.timeout(3000)});
@@ -514,11 +645,14 @@ async function fetchAgi(){
       }
     }
     if(!d.hits||d.hits.length===0)return;
+    let added=0;
     d.hits.forEach(h=>{
       if(agiSeen.has(h.id))return;
       agiSeen.add(h.id);
       agiQueue.push(h);
+      added++;
     });
+    if(added===0){agiSeen.clear();}
     drainAgiQueue();
   }catch(e){}
 }
@@ -536,24 +670,29 @@ const RESPONSE_COLORS = {
   POSTED:  'var(--green)',
 };
 
+let _respQ = [], _respBusy = false;
+function _drainResp() {
+  if (_respBusy || _respQ.length === 0) return;
+  _respBusy = true;
+  const {time, type, text} = _respQ.shift();
+  const col = RESPONSE_COLORS[type] || 'var(--cyan)';
+  const el = document.createElement('div');
+  el.style.cssText = 'padding:5px 4px;border-bottom:1px solid #ffffff0a;';
+  responsesBox.insertBefore(el, responsesBox.firstChild);
+  while (responsesBox.children.length > 30) responsesBox.removeChild(responsesBox.lastChild);
+  const html = '<div style="color:'+col+';font-size:10px;margin-bottom:2px;">['+type+'] <span style="color:#445566">'+time+'</span></div>'
+    + '<div style="color:#ddf4ee;font-size:12px;line-height:1.55;">'+text+'</div>';
+  streamChar(el, html, 0, () => { _respBusy = false; setTimeout(_drainResp, 200); });
+}
 function addResponse(time, type, text) {
   if (!RESPONSE_TYPES.has(type)) return;
   if (!text || text.length < 8) return;
-  const entry = document.createElement('div');
-  entry.style.cssText = 'padding:5px 4px;border-bottom:1px solid #ffffff0a;animation:fadein 0.3s ease;';
-  const col = RESPONSE_COLORS[type] || 'var(--cyan)';
-  entry.innerHTML = `<div style="color:${col};font-size:10px;margin-bottom:2px;letter-spacing:1px;">[${type}] <span style="color:var(--dim)">${time}</span></div><div style="color:#ddf4ee;white-space:normal;word-break:break-word;font-size:12px;line-height:1.55;">${text}</div>`;
-  responsesBox.appendChild(entry);
-  while (responsesBox.children.length > 30) responsesBox.removeChild(responsesBox.firstChild);
-  responsesBox.scrollTop = responsesBox.scrollHeight;
+  _respQ.push({time, type, text});
+  if (_respQ.length > 20) _respQ.shift();
+  _drainResp();
 }
 
 // Patch addStream to mirror Nex's own output to the responses panel
-const _origAddStream = addStream;
-window.addStream = function(t, type, text) {
-  _origAddStream(t, type, text);
-  addResponse(t, type, text);
-};
 
 fetchStats();
 </script>
