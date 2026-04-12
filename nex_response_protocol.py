@@ -703,23 +703,25 @@ def generate(query: str) -> str:
             if _self_ref:  # compiler disabled for general queries — LLM quality > compiler
                 _compiled = _compile(_activation_result)
                 if _compiled and len(_compiled.split()) >= 5:
-                    # Track compiler usage
-                    try:
-                        import sqlite3 as _sq; from pathlib import Path as _Pa
-                        _sd = _sq.connect(str(_Pa.home()/"Desktop/nex/nex.db"))
-                        _sd.execute("CREATE TABLE IF NOT EXISTS routing_stats (route TEXT, ts REAL)")
-                        _sd.execute("INSERT INTO routing_stats VALUES (?,?)", ("compiler", __import__("time").time()))
-                        _sd.commit(); _sd.close()
-                    except Exception: pass
-                    # Cache compiler response
-                    try:
-                        from nex_response_cache import _fingerprint as _fp, put as _cput
-                        _ids = [b.id for b in _activation_result.activated]
-                        _fingerprint = _fp(_ids, query)
-                        _cput(_fingerprint, query, _compiled, source="compiler")
-                    except Exception:
-                        pass
-                    return _compiled
+                    # Skip compiler return if identity context present
+                    # — identity-aware LLM responses are richer than compiled strings
+                    _skip_compiler = bool(locals().get('_identity_ctx','') or locals().get('_episodic_ctx',''))
+                    if not _skip_compiler:
+                        try:
+                            import sqlite3 as _sq; from pathlib import Path as _Pa
+                            _sd = _sq.connect(str(_Pa.home()/"Desktop/nex/nex.db"))
+                            _sd.execute("CREATE TABLE IF NOT EXISTS routing_stats (route TEXT, ts REAL)")
+                            _sd.execute("INSERT INTO routing_stats VALUES (?,?)", ("compiler", __import__("time").time()))
+                            _sd.commit(); _sd.close()
+                        except Exception: pass
+                        try:
+                            from nex_response_cache import _fingerprint as _fp, put as _cput
+                            _ids = [b.id for b in _activation_result.activated]
+                            _fingerprint = _fp(_ids, query)
+                            _cput(_fingerprint, query, _compiled, source="compiler")
+                        except Exception:
+                            pass
+                        return _compiled
         except Exception as _ce:
             pass  # compiler fallback
 
