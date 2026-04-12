@@ -389,18 +389,20 @@ def retrieve_beliefs_by_intent(intent: str, query: str, n: int = 6) -> list:
 # ── LLM call with G2-style deduplication ─────────────────────────────────────
 def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str:
     try:
-        # Gemma 4 / OpenAI-compatible chat endpoint
-        _chat_url = LLM_URL.replace("/completion", "/v1/chat/completions")
-        r = requests.post(_chat_url, json={
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt}
-            ],
-            "max_tokens": max(MAX_TOKENS, 280),
+        # Qwen2.5 format via /completion endpoint
+        _qwen_prompt = (
+            f"<|im_start|>system\n{system}<|im_end|>\n"
+            f"<|im_start|>user\n{prompt}<|im_end|>\n"
+            f"<|im_start|>assistant\n"
+        )
+        r = requests.post(LLM_URL, json={
+            "prompt": _qwen_prompt,
+            "n_predict": max(MAX_TOKENS, 280),
             "temperature": temperature,
+            "stop": ["<|im_end|>", "<|im_start|>"],
             "stream": False,
         }, timeout=25)
-        raw = r.json()["choices"][0]["message"]["content"].strip()
+        raw = r.json().get("content", "").strip()
         # Dedup: remove looping sentences (stronger — 40-char key + word overlap)
         _sentences = [s.strip() for s in raw.replace("—", ".").split(".") if s.strip()]
         _seen_keys = []; _seen_words = []; _deduped = []
