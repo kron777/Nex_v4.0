@@ -703,6 +703,7 @@ def generate(query: str) -> str:
     # 2b. Try traversal compiler — zero LLM calls for settled queries
     _fingerprint = None
     _self_ref = _is_self_referential(query)
+    _self_ref_identity = ""  # default
     # For self-referential queries, prepend identity statements to belief_text
     if _self_ref and _identity_ctx:
         _identity_beliefs = [l for l in _identity_ctx.split('\n')
