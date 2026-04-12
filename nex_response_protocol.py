@@ -397,7 +397,7 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
         )
         r = requests.post(LLM_URL, json={
             "prompt": _qwen_prompt,
-            "n_predict": max(MAX_TOKENS, 280),
+            "n_predict": max(MAX_TOKENS, 400),
             "temperature": temperature,
             "stop": ["<|im_end|>", "<|im_start|>"],
             "stream": False,
@@ -913,7 +913,19 @@ def generate(query: str) -> str:
     except Exception:
         pass
     # 3. Pick opener
+    # Initialize opener (may be overridden below)
     opener_pool = OPENERS.get(intent, OPENERS["epistemics"])
+    used_openers = list(_budget.used_openers)
+    available = [o for o in opener_pool if o not in used_openers] or opener_pool
+    opener = random.choice(available)
+    _budget.used_openers.append(opener)
+
+    # For self-referential queries, override opener with identity statement
+    if _self_ref and _identity_ctx:
+        _id_lines = [l.strip() for l in _identity_ctx.split('\n')
+                     if l.strip() and not l.startswith('IDENTITY') and len(l.strip()) > 20]
+        if _id_lines:
+            opener = _id_lines[0]
     used_openers = list(_budget.used_openers)
     available = [o for o in opener_pool if o not in used_openers] or opener_pool
     opener = random.choice(available)
@@ -1094,6 +1106,20 @@ def generate(query: str) -> str:
     # ─────────────────────────────────────────────────────────────────────
     if not response:
         response = _call_llm(system, prompt)
+
+    # Post-process — strip bridge garbage baked into model weights
+    if response:
+        _bridge_patterns = [
+            'bridge:truth seeking', 'bridge:reuse', '↔reuse', '↔general',
+            '↔social', 'What does bridge:', 'The interesting thing about bridge',
+            'truth seeking↔', 'bridge:truth'
+        ]
+        if any(p in response for p in _bridge_patterns):
+            # Response is contaminated — regenerate with explicit instruction
+            _clean_prompt = prompt + "\n\nIMPORTANT: Do not mention 'bridge:', '↔', or cross-domain bridges. Respond directly from beliefs only."
+            _clean = _call_llm(system, _clean_prompt)
+            if _clean and not any(p in _clean for p in _bridge_patterns):
+                response = _clean
     # ── LLM output sanitizer — strip non-printable / corrupt token sequences ─
     if response:
         # Remove runs of CJK / non-Latin unicode that indicate model corruption
