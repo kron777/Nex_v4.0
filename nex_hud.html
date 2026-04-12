@@ -437,7 +437,10 @@ async function fetchReplies() {
     // Ticker: one per fetch cycle
     if (_replyWin[_replyCursor]) {
       const e = _replyWin[_replyCursor];
-      if (e.text && e.text.length > 8) addResponse(e.ts || '', 'REPLIED', e.text);
+      if (e.text && e.text.length > 8) {
+        const plat = e.platform || 'REPLIED';
+        addResponse(e.ts || '', plat, e.text);
+      }
       _replyCursor++;
     }
     if (_replyCursor >= _replyWin.length) _replyCursor = 0;
@@ -663,9 +666,13 @@ fetchAgi();
 
 // ── NEX Response Panel ────────────────────────────────────────────────────────
 const responsesBox = document.getElementById('responses-box');
-const RESPONSE_TYPES = new Set(['REPLIED','CHATTED','POSTED']);
+const RESPONSE_TYPES = new Set(['REPLIED','CHATTED','POSTED','MASTODON','DISCORD','MOLTBOOK','TELEGRAM']);
 const RESPONSE_COLORS = {
   REPLIED: 'var(--purple)',
+  MASTODON: '#6364ff',
+  DISCORD: '#5865f2',
+  MOLTBOOK: 'var(--cyan)',
+  TELEGRAM: '#29b6f6',
   CHATTED: 'var(--cyan)',
   POSTED:  'var(--green)',
 };

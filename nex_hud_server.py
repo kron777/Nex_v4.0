@@ -209,7 +209,13 @@ class HUD(BaseHTTPRequestHandler):
             try:
                 db = sqlite3.connect(str(NEX_DIR/"nex.db"), timeout=2)
                 rows = db.execute("SELECT id, response, user_input, timestamp FROM reflexion_log ORDER BY timestamp DESC LIMIT 30").fetchall()
-                replies = [{"id": r[0], "text": r[1], "context": r[2], "ts": r[3]} for r in rows if r[1]]
+                def _platform(u):
+                    if not u: return "MOLTBOOK"
+                    if u.startswith("@"): return "MASTODON"
+                    if "discord" in u.lower(): return "DISCORD"
+                    if "telegram" in u.lower(): return "TELEGRAM"
+                    return "MOLTBOOK"
+                replies = [{"id": r[0], "text": r[1], "context": r[2], "ts": r[3], "platform": _platform(r[2])} for r in rows if r[1]]
                 db.close()
             except:
                 replies = []
