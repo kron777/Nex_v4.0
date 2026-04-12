@@ -403,6 +403,11 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
             "stream": False,
         }, timeout=25)
         raw = r.json().get("content", "").strip()
+        # Strip DeepSeek-R1 thinking blocks from output
+        raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
+        raw = re.sub(r'\[Start thinking\].*?\[End thinking\]', '', raw, flags=re.DOTALL).strip()
+        # Fix thinking bleed — odd ". such as" / ". however" fragments
+        raw = re.sub(r'\. ([a-z])', lambda m: '. ' + m.group(1).upper(), raw)
         # Dedup: remove looping sentences (stronger — 40-char key + word overlap)
         _sentences = [s.strip() for s in raw.replace("—", ".").split(".") if s.strip()]
         _seen_keys = []; _seen_words = []; _deduped = []
@@ -685,9 +690,9 @@ def generate(query: str) -> str:
                 primary_topic=intent or 'philosophy'
             )
             _ifr_prompt = _ifr_result.get('ifr_prompt', '')
-            # Override: if identity context present, always require inference
-            # — NEX should always generate, never just quote a raw belief
-            if locals().get('_identity_ctx') and _ifr_result.get('tension', {}).get('tension_type') == 'settled':
+            # Override: always require inference when identity context present
+            # — applies to ALL tension types, not just settled
+            if locals().get('_identity_ctx'):
                 _ifr_result['requires_inference'] = True
                 _ifr_result['tension']['tension_type'] = 'open'
             # Hard flag — checked downstream to force LLM call
