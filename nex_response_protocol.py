@@ -696,10 +696,6 @@ def generate(query: str) -> str:
             print(f'  [IFR] error: {_ifre}')
     # ─────────────────────────────────────────────────────────────────
 
-    # Prepend identity to belief_text for self-referential queries
-    if _self_ref_identity:
-        belief_text = _self_ref_identity + "\n" + belief_text
-
     # 2b. Try traversal compiler — zero LLM calls for settled queries
     _fingerprint = None
     _self_ref = _is_self_referential(query)
