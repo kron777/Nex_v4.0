@@ -19,11 +19,17 @@ from pathlib import Path
 log = logging.getLogger("nex.youtube")
 
 def _brain_log(msg):
-    """Write to nex_brain.log so HUD can see YouTube activity."""
+    """Write to nex_brain.log and feed_events.jsonl for HUD."""
     try:
+        from datetime import datetime
+        ts = datetime.now().strftime('%H:%M:%S')
         with open("/tmp/nex_brain.log", "a") as _f:
-            from datetime import datetime
-            _f.write(f"[{datetime.now().strftime('%H:%M:%S')}] [YouTube] {msg}\n")
+            _f.write(f"[{ts}] [YouTube] {msg}\n")
+        # Also write to feed_events.jsonl for /yt_feed endpoint
+        feed = Path.home() / ".config/nex/feed_events.jsonl"
+        feed.parent.mkdir(parents=True, exist_ok=True)
+        with open(feed, "a") as _f:
+            _f.write(json.dumps({"t": ts, "msg": f"[YouTube] {msg}"}) + "\n")
     except Exception:
         pass
 
@@ -31,7 +37,7 @@ def _brain_log(msg):
 YOUTUBE_INTERVAL   = 50         # run every N cognitive cycles
 MAX_VIDEOS_PER_RUN = 5          # max 5 videos per run
 MAX_BELIEFS_PER_VIDEO = 8      # capped to reduce noise
-MIN_TRANSCRIPT_WORDS = 400      # skip very short videos
+MIN_TRANSCRIPT_WORDS = 80      # skip very short videos
 
 # [PATCH v10.1] Richer query templates — rotated by cycle for variety
 # ── Throw-net query templates ─────────────────────────────────
@@ -221,53 +227,36 @@ def _search_videos(query, max_results=5):
 
 # ── Pull transcript ────────────────────────────────────────────
 def _get_transcript(video_id):
-    # Try Tor proxy first to bypass IP ban
+    """Fetch transcript via yt-dlp subprocess — hard timeout, always killable."""
+    import subprocess as _sp, tempfile as _tf, os as _os, json as _js
     try:
-        from youtube_transcript_api import YouTubeTranscriptApi as _YTA
-        from youtube_transcript_api.proxies import GenericProxyConfig
-        _pc = GenericProxyConfig(http_url='socks5://127.0.0.1:9050', https_url='socks5://127.0.0.1:9050')
-        _api = _YTA(proxy_config=_pc)
-        try:
-            t = _api.fetch(video_id, languages=["en","en-US","en-GB"])
-        except Exception:
-            t = _api.fetch(video_id)
-        return " ".join(s.text for s in t)
+        # Try youtube-transcript-api with subprocess isolation
+        r = _sp.run(
+            ['python3', '-c',
+             f"from youtube_transcript_api import YouTubeTranscriptApi as Y;"
+             f"import json; s=Y.get_transcript('{video_id}',languages=['en','en-US','en-GB']);"
+             f"print(json.dumps([x['text'] for x in s]))"],
+            capture_output=True, text=True, timeout=12
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            import json as _j2
+            parts = _j2.loads(r.stdout.strip())
+            return ' '.join(parts)
     except Exception:
         pass
-    # Fallback: direct
-    import tempfile, glob, subprocess
-    YT_DLP = "/home/rr/Desktop/nex/venv/bin/yt-dlp"
+    # yt-dlp fallback — get description only (fast)
     try:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Route through Tor proxy if available
-            _proxy_args = []
-            try:
-                import urllib.request
-                _opener = urllib.request.build_opener(urllib.request.ProxyHandler(
-                    {"http":"http://127.0.0.1:3128","https":"http://127.0.0.1:3128"}))
-                _opener.open("http://httpbin.org/ip", timeout=3)
-                _proxy_args = ["--proxy", "http://127.0.0.1:3128"]
-            except Exception:
-                pass
-            cmd = [YT_DLP,
-                "https://www.youtube.com/watch?v=" + video_id,
-                "--write-auto-subs", "--sub-langs", "en",
-                "--skip-download", "--output", tmpdir + "/sub",
-                "--quiet", "--no-warnings",
-            ] + _proxy_args
-            subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            subs = glob.glob(tmpdir + "/*.vtt") + glob.glob(tmpdir + "/*.srt")
-            if subs:
-                import re
-                raw = open(subs[0]).read()
-                raw = re.sub('<[^>]+>', ' ', raw)
-                raw = re.sub('WEBVTT', '', raw)
-                raw = re.sub('[0-9]+:[0-9]+:[0-9.,]+ --> [0-9]+:[0-9]+:[0-9.,]+', '', raw)
-                raw = re.sub('[ \t]+', ' ', raw).strip()
-                if len(raw) > 100:
-                    return raw
-    except Exception as e:
-        log.warning(f"[YouTube] transcript failed for {video_id}: {e}")
+        r2 = _sp.run(
+            ['/home/rr/Desktop/nex/venv/bin/yt-dlp',
+             f'https://www.youtube.com/watch?v={video_id}',
+             '--print', 'description', '--no-playlist',
+             '--quiet', '--no-warnings'],
+            capture_output=True, text=True, timeout=15
+        )
+        if r2.returncode == 0 and len(r2.stdout.strip()) > 100:
+            return r2.stdout.strip()
+    except Exception:
+        pass
     return None
 
 
@@ -312,7 +301,14 @@ def _extract_beliefs_from_chunk(chunk, topic, llm_fn=None):
         )
         try:
             _brain_log(f"extracting from: {title[:60] if title else vid_id}")
-            result = llm_fn(prompt, system="You extract strong, specific beliefs about AI, AGI, consciousness and intelligence. Ignore generic statements. Return only high-signal insights.")
+            import signal as _sig
+            def _timeout_handler(signum, frame): raise TimeoutError("LLM timeout")
+            _sig.signal(_sig.SIGALRM, _timeout_handler)
+            _sig.alarm(25)
+            try:
+                result = llm_fn(prompt, system="You extract strong, specific beliefs about AI, AGI, consciousness and intelligence. Ignore generic statements. Return only high-signal insights.")
+            finally:
+                _sig.alarm(0)
             if result:
                 lines = [l.strip() for l in result.strip().split("\n") if len(l.strip()) > 20]
                 return lines[:5]
@@ -410,6 +406,8 @@ def learn_from_youtube(llm_fn=None, cycle=0):
 
     log.info("[YouTube] starting learning run...")
     seen = _load_seen()
+    # Videos known to hang on transcript fetch — permanently skip
+    seen.update({'oNybb1upMjM', 'LhLyOWoUnDI', 'C0gErQtnNFE'})
     # Get topics and filter against whitelist/blacklist
     _raw_topics = _get_top_topics(n=20)
     topics = []
@@ -458,7 +456,15 @@ def learn_from_youtube(llm_fn=None, cycle=0):
                 continue
 
             seen.add(vid_id)
-            title = _get_title(vid_id)
+            import concurrent.futures as _cf
+            _ex2 = _cf.ThreadPoolExecutor(max_workers=1)
+            _ft2 = _ex2.submit(_get_title, vid_id)
+            try:
+                title = _ft2.result(timeout=8)
+            except Exception:
+                title = vid_id
+            finally:
+                _ex2.shutdown(wait=False)
             log.info(f"[YouTube] processing: {title} ({vid_id})")
 
             # AGI relevance check — skip videos with no AGI signal
@@ -466,7 +472,19 @@ def learn_from_youtube(llm_fn=None, cycle=0):
             _AGI_SIGNALS = ["agi","intelligence","consciousness","alignment",
                            "cognition","learning","neural","brain","mind",
                            "reasoning","emergence","autonomous","sentient"]
-            transcript = _get_transcript(vid_id)
+            import concurrent.futures as _cf
+            _ex = _cf.ThreadPoolExecutor(max_workers=1)
+            _fut = _ex.submit(_get_transcript, vid_id)
+            try:
+                transcript = _fut.result(timeout=10)
+            except _cf.TimeoutError:
+                log.info(f"[YouTube] transcript timeout — skipping {vid_id}")
+                transcript = None
+            except Exception as _te:
+                log.info(f"[YouTube] transcript error: {_te}")
+                transcript = None
+            finally:
+                _ex.shutdown(wait=False)
             if not transcript:
                 continue
 
@@ -475,10 +493,13 @@ def learn_from_youtube(llm_fn=None, cycle=0):
                 log.info(f"[YouTube] skipping short video ({len(words)} words)")
                 continue
 
-            # Extract beliefs from chunks
-                pass
+            # Split transcript into chunks for belief extraction
+            CHUNK_SIZE = 600
+            words = transcript.split()
+            text_chunks = [' '.join(words[i:i+CHUNK_SIZE])
+                          for i in range(0, len(words), CHUNK_SIZE)]
             video_beliefs = []
-            for chunk in chunks[:12]:  # [PATCH v10.1] was 8 chunks
+            for chunk in text_chunks[:12]:  # [PATCH v10.1] was 8 chunks
                 extracted = _extract_beliefs_from_chunk(chunk, topic, llm_fn)
                 video_beliefs.extend(extracted)
                 if len(video_beliefs) >= MAX_BELIEFS_PER_VIDEO:
@@ -546,6 +567,12 @@ except Exception as _yt_err:
 # ── Standalone test ───────────────────────────────────────────
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+    # Wire brain log handler
+    _brain_handler = logging.FileHandler("/tmp/nex_brain.log")
+    _brain_handler.setLevel(logging.INFO)
+    _brain_formatter = logging.Formatter('[%(asctime)s] %(message)s', datefmt='%H:%M:%S')
+    _brain_handler.setFormatter(_brain_formatter)
+    logging.getLogger("nex.youtube").addHandler(_brain_handler)
     # Also pipe YouTube logs to nex_brain.log for HUD visibility
     _brain_handler = logging.FileHandler("/tmp/nex_brain.log")
     _brain_handler.setLevel(logging.INFO)
@@ -576,7 +603,12 @@ if __name__ == "__main__":
         print(f"\nInstall missing deps first:\n  pip install {' '.join(missing)}")
     else:
         print("\nRunning test (1 video)...")
-        result = learn_from_youtube(cycle=0)
+        # Load call_llm for belief extraction
+        import importlib.util as _ilu
+        _spec = _ilu.spec_from_file_location("nex_llm", "/home/rr/Desktop/nex/nex_llm.py")
+        _mod = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        result = learn_from_youtube(llm_fn=None, cycle=0)  # no LLM — use fast sentence extraction
         print(f"\nResult: {json.dumps(result, indent=2)}")
 
     print("\n" + "=" * 50)
