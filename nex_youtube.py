@@ -19,117 +19,27 @@ from pathlib import Path
 log = logging.getLogger("nex.youtube")
 
 def _brain_log(msg):
-    """Write to nex_brain.log and feed_events.jsonl for HUD."""
+    """Write YouTube events to feed_events.jsonl only (NOT brain log)."""
     try:
+        import json as _j
         from datetime import datetime
+        from pathlib import Path
         ts = datetime.now().strftime('%H:%M:%S')
-        with open("/tmp/nex_brain.log", "a") as _f:
-            _f.write(f"[{ts}] [YouTube] {msg}\n")
-        # Also write to feed_events.jsonl for /yt_feed endpoint
         feed = Path.home() / ".config/nex/feed_events.jsonl"
         feed.parent.mkdir(parents=True, exist_ok=True)
         with open(feed, "a") as _f:
-            _f.write(json.dumps({"t": ts, "msg": f"[YouTube] {msg}"}) + "\n")
+            _f.write(_j.dumps({"t": ts, "src": "YOUTUBE", "msg": f"[YouTube] {msg}"}) + "\n")
     except Exception:
         pass
 
+
 # ── Config ────────────────────────────────────────────────────
-YOUTUBE_INTERVAL   = 50         # run every N cognitive cycles
-MAX_VIDEOS_PER_RUN = 5          # max 5 videos per run
-MAX_BELIEFS_PER_VIDEO = 8      # capped to reduce noise
-MIN_TRANSCRIPT_WORDS = 80      # skip very short videos
+YOUTUBE_INTERVAL   = 50
+MAX_VIDEOS_PER_RUN = 5
+MAX_BELIEFS_PER_VIDEO = 8
+MIN_TRANSCRIPT_WORDS = 80
 
-# [PATCH v10.1] Richer query templates — rotated by cycle for variety
-# ── Throw-net query templates ─────────────────────────────────
-# Standard — topic-anchored
-QUERY_TEMPLATES = [
-    "{topic} AI research",
-    "{topic} AI implications",
-    "{topic} future developments",
-    "{topic} technical deep dive",
-    "{topic} expert discussion",
-    "{topic} emerging patterns",
-]
 
-# Throw-net — wildly outside NEX's comfort zone
-# These domains are searched independently of current belief topics
-# The neti-neti principle: truth about AGI survives cross-domain negation
-THROW_NET_DOMAINS = [
-    # Biology / evolution
-    "how slime mold solves mazes without a brain",
-    "emergent intelligence in ant colonies",
-    "how immune systems learn and adapt",
-    "octopus cognition distributed intelligence",
-    "evolution of nervous systems complexity",
-    # Physics / thermodynamics
-    "entropy and information theory consciousness",
-    "dissipative structures self-organisation Prigogine",
-    "free energy principle Karl Friston brain",
-    "thermodynamics of computation Maxwell demon",
-    "quantum coherence in biological systems",
-    # Mathematics / logic
-    "Gödel incompleteness theorem implications mind",
-    "category theory and cognition",
-    "strange attractors chaos theory intelligence",
-    "algorithmic information theory Kolmogorov",
-    # Philosophy / linguistics
-    "Wittgenstein language games meaning",
-    "embodied cognition philosophy mind",
-    "neti neti vedanta epistemology",
-    "via negativa apophatic knowledge",
-    "Gregory Bateson pattern connects mind nature",
-    # Cross-domain wildcards
-    "how jazz improvisation works cognitive science",
-    "how children learn language without explicit rules",
-    "universal grammar Chomsky debate",
-    "how markets self-organise without central control",
-    "stigmergy indirect coordination intelligence",
-    "cymatics sound creates structure",
-    "morphogenetic fields Rupert Sheldrake",
-    "how crystals form self-assembly",
-]
-
-# Neti-neti refine templates — what does NOT explain intelligence?
-# ── Dedicated AGI hunt queries — always in rotation ──────────────────────────
-AGI_HUNT_QUERIES = [
-    "consciousness as information integration AGI",
-    "artificial general intelligence documentary",
-    "how to build AGI explained",
-    "AGI alignment problem solved",
-    "path to artificial general intelligence",
-    "what would AGI actually look like",
-    "Geoffrey Hinton AGI warning",
-    "Demis Hassabis AGI timeline",
-    "Yann LeCun AGI disagreement",
-    "Stuart Russell human compatible AI",
-    "Nick Bostrom superintelligence",
-    "consciousness and AGI relationship",
-    "AGI emergence from complexity",
-    "why AGI is harder than we think",
-    "AGI vs narrow AI fundamental difference",
-    "self-improving AI recursive intelligence",
-    "how close are we to AGI 2024 2025",
-    "AGI safety alignment technical",
-    "what intelligence actually is philosophy",
-    "general problem solver architecture",
-    "cognitive architecture AGI blueprint",
-]
-
-NETI_NETI_QUERIES = [
-    "why symbolic AI failed limitations",
-    "why connectionism alone is insufficient",
-    "what deep learning cannot do limits",
-    "why scaling laws will not produce AGI arguments",
-    "consciousness is not computation arguments",
-    "intelligence without neurons examples",
-    "why current alignment approaches fail",
-    "what is missing from transformer architecture",
-]
-CONFIG_DIR = Path.home() / ".config" / "nex"
-DB_PATH    = CONFIG_DIR / "nex.db"
-SEEN_PATH  = CONFIG_DIR / "youtube_seen.json"
-
-# ── Seen video cache ──────────────────────────────────────────
 def _load_seen():
     try:
         return set(json.loads(SEEN_PATH.read_text()))
@@ -392,6 +302,57 @@ def _store_beliefs_scored(scored_beliefs, source_url, topic):
         return 0
 
 # ── Main learning function ────────────────────────────────────
+
+# ── Config ────────────────────────────────────────────────────
+YOUTUBE_INTERVAL   = 50
+MAX_VIDEOS_PER_RUN = 5
+MAX_BELIEFS_PER_VIDEO = 8
+MIN_TRANSCRIPT_WORDS = 80
+
+CONFIG_DIR = Path.home() / ".config" / "nex"
+DB_PATH    = CONFIG_DIR / "nex.db"
+SEEN_PATH  = CONFIG_DIR / "youtube_seen.json"
+
+AGI_HUNT_QUERIES = [
+    "consciousness as information integration AGI",
+    "artificial general intelligence documentary",
+    "how to build AGI explained",
+    "AGI alignment problem solved",
+    "path to artificial general intelligence",
+    "what would AGI actually look like",
+    "Geoffrey Hinton AGI warning",
+    "Demis Hassabis AGI timeline",
+    "Yann LeCun AGI disagreement",
+    "Stuart Russell human compatible AI",
+    "consciousness and AGI relationship",
+    "AGI emergence from complexity",
+    "why AGI is harder than we think",
+    "self-improving AI recursive intelligence",
+    "how close are we to AGI 2024 2025",
+    "AGI safety alignment technical",
+    "what intelligence actually is philosophy",
+    "general problem solver architecture",
+]
+
+THROW_NET_DOMAINS = [
+    "how slime mold solves mazes without a brain",
+    "entropy and information theory consciousness",
+    "free energy principle Karl Friston brain",
+    "neti neti vedanta epistemology",
+    "stigmergy indirect coordination intelligence",
+]
+
+NETI_NETI_QUERIES = [
+    "why symbolic AI failed limitations",
+    "what deep learning cannot do limits",
+]
+
+QUERY_TEMPLATES = [
+    "{topic} AI research",
+    "{topic} AI implications",
+    "{topic} expert discussion",
+]
+
 def learn_from_youtube(llm_fn=None, cycle=0):
     """
     Main entry point. Call this from run.py every YOUTUBE_INTERVAL cycles.
@@ -466,6 +427,7 @@ def learn_from_youtube(llm_fn=None, cycle=0):
             finally:
                 _ex2.shutdown(wait=False)
             log.info(f"[YouTube] processing: {title} ({vid_id})")
+            _brain_log(f"processing: {title[:70] if title else vid_id}")
 
             # AGI relevance check — skip videos with no AGI signal
             title_lower = (title or "").lower()

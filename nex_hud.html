@@ -578,15 +578,14 @@ function queueStream(t, type, text) {
 }
 
 // Col 1: YouTube ticker — reads from /feed, shows YOUTUBE entries
-let ytCursor = 0, ytSeen = new Set();
+let ytSeen = new Set();
 async function fetchCol1() {
   try {
     const r = await fetch('http://localhost:7700/yt_feed', {signal: AbortSignal.timeout(2000)});
     const d = await r.json();
     const entries = d.entries || [];
-    while (ytCursor < entries.length) {
-      const e = entries[ytCursor++];
-      if (e.src !== 'YOUTUBE' && !(e.msg||'').includes('YouTube') && !(e.msg||'').includes('youtube')) continue;
+    const recent = entries.filter(e => e.src === 'YOUTUBE' || (e.msg||'').includes('YouTube')).slice(-15);
+    for (const e of recent) {
       let txt = (e.msg || '')
         .replace(/\[YOUTUBE\]\s*/i, '')
         .replace(/youtube_engine\s*/i, '')

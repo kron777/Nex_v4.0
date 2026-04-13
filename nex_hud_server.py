@@ -123,7 +123,7 @@ class HUD(BaseHTTPRequestHandler):
             _skip = ['consolidator','ACCEPT on topic','Resolved 3','Locked top',
                      'LOOP id=','Cap hit','reinforce_minor','prune_boost',
                      'NBRE bridge','fired=0','BeliefIndex','EMBODIED','high_load',
-                     '[YouTube]','YouTube']
+                     '[YouTube]','YouTube','youtube','AGI-HUNT','THROW-NET']
             _log = "/tmp/nex_brain.log"
             _off = os.path.getsize(_log) if os.path.exists(_log) else 0
             _eid = 0
@@ -138,7 +138,7 @@ class HUD(BaseHTTPRequestHandler):
                         _off = sz
                         for line in chunk.splitlines():
                             line = line.strip()
-                            if not line or any(s in line for s in _skip): continue
+                            if not line or any(s in line for s in _skip) or 'YouTube' in line or 'youtube' in line or 'AGI-HUNT' in line or 'THROW-NET' in line or "search '" in line: continue
                             line = _sre.sub(r'\x1b\[[0-9;]*m','',line)
                             line = _sre.sub(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[\.,\d]* ','',line).strip()
                             if len(line) < 5: continue
