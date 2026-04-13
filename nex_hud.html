@@ -36,23 +36,27 @@ body::after{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background-i
 /* === MAIN GRID: left panel | center split | right panel === */
 .main{display:grid;grid-template-columns:220px 1fr 659px;gap:3px;overflow:hidden;}
 .panel{background:var(--panel);border:1px solid var(--border);padding:6px;overflow:hidden;position:relative;}
+#center-panel{padding:0 !important;}
 .panel::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:0.5;}
 .panel::after{content:'';position:absolute;bottom:3px;right:3px;width:8px;height:8px;border-bottom:1px solid var(--cyan);border-right:1px solid var(--cyan);opacity:0.4;}
-.panel-title{font-family:'Orbitron',monospace;font-size:11px;color:var(--cyan);letter-spacing:2px;margin-bottom:5px;padding-bottom:3px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:4px;}
+.panel-title{font-family:'Orbitron',monospace;font-size:16px;color:var(--cyan);letter-spacing:2px;margin-bottom:5px;padding-bottom:3px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:4px;}
 .panel-title::before{content:'⌐';color:var(--purple);}.panel-title::after{content:'¬';color:var(--purple);margin-left:auto;}
 
 /* === CENTER SPLIT PANEL === */
 .center-panel{display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--border);position:relative;overflow:hidden;}
 .center-panel::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:0.5;}
 .center-split{display:grid;grid-template-columns:1fr 1fr;gap:0;flex:1;overflow:hidden;min-height:0;}
+.center-split .stream-box{padding:0 !important;margin:0 !important;}
+.center-split .center-col{padding:0 !important;}
+.center-split.panel, .panel.center-panel{padding:0 !important;}
 .center-col{display:flex;flex-direction:column;overflow:hidden;min-height:0;}
 .center-col:first-child{border-right:1px solid var(--border);}
 .center-col:last-child{margin-left:75px;}
-.center-col-title{font-family:'Orbitron',monospace;font-size:10px;color:var(--cyan);letter-spacing:2px;padding:4px 6px 3px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:4px;flex-shrink:0;}
+.center-col-title{font-family:'Orbitron',monospace;font-size:16px;color:var(--cyan);letter-spacing:2px;padding:0 0 2px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:4px;flex-shrink:0;}
 .center-col-title.debug-title{color:var(--debug-cyan);}
 .center-col-title .blink{animation:blink-dot 1.2s infinite;color:var(--green);}
 @keyframes blink-dot{0%,100%{opacity:1;}50%{opacity:0.2;}}
-.stream-box{flex:1;overflow-y:scroll;overflow-x:hidden;font-size:13px;line-height:1.65;position:relative;padding:2px 4px;min-height:0;scrollbar-width:none;}
+.stream-box{flex:1;overflow-y:scroll;overflow-x:hidden;font-size:13px;line-height:1.65;position:relative;padding:0 !important;margin:0 !important;min-height:0;scrollbar-width:none;}
 .stream-line{display:flex;gap:6px;padding:2px 0;border-bottom:1px solid #ffffff04;animation:fadein 0.3s ease;}
 @keyframes fadein{from{opacity:0;transform:translateX(-4px);}to{opacity:1;transform:translateX(0);}}
 .stream-ts{color:var(--dim);white-space:nowrap;flex-shrink:0;font-size:11px;}
@@ -104,6 +108,11 @@ body::after{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background-i
 .iq-val{font-family:'Orbitron',monospace;font-size:16px;font-weight:900;color:var(--green);text-shadow:0 0 10px var(--green);}
 .iq-label{font-size:12px;color:var(--dim);letter-spacing:2px;}
 .divider-line{width:1px;background:linear-gradient(to bottom,transparent,var(--border),var(--cyan),var(--border),transparent);opacity:0.6;align-self:stretch;}
+
+#center-panel { padding: 0 !important; }
+#center-panel .center-col { padding: 0 !important; margin: 0 !important; }
+#center-panel .stream-box { padding: 0 !important; margin: 0 !important; }
+#center-panel .center-col-title { padding: 2px 0 2px 0 !important; }
 </style>
 </head>
 <body>
@@ -145,7 +154,7 @@ body::after{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background-i
 
   <div class="main">
     <!-- LEFT: Cognitive State -->
-    <div class="panel" style="display:flex;flex-direction:column;">
+    <div class="panel" style="padding:0 !important;" style="display:flex;flex-direction:column;">
       <div class="panel-title">COGNITIVE STATE</div>
       <div class="beliefs-label">ACTIVE BELIEFS</div>
       <div class="beliefs-num" id="s-beliefs">0</div>
@@ -193,28 +202,28 @@ body::after{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background-i
         <div class="center-col">
           <div class="center-col-title">
             <span style="color:var(--purple);">⌐</span>
-            BRAIN LOG
+            YOUTUBE
             <span class="blink">●</span>
             <span style="color:var(--purple);margin-left:auto;">¬</span>
           </div>
-          <div class="stream-box" id="stream-box"></div>
+          <div class="stream-box" id="stream-box" style="padding-left:0;margin-left:0;"></div>
         </div>
 
         <!-- Debug Stream -->
-        <div class="center-col">
+        <div class="center-col" style="padding:0;">
           <div class="center-col-title debug-title">
             <span style="color:var(--purple);">⌐</span>
             DEBUG STREAM
             <span class="blink" style="color:var(--debug-cyan);">●</span>
             <span style="color:var(--purple);margin-left:auto;">¬</span>
           </div>
-          <div class="stream-box" id="debug-box"></div>
+          <div class="stream-box" id="debug-box" style="padding:0 !important;margin:0 !important;left:0;"></div>
         </div>
       </div>
     </div>
 
     <!-- RIGHT: NEX Responses -->
-    <div class="panel" style="display:flex;flex-direction:column;overflow:hidden;">
+    <div class="panel" style="padding:0 !important;" style="display:flex;flex-direction:column;overflow:hidden;">
       <div class="panel-title">NEX RESPONSES</div>
       <div id="responses-box" style="flex:1;overflow-y:scroll;overflow-x:hidden;font-size:12px;line-height:1.6;scrollbar-width:none;"></div>
       <div class="crash-alert" id="crash-alert">✗ SYSTEM ANOMALY DETECTED</div>
@@ -230,6 +239,9 @@ body::after{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background-i
 </div>
 
 <script>
+window.onerror = function(msg,src,line){console.error("JS ERROR:",msg,"line:",line); return false;};
+document.addEventListener("DOMContentLoaded", function() {
+window.onerror = function(msg,src,line){console.error("JS ERROR:",msg,"line:",line); return false;};
 // ── Clock & Uptime ────────────────────────────────────────────────────────────
 const startTime = Date.now();
 function updateClock() {
@@ -258,7 +270,7 @@ function setBar(id, vid, pct) {
 }
 
 // ── Notification Stream ───────────────────────────────────────────────────────
-const streamBox = document.getElementById('stream-box');
+const streamBox = document.getElementById('debug-box');
 const TYPE_COLORS = {
   BRAIN:'var(--cyan)', BELIEF:'var(--yellow)', REPLIED:'var(--purple)',
   POSTED:'var(--green)', CHATTED:'var(--cyan)', LEARNT:'var(--yellow)',
@@ -278,6 +290,11 @@ function addStream(ts, type, text) {
 
 // ── Debug Stream ──────────────────────────────────────────────────────────────
 const debugBox = document.getElementById('debug-box');
+
+debugBox.style.padding = '0';
+debugBox.style.marginLeft = '0';
+debugBox.style.paddingLeft = '0';
+debugBox.style.cssText += 'padding:0 !important;margin:0 !important;padding-left:0 !important;';
 
 const DEBUG_COLORS = {
   'BRAIN':   {cls:'debug-ok',   prefix:'✓'},
@@ -406,21 +423,24 @@ async function fetchStats() {
   }
 }
 
-// ── Debug stream from /tmp/nex_debug_stream.log via server ───────────────────
-let _debugCursor = -1;
-let _dbgWin = [], _dbgWinCursor = 0;
+// ── Debug stream ────────────────────────────────────────────────────────────
 async function fetchDebug() {
   try {
     const r = await fetch('http://localhost:7700/debug', {signal: AbortSignal.timeout(2000)});
     const d = await r.json();
-    const all = (d.lines || []).map(l => (l.msg||"").replace(/\u001b\[[0-9;]*m/g,"").trim()).filter(m => m.length > 4 && !m.startsWith("File \"/") && !m.startsWith("Traceback") && !m.includes("^^^^") && !m.startsWith("self.") && !m.startsWith("OSError") && !m.startsWith("Exception") && !m.startsWith("httpd"));
-    _dbgWin = all.slice(-20).reverse();
-    if (_dbgWinCursor >= _dbgWin.length) _dbgWinCursor = 0;
-    if (_dbgWin[_dbgWinCursor]) queueDebug('', 'SYS', _dbgWin[_dbgWinCursor], '');
-    _dbgWinCursor++;
+    const lines = (d.lines || []).map(l => (l.msg||'').replace(/\x1b\[[0-9;]*m/g,'').trim()).filter(m => m.length > 4);
+    if (!lines.length) return;
+    debugBox.innerHTML = '';
+    lines.slice(-30).forEach(msg => {
+      const el = document.createElement('div');
+      el.style.cssText = 'padding:0;margin:0;border-bottom:1px solid #0a1a2a;word-break:break-word;color:#7affcc;font-size:11px;';
+      el.textContent = msg;
+      debugBox.appendChild(el);
+    });
+    debugBox.scrollTop = debugBox.scrollHeight;
   } catch(e) {}
 }
-setInterval(fetchDebug, 1500);
+setInterval(fetchDebug, 3000);
 fetchDebug();
 
 // ── NEX Response Panel — polls /replies for real sent messages ───────────────
@@ -534,7 +554,7 @@ function drainAgiQueue(){
   setTimeout(()=>{if(h.tier!==1)agiDot.style.background='#2a6a4a';},2000);
 }
 
-// ── STREAM-BOX (col 1: BRAIN LOG/YOUTUBE) — AGI Watch pattern ──────────
+// ── STREAM-BOX (col 1: YOUTUBE/YOUTUBE) — AGI Watch pattern ──────────
 let streamQueue = [];
 let streamStreaming = false;
 
@@ -581,126 +601,22 @@ function queueStream(t, type, text) {
 let ytSeen = new Set();
 async function fetchCol1() {
   try {
-    const r = await fetch('http://localhost:7700/yt_feed', {signal: AbortSignal.timeout(2000)});
+    const r = await fetch('http://localhost:7700/yt_feed', {signal: AbortSignal.timeout(3000)});
     const d = await r.json();
     const entries = d.entries || [];
-    const recent = entries.filter(e => e.src === 'YOUTUBE' || (e.msg||'').includes('YouTube')).slice(-15);
-    for (const e of recent) {
-      let txt = (e.msg || '')
-        .replace(/\[YOUTUBE\]\s*/i, '')
-        .replace(/youtube_engine\s*/i, '')
-        .replace(/\[YouTube\]\s*/i, '')
-        .trim();
-      if (txt.length < 15) continue;
-      const key = txt.slice(0, 55);
-      if (ytSeen.has(key)) continue;
-      ytSeen.add(key);
-      queueStream(ts(), 'YOUTUBE', txt);
-      break; // one entry per fetch cycle
-    }
-    if (ytCursor >= entries.length) { ytCursor = 0; ytSeen.clear(); }
+    if (entries.length === 0) return;
+    const box = document.getElementById('stream-box');
+    box.innerHTML = '';
+    entries.slice(-20).forEach(e => {
+      const txt = (e.text || e.msg || '').replace(/\[YouTube\]\s*/gi,'').trim();
+      if (txt.length < 5) return;
+      const div = document.createElement('div');
+      div.style.cssText = 'padding:0;margin:0;color:#7affcc;font-size:11px;word-break:break-word;border-bottom:1px solid #0a2a1a;';
+      div.textContent = '[' + (e.time || e.t || '') + '] ' + txt;
+      box.appendChild(div);
+    });
+    box.scrollTop = box.scrollHeight;
   } catch(e) {}
 }
-setInterval(fetchCol1, 4000);
-fetchCol1();
-// Watchdog: track when streamStreaming was set, force-reset if stuck >5s
-let _streamStuckAt = 0;
-setInterval(()=>{
-  if(streamStreaming){
-    if(!_streamStuckAt) _streamStuckAt = Date.now();
-    else if(Date.now()-_streamStuckAt > 5000){
-      streamStreaming=false; _streamStuckAt=0; drainStreamQueue();
-    }
-  } else { _streamStuckAt=0; }
-}, 1000);
+setInterval(fetchCol1, 5000); fetchCol1();
 
-// ── DEBUG-BOX (col 2: DEBUG STREAM) — AGI Watch pattern ─────────────────────
-let _debugLastTs = '';
-
-let _dbgQ = [], _dbgBusy = false;
-function _drainDbg() {
-  if (_dbgBusy || _dbgQ.length === 0) return;
-  _dbgBusy = true;
-  const msg = _dbgQ.shift();
-  const el = document.createElement('div');
-  el.style.cssText = 'padding:1px 0;font-family:monospace;font-size:11px;color:#7affcc;';
-  debugBox.insertBefore(el, debugBox.firstChild);
-  while (debugBox.children.length > 120) debugBox.removeChild(debugBox.lastChild);
-  streamChar(el, msg, 0, () => { _dbgBusy = false; setTimeout(_drainDbg, 20); });
-}
-function queueDebug(t, src2, msg, status) {
-  _dbgQ.push(msg);
-  if (_dbgQ.length > 60) _dbgQ.shift();
-  _drainDbg();
-}
-
-async function fetchAgi(){
-  try{
-    const r=await fetch('http://localhost:7700/agi',{signal:AbortSignal.timeout(3000)});
-    const d=await r.json();
-    if(agiBadge){
-      if(d.badge&&d.badge>0){
-        agiBadge.textContent=d.badge;
-        agiBadge.style.display='inline-block';
-      } else {
-        agiBadge.style.display='none';
-      }
-    }
-    if(!d.hits||d.hits.length===0)return;
-    let added=0;
-    d.hits.forEach(h=>{
-      if(agiSeen.has(h.id))return;
-      agiSeen.add(h.id);
-      agiQueue.push(h);
-      added++;
-    });
-    if(added===0){agiSeen.clear();}
-    drainAgiQueue();
-  }catch(e){}
-}
-setInterval(fetchAgi,10000);
-fetchAgi();
-
-
-
-// ── NEX Response Panel ────────────────────────────────────────────────────────
-const responsesBox = document.getElementById('responses-box');
-const RESPONSE_TYPES = new Set(['REPLIED','CHATTED','POSTED','MASTODON','DISCORD','MOLTBOOK','TELEGRAM']);
-const RESPONSE_COLORS = {
-  REPLIED: 'var(--purple)',
-  MASTODON: '#6364ff',
-  DISCORD: '#5865f2',
-  MOLTBOOK: 'var(--cyan)',
-  TELEGRAM: '#29b6f6',
-  CHATTED: 'var(--cyan)',
-  POSTED:  'var(--green)',
-};
-
-let _respQ = [], _respBusy = false;
-function _drainResp() {
-  if (_respBusy || _respQ.length === 0) return;
-  _respBusy = true;
-  const {time, type, text} = _respQ.shift();
-  const col = RESPONSE_COLORS[type] || 'var(--cyan)';
-  const el = document.createElement('div');
-  el.style.cssText = 'padding:5px 4px;border-bottom:1px solid #ffffff0a;';
-  responsesBox.insertBefore(el, responsesBox.firstChild);
-  while (responsesBox.children.length > 30) responsesBox.removeChild(responsesBox.lastChild);
-  const html = '<div style="color:'+col+';font-size:10px;margin-bottom:2px;">['+type+'] <span style="color:#445566">'+time+'</span></div>'
-    + '<div style="color:#ddf4ee;font-size:12px;line-height:1.55;">'+text+'</div>';
-  streamChar(el, html, 0, () => { _respBusy = false; setTimeout(_drainResp, 200); });
-}
-function addResponse(time, type, text) {
-  if (!RESPONSE_TYPES.has(type)) return;
-  if (!text || text.length < 8) return;
-  _respQ.push({time, type, text});
-  if (_respQ.length > 20) _respQ.shift();
-  _drainResp();
-}
-
-// Patch addStream to mirror Nex's own output to the responses panel
-
-fetchStats();
-</script>
-</body>
-</html>
