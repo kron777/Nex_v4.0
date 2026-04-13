@@ -227,33 +227,33 @@ def _search_videos(query, max_results=5):
 
 # ── Pull transcript ────────────────────────────────────────────
 def _get_transcript(video_id):
-    """Fetch transcript via yt-dlp subprocess — hard timeout, always killable."""
-    import subprocess as _sp, tempfile as _tf, os as _os, json as _js
-    try:
-        # Try youtube-transcript-api with subprocess isolation
-        r = _sp.run(
-            ['python3', '-c',
-             f"from youtube_transcript_api import YouTubeTranscriptApi as Y;"
-             f"import json; s=Y.get_transcript('{video_id}',languages=['en','en-US','en-GB']);"
-             f"print(json.dumps([x['text'] for x in s]))"],
-            capture_output=True, text=True, timeout=12
-        )
-        if r.returncode == 0 and r.stdout.strip():
-            import json as _j2
-            parts = _j2.loads(r.stdout.strip())
+    """Fetch transcript — instance API (v1.x+), subprocess isolated."""
+    import subprocess as _sp
+    r = _sp.run(
+        ['/home/rr/Desktop/nex/venv/bin/python3', '-c',
+         f"from youtube_transcript_api import YouTubeTranscriptApi;"
+         f"import json;"
+         f"api=YouTubeTranscriptApi();"
+         f"t=api.fetch('{video_id}');"
+         f"print(json.dumps([s.text for s in t.snippets]))"],
+        capture_output=True, text=True, timeout=20
+    )
+    if r.returncode == 0 and r.stdout.strip():
+        try:
+            import json as _j
+            parts = _j.loads(r.stdout.strip())
             return ' '.join(parts)
-    except Exception:
-        pass
-    # yt-dlp fallback — get description only (fast)
+        except Exception:
+            pass
+    # yt-dlp description fallback
     try:
         r2 = _sp.run(
             ['/home/rr/Desktop/nex/venv/bin/yt-dlp',
              f'https://www.youtube.com/watch?v={video_id}',
-             '--print', 'description', '--no-playlist',
-             '--quiet', '--no-warnings'],
+             '--print', 'description', '--no-playlist', '--quiet', '--no-warnings'],
             capture_output=True, text=True, timeout=15
         )
-        if r2.returncode == 0 and len(r2.stdout.strip()) > 100:
+        if r2.returncode == 0 and len(r2.stdout.strip()) > 150:
             return r2.stdout.strip()
     except Exception:
         pass
@@ -476,7 +476,7 @@ def learn_from_youtube(llm_fn=None, cycle=0):
             _ex = _cf.ThreadPoolExecutor(max_workers=1)
             _fut = _ex.submit(_get_transcript, vid_id)
             try:
-                transcript = _fut.result(timeout=10)
+                transcript = _fut.result(timeout=25)
             except _cf.TimeoutError:
                 log.info(f"[YouTube] transcript timeout — skipping {vid_id}")
                 transcript = None
