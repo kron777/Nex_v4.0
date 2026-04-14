@@ -964,12 +964,28 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
             if _id_to_topic.get(bid, "general") in _expanded_topics
         }
 
+    # U7: Load user interest topics for activation boost
+    _interlocutor_boost_topics = []
+    try:
+        import sys as _isys
+        _isys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
+        from nex_interlocutor import get_interest_boost_topics
+        _interlocutor_boost_topics = get_interest_boost_topics()
+    except Exception:
+        pass
+
     scored = []
     for b in all_b:
         s = _score_belief(b, tokens)
         # Boost beliefs from the expanded concept cluster
         if _expanded_topics and (b.get("topic", "").lower() in _expanded_topics):
             s += 2.5
+        # U7: Boost beliefs matching user's known interests
+        if _interlocutor_boost_topics:
+            _btopic = (b.get("topic") or "").lower()
+            if any(_it in _btopic or _it in (b.get("content","")).lower()[:100]
+                   for _it in _interlocutor_boost_topics):
+                s += 1.2
         # Phase 6 — recency glow: recently activated beliefs surface faster
         s += _glow.get(b.get("id"), 0.0)
         # Build 3 — semantic similarity boost

@@ -866,6 +866,18 @@ class NexBeliefReservoirEngine:
                     expanded.extend(aliases)
         expanded = list(dict.fromkeys(expanded))
 
+        # U7: Add user interest topics to NBRE stimulation
+        try:
+            import sys as _isys2
+            if not any("nex_interlocutor" in k for k in _isys2.modules):
+                import importlib as _il2
+                _il2.import_module("nex_interlocutor")
+            from nex_interlocutor import get_interest_boost_topics as _git
+            _user_topics = _git()
+            expanded = list(dict.fromkeys(expanded + _user_topics))
+        except Exception:
+            pass
+
         if expanded:
             self.layer1.stimulate_by_topic(expanded, strength=1.2)
         self.layer1.stimulate_by_keywords(query, strength=0.9)
