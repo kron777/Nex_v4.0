@@ -2413,8 +2413,8 @@ def express(
             _user += f'NBRE (your belief engine) says: {_nbre_pos}\nBuild from this. Stay in your own voice.\n\n'
         _user += f'Your current position: {_position}\n\n'
         _user += ('Respond as NEX in 2-4 sentences. Stay grounded in your beliefs. Be direct. '
-                   'NEVER open with: "The honest gap", "Where I am genuinely uncertain", '
-                   '"I hold this loosely". Open with your position.')
+                   'NEVER open with or use: "The honest gap", "Where I am genuinely uncertain", '
+                   '"I hold this loosely", "autonomous cognitive entity", "not a generic assistant". Open with your position.')
         _prompt = f'<|im_start|>system\n{_sys}<|im_end|>\n<|im_start|>user\n{_user}<|im_end|>\n<|im_start|>assistant\n'
         # BCD — apply logit bias to suppress generic AI patterns
         _bcd_payload = {
