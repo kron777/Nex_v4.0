@@ -22,6 +22,54 @@ import random
 import math
 from typing import Optional
 
+# ── Neurosymbolic layer ───────────────────────────────────────────────────────
+try:
+    import sys as _sym_sys, os as _sym_os
+    _sym_sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent))
+    from nex_symbolic import symbolic_pass, init_symbolic, symbolic_status
+    init_symbolic()
+    _SYMBOLIC_OK = True
+    print("  [Symbolic] neurosymbolic layer loaded", flush=True)
+except Exception as _sym_err:
+    _SYMBOLIC_OK = False
+    print(f"  [Symbolic] unavailable: {_sym_err}", flush=True)
+    def symbolic_pass(beliefs, query_words, intent="topical"):
+        return beliefs, "bypass", []
+
+# ── World model ───────────────────────────────────────────────────────────────
+try:
+    import sys as _wm_sys
+    _wm_sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent))
+    from nex_world_model import WorldModel as _WorldModel
+    _wm = _WorldModel()
+    _WM_OK = True
+    print("  [WorldModel] entity tracker loaded", flush=True)
+except Exception as _wm_err:
+    _WM_OK = False
+    _wm = None
+    print(f"  [WorldModel] unavailable: {_wm_err}", flush=True)
+
+# ── JEPA world model inference ────────────────────────────────────────────────
+try:
+    import sys as _jepa_sys
+    _nex_desktop = str(__import__("pathlib").Path.home() / "Desktop" / "nex")
+    if _nex_desktop not in _jepa_sys.path:
+        _jepa_sys.path.insert(0, _nex_desktop)
+    # Use cached module if already loaded under any name
+    _jepa_mod = (_jepa_sys.modules.get("nex_jepa") or
+                 __import__("importlib").import_module("nex_jepa"))
+    _jepa_sys.modules["nex_jepa"] = _jepa_mod  # normalise key
+    from nex_jepa import jepa_nearest_beliefs as _jepa_nearest
+    # Preload encoder now so cognite() calls don't each load it
+    _jepa_mod._get_encoder()
+    _JEPA_OK = True
+    print("  [JEPA] world model inference loaded", flush=True)
+except Exception as _jepa_err:
+    _JEPA_OK = False
+    _jepa_nearest = None
+    print(f"  [JEPA] unavailable: {_jepa_err}", flush=True)
+# ─────────────────────────────────────────────────────────────────────────────
+
 DB = pathlib.Path("~/.config/nex/nex.db").expanduser()  # full schema + 13k+ beliefs  # full schema + 13k+ beliefs
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -48,6 +96,9 @@ class Context:
         self.connector  = ""         # bridge between beliefs
         self.closing    = ""         # optional turn-back to person
         self.response   = ""        # final output
+        # ── Symbolic layer outputs ────────────────────────────────────────────
+        self.symbolic_verdict = "bypass"   # clean / anchored / flagged / bypass
+        self.symbolic_flags   = []         # list of symbolic flag strings
 
 # ════════════════════════════════════════════════════════════════════════════
 # PASS 1 — PARSE
@@ -502,6 +553,38 @@ def cognite(query: str) -> str:
     pass1_parse(ctx)      # surface decomposition
     pass2_feel(ctx)       # emotional register
     pass3_retrieve(ctx)   # multi-head belief retrieval
+    # ── pass3b: symbolic validation ──────────────────────────────────────────
+    ctx.beliefs, ctx.symbolic_verdict, ctx.symbolic_flags = symbolic_pass(
+        ctx.beliefs, ctx.clean_words, ctx.intent
+    )
+    # ── pass3c: world model entity injection ─────────────────────────────────
+    _wm_block = ""
+    if _WM_OK and _wm:
+        try:
+            import re as _re
+            # Extract capitalised words from query as candidate entities
+            _entities = _re.findall(r'\b([A-Z][a-zA-Z]{2,})\b', query)
+            for _ent in _entities[:3]:
+                _block = _wm.prompt_block(_ent)
+                if _block:
+                    _wm_block += "\n" + _block
+        except Exception:
+            pass
+    # ── pass3d: JEPA world model — inject predicted-context beliefs ───────────
+    if _JEPA_OK and _jepa_nearest and ctx.intent not in ("casual",):
+        try:
+            _jepa_hits = _jepa_nearest(query, n=3)
+            for _belief_text, _score in _jepa_hits:
+                # Only inject if meaningfully similar and not already in beliefs
+                if _score >= 0.45 and not any(
+                    _belief_text[:50] in b[0] for b in ctx.beliefs
+                ):
+                    ctx.beliefs.append((_belief_text, _score * 8.0))
+            # Re-sort by score after injection
+            ctx.beliefs = sorted(ctx.beliefs, key=lambda x: x[1], reverse=True)[:6]
+        except Exception:
+            pass
+    # ─────────────────────────────────────────────────────────────────────────
     pass4_relate(ctx)     # tension/connection detection
     pass5_position(ctx)   # stance setting
     pass6_compose(ctx)    # warm prose composition
@@ -581,7 +664,7 @@ def cognite(query: str) -> str:
             history_str += "\n"
 
         prompt = (
-            history_str + "NEX beliefs:\n" + belief_ctx + 
+            history_str + "NEX beliefs:\n" + belief_ctx + _wm_block +
             "\n\nSpeaking as NEX, using only first person and drawing on the beliefs above, "
             "respond to this without any AI disclaimers or hedging: " + ctx.query +
             "\n\nNEX response (I think / I hold / I believe / my position is):"
@@ -602,6 +685,17 @@ def cognite(query: str) -> str:
     _CONV_HISTORY.append((raw_query if "raw_query" in dir() else query, ctx.response))
     if len(_CONV_HISTORY) > _MAX_HISTORY:
         _CONV_HISTORY.pop(0)
+
+    # ── World model: extract entities from this exchange ──────────────────────
+    if _WM_OK and _wm and ctx.response:
+        try:
+            _wm.extract_and_update(
+                query + " " + ctx.response,
+                source="conversation"
+            )
+        except Exception:
+            pass
+    # ─────────────────────────────────────────────────────────────────────────
 
     return ctx.response
 

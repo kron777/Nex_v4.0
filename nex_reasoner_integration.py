@@ -126,7 +126,7 @@ def gated_cognite(query: str, cognite_fn, *args, **kwargs) -> dict:
     t_gate.start()
     t_cognite.start()
     t_gate.join(timeout=90)
-    t_cognite.join(timeout=30)
+    t_cognite.join(timeout=45)
 
     cognite_text = cognite_reply.get("text", "[cognite timeout]")
     gate_score   = gate_result.get("confidence", {}).get("score", 0.0)

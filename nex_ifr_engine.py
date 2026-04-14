@@ -34,7 +34,7 @@ from collections import deque
 from typing import Optional
 
 log     = logging.getLogger("nex.ifr")
-DB_PATH = Path.home() / "Desktop" / "nex" / "nex.db"
+DB_PATH = Path.home() / ".config" / "nex" / "nex.db"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -200,9 +200,9 @@ def forge_positive_ifr(
 
                 # Get edges and continue BFS
                 edges = db.execute(
-                    "SELECT target_id, weight, relation_type "
-                    "FROM belief_relations WHERE source_id=? "
-                    "AND relation_type IN ('similar','bridges','supports')",
+                    "SELECT target_id, weight, link_type as relation_type "
+                    "FROM belief_links WHERE source_id=? "
+                    "AND link_type IN ('similar','bridges','supports','causal')",
                     (current_id,)
                 ).fetchall()
 
@@ -292,18 +292,24 @@ def forge_negative_ifr(
             """, (f"%{kw}%",)).fetchall()
             opposing.extend(rows)
 
-        # Also check belief_relations for opposes edges
-        # Get IDs of activated beliefs first
-        rows2 = db.execute("""
-            SELECT b.content, b.confidence
-            FROM beliefs b
-            JOIN belief_relations br ON br.target_id = b.id
-            WHERE br.relation_type = 'opposes'
-            AND b.confidence > 0.60
-            ORDER BY b.confidence DESC
-            LIMIT 5
-        """).fetchall()
-        opposing.extend(rows2)
+        # Wire to tensions table (2631 unresolved tensions — belief_relations has 0 rows)
+        try:
+            rows2 = db.execute("""
+                SELECT b1.content, t.energy,
+                       b2.content, b2.confidence
+                FROM tensions t
+                JOIN beliefs b1 ON t.belief_a_id = b1.id
+                JOIN beliefs b2 ON t.belief_b_id = b2.id
+                WHERE t.resolved = 0
+                AND b1.confidence > 0.50
+                ORDER BY t.energy DESC
+                LIMIT 10
+            """).fetchall()
+            for row in rows2:
+                opposing.append((row[0], row[1]))  # content, energy as proxy confidence
+                opposing.append((row[2], row[3]))  # opposing belief
+        except Exception as _te:
+            pass
 
         db.close()
 
