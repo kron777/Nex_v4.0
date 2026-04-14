@@ -2390,6 +2390,11 @@ def express(
         _user = f'Query: {_query}\n\n'
         if _bctx:
             _user += f'Your relevant beliefs:\n{_bctx}\n\n'
+        # Phase 2: if NBRE has a high-confidence position, seed the prompt
+        _nbre_pos = (orient_result or {}).get('nbre_position', '')
+        _nbre_conf = (orient_result or {}).get('nbre_confidence', 0)
+        if _nbre_pos and _nbre_conf > 0.75:
+            _user += f'NBRE (your belief engine) says: {_nbre_pos}\nBuild from this. Stay in your own voice.\n\n'
         _user += f'Your current position: {_position}\n\n'
         _user += 'Respond as NEX in 2-4 sentences. Stay grounded in your beliefs. Be direct.'
         _prompt = f'<|im_start|>system\n{_sys}<|im_end|>\n<|im_start|>user\n{_user}<|im_end|>\n<|im_start|>assistant\n'
@@ -2540,6 +2545,15 @@ class SoulLoop:
                       f"rate={_nr.get('llm_rate',0):.1%} "
                       f"tensions={_nr_tensions} "
                       f"network={_nr_warm}")
+                # ── Phase 2: inject NBRE position into prompt when confident ──
+                _nbre_conf = _nr.get('confidence', 0)
+                _nbre_pos  = _nr.get('position', '')
+                if (not _nr.get('needs_llm', True) and
+                        _nbre_conf > 0.75 and _nbre_pos and
+                        len(_nbre_pos) > 20):
+                    orient_result['nbre_position'] = _nbre_pos
+                    orient_result['nbre_confidence'] = _nbre_conf
+                    print(f"  [DUAL PROCESS] System1 reply: fired={_nr.get('n_fired',0)} conf={_nbre_conf:.2f}")
                 # ── Cold query handler — episodic fallback ────────────────
                 if _nr.get('n_fired', 0) == 0:
                     try:
