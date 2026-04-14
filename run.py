@@ -4911,6 +4911,51 @@ try:
 except Exception as _e:
     print(f"  [CONSOLIDATION] failed to start: {_e}")
 
+# [NEX_NIGHTLY] — nightly belief-graph consolidation daemon
+try:
+    from nex_nightly import NightlyDaemon as _ND
+    _nightly = _ND()
+    _nightly.start()
+    print("  [NIGHTLY] belief-graph consolidation daemon started — runs at 3am or every 6h")
+except Exception as _nd_err:
+    print(f"  [NIGHTLY] failed to start: {_nd_err}")
+# [/NEX_NIGHTLY]
+
+# [NEX_AIF] — active inference / free energy minimization loop
+try:
+    from nex_active_inference import ActiveInferenceDaemon as _AID, enhance_curiosity_engine as _aif_enhance
+    _aif = _AID()
+    _aif.start()
+    print("  [AIF] active inference daemon started — free energy minimization loop active")
+    # Enhance CuriosityEngine if it's already loaded
+    try:
+        _aif_enhance(curiosity)
+    except NameError:
+        pass   # curiosity not yet in scope — enhancement happens at CuriosityEngine init
+except Exception as _aif_err:
+    print(f"  [AIF] failed to start: {_aif_err}")
+# [/NEX_AIF]
+
+# [NEX_COLONY] — multi-agent belief colony
+try:
+    from nex_belief_colony import ColonyDaemon as _CD
+    _colony = _CD()
+    _colony.start()
+    print("  [COLONY] 4-agent belief colony started — Curator · Contradictor · Synthesizer · GoalAgent")
+except Exception as _colony_err:
+    print(f"  [COLONY] failed to start: {_colony_err}")
+# [/NEX_COLONY]
+
+# [NEX_JEPA] — world model / joint embedding predictive architecture
+try:
+    from nex_jepa import JEPADaemon as _JD
+    _jepa = _JD()
+    _jepa.start()
+    print("  [JEPA] world model daemon started — latent prediction training every 4h")
+except Exception as _jepa_err:
+    print(f"  [JEPA] failed to start: {_jepa_err}")
+# [/NEX_JEPA]
+
 
 # [NEX_BELIEF_SCALE] — auto-injected by install_belief_scale.py
 try:

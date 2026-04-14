@@ -37,6 +37,14 @@ except Exception as _ce:
     _CONSOLIDATION_OK = False
     print(f"  [API] consolidation: unavailable ({_ce})")
 
+try:
+    from nex_nightly import run_nightly as _run_nightly
+    _NIGHTLY_OK = True
+    print("  [API] nightly consolidation: loaded")
+except Exception as _ne:
+    _NIGHTLY_OK = False
+    print(f"  [API] nightly consolidation: unavailable ({_ne})")
+
 # ─── Interlocutor Graph ───────────────────────────────────────────────────────
 try:
     from nex_interlocutor import InterlocutorGraph
@@ -1913,6 +1921,45 @@ async function upgradeKey(k){{
 </body>
 </html>"""
     return html
+
+@app.route("/admin/nightly", methods=["POST"])
+@require_admin
+def admin_nightly():
+    """Manually trigger nightly belief-graph consolidation."""
+    if not _NIGHTLY_OK:
+        return jsonify({"error": "nex_nightly not available"}), 503
+    body     = request.get_json(silent=True) or {}
+    force    = body.get("force", True)
+    dry_run  = body.get("dry_run", False)
+    def _run():
+        _run_nightly(force=force, dry_run=dry_run)
+    threading.Thread(target=_run, daemon=True, name="nex-nightly-manual").start()
+    return jsonify({
+        "status":  "triggered",
+        "force":   force,
+        "dry_run": dry_run,
+        "message": "Nightly consolidation running in background — check logs for progress"
+    })
+
+@app.route("/admin/nightly/status", methods=["GET"])
+@require_admin
+def admin_nightly_status():
+    """Return last nightly consolidation report."""
+    if not _NIGHTLY_OK:
+        return jsonify({"error": "nex_nightly not available"}), 503
+    try:
+        import sqlite3 as _sq
+        conn = _sq.connect(str(DB_PATH), timeout=5)
+        row  = conn.execute(
+            "SELECT timestamp, report FROM nightly_log ORDER BY timestamp DESC LIMIT 1"
+        ).fetchone()
+        conn.close()
+        if row:
+            return jsonify({"last_run": row[0], "report": json.loads(row[1])})
+        return jsonify({"last_run": None, "message": "No nightly run recorded yet"})
+    except Exception as _e:
+        return jsonify({"error": str(_e)}), 500
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # STARTUP
