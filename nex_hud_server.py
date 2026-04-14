@@ -454,7 +454,7 @@ class HUDHandler(BaseHTTPRequestHandler):
                                 if not _send("col3", {"t":str(_rr[3] or ""),"plat":_plat,"msg":_txt[:300]}): break
                         except: pass
 
-                    _t.sleep(0.5)
+                    _t.sleep(0.1)
             except: pass
             return
         elif path == "/sse/activity":
