@@ -344,19 +344,17 @@ class HUDHandler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Connection", "keep-alive")
             self.send_header("X-Accel-Buffering", "no")
-            self.send_header("Transfer-Encoding", "chunked")
             self.end_headers()
-            # Tell browser to retry in 1s if disconnected
+            # Use UNBUFFERED raw socket — fixes SSE data being held in buffer
+            _raw = self.connection.makefile('wb', 0)
             try:
-                self.wfile.write(b"retry: 1000\n\n")
-                self.wfile.flush()
+                _raw.write(b"retry: 1000\n\n")
             except: pass
 
             def _send(evt, data):
                 try:
                     msg = f"event: {evt}\ndata: {json.dumps(data)}\n\n"
-                    self.wfile.write(msg.encode("utf-8"))
-                    self.wfile.flush()
+                    _raw.write(msg.encode("utf-8"))
                     return True
                 except (BrokenPipeError, ConnectionResetError, OSError):
                     return False
@@ -408,8 +406,7 @@ class HUDHandler(BaseHTTPRequestHandler):
                     # Keepalive every 5s — prevents browser timeout
                     if _tick % 10 == 0:
                         try:
-                            self.wfile.write(b": keepalive\n\n")
-                            self.wfile.flush()
+                            _raw.write(b": keepalive\n\n")
                         except (BrokenPipeError, ConnectionResetError, OSError):
                             break
 
@@ -615,6 +612,7 @@ class HUDHandler(BaseHTTPRequestHandler):
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     server = ThreadingHTTPServer(("localhost", PORT), HUDHandler)
+    server.daemon_threads = True
     print(f"[NEX HUD] http://localhost:{PORT}", flush=True)
     try:
         server.serve_forever()
