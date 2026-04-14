@@ -744,7 +744,7 @@ function sseConnect() {
 
 const _seenAgi=new Set();
 async function pollAgi() {
-  if (_seenAgi.size > 50) _seenAgi.clear();
+  _seenAgi.clear();
   try {
     const r=await fetch('http://localhost:7700/agi',{signal:AbortSignal.timeout(2000)});
     const d=await r.json();

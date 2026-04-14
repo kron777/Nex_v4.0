@@ -566,3 +566,19 @@ if __name__ == "__main__":
     print("\n" + "=" * 50)
     print("Add this to run.py:")
     print(INTEGRATION_SNIPPET)
+
+def run_forever():
+    """Run YouTube learning in a continuous loop."""
+    import time
+    logging.basicConfig(level=logging.INFO)
+    cycle = 0
+    while True:
+        try:
+            learn_from_youtube(llm_fn=None, cycle=0)
+        except Exception as e:
+            log.error(f"[YouTube] loop error: {e}")
+        cycle += 1
+        time.sleep(60)  # wait 60s between runs
+
+if __name__ == "__main__" and "--loop" in __import__('sys').argv:
+    run_forever()
