@@ -104,7 +104,9 @@ def run_audit(dry_run: bool = False, verbose: bool = True) -> dict:
         # Skip protected sources from soft scoring but not hard patterns
         is_protected = (src or '') in PROTECTED_SOURCES
 
-        # Hard bad — always quarantine
+        # Hard bad — always quarantine (skip fully protected sources)
+        if is_protected:
+            continue
         for pat in HARD_BAD_PATTERNS:
             if re.search(pat, content, re.IGNORECASE):
                 hard_quarantine.append(bid)
