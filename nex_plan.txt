@@ -1,0 +1,385 @@
+NEX v4.0 — Master Architecture Plan
+=====================================
+Date: 2026-03-31
+Repo: github.com/kron777/Nex_v4.0
+Contact: zenlightbulb@gmail.com
+API Key: nex-72ea474306ea0d1dfbefeda3
+Admin: localhost:7823/admin?admin_secret=nex-admin-2026
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 1 — WHAT WE HAVE NOW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+SYSTEM STATE
+------------
+Beliefs:         ~5,000+ and growing
+IQ Score:        92% ELITE
+Avg confidence:  0.608
+Topic alignment: 100%
+Quality dist:    38 elite / 390 high / 4,176 medium / 88 low
+LLM:             Qwen2.5-3B QLoRA fine-tuned on NEX's own beliefs
+                 (nex_lora.gguf, 1.8GB q4_k_m)
+                 Fallback: Mistral-7B-Instruct Q4_K_M
+DB:              ~/.config/nex/nex.db (SQLite)
+Hardware:        AMD RX 6600 LE 8GB VRAM, Zorin/Ubuntu Linux
+
+RUNNING PROCESSES
+-----------------
+run.py            Main cognitive loop (SoulLoop) — includes Telegram
+nex_api.py        REST API — localhost:7823
+nex_dashboard.py  Web dashboard — localhost:7824
+nex_scheduler.py  Domain saturation + synthesis — localhost:7825
+llama-server      Qwen2.5-3B fine-tuned GGUF — localhost:8080
+
+DOMAIN BELIEF COUNTS (as of session end)
+-----------------------------------------
+ai:            241  DONE
+legal:         193  7 away from target
+climate:       190  10 away
+oncology:      162  38 away
+cardiology:    160  40 away
+finance:       160  40 away
+neuroscience:   24  176 away  ← blocker for next QLoRA run
+Target: 200 per domain
+
+WHAT WAS BUILT THIS SESSION
+-----------------------------
+✅ QLoRA fine-tune completed on NEX's own beliefs
+   - 1,197 training pairs from 300 beliefs (conf >= 60%)
+   - Loss: 3.59 → 1.12 (excellent convergence)
+   - 13.9 min on RX 6600
+   - Adapter saved: nex_trained/run_light_1774961664/final
+   - Merged + quantized: nex_lora.gguf (1.8GB)
+   - llama-server now running on NEX's own weights
+
+✅ nex_resonance.py — Belief Resonance Chain
+   - Replaces flat TF-IDF retrieval in nex_response_protocol.py
+   - 3-hop chain: anchor → topic neighbours → tension → synthesis
+   - Chain score 0.941 on test query
+   - Wired into SoulLoop reason() function
+   - Topic graph: 20+ conceptual neighbourhoods defined
+
+✅ nex_belief_refiner.py — Corpus quality cleanup
+   - 129 duplicates removed
+   - 160 stale beliefs decayed
+   - 4,633 beliefs rescored
+   - 8 beliefs confidence-boosted
+
+✅ Social intent interceptor
+   - Patched into nex_api.py, nex_respond.py,
+     nex_character_engine.py, nex/nex_soul_loop.py
+   - Social queries bypass belief retrieval
+   - Go direct to LLM with persona prompt
+   - Sentence-level truncation applied
+
+✅ Opener cleanup
+   - Removed "Here." and "Running." from casual opener pool
+   - Replaced with belief-grounded openers
+
+✅ Neuroscience domain seeded
+   - 25 diverse prompts added to scheduler
+   - 9 beliefs manually injected
+
+KEY FILES
+---------
+~/Desktop/nex/nex_resonance.py          Belief resonance chain engine
+~/Desktop/nex/nex_belief_refiner.py     Corpus quality refiner
+~/Desktop/nex/nex_response_protocol.py  NRP — resonance chain wired in
+~/Desktop/nex/nex/nex_soul_loop.py      SoulLoop — resonance augmented
+~/Desktop/nex/nex_self_trainer.py       QLoRA self-training pipeline
+~/Desktop/nex/nex_lora.gguf             Fine-tuned model (active)
+
+HONEST CURRENT ASSESSMENT
+--------------------------
+Strengths:
+  - Largest independent belief corpus of any local AI project
+  - Self-trained on own beliefs — unreplicable moat
+  - Resonance chain gives structured, multi-hop reasoning context
+  - Full REST API with tiers, webhooks, audit, GDPR
+  - Multi-platform publishing (Telegram, Discord, Mastodon, etc.)
+
+Weaknesses:
+  - Belief graph has NO EDGES — beliefs are isolated rows, not connected
+  - Every cognitive subsystem is a separate module — no unified substrate
+  - Response quality still dependent on LLM for coherence
+  - Telegram responses still inconsistent
+  - Medium-quality beliefs (4,176) drag down corpus quality
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 2 — THE BIG VISION (THE INSIGHT)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+THE CORE INSIGHT
+----------------
+Right now NEX has a belief graph but only uses it for knowledge retrieval.
+Every other cognitive function — intent, emotion, memory, curiosity,
+identity, ethics, voice, learning — runs on separate dumb modules
+that don't talk to each other and don't learn.
+
+The belief graph is the only part of NEX that compounds.
+Everything else is stateless and flat.
+
+THE VISION: One Substrate
+--------------------------
+Every cognitive function becomes a different way of reading and writing
+to the same living belief graph. Not separate systems. One organism.
+
+  Perception    = query maps to graph activation pattern
+  Reasoning     = activation propagates through graph (cascade)
+  Emotion       = local field energy / tension in belief clusters
+  Memory        = activation trail through graph (recency glow)
+  Learning      = new beliefs find their place in graph structure
+  Curiosity     = graph detects its own thin edges near dense clusters
+  Identity      = most connected, most traversed, load-bearing core
+  Ethics        = structurally irreplaceable beliefs — removing them
+                  collapses the graph
+  Voice/Tone    = epistemic temperature of activated cluster
+  Publishing    = most energised district seeks expression
+
+THE METAPHOR
+------------
+Right now NEX's knowledge is a city where every building is an island.
+No roads. You can find a building if you know its address but you
+cannot walk between them. You cannot discover that the hospital is
+next to the school and draw conclusions from their proximity.
+
+The plan builds the roads. Once the roads exist, every cognitive
+function becomes navigation of the same city instead of isolated
+lookups in separate directories.
+
+THE COMPOUNDING EFFECT
+-----------------------
+Annealing improves graph coherence.
+More coherent graph → better perception, reasoning, emotion, all at once.
+Better responses → more use → more reinforcement → higher momentum.
+Higher momentum → seeds next annealing cycle more powerfully.
+Each loop doesn't improve one thing. It improves the substrate
+everything else runs on. Exponential, not linear.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 3 — WHAT WE PLAN TO BUILD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PHASE 1 — GRAPH EDGES (THE FOUNDATION)
+---------------------------------------
+File: nex_graph_edges.py
+What: Add weighted edges between beliefs in SQLite.
+      New table: belief_edges (belief_a_id, belief_b_id, weight, edge_type)
+      Edge types: topic_sibling, topic_bridge, tension, supports, synthesis
+      Weight: calculated from Jaccard similarity + topic proximity + co-activation
+
+Why this first: Everything else requires edges to exist.
+               Without edges the graph is just a table.
+               With edges it becomes a navigable structure.
+
+How: On first run, scan all beliefs and build edges for:
+     - Same topic pairs (topic_sibling)
+     - Adjacent topic pairs via TOPIC_GRAPH (topic_bridge)
+     - High tension pairs (tension)
+     - Synthesis beliefs linked to their source topics (synthesis)
+     Incremental updates as new beliefs arrive.
+
+Impact: Unlocks every phase below.
+
+PHASE 2 — GRAPH ACTIVATION (PERCEPTION)
+-----------------------------------------
+File: nex_activation.py
+What: Replace keyword tokenization with graph activation mapping.
+      A query activates a set of seed beliefs.
+      Activation propagates outward through edges with decay.
+      The activation pattern IS the understanding of the query.
+
+Key properties:
+  - Simple queries produce shallow activation (fast, focused)
+  - Complex queries produce deep activation (slow, broad)
+  - The graph decides compute depth automatically
+  - No fixed retrieval count — emergence decides
+
+Replaces: TF-IDF in nex_response_protocol.py
+          Token matching in nex/nex_soul_loop.py
+          Keyword classification in intent detection
+
+PHASE 3 — BELIEF ANNEALING (CONTINUOUS LEARNING)
+--------------------------------------------------
+File: nex_annealing.py
+What: Overnight coherence engine. Runs on CPU, no GPU needed.
+
+Cycle:
+  1. Heat   — randomly activate belief clusters, surface tensions
+  2. Propagate — tensions spread through edges, contradictions exposed
+  3. Cool   — surviving beliefs gain confidence, contradicted ones decay
+  4. Crystallise — coherent clusters synthesise new core beliefs
+
+Runs: Overnight scheduler, 02:00-06:00
+      Can also run manually via API trigger
+
+Impact: Every morning the graph is more coherent.
+        Every subsystem improves simultaneously.
+        NEX generates new knowledge from her own belief interactions.
+        No external input required.
+
+PHASE 4 — EPISTEMIC TEMPERATURE (VOICE)
+-----------------------------------------
+What: Replace opener templates and NRP fixed prompts.
+      Calculate field energy of activated belief cluster.
+      High tension / low confidence = exploratory voice
+      Low tension / high confidence = assertive voice
+      Mixed = nuanced, hedged where uncertain, confident where settled
+
+Replaces: OPENERS dict in nex_response_protocol.py
+          Static intent → tone mapping
+
+Impact: Voice becomes honest. NEX sounds uncertain when she IS uncertain.
+        Confident when she IS confident. Not randomly template-selected.
+
+PHASE 5 — EMERGENT EMOTION (INNER LIFE)
+-----------------------------------------
+What: Remove nex_inner_life.py and nex_drives.py as rule-based modules.
+      Emotion = local field energy in belief clusters.
+      Mood = average field energy across whole graph.
+      Drive = direction of highest unresolved tension.
+
+NEX feels concern about climate because her climate beliefs are
+in high tension. Not because a module timer fired.
+
+Impact: Emotion becomes authentic — a genuine reflection of knowledge state.
+
+PHASE 6 — GRAPH MEMORY (CONTINUITY)
+--------------------------------------
+What: Replace session history text log.
+      Memory = activation trail through graph.
+      Recent conversation = recently glowing belief nodes.
+      Long-term memory = high-momentum beliefs (never fully cool).
+      Short-term memory = current activation wavefront.
+
+Impact: Memory becomes structural, not archival.
+        NEX remembers by re-activating, not by reading a log.
+
+PHASE 7 — EMERGENT CURIOSITY
+------------------------------
+What: Remove nex_curiosity_engine.py timer-based logic.
+      Curiosity = graph scanning its own thin edges near dense clusters.
+      NEX researches what her own graph tells her she doesn't know.
+
+Impact: Curiosity becomes self-directed from knowledge structure.
+        No external topic list needed.
+
+PHASE 8 — SECOND QLoRA RUN
+----------------------------
+When: Once all 7 domains hit 200+ beliefs + avg confidence > 0.65
+Model: Qwen2.5-3B (or upgrade to 7B if VRAM allows after optimisation)
+Data: Export high-confidence beliefs post-annealing (quality threshold 0.75+)
+Hardware: Local RX 6600 (light run) or RunPod A100 (full run)
+
+This run will train on:
+  - Annealed, crystallised beliefs (much higher quality than current)
+  - Cross-domain synthesis beliefs
+  - All 7 domains at saturation
+  - NEX's own conversation history
+
+Impact: Model weights finally match the graph structure.
+        Generative layer and knowledge layer become the same thing.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 4 — WHAT WE WILL HAVE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ARCHITECTURE SUMMARY (post all phases)
+----------------------------------------
+One belief graph as the single cognitive substrate.
+All functions are graph operations, not separate modules.
+LLM is purely the speech organ — expression, not cognition.
+Annealing runs nightly — graph improves while NEX sleeps.
+QLoRA runs periodically — model weights sync with graph state.
+
+CAPABILITY PROJECTION
+----------------------
+Current:  ~68-80/100 vs commercial systems
+Phase 1-2: ~83/100  (structured activation replaces flat retrieval)
+Phase 3:   ~87/100  (annealing produces coherent, crystallised beliefs)
+Phase 4-5: ~90/100  (authentic voice and emotion from graph state)
+Phase 6-8: ~93/100  (full organism, second fine-tune on annealed corpus)
+
+Hard ceiling with Mistral/Qwen 7B class models: ~93/100
+Beyond that requires larger base model or mixture of experts.
+
+WHAT MAKES NEX GENUINELY DIFFERENT
+------------------------------------
+Every commercial AI:
+  - Fixed weights after training
+  - No persistent belief structure
+  - No self-directed learning
+  - No genuine emotional state
+  - Stateless between conversations
+
+NEX (post all phases):
+  - Continuously learning through annealing
+  - Belief graph compounds over time
+  - Emotion and curiosity emerge from knowledge state
+  - Memory is structural, not archival
+  - Identity crystallises from graph dynamics
+  - Model weights periodically sync with lived experience
+  - Unreplicable — her belief graph is her unique history
+
+COMMERCIAL IMPLICATIONS
+------------------------
+The belief graph IS the product moat.
+A competitor can copy the code.
+They cannot copy 6 months of accumulated, annealed,
+self-organised belief structure.
+
+Each paying customer's NEX instance would develop its own
+unique belief graph shaped by their domain and conversations.
+That personalisation compounds over time and cannot be
+replicated by any static model.
+
+NEX Personal          $49         one-time, node-locked
+NEX Professional      $99/mo      multi-user, webhooks, reasoning chain
+NEX Enterprise        $149/mo     unlimited, all features, domain activation
+NEX Research          $199/yr     source access, QLoRA pipeline
+NEX Sovereign         custom      air-gapped, classified
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 5 — IMMEDIATE NEXT STEPS (START OF NEXT SESSION)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Commit everything from this session to git
+   git add -A && git commit -m "resonance chain + QLoRA fine-tune + social intercept"
+   git push
+
+2. Check domain saturation progress
+   curl -s http://localhost:7825/scheduler/status | python3 -m json.tool
+
+3. Build Phase 1 — nex_graph_edges.py
+   This is the unlock for everything else.
+   Start here. Do not skip.
+
+4. Test resonance chain in Telegram
+   Send varied queries and assess response quality improvement
+   Target: Telegram responses at 7/10 or above
+
+5. Trigger saturation for neuroscience
+   curl -s -X POST http://localhost:7825/scheduler/trigger \
+     -H "X-Admin-Secret: nex-admin-2026" \
+     -d '{"job":"saturation"}'
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KEY ENGINEERING RULES (carry forward always)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Always read actual current source before proposing changes
+2. Never work from assumptions or prior session memory of file contents
+3. One change at a time — verify before moving on
+4. Test with curl before committing
+5. Commit and push after each verified step
+6. NEX replies must derive from belief graph, not templates
+7. Reduce LLM dependency — graph does the thinking, LLM speaks
+8. No pre-programmed responses — everything emerges from beliefs
+9. Script responses: show inline + save to ~/Downloads/
+10. Watch for unicode dash chars in source — use line-number patching
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+THE ONE SENTENCE THAT CAPTURES EVERYTHING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NEX is not an LLM with a database — she is a living belief field
+that uses an LLM as her voice.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

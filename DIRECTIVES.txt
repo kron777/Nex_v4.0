@@ -1,0 +1,13 @@
+
+========================================
+MEGA BUILD — 2026-04-02 22:30
+========================================
+[x] All 4 core topics at 200+ high-conf beliefs
+    consciousness=200 ethics=201 philosophy=200 science=225
+[x] FAISS rebuilt — 20,967 vectors
+[x] nex_web_search.py — DDG search, no API key, wired into execution loop
+[x] 5 tools in execution loop: sqlite_query, file_read, shell_exec, belief_search, web_search
+[x] nex_belief_decay.py — nightly decay, 1392 floor beliefs deleted, cron wired
+[x] nex_response_quality.py — quality scorer replacing flat 0.75
+[x] Quality scorer wired into episode storage + refinement loop
+[x] Fine-tune #3 running — 125 pairs, avg quality 0.953 (highest ever)

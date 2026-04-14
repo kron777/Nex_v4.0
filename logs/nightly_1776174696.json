@@ -1,0 +1,25 @@
+{
+  "zone": "calm",
+  "dominant_drive": "exploration",
+  "synthesis_cap": 80,
+  "total_beliefs": 6138,
+  "high_conf": 2242,
+  "wm_count": 478,
+  "total_beliefs_before": 6138,
+  "meta_written": 0,
+  "contradictions_resolved": 1,
+  "dedup_count": 8,
+  "decayed_count": 523,
+  "ontology_hollow": 0,
+  "ontology_grounded": 0,
+  "graph_stats": {
+    "nodes": 5000,
+    "edges": 26804,
+    "contradictions": 3,
+    "avg_attention": 0.78
+  },
+  "emerged": 0,
+  "elapsed_s": 108.0,
+  "datetime": "2026-04-14T13:51:36.326766+00:00",
+  "dry_run": false
+}

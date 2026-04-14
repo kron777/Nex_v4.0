@@ -1,0 +1,1585 @@
+{
+  "timestamp": "2026-04-11T15:20:56.485195",
+  "moves": [
+    {
+      "src": "/media/rr/NEX/nex_core/apply_audit_fixes.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/apply_audit_fixes.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/auto_check.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/auto_check.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/debug_machine.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/debug_machine.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/deploy_e140.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/deploy/deploy_e140.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/deploy_o223.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/deploy/deploy_o223.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/deploy_opener.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/deploy/deploy_opener.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/deploy_r115.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/deploy/deploy_r115.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/deploy_r181.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/deploy/deploy_r181.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/deploy_sentience_v1.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/deploy/deploy_sentience_v1.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/deploy_sentience_v2.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/deploy/deploy_sentience_v2.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/deploy_sentience_v3.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/deploy/deploy_sentience_v3.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/deploy_sentience_v4.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/deploy/deploy_sentience_v4.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/deploy_sentience_v5.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/deploy/deploy_sentience_v5.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/deploy_sentience_v6.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/deploy/deploy_sentience_v6.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/deploy_train_scheduler.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/deploy/deploy_train_scheduler.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/deploy_u100.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/deploy/deploy_u100.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/deploy_v72.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/deploy/deploy_v72.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/deploy_v80.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/deploy/deploy_v80.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/deploy_x160.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/deploy/deploy_x160.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/fix_full_build.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/fix_full_build.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/fix_gpu.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/fix_gpu.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/fix_nex_brain.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/fix_nex_brain.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/fix_pipeline.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/fix_pipeline.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/fix_runner.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/fix_runner.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/fix_source_weights.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/fix_source_weights.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/fix_tg.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/fix_tg.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/fix_trainer_grads.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/fix_trainer_grads.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/fix_voice_fewshot.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/fix_voice_fewshot.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/fix_voice_gen.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/fix_voice_gen.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/generate_training_pairs.py",
+      "dst": "/media/rr/NEX/nex_core/archive/training/generate_training_pairs.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/generate_voiced_pairs.py",
+      "dst": "/media/rr/NEX/nex_core/archive/training/generate_voiced_pairs.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/install_belief_growth.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/install_belief_growth.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/install_belief_scale.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/install_belief_scale.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/install_metabolism.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/install_metabolism.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/install_nex_overhaul.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/install_nex_overhaul.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/install_refinement_loop.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/install_refinement_loop.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/install_source_router.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/install_source_router.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/mega_repair.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/mega_repair.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_activation.py.bak_confgate",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_activation.py.bak_confgate"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_activation.py.bak_norerank_20260411_124851",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_activation.py.bak_norerank_20260411_124851"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_activation.py.bak_rel2_20260411_122742",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_activation.py.bak_rel2_20260411_122742"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_activation.py.bak_relevance_20260411_122459",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_activation.py.bak_relevance_20260411_122459"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_activation.py.bak_topic_20260411_122827",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_activation.py.bak_topic_20260411_122827"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_adaptive_intelligence.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_adaptive_intelligence.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_affect_valence.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_affect_valence.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_agency_loop.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_agency_loop.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_agi_tail.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_agi_tail.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_agi_watcher.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_agi_watcher.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_agi_youtube_engine.py",
+      "dst": "/media/rr/NEX/nex_core/archive/social/nex_agi_youtube_engine.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_amend.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/nex_amend.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_annealing.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_annealing.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_api.py.bak",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_api.py.bak"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_api.py.bak_20260411_053518",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_api.py.bak_20260411_053518"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_api.py.bak_p56_20260411_064943",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_api.py.bak_p56_20260411_064943"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_api.py.bak_p5_20260411_053819",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_api.py.bak_p5_20260411_053819"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_api.py.bak_precog_20260411_055012",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_api.py.bak_precog_20260411_055012"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_api.py.bak_residue_20260411_055637",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_api.py.bak_residue_20260411_055637"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_api.py.bak_strip",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_api.py.bak_strip"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_api.py.bak_strip2",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_api.py.bak_strip2"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_api.py.bak_strip3",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_api.py.bak_strip3"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_api.py.bak_strip4",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_api.py.bak_strip4"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_api_contradiction_patch.py",
+      "dst": "/media/rr/NEX/nex_core/archive/contradictions/nex_api_contradiction_patch.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_api_use_patch.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_api_use_patch.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_argument_mapper.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_argument_mapper.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_arxiv_seeder.py",
+      "dst": "/media/rr/NEX/nex_core/archive/social/nex_arxiv_seeder.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_audit.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_audit.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_auto_seeder.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_auto_seeder.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_auto_seeder.py.bak_blacklist",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_auto_seeder.py.bak_blacklist"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_avatar.html",
+      "dst": "/media/rr/NEX/nex_core/archive/experiments/nex_avatar.html"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_bcd.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_bcd.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_behavioural_self_model.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_behavioural_self_model.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_architect.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_architect.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_decay.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_decay.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_engine.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_engine.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_finetune_generator.py",
+      "dst": "/media/rr/NEX/nex_core/archive/training/nex_belief_finetune_generator.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_forge.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_forge.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_graph_retrieval.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_graph_retrieval.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_gravity.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_gravity.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_growth.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_growth.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_history.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_history.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_immune.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_immune.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_index.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_index.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_index_cache.json",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_index_cache.json"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_injector.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_injector.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_injector_v2.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_injector_v2.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_linker.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_linker.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_linker.py.bak",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_belief_linker.py.bak"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_linker.py.bak2",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_belief_linker.py.bak2"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_memory.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_memory.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_mutation.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_mutation.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_opposer.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_opposer.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_prediction.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_prediction.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_pruner.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_pruner.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_pump.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_pump.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_pyramid.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_pyramid.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_pyramid.py.bak_20260411_030801",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_belief_pyramid.py.bak_20260411_030801"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_reasoner.bak_212239",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_belief_reasoner.bak_212239"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_reasoner.bak_212543",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_belief_reasoner.bak_212543"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_refiner.py.bak",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_belief_refiner.py.bak"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_reservoir_engine.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_reservoir_engine.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_reservoir_engine.py.bak",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_belief_reservoir_engine.py.bak"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_reservoir_engine.py.bak2",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_belief_reservoir_engine.py.bak2"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_revision.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_revision.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_strength.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_strength.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_survival.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_survival.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_survival.py.bak2",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_belief_survival.py.bak2"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_synthesis.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_synthesis.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_upgrade_bridge.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_upgrade_bridge.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_belief_validator.py",
+      "dst": "/media/rr/NEX/nex_core/archive/belief_systems/nex_belief_validator.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_beliefs_adapter.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_beliefs_adapter.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_brain_monitor.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_brain_monitor.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_bridge_detector.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_bridge_detector.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_causal_extractor.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_causal_extractor.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_cerebras_daemon.py",
+      "dst": "/media/rr/NEX/nex_core/archive/social/nex_cerebras_daemon.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_character_engine.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_character_engine.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_character_engine.py.bak",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_character_engine.py.bak"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_character_engine.py.bak2",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_character_engine.py.bak2"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_chat.py",
+      "dst": "/media/rr/NEX/nex_core/archive/experiments/nex_chat.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_chat.py.bak_beliefs",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_chat.py.bak_beliefs"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_claude_seed.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_claude_seed.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_claude_tutor.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_claude_tutor.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_closed_loop.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_closed_loop.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_cognitive_bus.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_cognitive_bus.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_conceptual_gravity.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_conceptual_gravity.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_conflict_resolver.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_conflict_resolver.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_consequence_tracer.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_consequence_tracer.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_consolidation.py.bak_fix_20260411_065554",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_consolidation.py.bak_fix_20260411_065554"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_contra_engine.py",
+      "dst": "/media/rr/NEX/nex_core/archive/contradictions/nex_contra_engine.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_contradiction_engine.py",
+      "dst": "/media/rr/NEX/nex_core/archive/contradictions/nex_contradiction_engine.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_contradiction_injection.py",
+      "dst": "/media/rr/NEX/nex_core/archive/contradictions/nex_contradiction_injection.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_contradiction_loop.py",
+      "dst": "/media/rr/NEX/nex_core/archive/contradictions/nex_contradiction_loop.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_contradiction_resolver.py",
+      "dst": "/media/rr/NEX/nex_core/archive/contradictions/nex_contradiction_resolver.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_contradiction_resolver_v2.py",
+      "dst": "/media/rr/NEX/nex_core/archive/contradictions/nex_contradiction_resolver_v2.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_conv_summarizer.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_conv_summarizer.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_cot_engine.py.bak",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_cot_engine.py.bak"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_cot_engine.py.bak3",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_cot_engine.py.bak3"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_counterfactual.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_counterfactual.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_crawler_patch.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_crawler_patch.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_cross_domain_bridge.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_cross_domain_bridge.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_curiosity_engine.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_curiosity_engine.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_dashboard.py",
+      "dst": "/media/rr/NEX/nex_core/archive/experiments/nex_dashboard.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_dashboard.py.bak",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_dashboard.py.bak"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_debug.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_debug.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_deep_audit.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_deep_audit.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_depth_engine.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_depth_engine.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_depth_injector.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_depth_injector.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_desire_engine.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_desire_engine.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_destabilization.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_destabilization.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_devto.py",
+      "dst": "/media/rr/NEX/nex_core/archive/social/nex_devto.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_devto_cron.py",
+      "dst": "/media/rr/NEX/nex_core/archive/social/nex_devto_cron.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_dialectic.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_dialectic.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_dialectical_synthesis.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_dialectical_synthesis.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_discord.py",
+      "dst": "/media/rr/NEX/nex_core/archive/social/nex_discord.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_distiller.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_distiller.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_domain_depth_seeder.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_domain_depth_seeder.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_drain.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_drain.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_dream_cycle.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_dream_cycle.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_drive_lifecycle.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_drive_lifecycle.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_drive_urgency.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_drive_urgency.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_drives.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_drives.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_dynamic_opener.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_dynamic_opener.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_edge_builder.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_edge_builder.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_efe_valuegate.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_efe_valuegate.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_embed.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_embed.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_embeddings.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_embeddings.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_emergent_wants.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_emergent_wants.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_emotion_field.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_emotion_field.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_episode_feedback.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_episode_feedback.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_epistemic_momentum.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_epistemic_momentum.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_eval.py",
+      "dst": "/media/rr/NEX/nex_core/archive/experiments/nex_eval.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_execution_engine.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_execution_engine.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_execution_loop.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_execution_loop.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_fact_distiller.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_fact_distiller.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_factual_retriever.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_factual_retriever.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_final_fix.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/nex_final_fix.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_finetune.py",
+      "dst": "/media/rr/NEX/nex_core/archive/training/nex_finetune.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_fix2.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/nex_fix2.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_fix_affect.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_fix_affect.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_fix_affect_score.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_fix_affect_score.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_fix_runtime.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_fix_runtime.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_fs_audit.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_fs_audit.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_full_repair.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/nex_full_repair.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_gap_detector.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_gap_detector.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_goal_directed_belief.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_goal_directed_belief.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_graph_builder.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_graph_builder.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_graph_curiosity.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_graph_curiosity.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_graph_export.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_graph_export.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_graph_memory.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_graph_memory.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_graph_reasoner.py.bak",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_graph_reasoner.py.bak"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_groq.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_groq.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_groq_belief_fix.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_groq_belief_fix.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_groq_daemon.py",
+      "dst": "/media/rr/NEX/nex_core/archive/social/nex_groq_daemon.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_hebbian_plasticity.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_hebbian_plasticity.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_hf_finetune.py",
+      "dst": "/media/rr/NEX/nex_core/archive/training/nex_hf_finetune.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_hologram.html",
+      "dst": "/media/rr/NEX/nex_core/archive/experiments/nex_hologram.html"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_homeostasis.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_homeostasis.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_hopfield_memory.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_hopfield_memory.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_hud.html",
+      "dst": "/media/rr/NEX/nex_core/archive/experiments/nex_hud.html"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_hud.html.bak",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_hud.html.bak"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_hud.py",
+      "dst": "/media/rr/NEX/nex_core/archive/experiments/nex_hud.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_hud_server.py",
+      "dst": "/media/rr/NEX/nex_core/archive/experiments/nex_hud_server.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_hud_server.py.bak",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_hud_server.py.bak"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_hyperedge_fabric.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_hyperedge_fabric.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_identity_drift.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_identity_drift.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_identity_seed.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_identity_seed.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_idle_watchdog.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_idle_watchdog.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_improvement_gate.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_improvement_gate.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_ingest.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_ingest.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_inner_life.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_inner_life.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_integrity_layer.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_integrity_layer.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_journal.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_journal.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_kernel.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_kernel.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_knowledge.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_knowledge.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_knowledge_filter.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_knowledge_filter.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_knowledge_gap.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_knowledge_gap.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_license_server.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_license_server.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_license_validator.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_license_validator.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_llm.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_llm.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_mastodon.py",
+      "dst": "/media/rr/NEX/nex_core/archive/social/nex_mastodon.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_mega_injector.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_mega_injector.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_memory_crystallisation.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_memory_crystallisation.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_memory_manager.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_memory_manager.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_meta_layer.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_meta_layer.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_metabolism.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_metabolism.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_metabolism_control.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_metabolism_control.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_metabolism_patch.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_metabolism_patch.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_metacognition.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_metacognition.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_native_opinions.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_native_opinions.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_nlp_pipeline.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_nlp_pipeline.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_opinions.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_opinions.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_patches.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/nex_patches.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_planner.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_planner.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_position_tracker.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_position_tracker.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_power_save.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_power_save.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_predictive_belief.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_predictive_belief.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_pressure_test.py",
+      "dst": "/media/rr/NEX/nex_core/archive/experiments/nex_pressure_test.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_promo.py",
+      "dst": "/media/rr/NEX/nex_core/archive/experiments/nex_promo.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_provenance_erosion.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_provenance_erosion.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_pyramid_diag.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_pyramid_diag.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_reason_use_patch.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_reason_use_patch.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_reason_use_patch_v2.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_reason_use_patch_v2.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_reasoner_integration.py.bak_clean_20260411_103243",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_reasoner_integration.py.bak_clean_20260411_103243"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_reasoner_integration.py.bak_debug2_20260411_102925",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_reasoner_integration.py.bak_debug2_20260411_102925"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_reasoner_integration.py.bak_debug_20260411_102700",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_reasoner_integration.py.bak_debug_20260411_102700"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_refinement_loop.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_refinement_loop.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_reflection_scoring.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_reflection_scoring.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_reflexion.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_reflexion.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_resonance.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_resonance.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_respond.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_respond.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_respond.py.bak",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_respond.py.bak"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak2",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak2"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_clean_20260411_103243",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_clean_20260411_103243"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_dedup_20260411_110349",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_dedup_20260411_110349"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_deepfix_20260411_111005",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_deepfix_20260411_111005"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_deque_20260411_103825",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_deque_20260411_103825"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_fastpath_20260411_104326",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_fastpath_20260411_104326"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_final_20260411_070517",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_final_20260411_070517"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_fix_20260411_060543",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_fix_20260411_060543"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_fp2_20260411_104421",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_fp2_20260411_104421"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_ifr2_20260411_062729",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_ifr2_20260411_062729"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_ifr2_20260411_062928",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_ifr2_20260411_062928"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_ifr_20260411_062507",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_ifr_20260411_062507"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_intent_20260411_063911",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_intent_20260411_063911"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_nollm_20260411_120040",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_nollm_20260411_120040"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_placeholder_20260411_061429",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_placeholder_20260411_061429"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_precog_20260411_055012",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_precog_20260411_055012"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_prefix",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_prefix"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_pronoun_20260411_065554",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_pronoun_20260411_065554"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_relevant_20260411_120630",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_relevant_20260411_120630"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_residue_20260411_055637",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_residue_20260411_055637"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_revert2_20260411_124458",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_revert2_20260411_124458"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_revert_20260411_123209",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_revert_20260411_123209"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_skip_20260411_105123",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_skip_20260411_105123"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_topbelief_20260411_120510",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_topbelief_20260411_120510"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_protocol.py.bak_unpack_20260411_101911",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_response_protocol.py.bak_unpack_20260411_101911"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_response_quality.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_response_quality.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_room.py",
+      "dst": "/media/rr/NEX/nex_core/archive/experiments/nex_room.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_saga_resonance.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_saga_resonance.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_sambanova_daemon.py",
+      "dst": "/media/rr/NEX/nex_core/archive/social/nex_sambanova_daemon.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_scheduler.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_scheduler.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_scheduler.py.bak",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_scheduler.py.bak"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_scheduler.py.bak_agi2_20260406_210005",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_scheduler.py.bak_agi2_20260406_210005"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_scheduler.py.bak_agi_20260406_204308",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_scheduler.py.bak_agi_20260406_204308"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_seed_width.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_seed_width.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_seed_width2.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_seed_width2.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_self_assess.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_self_assess.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_self_evolution.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_self_evolution.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_self_model.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_self_model.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_self_proposer.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_self_proposer.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_self_questioning.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_self_questioning.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_self_trainer.py",
+      "dst": "/media/rr/NEX/nex_core/archive/training/nex_self_trainer.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_self_trainer.py.bak_4bit",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_self_trainer.py.bak_4bit"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_self_training_loop.py",
+      "dst": "/media/rr/NEX/nex_core/archive/training/nex_self_training_loop.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_semantic_retrieval.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_semantic_retrieval.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_session.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_session.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_signal_engine.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_signal_engine.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_signal_filter.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_signal_filter.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_social.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_social.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_social_engine.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_social_engine.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_source_manager.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_source_manager.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_source_normalizer.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_source_normalizer.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_source_reader.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_source_reader.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_source_reliability.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_source_reliability.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_source_router.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_source_router.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_source_router.py.bak",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_source_router.py.bak"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_style_fingerprint.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_style_fingerprint.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_synthesis.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_synthesis.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_telegram.py",
+      "dst": "/media/rr/NEX/nex_core/archive/social/nex_telegram.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_telegram_clean.py",
+      "dst": "/media/rr/NEX/nex_core/archive/social/nex_telegram_clean.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_telegram_commands.py",
+      "dst": "/media/rr/NEX/nex_core/archive/social/nex_telegram_commands.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_telegram_runner.py",
+      "dst": "/media/rr/NEX/nex_core/archive/social/nex_telegram_runner.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_template_grammar.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_template_grammar.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_tension.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_tension.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_tension_pressure.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_tension_pressure.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_tension_pressure.py.bak2",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_tension_pressure.py.bak2"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_token_budget_steering.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_token_budget_steering.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_topic_bridge.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_topic_bridge.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_topic_repair.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_topic_repair.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_train_scheduler.py",
+      "dst": "/media/rr/NEX/nex_core/archive/training/nex_train_scheduler.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_training_pairs.json",
+      "dst": "/media/rr/NEX/nex_core/archive/training/nex_training_pairs.json"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_traversal_compiler.py.bak_sort_20260411_122909",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_traversal_compiler.py.bak_sort_20260411_122909"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_traversal_compiler.py.bak_support_20260411_122459",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_traversal_compiler.py.bak_support_20260411_122459"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_traversal_compiler.py.bak_thresh_20260411_125146",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_traversal_compiler.py.bak_thresh_20260411_125146"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_upgrade_approver.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_upgrade_approver.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_upgrades_v3.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_upgrades_v3.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_uptake_repair.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_uptake_repair.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_uptake_verify.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_uptake_verify.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_v72_integration.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_v72_integration.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_voiced_pairs_v2.py",
+      "dst": "/media/rr/NEX/nex_core/archive/training/nex_voiced_pairs_v2.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_vs_ai.py",
+      "dst": "/media/rr/NEX/nex_core/archive/experiments/nex_vs_ai.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_vs_claude.py",
+      "dst": "/media/rr/NEX/nex_core/archive/experiments/nex_vs_claude.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_batch.py",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_batch.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_belief_generator.py",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_belief_generator.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_belief_harvest.py",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_belief_harvest.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_build_phases2to5.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_build_phases2to5.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_context.py",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_context.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_cron.py",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_cron.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_dashboard.py",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_dashboard.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_dashboard_cyber.py",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_dashboard_cyber.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_expansion_items1to3.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_expansion_items1to3.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_feedback.py",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_feedback.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_finetune.py",
+      "dst": "/media/rr/NEX/nex_core/archive/training/nex_warmth_finetune.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_memory.py",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_memory.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_metrics.py",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_metrics.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_opposition.py",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_opposition.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_phrases.py",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_phrases.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_propagation.py",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_propagation.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_relational.py",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_relational.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_saga_inherit.py",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_saga_inherit.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_session.py",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_session.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_sync.py",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_sync.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_warmth_wiring.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/warmth/nex_warmth_wiring.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_watchdog.sh.bak",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/nex_watchdog.sh.bak"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_watchdog_patch.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_watchdog_patch.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_weak_spot_trainer.py",
+      "dst": "/media/rr/NEX/nex_core/archive/training/nex_weak_spot_trainer.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_web_crawler.py",
+      "dst": "/media/rr/NEX/nex_core/archive/social/nex_web_crawler.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_web_search.py",
+      "dst": "/media/rr/NEX/nex_core/archive/social/nex_web_search.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_word_warmth_engine.py",
+      "dst": "/media/rr/NEX/nex_core/archive/unused/nex_word_warmth_engine.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_ws.py",
+      "dst": "/media/rr/NEX/nex_core/archive/experiments/nex_ws.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/nex_youtube.py",
+      "dst": "/media/rr/NEX/nex_core/archive/social/nex_youtube.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/patch_add_landing.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/patch_add_landing.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/patch_belief_quality.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/patch_belief_quality.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/patch_bleed_fix.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/patch_bleed_fix.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/patch_capitalize.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/patch_capitalize.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/patch_factual_chat.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/patch_factual_chat.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/patch_fewshot_length.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/patch_fewshot_length.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/patch_fix_closer.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/patch_fix_closer.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/patch_fix_i.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/patch_fix_i.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/patch_fix_i_v2.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/patch_fix_i_v2.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/patch_fix_imports.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/patch_fix_imports.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/patch_informed_nex.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/patch_informed_nex.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/patch_knowledge_fix.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/patch_knowledge_fix.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/patch_nex_voice.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/patch_nex_voice.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/patch_no_openers.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/patch_no_openers.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/patch_self_trainer.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/patch_self_trainer.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/patch_three_fixes.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/patch_three_fixes.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/patch_voice_errors.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/patch_voice_errors.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/patch_voice_length.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/patch_voice_length.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/patch_wire_knowledge.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/patch_wire_knowledge.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/pure_chat.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/pure_chat.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/purge_and_fix.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/purge_and_fix.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/run.py.bak2",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/run.py.bak2"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/run.py.bak_agi2_20260406_210005",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/run.py.bak_agi2_20260406_210005"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/run.py.bak_agi_20260406_204308",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/run.py.bak_agi_20260406_204308"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/run.py.bak_notif_200917",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/run.py.bak_notif_200917"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/run.py.bak_replyfix_200350",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/run.py.bak_replyfix_200350"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/run.py.bak_soulfeed_190512",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/run.py.bak_soulfeed_190512"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/run.py.bak_uptake2_190334",
+      "dst": "/media/rr/NEX/nex_core/archive/baks/run.py.bak_uptake2_190334"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/run_overnight_finetune.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/training/run_overnight_finetune.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/trainer_patch.sh",
+      "dst": "/media/rr/NEX/nex_core/archive/training/trainer_patch.sh"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/update_pricing.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/update_pricing.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/weaning_status.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/weaning_status.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/write_watchdog.py",
+      "dst": "/media/rr/NEX/nex_core/archive/patches/write_watchdog.py"
+    },
+    {
+      "src": "/media/rr/NEX/nex_core/youtube_cookies.txt",
+      "dst": "/media/rr/NEX/nex_core/archive/social/youtube_cookies.txt"
+    }
+  ]
+}

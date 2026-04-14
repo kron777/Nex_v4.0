@@ -1,0 +1,140 @@
+=== NEX BUILD CARRYOVER ===
+Date: 2026-04-11
+Session: Throw-net/refinement bolt-on — all 6 phases deployed
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SYSTEM STATE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NEX root:    /media/rr/NEX/nex_core/
+Desktop:     ~/Desktop/nex/ (symlinks to above)
+DB:          ~/.config/nex/nex.db  (WAL mode enabled)
+API:         port 7823 (run manually — NOT via systemd)
+Venv:        ~/Desktop/nex/venv/
+Model:       local Mistral via nex-llama.service (localhost:8080)
+
+Start every session:
+  cd ~/Desktop/nex && source venv/bin/activate
+  sudo fuser -k 7823/tcp 2>/dev/null; sleep 1
+  python3 /media/rr/NEX/nex_core/nex_api.py > /tmp/nex_api.log 2>&1 &
+  sleep 3 && curl -s http://localhost:7823/api/version
+
+API key:
+  API_KEY=$(cat ~/.config/nex/api_keys.json | python3 -c \
+    'import sys,json; d=json.load(sys.stdin); print(list(d.keys())[0])')
+
+Services:
+  nex-llama.service  — RUNNING (Mistral, leave alone)
+  nex-brain.service  — RUNNING (soul loop stable as of today)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WHAT WAS BUILT TODAY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Throw-net/refinement methodology (v11 frozen) fully bolted onto NEX.
+Six phases deployed and running:
+
+  Phase 1: nex_interlocutor.py     — live recipient model per conversation
+  Phase 2: nex_precognition.py     — topology sweep before query retrieval
+  Phase 3: nex_residue.py          — belief residue capture + warm-start
+  Phase 4: nex_ifr_engine.py       — IFR reasoning destination engine
+  Phase 5: nex_delta_reinforcement.py — integration delta → belief boost
+  Phase 6: nex_consolidation.py    — consolidation loop (every 10 convos)
+
+All wired into nex_api.py and nex_response_protocol.py via patch scripts.
+
+Additional fixes applied:
+  - Intent classifier: 13 structural patterns added (was defaulting to casual)
+  - Compiler fast-path: self-referential queries bypass cognite timeout
+  - Last-resort compiler: no more placeholder "I'm processing this" responses
+  - Pronoun referent tracking: "that/this/it" queries inherit prior intent
+  - WAL mode enabled on nex.db (fixes interlocutor graph DB lock)
+  - nex_power_save.py stub created (was crashing brain service)
+  - nex_youtube.py stub created (was crashing brain service)
+  - nex_train_scheduler.py stub created (was crashing brain service)
+  - Brain service stable after stub fixes
+
+net.txt written to ~/Desktop/net.txt — methodology freeze document.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BENCHMARK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6-question hard eval (consciousness, identity, truth, reasoning):
+  Pre-session:  82/100 (easy benchmark)
+  Post-session: 87/100 (harder question set, multi-turn)
+
+Landing rate (Phase 6 consolidation): 10.8% across 14 conversations
+Dominant ZPD: below-or-miss (needs more dialogue, not eval queries)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NEXT SESSION PRIORITIES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Run genuine multi-turn dialogues (not eval queries) to accumulate
+   real landing data and let Phase 5+6 self-improve the belief graph
+2. Watch consolidation report after 10 conversations — first real v12 data
+3. Q4 (originating thought) and conversational thread-holding still weak
+   — IFR needs to maintain topic across pronoun references better
+4. Chinese characters in LLM output — occasional model corruption
+   — add output sanitisation filter in _call_llm
+5. YouTube learning — monitor HUD for ACTIVE status post brain restart
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+V12 STATUS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+V12 is writing itself from deployment data.
+First consolidation report already shows terrain:
+  - 10.8% landing rate
+  - Chronic residue: truth, experience, reasoning beliefs
+  - These are NEX's deepest beliefs not reaching utterance
+V12 emerges from the next 10 conversations. Watch the consolidation log.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+HUD SERVER (port 7700)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Not autostarted — run manually:
+  sudo fuser -k 7700/tcp 2>/dev/null; sleep 1
+  python3 ~/Desktop/nex/nex_hud_server.py &
+
+If missing: restore from archive:
+  cp /media/rr/NEX/nex_core/archive/experiments/nex_hud_server.py ~/Desktop/nex/
+  cp /media/rr/NEX/nex_core/archive/experiments/nex_hud.py ~/Desktop/nex/
+  cp /media/rr/NEX/nex_core/archive/experiments/nex_hud.html ~/Desktop/nex/
+
+YouTube engine: restore from archive if stub:
+  cp /media/rr/NEX/nex_core/archive/social/nex_agi_youtube_engine.py ~/Desktop/nex/
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AGI SIPHON
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Module:  ~/Desktop/nex/nex_agi_siphon.py
+Corpus:  agi_corpus table in ~/.config/nex/nex.db
+Pairs:   ~/Desktop/nex/agi_finetune_pairs.jsonl
+
+Commands:
+  python3 nex_agi_siphon.py --seed        # pull new beliefs from graph
+  python3 nex_agi_siphon.py --report --top 10
+  python3 nex_agi_siphon.py --export > agi_finetune_pairs.jsonl
+  python3 nex_agi_siphon.py --promote     # inject top corpus → graph
+
+Thresholds:
+  Min confidence:  0.72
+  Min AGI score:   0.55
+  Promote at:      score >= 0.70 (lower if needed)
+
+Milestones:
+  Current:   8 beliefs, 49 pairs
+  Re-seed:   when corpus hits 20+ new beliefs (~ 2 weeks)
+  Fine-tune: when pairs hit 200+ (~ 2-3 months or sooner
+             with targeted AGI conversations)
+
+AGI SIPHON EXPORT (canonical — use this, not --export CLI):
+  python3 -c "
+import sys,json,sqlite3
+from pathlib import Path
+db=sqlite3.connect(str(Path.home()/'.config/nex/nex.db'))
+rows=db.execute('SELECT content,topic,confidence,agi_score FROM agi_corpus WHERE human_reviewed=1 ORDER BY agi_score DESC').fetchall()
+db.close()
+sys.path.insert(0,'/home/rr/Desktop/nex')
+from nex_agi_siphon import AGISiphon
+s=AGISiphon()
+pairs=[{'prompt':s._generate_prompt(c,t),'completion':c,'agi_score':sc,'confidence':cf,'topic':t} for c,t,cf,sc in rows]
+open('/home/rr/Desktop/nex/agi_finetune_pairs.jsonl','w').write('\n'.join(json.dumps(p) for p in pairs)+'\n')
+print(f'Written {len(pairs)} pairs')
+  "

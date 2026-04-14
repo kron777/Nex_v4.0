@@ -1,0 +1,10 @@
+{
+  "generated_at": "2026-04-03T05:16:16",
+  "source_pairs": 300,
+  "weighted_pairs": 433,
+  "weight3": 0,
+  "weight2": 133,
+  "weight1": 167,
+  "avg_score": 0.44933,
+  "output": "/home/rr/Desktop/nex/training_data/weighted_batch_20260403_051616.jsonl"
+}

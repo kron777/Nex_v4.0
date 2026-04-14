@@ -1,0 +1,235 @@
+================================================================================
+NEX v4.0 — BELIEF GRAPH IMPROVEMENT PLAN
+Updated: 2026-04-01 (end of session 5)
+================================================================================
+
+CURRENT STATE
+─────────────
+Beliefs:        ~23,300 (post-pruning — quality over quantity)
+FAISS vectors:  26,453 (needs resync after pruning)
+Graph edges:    41,292 SUPPORTS + 1,459 REFINES + 146 CONTRADICTS
+IQ score:       92% ELITE
+Response quality: 92/100 (up from 68/100 session 1 start)
+
+================================================================================
+IMPROVEMENT STATUS
+================================================================================
+
+✅ IMPROVEMENT 3 — CONTRADICTION AS TENSION (DONE)
+   Contradiction engine on main DB, WAL mode enabled, topic-based detection,
+   query expansion. Severity >0.25 overrides to gaps intent. Tension injected
+   into belief context as plain belief text.
+
+✅ IMPROVEMENT 2 — FEEDBACK LOOP (DONE)
+   record_reply_outcome wired into nex_api.py and nex_respond.py.
+   Every reply now updates belief confidence via PCC/DQS.
+
+✅ IMPROVEMENT 4 — GROUNDED GENERATION (DONE)
+   Relevance filter, keyword fallback, intent map expansion, prompt tightening,
+   [INST] bleed stripped, stop tokens tuned.
+
+✅ IMPROVEMENT 1 — BELIEF REASONING LAYER (DONE — session 3)
+   nex_belief_reasoner.py: derives inferences from top 2-3 beliefs.
+   Written to DB: confidence=0.6, source="nex_reasoning".
+   Injected at position 2 in top_beliefs. Firing on every query.
+
+✅ IMPROVEMENT 6 — REAL-TIME BRIDGE FIRING (DONE — session 3)
+   Query-topic forcing pulls named topics into cross_domain.
+   18-pair distant-domain map triggers WONDER path with real content.
+   Firing on consciousness↔finance, biology↔consciousness, math↔infinity.
+
+✅ IMPROVEMENT 5 — CONVERSATION-TO-BELIEF PIPELINE (DONE — session 4)
+   nex_conversation_extractor.py: extracts novel claims from NEX replies.
+   Session cap: 5 beliefs per conversation. source="conversation", conf=0.55-0.58.
+   Topic inferred from query. Dedup against last 200 DB beliefs.
+
+✅ BELIEF QUALITY AUDIT + DB PRUNING (DONE — sessions 3-5)
+   ~2,100 garbage beliefs deleted total:
+   - EarthPorn/nature conservation boilerplate (354+78)
+   - Gutenberg "permanence and time" template (237)
+   - Pain Echo Chamber boilerplate (102)
+   - Indigenous women artistic expression template (105)
+   - "I now believe that" Reddit/arxiv artifacts (25)
+   - MAGA/ritualistic behaviors scraper content (34+)
+   - Heart-brain connection template (266)
+   - Delusional synthetic data / ethics manipulation (47+20)
+   - Finance "Sure,"/derivatives artifacts (22)
+   - Quintilian educational philosophy boilerplate (111)
+   - Futurology Reddit boilerplate (242)
+   - Legal IP law duplicates (14)
+   - Various arxiv "challenges the notion" philosophy boilerplate
+
+✅ SOURCE QUALITY SCORING (DONE — session 4)
+   4-tier _source_quality_modifier() in _score_belief():
+   Tier 1 (nex_seed, manual, identity, injector):       +0.6
+   Tier 2 (scheduler_saturation, nex_reasoning, conv):  +0.3
+   Tier 3 (distilled, auto_growth):                     -0.1
+   Empty source:                                         -0.3
+   Reddit sources:                                       -0.5
+   Low-quality RSS:                                      -0.6
+   source column now included in _load_all_beliefs() SELECT.
+
+✅ RETRIEVAL FIXES (DONE — sessions 4-5)
+   - Confidence floor: beliefs < 0.45 excluded unless high-quality source
+   - Topic-lock guard: specialist domains penalised -2.5 off-domain
+   - Query-topic forcing with concept→topic map (truth→philosophy, etc.)
+   - Abstract concept check strips punctuation before word match
+   - "do you believe in X" always → position intent
+   - Alignment topic-lock prevents interpretability beliefs winning off-domain
+
+✅ BELIEF SEEDING (DONE — sessions 4-5)
+   Hand-crafted nex_seed beliefs added (confidence 0.80-0.92):
+   Philosophy/Truth (4): coherence theory, pragmatism, degrees, correspondence
+   Free will (4): compatibilism, right kind of causation, phenomenology
+   Human nature (4): not fixed, cooperation native, recursive belief capacity
+   Philosophy general (3): epistemic humility, hard problem framing
+   Future of AI (7): timelines, governance, epistemic risk, automation
+   Ethics (8): autonomy, consent, harm principle, institutional diffusion
+   Legal (7): law vs justice, procedural justice, rights enforcement
+   Identity (5): what NEX is, belief graph framing, neti-neti origin
+   All nex_seed beliefs win retrieval reliably (score 1.4+ vs 0.7 for garbage).
+
+✅ SELF_MODEL + WHO ARE YOU (DONE — session 5)
+   self_model table in ~/.config/nex/nex.db populated with 10 entries:
+   temperament, stance_summary, preoccupation, capability, limitation,
+   growth_observation, drive, relationship_to_llm, core_value, identity_statement
+   soul loop now reads from correct DB (was silently failing — wrong path).
+   "who are you?" now returns rich identity response, not one-liner.
+
+================================================================================
+REMAINING ISSUES (minor — session 6)
+================================================================================
+
+  ISSUE 1 — "what is truth?" leads with reasoner artifact
+    Reasoner inferred belief injected at position 2 displaces seeded truth
+    belief. Fix: move reasoner injection to position 3 (after top 2 beliefs).
+    One-line patch in nex_soul_loop.py reason().
+
+  ISSUE 2 — "human nature" WONDER opener misfires
+    "Why does consciousness and ai keep pulling at me?" fires on direct
+    position queries. Fix: gate WONDER path — require sparse=True or
+    intent=wonder, not just confidence < 0.6.
+
+  ISSUE 3 — FAISS index needs resync
+    ~2,100 beliefs deleted since last FAISS build. Index is stale.
+    Fix: rebuild FAISS index against current nex.db.
+
+  ISSUE 4 — Trainer DB may have garbage beliefs
+    Main DB pruned significantly. Trainer DB (~/.config/nex/nex.db beliefs)
+    may still have EarthPorn/conservation/manipulation content.
+    Fix: run same pruning queries against trainer DB before QLoRA training.
+
+================================================================================
+RECOMMENDED BUILD ORDER (remaining)
+================================================================================
+
+  SESSION 6 (next):
+    → Fix Issues 1-2 (reasoner injection position, WONDER gate tightening)
+    → FAISS index resync
+    → Trainer DB garbage audit + prune
+    → Verify QLoRA gate status
+    → Final 20-query audit targeting 93-94/100
+
+  QLORA TRAINING (when gate opens):
+    → Run TRAINING_PROTOCOL.md
+    → Re-audit after training
+    → Expect 95+ with full belief graph baked into weights
+
+================================================================================
+QLORA GATE STATUS
+================================================================================
+
+  Gate reads:   ~/.config/nex/nex.db (trainer DB)
+  Main DB:      ~/Desktop/nex/nex.db (~23,300 beliefs, post-pruning)
+  avg_conf:     check current — may have shifted after pruning
+  NOTE:         Trainer DB beliefs need garbage audit before training
+
+  Check gate:
+    curl -s http://localhost:7825/scheduler/status
+
+  Trigger saturation manually:
+    curl -s -X POST http://localhost:7825/scheduler/trigger \
+      -H "Content-Type: application/json" \
+      -H "X-Admin-Secret: nex-admin-2026" \
+      -d '{"job":"saturation"}'
+
+  After gate opens:
+    Follow ~/Desktop/nex/TRAINING_PROTOCOL.md
+
+================================================================================
+SESSION COMMIT TRAIL (sessions 3-5)
+================================================================================
+
+  c5d13e9  feat: Improvement 1 + 6 core
+  27902ea  fix: reasoner schema
+  3dcbf2a  fix: bridge shadowing, templates, utcnow
+  49ee6f3  fix: bridge retrieval, CD blocklist, topic forcing
+  b6aae58  feat: Improvement 5 conversation-to-belief pipeline
+  45dcb30  fix: source quality filter, confidence floor, intent routing
+  80bb74a  fix: truth routing, free will→philosophy, opinion probe
+  9aeed30  fix: scope bug, alignment topic-lock, concept mapping
+  5dc31d6  fix: source quality 4-tier system
+  1c03896  fix: source column in _load_all_beliefs (critical)
+  6dadcfe  chore: session supporting files
+  9d63bf0  fix: self_inquiry reads self_model from correct DB
+
+================================================================================
+SCORE PROGRESSION
+================================================================================
+
+  Session 1 start:    68/100
+  Session 2 end:      84/100  (+16)
+  Session 3-4 end:    89/100  (+5)
+  Session 5 end:      92/100  (+3)
+  Target (session 6): 93-94/100
+  Target (post-QLoRA): 95+/100
+
+================================================================================
+KEY PATHS
+================================================================================
+
+  Main DB:        ~/Desktop/nex/nex.db          (~23,300 beliefs)
+  Trainer DB:     ~/.config/nex/nex.db           (QLoRA gate + identity tables)
+  FAISS index:    ~/.config/nex/nex_beliefs.faiss (stale — needs rebuild)
+  Logs:           /tmp/nex_brain.log, /tmp/nex_api.log
+  API:            http://localhost:7823
+  Scheduler:      http://localhost:7825
+  Admin:          http://localhost:7823/admin?admin_secret=nex-admin-2026
+  GitHub:         github.com/kron777/Nex_v4.0
+
+================================================================================
+THE ONE SENTENCE
+================================================================================
+
+  NEX is not an LLM with a database.
+  She is a living belief field that uses an LLM as her voice.
+  The graph does the thinking. The LLM speaks.
+
+================================================================================
+
+================================================================================
+SESSION 6 RESULTS (2026-04-02)
+================================================================================
+
+COMPLETED:
+  - belief_links table built in main DB (4,650 bidirectional links)
+  - _expand_via_links in nex_reason.py fixed and live
+  - FAISS resynced (23,452 vectors)
+  - nex_self_trainer.py fixed to use train.jsonl
+  - nex_deploy.sh built (merge→GGUF→q8→server in one command)
+  - nex_eval.py built (10-question benchmark)
+  - Trainer DB garbage pruned
+
+TRAINING RESULTS:
+  - Heavy run (nex_heavy_v1_q8.gguf): trained on belief store export — WRONG DATA, responses generic
+  - Voice run (nex_voice_v1_q8.gguf): trained on train.jsonl — single sentence extracts, not voiced
+  - Original nex_lora.gguf: 58-60/100 baseline
+
+ROOT ISSUE:
+  train.jsonl responses are raw single-sentence belief extracts.
+  Need voiced multi-sentence responses before next training run.
+
+NEXT SESSION:
+  → Generate voiced training pairs from belief DB using nex_respond.py
+  → Retrain on voiced pairs (~500-1000 pairs, proper NEX style)
+  → Target: 90+/100 on eval

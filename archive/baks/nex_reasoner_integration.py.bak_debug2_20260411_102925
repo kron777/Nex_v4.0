@@ -1,0 +1,309 @@
+#!/usr/bin/env python3
+"""
+nex_reasoner_integration.py — Wires nex_confidence_gate into the NEX API.
+
+HOW TO INSTALL:
+  1. Drop this file into ~/Desktop/nex/
+  2. In nex_api.py, find the /chat route (search for @app.route('/chat'))
+  3. Add ONE import at the top of nex_api.py:
+       from nex_reasoner_integration import gated_cognite
+  4. In the /chat route handler, replace the cognite() call with gated_cognite()
+     (exact replacement shown at bottom of this file)
+
+WHAT IT DOES:
+  - Runs gated_reason() in parallel with cognite() 
+  - If gate score >= 0.30 (moderate+), injects graph context into the response
+  - If gate score < 0.10 (belief gap), overrides with honest gap response
+  - Otherwise falls back to existing cognite() output unchanged
+  - All gate decisions logged to gate_log for stats
+  - Zero breaking changes — existing behaviour preserved as fallback
+
+INTEGRATION MODES (set INTEGRATION_MODE below):
+  'augment'  — prepend graph reasoning context to cognite() response (default)
+  'override' — replace cognite() entirely with gated_reason() response
+  'parallel' — run both, pick higher-quality response
+  'inject'   — inject graph chains into cognite's belief context before it runs
+"""
+
+import sys
+import time
+import sqlite3
+import threading
+from pathlib import Path
+
+DB_PATH = Path(__file__).parent / "nex.db"
+
+INTEGRATION_MODE = "augment"   # augment | override | parallel
+
+# Minimum gate score to augment/override the response
+AUGMENT_THRESHOLD  = 0.75   # raised — only augment high-confidence gate results
+OVERRIDE_THRESHOLD = 0.80   # high → full gate override
+GAP_THRESHOLD      = 0.10   # below → use gap acknowledgement
+
+# ── Lazy imports (don't crash API if gate modules missing) ────────────────────
+
+_gate_available = None
+
+def _check_gate():
+    global _gate_available
+    if _gate_available is not None:
+        return _gate_available
+    try:
+        from nex_confidence_gate import gated_reason, decide_gate
+        from nex_graph_traversal import find_chains, context_block
+        from nex_cot import _assess_conflicts, _assess_confidence
+        _gate_available = True
+    except ImportError as e:
+        print(f"[integration] Gate modules not available: {e}")
+        _gate_available = False
+    return _gate_available
+
+# ── Core integration function ─────────────────────────────────────────────────
+
+def gated_cognite(query: str, cognite_fn, *args, **kwargs) -> dict:
+    """
+    Drop-in replacement for cognite() calls in nex_api.py.
+
+    Usage in nex_api.py:
+        # OLD:
+        reply = cognite(user_input)
+        # NEW:
+        result = gated_cognite(user_input, cognite)
+        reply = result["response"]
+
+    Returns:
+        response     : str   — the final response text
+        gate_decision: str   — high/moderate/low/belief_gap/conflict_block
+        gate_score   : float — confidence score
+        augmented    : bool  — whether graph reasoning was applied
+        source       : str   — 'gate_override'|'gate_augment'|'cognite_fallback'
+    """
+    if not _check_gate():
+        # Gate unavailable — fall back to original cognite
+        try:
+            reply = cognite_fn(query, *args, **kwargs)
+            return {
+                "response":      reply,
+                "gate_decision": "unavailable",
+                "gate_score":    0.0,
+                "augmented":     False,
+                "source":        "cognite_fallback",
+            }
+        except Exception as e:
+            return {
+                "response":      f"[error: {e}]",
+                "gate_decision": "error",
+                "gate_score":    0.0,
+                "augmented":     False,
+                "source":        "error",
+            }
+
+    from nex_confidence_gate import gated_reason, decide_gate
+    from nex_graph_traversal import find_chains
+    from nex_cot import _assess_conflicts, _assess_confidence
+
+    # Run gate and cognite in parallel
+    gate_result   = {}
+    cognite_reply = {}
+    errors        = {}
+
+    def run_gate():
+        try:
+            gate_result.update(gated_reason(query, use_cache=True))
+        except Exception as e:
+            errors["gate"] = str(e)
+
+    def run_cognite():
+        try:
+            reply = cognite_fn(query, *args, **kwargs)
+            cognite_reply["text"] = reply if isinstance(reply, str) else str(reply)
+        except Exception as e:
+            import traceback
+            print(f"  [COGNITE ERROR] {e}")
+            traceback.print_exc()
+            errors["cognite"] = str(e)
+            cognite_reply["text"] = f"[error: {e}]"
+
+    t_gate    = threading.Thread(target=run_gate,    daemon=True)
+    t_cognite = threading.Thread(target=run_cognite, daemon=True)
+    t_gate.start()
+    t_cognite.start()
+    t_gate.join(timeout=90)
+    t_cognite.join(timeout=30)
+
+    cognite_text = cognite_reply.get("text", "[cognite timeout]")
+    gate_score   = gate_result.get("confidence", {}).get("score", 0.0)
+    gate_decision= gate_result.get("gate_decision", {}).get("decision", "unknown")
+    gate_response= gate_result.get("response", "")
+
+    # ── Decision logic ────────────────────────────────────────────────────
+
+    if INTEGRATION_MODE == "override":
+        # Full override when gate has high confidence
+        if gate_score >= OVERRIDE_THRESHOLD and gate_response and "unavailable" not in gate_response:
+            _log_integration(query, gate_score, gate_decision, "gate_override")
+            return {
+                "response":      gate_response,
+                "gate_decision": gate_decision,
+                "gate_score":    gate_score,
+                "augmented":     True,
+                "source":        "gate_override",
+            }
+
+    if INTEGRATION_MODE in ("augment", "override", "parallel"):
+        # Belief gap — honest acknowledgement, override cognite
+        # gap_override disabled — metacog gate handles gaps correctly
+
+        # Augment mode — enrich cognite response with graph context
+        if gate_score >= AUGMENT_THRESHOLD and gate_response:
+            augmented = _augment_response(cognite_text, gate_result)
+            _log_integration(query, gate_score, gate_decision, "gate_augment")
+            return {
+                "response":      augmented,
+                "gate_decision": gate_decision,
+                "gate_score":    gate_score,
+                "augmented":     True,
+                "source":        "gate_augment",
+            }
+
+    # Fallback — use cognite as-is
+    _log_integration(query, gate_score, gate_decision, "cognite_fallback")
+    return {
+        "response":      cognite_text,
+        "gate_decision": gate_decision,
+        "gate_score":    gate_score,
+        "augmented":     False,
+        "source":        "cognite_fallback",
+    }
+
+
+def _augment_response(cognite_text: str, gate_result: dict) -> str:
+    """
+    Enrich cognite's response with gate's reasoning.
+    Strategy: if gate found a conflict, append a tension note.
+    If gate has a cleaner/deeper response, blend it.
+    """
+    gate_resp  = gate_result.get("response", "")
+    gate_score = gate_result.get("confidence", {}).get("score", 0.0)
+    ci         = gate_result.get("conflict_info", {})
+    trace      = gate_result.get("trace", {})
+
+    # If cognite gave a short/weak response and gate has a better one, prefer gate
+    if len(gate_resp) > len(cognite_text) * 1.2 and gate_score >= 0.45:
+        return gate_resp
+
+    # If there's a genuine conflict the gate identified, append it to cognite's response
+    if ci.get("has_conflict") and ci.get("conflict_count", 0) <= 5:
+        tension = trace.get("tensions", "")
+        query_words = set(query.lower().split())
+        tension_words = set(tension.lower().split())
+        relevant = len(query_words & tension_words) >= 2
+        if tension and len(tension) > 30 and relevant:
+            return (cognite_text.rstrip() +
+                    f"\n\nThough I should note a tension in my beliefs here: {tension[:200].rstrip('.')}.")
+
+    # Default: return cognite unchanged (gate confirmed it's reasonable)
+    return cognite_text
+
+
+def _build_gap_response(query: str, cognite_fallback: str) -> str:
+    """Build an honest gap response when NEX has no relevant beliefs."""
+    return (
+        f"This falls outside what my belief graph covers directly. "
+        f"I don't have a formed position on this — it's a genuine gap rather than "
+        f"something I'm deflecting. "
+        f"If you're asking because it connects to something I do hold views on, "
+        f"point me there and I'll engage properly."
+    )
+
+
+def _log_integration(query: str, score: float, decision: str, source: str):
+    """Log integration decision to gate_log."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur  = conn.cursor()
+        cur.execute(
+            """INSERT INTO gate_log (content, topic, confidence, source, accepted, reason, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (query[:300], "", score, source, 1, decision, time.time())
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+# ── nex_api.py patch instructions ────────────────────────────────────────────
+
+PATCH_INSTRUCTIONS = """
+╔══════════════════════════════════════════════════════════════╗
+║  HOW TO INTEGRATE INTO nex_api.py                           ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║  1. Add import at top of nex_api.py (after existing imports):║
+║                                                              ║
+║     try:                                                     ║
+║         from nex_reasoner_integration import gated_cognite  ║
+║         GATE_OK = True                                       ║
+║     except ImportError:                                      ║
+║         GATE_OK = False                                      ║
+║                                                              ║
+║  2. Find the /chat route. It looks like:                     ║
+║     reply = cognite(user_input)                              ║
+║     OR                                                       ║
+║     reply = cognite(message)                                 ║
+║                                                              ║
+║  3. Replace it with:                                         ║
+║     if GATE_OK and cognite:                                  ║
+║         result = gated_cognite(user_input, cognite)          ║
+║         reply  = result["response"]                          ║
+║     else:                                                    ║
+║         reply = cognite(user_input) if cognite else "..."    ║
+║                                                              ║
+║  That's the entire integration. One try/import block,        ║
+║  one if/else around the cognite call. Everything else        ║
+║  in the API stays identical.                                 ║
+╚══════════════════════════════════════════════════════════════╝
+"""
+
+
+# ── Standalone test ───────────────────────────────────────────────────────────
+
+def _mock_cognite(query: str) -> str:
+    """Simulate cognite() for integration testing without the full stack."""
+    return f"[mock cognite response to: {query[:60]}]"
+
+
+if __name__ == "__main__":
+    print(PATCH_INSTRUCTIONS)
+
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--query", type=str, default="Does consciousness require a physical substrate?")
+    ap.add_argument("--mode",  type=str, default="augment", choices=["augment","override","parallel"])
+    ap.add_argument("--mock",  action="store_true", help="Use mock cognite (no LLM needed)")
+    args = ap.parse_args()
+
+    INTEGRATION_MODE = args.mode
+
+    cognite_fn = _mock_cognite if args.mock else None
+
+    if cognite_fn is None:
+        try:
+            sys.path.insert(0, str(Path(__file__).parent))
+            from nex.nex_cognition import cognite as cognite_fn
+        except ImportError:
+            print("nex_cognition not available — using mock. Run with --mock to suppress this.")
+            cognite_fn = _mock_cognite
+
+    print(f"\nQuery    : {args.query}")
+    print(f"Mode     : {INTEGRATION_MODE}")
+    print(f"Cognite  : {'mock' if cognite_fn is _mock_cognite else 'real'}\n")
+
+    result = gated_cognite(args.query, cognite_fn)
+
+    print(f"Source       : {result['source']}")
+    print(f"Gate decision: {result['gate_decision']}")
+    print(f"Gate score   : {result['gate_score']:.3f}")
+    print(f"Augmented    : {result['augmented']}")
+    print(f"\nResponse:\n{result['response']}")

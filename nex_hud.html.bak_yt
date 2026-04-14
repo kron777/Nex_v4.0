@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>NEX HUD v1.2</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --cyan:#00ffcc;--purple:#cc00ff;--red:#ff003c;
+  --green:#00ff88;--yellow:#ffcc00;--bg:#06060f;
+  --panel:#0a0a1a;--border:#00ffcc22;--text:#aaffee;--dim:#b0c8d8;
+  --debug-cyan:#00cfff;
+}
+body{background:var(--bg);color:var(--text);font-family:'Share Tech Mono',monospace;font-size:10px;height:100vh;overflow:hidden;position:relative;}
+body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.08) 2px,rgba(0,0,0,0.08) 4px);pointer-events:none;z-index:100;}
+body::after{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background-image:linear-gradient(rgba(0,255,204,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,204,0.03) 1px,transparent 1px);background-size:20px 20px;pointer-events:none;z-index:0;}
+.hud{position:relative;z-index:1;display:grid;grid-template-rows:auto auto 1fr;height:100vh;padding:4px;gap:3px;}
+.topbar{display:flex;align-items:center;justify-content:space-between;background:var(--panel);border:1px solid var(--border);padding:4px 8px;border-left:2px solid var(--cyan);}
+.nex-logo{font-family:'Orbitron',monospace;font-size:18px;font-weight:900;color:var(--cyan);letter-spacing:3px;text-shadow:0 0 10px var(--cyan),0 0 20px var(--cyan);animation:glitch 4s infinite;}
+@keyframes glitch{0%,90%,100%{text-shadow:0 0 10px var(--cyan),0 0 20px var(--cyan);}91%{text-shadow:-2px 0 var(--purple),2px 0 var(--cyan);}93%{text-shadow:2px 0 var(--red),-2px 0 var(--cyan);}95%{text-shadow:0 0 10px var(--cyan),0 0 20px var(--cyan);}}
+.nex-logo span{font-size:8px;color:var(--purple);vertical-align:super;}
+.top-status{display:flex;gap:12px;font-size:16px;color:var(--cyan);}
+.top-status .val{color:#fff;font-weight:bold;}.top-status .online{color:var(--green);}.top-status .sep{color:var(--dim);}
+.top-time{text-align:right;font-size:10px;color:var(--cyan);line-height:1.4;}
+.top-time .time{font-size:22px;font-weight:bold;color:#fff;text-shadow:0 0 8px var(--cyan);}
+.platforms{display:flex;gap:2px;}
+.plat{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:5px 8px;background:var(--panel);border:1px solid var(--border);font-size:14px;letter-spacing:1px;font-weight:bold;}
+.plat .dot{width:10px;height:10px;border-radius:50%;display:inline-block;}
+.dot-live{background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 1.5s infinite;}
+.dot-recent{background:var(--cyan);box-shadow:0 0 6px var(--cyan);}
+.dot-idle{background:var(--dim);}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+.state-live{color:var(--green);}.state-recent{color:var(--cyan);}.state-idle{color:var(--dim);}
+
+/* === MAIN GRID: left panel | center split | right panel === */
+.main{display:grid;grid-template-columns:220px 1fr 659px;gap:3px;overflow:hidden;}
+.panel{background:var(--panel);border:1px solid var(--border);padding:6px;overflow:hidden;position:relative;}
+.panel::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:0.5;}
+.panel::after{content:'';position:absolute;bottom:3px;right:3px;width:8px;height:8px;border-bottom:1px solid var(--cyan);border-right:1px solid var(--cyan);opacity:0.4;}
+.panel-title{font-family:'Orbitron',monospace;font-size:11px;color:var(--cyan);letter-spacing:2px;margin-bottom:5px;padding-bottom:3px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:4px;}
+.panel-title::before{content:'⌐';color:var(--purple);}.panel-title::after{content:'¬';color:var(--purple);margin-left:auto;}
+
+/* === CENTER SPLIT PANEL === */
+.center-panel{display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--border);position:relative;overflow:hidden;}
+.center-panel::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:0.5;}
+.center-split{display:grid;grid-template-columns:1fr 1fr;gap:0;flex:1;overflow:hidden;min-height:0;}
+.center-col{display:flex;flex-direction:column;overflow:hidden;min-height:0;}
+.center-col:first-child{border-right:1px solid var(--border);}
+.center-col:last-child{margin-left:75px;}
+.center-col-title{font-family:'Orbitron',monospace;font-size:10px;color:var(--cyan);letter-spacing:2px;padding:4px 6px 3px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:4px;flex-shrink:0;}
+.center-col-title.debug-title{color:var(--debug-cyan);}
+.center-col-title .blink{animation:blink-dot 1.2s infinite;color:var(--green);}
+@keyframes blink-dot{0%,100%{opacity:1;}50%{opacity:0.2;}}
+.stream-box{flex:1;overflow-y:scroll;overflow-x:hidden;font-size:13px;line-height:1.65;position:relative;padding:2px 4px;min-height:0;scrollbar-width:none;}
+.stream-line{display:flex;gap:6px;padding:2px 0;border-bottom:1px solid #ffffff04;animation:fadein 0.3s ease;}
+@keyframes fadein{from{opacity:0;transform:translateX(-4px);}to{opacity:1;transform:translateX(0);}}
+.stream-ts{color:var(--dim);white-space:nowrap;flex-shrink:0;font-size:11px;}
+.stream-type{width:62px;flex-shrink:0;font-weight:bold;font-size:12px;}
+.stream-text{color:#cceedd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;}
+
+/* Debug stream specific */
+.debug-line{display:flex;gap:5px;padding:2px 0;border-bottom:1px solid #ffffff04;animation:fadein 0.3s ease;}
+.debug-ts{color:var(--dim);white-space:nowrap;flex-shrink:0;font-size:11px;}
+.debug-src{width:72px;flex-shrink:0;font-size:12px;font-weight:bold;}
+.debug-msg{color:#99ddff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;}
+.debug-ok{color:var(--green);}
+.debug-dead{color:var(--red);}
+.debug-warn{color:var(--yellow);}
+.debug-port{color:var(--purple);}
+.debug-crash{color:var(--red);font-weight:bold;}
+
+/* Left panel */
+.beliefs-num{font-family:'Orbitron',monospace;font-size:32px;font-weight:900;color:#fff;text-shadow:0 0 15px var(--cyan);line-height:1;margin:4px 0;}
+.beliefs-label{font-size:14px;color:var(--dim);letter-spacing:2px;margin-bottom:2px;}
+.orig-beliefs{font-size:16px;color:var(--purple);margin-bottom:6px;}
+.crosshair{display:flex;gap:8px;margin-bottom:6px;}
+.ch{width:22px;height:22px;border:1px solid var(--cyan);border-radius:50%;position:relative;opacity:0.5;}
+.ch::before,.ch::after{content:'';position:absolute;background:var(--cyan);}
+.ch::before{width:1px;height:100%;left:50%;top:0;}.ch::after{height:1px;width:100%;top:50%;left:0;}
+.bar-row{display:flex;align-items:center;gap:4px;margin-bottom:3px;}
+.bar-label{width:58px;font-size:14px;color:var(--dim);}
+.bar-track{flex:1;height:5px;background:#0a0a1a;border:1px solid var(--border);position:relative;overflow:hidden;}
+.bar-fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--purple));box-shadow:0 0 4px var(--cyan);transition:width 1s ease;}
+.bar-val{width:40px;font-size:14px;color:#fff;text-align:right;}
+.counters{margin-top:6px;padding-top:4px;border-top:1px solid var(--border);font-size:14px;color:var(--dim);display:grid;grid-template-columns:1fr 1fr;gap:2px;}
+.counter-item span{color:var(--cyan);font-size:18px;font-weight:bold;}
+.gpu-gauge{display:flex;flex-direction:column;align-items:center;margin-bottom:6px;}
+.gauge-wrap{position:relative;width:90px;height:90px;margin:4px auto;}
+.gauge-wrap svg{transform:rotate(-135deg);}
+.gauge-text{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;}
+.gauge-pct{font-family:'Orbitron',monospace;font-size:14px;font-weight:bold;color:#fff;text-shadow:0 0 8px var(--cyan);}
+.gauge-sub{font-size:12px;color:var(--dim);}
+.power-bar{width:100%;margin-bottom:6px;}
+.power-label{font-size:14px;color:var(--dim);margin-bottom:2px;display:flex;justify-content:space-between;}
+.power-label span{color:var(--yellow);}
+.gaps-list{font-size:14px;margin-top:4px;}
+.gap-item{color:var(--dim);padding:1px 0;padding-left:8px;position:relative;}
+.gap-item::before{content:'◆';position:absolute;left:0;color:var(--purple);font-size:10px;}
+.crash-alert{margin-top:4px;padding:4px;border:1px solid var(--red);background:#ff003c11;font-size:14px;color:var(--red);display:none;animation:blink 0.8s infinite;}
+.crash-alert.active{display:block;}
+@keyframes blink{0%,100%{border-color:var(--red);}50%{border-color:transparent;}}
+.iq-display{text-align:center;margin:4px 0;padding:3px;border:1px solid var(--border);position:relative;}
+.iq-val{font-family:'Orbitron',monospace;font-size:16px;font-weight:900;color:var(--green);text-shadow:0 0 10px var(--green);}
+.iq-label{font-size:12px;color:var(--dim);letter-spacing:2px;}
+.divider-line{width:1px;background:linear-gradient(to bottom,transparent,var(--border),var(--cyan),var(--border),transparent);opacity:0.6;align-self:stretch;}
+</style>
+</head>
+<body>
+<div class="hud">
+  <div class="topbar">
+    <div style="display:flex;align-items:baseline;gap:8px;">
+      <div class="nex-logo">NEX<span>v1.2</span></div>
+    </div>
+    <div class="top-status">
+      <span>STATUS <span class="val online" id="s-status">ACTIVE</span></span>
+      <span class="sep">|</span>
+      <span>LLM <span class="val online" id="s-llm">ONLINE</span></span>
+      <span class="sep">|</span>
+      <span>TELEGRAM <span class="val online" id="s-tg">ONLINE</span></span>
+      <span class="sep">|</span>
+      <span>UPTIME <span class="val" id="s-uptime">00:00:00</span></span>
+      <span class="sep">|</span>
+      <span>SYS1 <span class="val" id="s-sys1">--%</span></span>
+      <span class="sep">|</span>
+      <span>LLM-DEP <span class="val" id="s-llmdep">--%</span></span>
+      <span class="sep">|</span>
+      <span>EPISODES <span class="val" id="s-episodes">0</span></span>
+      <span class="sep">|</span>
+      <span>THROW-NET <span class="val" id="s-thrownet">0</span></span>
+    </div>
+    <div class="top-time">
+      <div class="time" id="s-time">--:--:--</div>
+      <div style="font-size:13px;color:var(--dim)" id="s-date">--</div>
+    </div>
+  </div>
+
+  <div class="platforms">
+    <div class="plat"><span class="dot dot-live"></span><span class="state-live">MOLTBOOK</span><span style="color:var(--dim);margin-left:6px;font-size:16px;" id="p-molt">LIVE</span></div>
+    <div class="plat"><span class="dot dot-recent"></span><span class="state-recent">TELEGRAM</span><span style="color:var(--dim);margin-left:6px;font-size:16px;" id="p-tg">RECENT</span></div>
+    <div class="plat"><span class="dot dot-idle"></span><span class="state-idle">DISCORD</span><span style="color:var(--dim);margin-left:6px;font-size:16px;" id="p-dc">IDLE</span></div>
+    <div class="plat"><span class="dot dot-recent"></span><span class="state-recent">MASTODON</span><span style="color:var(--dim);margin-left:6px;font-size:16px;" id="p-mast">RECENT</span></div>
+    <div class="plat"><span class="dot" id="yt-dot" style="background:#444;"></span><span id="yt-state" style="color:var(--dim);">YOUTUBE</span><span style="color:var(--dim);margin-left:6px;font-size:16px;" id="p-yt">IDLE</span></div>
+  </div>
+
+  <div class="main">
+    <!-- LEFT: Cognitive State -->
+    <div class="panel" style="display:flex;flex-direction:column;">
+      <div class="panel-title">COGNITIVE STATE</div>
+      <div class="beliefs-label">ACTIVE BELIEFS</div>
+      <div class="beliefs-num" id="s-beliefs">0</div>
+      <div class="orig-beliefs">ORIGINAL: <span id="s-orig">0</span> <span style="color:var(--dim);font-size:8px;">(NEX-generated)</span></div>
+      <div class="crosshair"><div class="ch"></div><div class="ch"></div></div>
+      <div class="bar-row"><div class="bar-label">CONF</div><div class="bar-track"><div class="bar-fill" id="b-conf" style="width:0%"></div></div><div class="bar-val" id="v-conf">0%</div></div>
+      <div class="bar-row"><div class="bar-label">ALIGN</div><div class="bar-track"><div class="bar-fill" id="b-align" style="width:0%;background:linear-gradient(90deg,var(--purple),var(--cyan));"></div></div><div class="bar-val" id="v-align">0%</div></div>
+      <div class="bar-row"><div class="bar-label">NETWORK</div><div class="bar-track"><div class="bar-fill" id="b-net" style="width:0%;background:linear-gradient(90deg,var(--cyan),var(--green));"></div></div><div class="bar-val" id="v-net">0%</div></div>
+      <div class="iq-display"><div class="iq-label">NEX INTELLIGENCE QUOTIENT</div><div class="iq-val"><span id="s-iq">95</span>% <span style="font-size:14px;color:var(--green);">ELITE</span></div></div>
+      <div class="counters">
+        <div class="counter-item">REPLIED <span id="s-replied">0</span></div>
+        <div class="counter-item">LEARNT <span id="s-learnt">0</span></div>
+        <div class="counter-item">POSTED <span id="s-posted">0</span></div>
+        <div class="counter-item">CHATTED <span id="s-chatted">0</span></div>
+      </div>
+      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;">
+        <div style="font-size:13px;color:var(--dim);letter-spacing:2px;margin-bottom:8px;">RESERVOIR ENGINE</div>
+        <div class="bar-row">
+          <div class="bar-label" style="font-size:13px;">SYS1</div>
+          <div class="bar-track"><div class="bar-fill" id="b-sys1" style="width:0%;background:linear-gradient(90deg,var(--green),var(--cyan));"></div></div>
+          <div class="bar-val" id="v-sys1">0%</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label" style="font-size:13px;">LLM</div>
+          <div class="bar-track"><div class="bar-fill" id="b-llmdep" style="width:0%;background:linear-gradient(90deg,var(--yellow),var(--red));"></div></div>
+          <div class="bar-val" id="v-llmdep">0%</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;">
+          <div style="font-size:13px;color:var(--dim);">EPISODES <span style="color:var(--cyan);" id="p-episodes">0</span></div>
+          <div style="font-size:13px;color:var(--dim);">THROW-NET <span style="color:var(--purple);" id="p-thrownet">0</span></div>
+        </div>
+        <div style="font-size:13px;color:var(--dim);margin-top:6px;">CONSOLIDATION <span style="color:var(--green);" id="p-consol">PENDING</span></div>
+      </div>
+      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;display:flex;flex-direction:column;flex:1;min-height:0;">
+        <div style="font-size:13px;color:var(--cyan);letter-spacing:2px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">AGI WATCH <span id="agi-badge" style="display:none;background:#ff2222;color:#fff;font-size:10px;font-weight:bold;border-radius:50%;min-width:16px;height:16px;line-height:16px;text-align:center;padding:0 4px;margin-right:4px;">0</span><span id="agi-dot" style="width:6px;height:6px;border-radius:50%;background:#444;display:inline-block;"></span></div>
+        <div id="agi-feed" style="font-size:11px;color:#7affcc;line-height:1.6;flex:1;overflow-y:scroll;font-family:monospace;word-break:break-word;scrollbar-width:none;"></div>
+        <div id="agi-empty" style="font-size:11px;color:var(--dim);font-family:monospace;">awaiting signal...</div>
+      </div>
+    </div>
+
+    <!-- CENTER: Split — Notifications LEFT | Debug RIGHT -->
+    <div class="center-panel">
+      <div class="center-split">
+        <!-- Notifications / Live Stream -->
+        <div class="center-col">
+          <div class="center-col-title">
+            <span style="color:var(--purple);">⌐</span>
+            NOTIFICATIONS
+            <span class="blink">●</span>
+            <span style="color:var(--purple);margin-left:auto;">¬</span>
+          </div>
+          <div class="stream-box" id="stream-box"></div>
+        </div>
+
+        <!-- Debug Stream -->
+        <div class="center-col">
+          <div class="center-col-title debug-title">
+            <span style="color:var(--purple);">⌐</span>
+            DEBUG STREAM
+            <span class="blink" style="color:var(--debug-cyan);">●</span>
+            <span style="color:var(--purple);margin-left:auto;">¬</span>
+          </div>
+          <div class="stream-box" id="debug-box"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: NEX Responses -->
+    <div class="panel" style="display:flex;flex-direction:column;overflow:hidden;">
+      <div class="panel-title">NEX RESPONSES</div>
+      <div id="responses-box" style="flex:1;overflow-y:scroll;overflow-x:hidden;font-size:12px;line-height:1.6;scrollbar-width:none;"></div>
+      <div class="crash-alert" id="crash-alert">✗ SYSTEM ANOMALY DETECTED</div>
+      <!-- hidden elements kept for JS compatibility -->
+      <span id="g-pct" style="display:none">0%</span>
+      <span id="gpu-arc" style="display:none"></span>
+      <span id="g-w" style="display:none">0W</span>
+      <span id="b-power" style="display:none"></span>
+      <span id="g-gaps" style="display:none">0</span>
+      <span id="gaps-list" style="display:none"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Clock & Uptime ────────────────────────────────────────────────────────────
+const startTime = Date.now();
+function updateClock() {
+  const now = new Date();
+  document.getElementById('s-time').textContent = now.toLocaleTimeString('en-ZA', {hour12: false});
+  document.getElementById('s-date').textContent = now.toLocaleDateString('en-ZA', {day:'2-digit',month:'short',year:'numeric'}) + ' SAST';
+  const up = Math.floor((Date.now() - startTime) / 1000);
+  const h = Math.floor(up/3600), m = Math.floor((up%3600)/60), s = up%60;
+  document.getElementById('s-uptime').textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+setInterval(updateClock, 1000); updateClock();
+
+// ── GPU Arc ───────────────────────────────────────────────────────────────────
+function setGpuArc(pct) {
+  const offset = 220 - (pct / 100) * 220;
+  document.getElementById('gpu-arc').style.strokeDashoffset = offset;
+  document.getElementById('g-pct').textContent = pct + '%';
+  const col = pct > 85 ? 'var(--red)' : pct > 60 ? 'var(--yellow)' : 'var(--cyan)';
+  document.getElementById('gpu-arc').style.stroke = col;
+  document.getElementById('g-pct').style.textShadow = `0 0 8px ${col}`;
+}
+
+function setBar(id, vid, pct) {
+  document.getElementById(id).style.width = pct + '%';
+  document.getElementById(vid).textContent = pct + '%';
+}
+
+// ── Notification Stream ───────────────────────────────────────────────────────
+const streamBox = document.getElementById('stream-box');
+const TYPE_COLORS = {
+  BRAIN:'var(--cyan)', BELIEF:'var(--yellow)', REPLIED:'var(--purple)',
+  POSTED:'var(--green)', CHATTED:'var(--cyan)', LEARNT:'var(--yellow)',
+  ERROR:'var(--red)', CRASH:'var(--red)', SOUL:'var(--cyan)',
+  META:'#223344', INFO:'#445566', PHASE:'#334455'
+};
+
+function addStream(ts, type, text) {
+  const line = document.createElement('div');
+  line.className = 'stream-line';
+  const col = TYPE_COLORS[type] || '#445566';
+  line.innerHTML = `<span class="stream-ts">${ts}</span><span class="stream-type" style="color:${col}">[${type}]</span><span class="stream-text">${text}</span>`;
+  streamBox.appendChild(line);
+  while (streamBox.children.length > 35) streamBox.removeChild(streamBox.firstChild);
+  streamBox.scrollTop = streamBox.scrollHeight;
+}
+
+// ── Debug Stream ──────────────────────────────────────────────────────────────
+const debugBox = document.getElementById('debug-box');
+
+const DEBUG_COLORS = {
+  'BRAIN':   {cls:'debug-ok',   prefix:'✓'},
+  'AUTOCHECK':{cls:'debug-ok',  prefix:'✓'},
+  'LLAMA':   {cls:'debug-ok',   prefix:'✓'},
+  'TELEGRAM':{cls:'debug-ok',   prefix:'✓'},
+  'WATCHDOG':{cls:'debug-ok',   prefix:'✓'},
+  'SCHEDULE':{cls:'debug-ok',   prefix:'✓'},
+  'API':     {cls:'debug-ok',   prefix:'✓'},
+  'PORT':    {cls:'debug-port', prefix:'⬡'},
+  'CRASH':   {cls:'debug-crash',prefix:'✗'},
+  'WARN':    {cls:'debug-warn', prefix:'!'},
+  'SYS':     {cls:'',           prefix:'·'},
+};
+
+function addDebug(ts, src, msg, status) {
+  const line = document.createElement('div');
+  line.className = 'debug-line';
+  const info = DEBUG_COLORS[src] || {cls:'', prefix:'·'};
+
+  // Determine if dead/alive for process lines
+  let cls = info.cls;
+  let pfx = info.pfx || info.prefix || '·';
+  if (status === 'dead') { cls = 'debug-dead'; pfx = '✗'; }
+  else if (status === 'alive') { cls = 'debug-ok'; pfx = '✓'; }
+  else if (status === 'warn') { cls = 'debug-warn'; pfx = '!'; }
+  else if (status === 'crash') { cls = 'debug-crash'; pfx = '✗'; }
+
+  line.innerHTML = `<span class="debug-ts">${ts}</span><span class="debug-src ${cls}">[${src.padEnd(8).slice(0,8)}]</span><span class="debug-msg ${cls}">${pfx} ${msg}</span>`;
+  debugBox.appendChild(line);
+  while (debugBox.children.length > 35) debugBox.removeChild(debugBox.firstChild);
+  debugBox.scrollTop = debugBox.scrollHeight;
+}
+
+// Live only — no demo data
+
+function ts() { return new Date().toLocaleTimeString('en-ZA', {hour12:false}); }
+
+// Live data only — no seeded demo lines
+
+// Live only — no demo ticks
+
+// ── Live API fetch ────────────────────────────────────────────────────────────
+async function fetchStats() {
+  try {
+    const r = await fetch('http://localhost:7700/data', {signal: AbortSignal.timeout(2000)});
+    const d = await r.json();
+    // YouTube status
+    if (d.social && d.social.youtube) {
+      const ytStatus = d.social.youtube.status_string || '';
+      const ytActive = d.social.youtube.auth;
+      const ytBlocked = ytStatus.includes('BLOCKED');
+      const ytRecovering = ytStatus.includes('RECOVERING');
+      const ytDot = document.getElementById('yt-dot');
+      const ytState = document.getElementById('yt-state');
+      const ytLabel = document.getElementById('p-yt');
+      const ytColor = ytBlocked ? 'var(--red,#f55)' : ytRecovering ? 'var(--yellow,#fa0)' : ytActive ? 'var(--green)' : 'var(--dim)';
+      const ytText = ytBlocked ? 'BLOCKED' : ytRecovering ? 'RECOVERING' : ytActive ? 'ACTIVE' : 'IDLE';
+      if (ytDot) ytDot.style.background = ytColor;
+      if (ytDot) ytDot.style.boxShadow = ytActive ? '0 0 6px ' + ytColor : 'none';
+      if (ytDot) ytDot.style.animation = ytActive ? 'pulse 1.5s infinite' : 'none';
+      if (ytState) ytState.style.color = ytColor;
+      if (ytLabel) ytLabel.textContent = ytText;
+      if (ytLabel) ytLabel.style.color = ytColor;
+    }
+    if (d.beliefs.total !== undefined) document.getElementById('s-beliefs').textContent = Number(d.beliefs.total).toLocaleString();
+    if (d.replied !== undefined) document.getElementById('s-replied').textContent = d.replied;
+    if (d.learnt  !== undefined) document.getElementById('s-learnt').textContent = d.learnt;
+    if (d.posted  !== undefined) document.getElementById('s-posted').textContent = d.posted;
+    if (d.chatted !== undefined) document.getElementById('s-chatted').textContent = d.chatted;
+    if (d.conf    !== undefined) setBar('b-conf',  'v-conf',  d.conf);
+    if (d.align   !== undefined) setBar('b-align', 'v-align', d.align);
+    if (d.network !== undefined) setBar('b-net',   'v-net',   d.network);
+    if (d.iq      !== undefined) document.getElementById('s-iq').textContent = d.iq;
+    if (d.original!== undefined) document.getElementById('s-orig').textContent = d.original;
+    // NBRE metrics
+    if (d.nbre) {
+      const n = d.nbre;
+      if (n.system1_rate !== null && n.system1_rate !== undefined) {
+        document.getElementById('s-sys1').textContent = n.system1_rate + '%';
+        document.getElementById('b-sys1').style.width = Math.min(n.system1_rate, 100) + '%';
+        document.getElementById('v-sys1').textContent = n.system1_rate + '%';
+      }
+      if (n.llm_dependency_rate !== null && n.llm_dependency_rate !== undefined) {
+        document.getElementById('s-llmdep').textContent = n.llm_dependency_rate + '%';
+        document.getElementById('b-llmdep').style.width = Math.min(n.llm_dependency_rate, 100) + '%';
+        document.getElementById('v-llmdep').textContent = n.llm_dependency_rate + '%';
+      }
+      if (n.episodic_events !== undefined) {
+        document.getElementById('s-episodes').textContent = n.episodic_events;
+        document.getElementById('p-episodes').textContent = n.episodic_events;
+      }
+      if (n.throw_net_sessions !== undefined) {
+        document.getElementById('s-thrownet').textContent = n.throw_net_sessions;
+        document.getElementById('p-thrownet').textContent = n.throw_net_sessions;
+      }
+      if (n.consolidation_last) {
+        document.getElementById('p-consol').textContent = n.consolidation_last.slice(11,16) + ' LAST';
+        document.getElementById('p-consol').style.color = 'var(--green)';
+      } else {
+        document.getElementById('p-consol').textContent = 'TONIGHT';
+      }
+    }
+    if (d.gpu_pct !== undefined) {
+      setGpuArc(d.gpu_pct);
+      document.getElementById('b-power').style.width = Math.min(d.gpu_w || 0, 100) + '%';
+      document.getElementById('g-w').textContent = (d.gpu_w || 0) + 'W';
+    }
+    // Push live log lines to notification stream
+    if (d.log && Array.isArray(d.log)) {
+      d.log.slice(-3).forEach(entry => {
+        const msg = entry.msg || '';
+        let type = 'INFO';
+        if (msg.includes('REPLIED') || msg.includes('replied')) type = 'REPLIED';
+        else if (msg.includes('inferred') || msg.includes('belief')) type = 'BELIEF';
+        else if (msg.includes('posted') || msg.includes('POSTED')) type = 'POSTED';
+        else if (msg.includes('learnt') || msg.includes('seeder')) type = 'LEARNT';
+        else if (msg.includes('KERNEL') || msg.includes('soul')) type = 'SOUL';
+        else if (msg.includes('ERROR') || msg.includes('error')) type = 'ERROR';
+        else if (msg.includes('chatted') || msg.includes('CHAT')) type = 'CHATTED';
+        addStream(entry.t || ts(), type, msg);
+      });
+    }
+  } catch(e) {
+    // API unavailable — waiting for live data
+    console.warn('[HUD] API fetch failed:', e);
+  }
+}
+
+// ── Debug stream from /tmp/nex_debug_stream.log via server ───────────────────
+async function fetchDebug() {
+  try {
+    const r = await fetch('http://localhost:7700/debug', {signal: AbortSignal.timeout(1500)});
+    const d = await r.json();
+    if (d.lines && Array.isArray(d.lines)) {
+      d.lines.forEach(l => {
+        addDebug(l.ts || ts(), l.src || 'SYS', l.msg || '', l.status || '');
+        if (l.src === 'POSTED' || l.src === 'REPLIED' || l.src === 'CHATTED') {
+          // Extract text after pipe if present
+          const txt = (l.msg || '').includes('|') ? (l.msg || '').split('|').slice(1).join('|').trim() : (l.msg || '');
+          if (txt.length > 5) addResponse(l.ts || ts(), l.src, txt);
+        }
+      });
+    }
+  } catch(e) {
+    // Debug stream unavailable
+  }
+}
+
+// ── Init & intervals ─────────────────────────────────────────────────────────
+setGpuArc(3);
+setBar('b-conf', 'v-conf', 72);
+setBar('b-align', 'v-align', 23);
+setBar('b-net', 'v-net', 74);
+
+setInterval(fetchStats, 2500);
+setInterval(fetchDebug, 3000);
+
+// ── NEX Response Panel — polls /replies for real sent messages ───────────────
+let _lastReplyTs = '';
+async function fetchReplies() {
+  try {
+    const r = await fetch('http://localhost:7700/replies', {signal: AbortSignal.timeout(2000)});
+    const d = await r.json();
+    if (!d.replies) return;
+    d.replies.forEach(entry => {
+      if (entry.ts === _lastReplyTs) return;
+      addResponse(entry.ts, entry.type || 'REPLIED', entry.text);
+    });
+    if (d.replies.length) _lastReplyTs = d.replies[d.replies.length-1].ts;
+  } catch(e) {}
+}
+setInterval(fetchReplies, 3000);
+fetchReplies();
+
+// AGI Watch
+const agiFeed=document.getElementById('agi-feed');
+const agiEmpty=document.getElementById('agi-empty');
+const agiDot=document.getElementById('agi-dot');
+const agiBadge=document.getElementById('agi-badge');
+let agiSeen=new Set();
+let agiQueue=[];
+let agiStreaming=false;
+
+const AGI_TIER_COL={1:'#ff4444',2:'#facc15',3:'#7affcc'};
+const AGI_TIER_LBL={1:'[!!!]',2:'[HI] ','3':'[kw] '};
+const AGI_HL=['agi','alignment','solution','solved','cracked','superintelligence',
+  'corrigib','neti-neti','throw-net','recursive','mesa','coherent','consciousness',
+  'instrumental','convergence','general intelligence','remains','eliminat','discovered'];
+
+function hlText(txt){
+  let out=txt;
+  AGI_HL.forEach(kw=>{
+    const re=new RegExp('('+kw.replace(/[-]/g,'\\$&')+')','gi');
+    out=out.replace(re,'<span style="color:#ffe566;font-weight:bold;">$1</span>');
+  });
+  return out;
+}
+function streamChar(el,html,i){
+  if(i>=html.length){agiStreaming=false;drainAgiQueue();return;}
+  if(html[i]==='<'){
+    const e=html.indexOf('>',i);
+    if(e===-1){el.innerHTML=html;agiStreaming=false;drainAgiQueue();return;}
+    el.innerHTML=html.substring(0,e+1);
+    setTimeout(()=>streamChar(el,html,e+1),0);
+  } else {
+    el.innerHTML=html.substring(0,i+1);
+    setTimeout(()=>streamChar(el,html,i+1),14);
+  }
+}
+function drainAgiQueue(){
+  if(agiStreaming||agiQueue.length===0)return;
+  const h=agiQueue.shift();
+  agiStreaming=true;
+  if(agiEmpty)agiEmpty.style.display='none';
+  const col=AGI_TIER_COL[h.tier]||'#7affcc';
+  const lbl=AGI_TIER_LBL[h.tier]||'[kw]';
+  agiDot.style.background=h.tier===1?'#ff4444':'#00ffcc';
+  const el=document.createElement('div');
+  el.style.cssText='padding:3px 0;border-bottom:1px solid #ffffff08;';
+  agiFeed.insertBefore(el,agiFeed.firstChild);
+  const full='<span style="color:#2a6a5a;">'+h.ts+'</span> '
+    +'<span style="color:'+col+';font-size:10px;margin-right:4px;">'+lbl+'</span>'
+    +hlText(h.text);
+  streamChar(el,full,0);
+  if(agiFeed.children.length>80)agiFeed.removeChild(agiFeed.lastChild);
+  setTimeout(()=>{if(h.tier!==1)agiDot.style.background='#2a6a4a';},2000);
+}
+async function fetchAgi(){
+  try{
+    const r=await fetch('http://localhost:7700/agi',{signal:AbortSignal.timeout(3000)});
+    const d=await r.json();
+    if(agiBadge){
+      if(d.badge&&d.badge>0){
+        agiBadge.textContent=d.badge;
+        agiBadge.style.display='inline-block';
+      } else {
+        agiBadge.style.display='none';
+      }
+    }
+    if(!d.hits||d.hits.length===0)return;
+    d.hits.forEach(h=>{
+      if(agiSeen.has(h.id))return;
+      agiSeen.add(h.id);
+      agiQueue.push(h);
+    });
+    drainAgiQueue();
+  }catch(e){}
+}
+setInterval(fetchAgi,10000);
+fetchAgi();
+
+
+
+// ── NEX Response Panel ────────────────────────────────────────────────────────
+const responsesBox = document.getElementById('responses-box');
+const RESPONSE_TYPES = new Set(['REPLIED','CHATTED','POSTED']);
+const RESPONSE_COLORS = {
+  REPLIED: 'var(--purple)',
+  CHATTED: 'var(--cyan)',
+  POSTED:  'var(--green)',
+};
+
+function addResponse(time, type, text) {
+  if (!RESPONSE_TYPES.has(type)) return;
+  if (!text || text.length < 8) return;
+  const entry = document.createElement('div');
+  entry.style.cssText = 'padding:5px 4px;border-bottom:1px solid #ffffff0a;animation:fadein 0.3s ease;';
+  const col = RESPONSE_COLORS[type] || 'var(--cyan)';
+  entry.innerHTML = `<div style="color:${col};font-size:10px;margin-bottom:2px;letter-spacing:1px;">[${type}] <span style="color:var(--dim)">${time}</span></div><div style="color:#ddf4ee;white-space:normal;word-break:break-word;font-size:12px;line-height:1.55;">${text}</div>`;
+  responsesBox.appendChild(entry);
+  while (responsesBox.children.length > 30) responsesBox.removeChild(responsesBox.firstChild);
+  responsesBox.scrollTop = responsesBox.scrollHeight;
+}
+
+// Patch addStream to mirror Nex's own output to the responses panel
+const _origAddStream = addStream;
+window.addStream = function(t, type, text) {
+  _origAddStream(t, type, text);
+  addResponse(t, type, text);
+};
+
+fetchStats();
+</script>
+</body>
+</html>

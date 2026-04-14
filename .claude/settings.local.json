@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls /home/rr/Desktop/nex/nex_upgrades/*.py)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "Bash(bash /home/rr/Desktop/nex/nex_exit.sh)",
+      "Bash(bash /home/rr/Desktop/nex/nex_launch.sh)",
+      "Bash(curl -s http://localhost:7823/api/version)",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s -X POST http://localhost:7823/api/chat -H 'Content-Type: application/json' -H 'X-API-Key: nex-72ea474306ea0d1dfbefeda3' -d '{\"message\": \"what is consciousness?\"}')",
+      "Bash(curl -s -X POST http://localhost:7823/api/chat -H 'Content-Type: application/json' -H 'X-API-Key: nex-72ea474306ea0d1dfbefeda3' -d '{\"query\": \"what is consciousness?\"}')",
+      "Bash(sqlite3:*)",
+      "Bash(curl:*)",
+      "Bash(grep -E \"\\(\\\\\\\\\\\\$|price|tier|plan|personal|professional|enterprise|research|sovereign\\)\" -i)",
+      "Bash(grep -i \"price\\\\|tier\\\\|personal\\\\|pro\\\\|enterprise\\\\|research\\\\|\\\\$\")",
+      "Bash(grep -rn \"\\\\$49\\\\|\\\\$99\\\\|\\\\$149\\\\|\\\\$199\\\\|\\\\$2,500\\\\|\\\\$15,000\\\\|\\\\$50,000\" ~/Desktop/nex/ --include=\"*.py\" --include=\"*.md\" --include=\"*.html\" --include=\"*.txt\")",
+      "Bash(ls /tmp/nex_*.log)"
+    ]
+  }
+}

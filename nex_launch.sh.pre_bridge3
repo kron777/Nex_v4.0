@@ -1,0 +1,151 @@
+#!/bin/bash
+# nex_launch.sh — hardened launch with clean exit trap
+# license check removed — file no longer exists
+
+# ── ROCm / HIP environment ───────────────────────────────────────────────────
+export HSA_OVERRIDE_GFX_VERSION=10.3.0
+export LD_LIBRARY_PATH=/mnt/steam_library/llmz/mradermacher/Mistral-7B-Instruct-v0.3-abliterated-GGUF/llama.cpp/build-vulkan/bin:$LD_LIBRARY_PATH
+export GGML_CUDA_NO_CUDA_GRAPHS=1
+export HSA_ENABLE_SDMA=0
+export ROCR_VISIBLE_DEVICES=0
+export AMD_SERIALIZE_KERNEL=3
+export AMD_SERIALIZE_COPY=3
+
+BUILD="/media/rr/NEX/llama.cpp/build/bin"
+MODEL="/home/rr/Desktop/nex/models/nex_v2.gguf"
+NEX_DIR="/home/rr/Desktop/nex"
+
+# ── Clean any existing processes first ───────────────────────────────────────
+echo "[NEX] Stopping existing processes..."
+sleep 2
+
+# ── Launch llama-server via systemd ──────────────────────────────────────────
+echo "[NEX] Starting llama-server via systemd..."
+sudo systemctl restart nex-llama
+echo "[NEX] llama-server managed by systemd (auto-restart enabled)"
+: \
+    -m "$MODEL" \
+    --port 8080 \
+    -ngl 99 \
+    --host 0.0.0.0 \
+    -c 4096 \
+    --parallel 2 \
+    --cache-type-k q8_0 \
+    --cache-type-v q8_0 \
+    -fa 1 \
+    --no-mmap \
+    > /tmp/llama_server.log 2>&1 &
+LLAMA_PID=$!
+disown
+
+# ── Wait for LLM to be ready ─────────────────────────────────────────────────
+echo "[NEX] Waiting for LLM..."
+MAX_WAIT=90
+ELAPSED=0
+while true; do
+    STATUS=$(curl -s --max-time 2 http://localhost:8080/health 2>/dev/null | grep -o '"ok"')
+    if [ "$STATUS" = '"ok"' ]; then
+        echo "[NEX] LLM ONLINE ✓ (${ELAPSED}s)"
+        break
+    fi
+    if [ "$ELAPSED" -ge "$MAX_WAIT" ]; then
+        echo "[NEX] WARNING: LLM not ready after ${MAX_WAIT}s — check /tmp/llama_server.log"
+        echo "[NEX] Tail: $(tail -5 /tmp/llama_server.log)"
+        echo "[NEX] Continuing with Groq fallback..."
+        break
+    fi
+    sleep 3
+    ELAPSED=$((ELAPSED + 3))
+    printf "[NEX] ...%ds\r" "$ELAPSED"
+done
+
+# ── Launch NEX brain ──────────────────────────────────────────────────────────
+echo "[NEX] Starting NEX brain..."
+cd "$NEX_DIR"
+source "$NEX_DIR/venv/bin/activate"
+python3 -u run.py --no-server > /tmp/nex_brain.log 2>&1 &
+NEX_PID=$!
+disown
+sleep 4
+
+# ── Verify brain started ──────────────────────────────────────────────────────
+if grep -q "loaded\|started\|ready\|ONLINE" /tmp/nex_brain.log 2>/dev/null; then
+    echo "[NEX] Brain ONLINE ✓ (pid=$NEX_PID)"
+else
+    echo "[NEX] WARNING: Brain initializing — check /tmp/nex_brain.log"
+fi
+
+# ── Open terminals ────────────────────────────────────────────────────────────
+# Stagger terminal launches to prevent display server crash
+sleep 1
+gnome-terminal --title="NEX BRAIN" -- bash -c "
+    cd $NEX_DIR && source venv/bin/activate
+    tmux kill-session -t nex 2>/dev/null
+    tmux new-session -d -s nex
+    tmux split-window -h -t nex
+    tmux send-keys -t nex:0.0 'tail -f /tmp/nex_brain.log' Enter
+    tmux send-keys -t nex:0.1 'cd $NEX_DIR && source venv/bin/activate && sleep 5 && python3 nex_debug.py' Enter
+    tmux attach -t nex
+    exec bash" &
+sleep 3
+gnome-terminal --title="NEX AUTO CHECK" -- bash -c "
+    cd $NEX_DIR && source venv/bin/activate
+    sleep 7 && python3 auto_check.py
+    exec bash" &
+sleep 2
+
+nohup python3 $NEX_DIR/nex_api.py > /tmp/nex_api.log 2>&1 &
+echo "[NEX] API: PID $!"
+nohup python3 $NEX_DIR/nex_scheduler.py > /tmp/nex_scheduler.log 2>&1 &
+echo "[NEX] Scheduler: PID $!"
+nohup bash $NEX_DIR/nex_watchdog.sh > /tmp/nex_watchdog.log 2>&1 &
+echo "[NEX] Watchdog: PID $!"
+nohup python3 $NEX_DIR/nex_ingest.py --loop --interval 30 > /tmp/nex_ingest.log 2>&1 &
+echo "[NEX] Ingest pipeline: PID $!"
+# ── D1-D8 module init ─────────────────────────────────────────
+echo "[NEX] Initialising D1-D8 modules..."
+source $NEX_DIR/venv/bin/activate
+# Rebuild FAISS if needed
+python3 -c "
+import sys; sys.path.insert(0, '$NEX_DIR')
+from nex_embed import build_faiss_index
+build_faiss_index()
+" >> /tmp/nex_faiss_init.log 2>&1 &
+# Seed goals
+python3 -c "
+import sys; sys.path.insert(0, '$NEX_DIR')
+from nex_goal_system import GoalStack
+GoalStack().seed_defaults()
+" >> /tmp/nex_goals_init.log 2>&1 &
+# Seed world model
+python3 -c "
+import sys; sys.path.insert(0, '$NEX_DIR')
+from nex_world_model import WorldModel
+wm = WorldModel()
+wm.update('NEX', 'type', 'Dynamic Intelligence Organism', 1.0, 'seed')
+wm.update('NEX', 'eval_score', '92/100 ELITE', 0.95, 'seed')
+wm.update('llama-server', 'port', '8080', 1.0, 'seed')
+wm.update('llama-server', 'model', 'nex_v2.gguf', 1.0, 'seed')
+" >> /tmp/nex_world_init.log 2>&1 &
+echo "[NEX] D1-D8 modules initialising in background."
+# ── Telegram owner config ────────────────────────────────────────────────────
+ mkdir -p ~/.config/nex
+ echo '{"owner_id": 5217790760}' > ~/.config/nex/telegram_config.json
+
+# ── Sync legacy modules ──────────────────────────────────────────────────────
+ echo "[NEX] Syncing legacy modules..."
+ cp $NEX_DIR/legacy/*.py $NEX_DIR/ 2>/dev/null
+ export PYTHONPATH=$NEX_DIR:$PYTHONPATH
+
+# ── Telegram bridge ──────────────────────────────────────────────────────────
+ echo "[NEX] Starting Telegram bridge..."
+ nohup python3 $NEX_DIR/nex_telegram.py > /tmp/nex_telegram.log 2>&1 &
+ echo "[NEX] Telegram: PID $!"
+
+# ── YouTube learner ──────────────────────────────────────────────────────────
+ echo "[NEX] Starting YouTube learner..."
+ nohup python3 -c "import sys; sys.path.insert(0, '$NEX_DIR'); from nex_youtube import learn_from_youtube; learn_from_youtube()" > /tmp/nex_youtube.log 2>&1 &
+ echo "[NEX] YouTube: PID $!"
+
+echo "[NEX] All systems live."
+echo "[NEX] To stop cleanly: bash $NEX_DIR/nex_exit.sh"

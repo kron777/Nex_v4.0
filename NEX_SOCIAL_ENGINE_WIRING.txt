@@ -1,0 +1,136 @@
+NEX SOCIAL ENGINE — WIRING GUIDE
+=================================
+Drop nex_social_engine.py into ~/Desktop/nex/
+Then make these three surgical changes.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CHANGE 1 — nex_api.py  (instantiate once at startup)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+At the top of nex_api.py, near the other imports:
+
+    from nex_social_engine import SocialEngine
+    social_engine = SocialEngine(db_path="nex_beliefs.db")
+
+Then pass it into wherever SoulLoop is created:
+
+    soul_loop = SoulLoop(..., social_engine=social_engine)
+
+If SoulLoop is created elsewhere (run.py), do the same there.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CHANGE 2 — nex/nex_soul_loop.py  (the core wiring)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+In __init__, accept and store the engine:
+
+    def __init__(self, ..., social_engine=None):
+        ...
+        self.social_engine = social_engine
+        self.conversation_history = []   # add if not already present
+
+In your REPLY phase, before the LLM call in express():
+
+    # ── Social context (belief-graph-native) ──────────────────
+    if self.social_engine:
+        from nex_social_engine import social_system_prompt
+        ctx = self.social_engine.analyse(
+            message=user_message,
+            conversation_history=self.conversation_history
+        )
+        system_prompt = social_system_prompt(ctx, base_prompt=self.base_system_prompt)
+    else:
+        system_prompt = self.base_system_prompt
+
+    # Pass system_prompt to your /completion call as usual
+    # ──────────────────────────────────────────────────────────
+
+After getting the reply, append to history:
+
+    self.conversation_history.append(user_message)
+    self.conversation_history.append(nex_reply)
+    # keep last 16 turns (8 exchanges)
+    self.conversation_history = self.conversation_history[-16:]
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CHANGE 3 — verify your llama-server call format
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+(Engineering rule #11/#12 from session state)
+The system_prompt should be injected as part of the
+`prompt` field, NOT as a messages[] array.
+
+Typical format for /completion:
+
+    payload = {
+        "prompt": f"{system_prompt}\n\nUser: {user_message}\nNEX:",
+        "n_predict": 512,
+        "stop": ["User:", "\n\n"]
+    }
+
+If you're using /v1/chat/completions format instead,
+system_prompt goes in messages[0] as role="system".
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TEST — run standalone before wiring
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+cd ~/Desktop/nex && source venv/bin/activate
+
+# Basic test:
+python3 nex_social_engine.py \
+  --db nex_beliefs.db \
+  --message "Do you think AI can be truly conscious?"
+
+# With conversation history:
+python3 nex_social_engine.py \
+  --db nex_beliefs.db \
+  --message "But isn't consciousness just computation?" \
+  --history "I think AI will never be conscious" "NEX: I find that position interesting but incomplete"
+
+# See the full LLM prompt block:
+python3 nex_social_engine.py \
+  --db nex_beliefs.db \
+  --message "What do you think about free will?" \
+  --prompt
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+UPGRADE PATH — when embeddings are wired
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+nex_social_engine.py uses keyword similarity now.
+When your FAISS index is live (Master Map Build 2),
+replace score_text_similarity() with:
+
+    from your_embedding_module import embed, cosine
+    def score_text_similarity(text_a, text_b):
+        return cosine(embed(text_a), embed(text_b))
+
+One function swap. Everything else stays identical.
+The engine gets dramatically more accurate overnight.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WHAT THIS BUYS NEX (social skills delta)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Before: LLM picks tone and depth on its own.
+        Social behaviour is the LLM's personality, not NEX's.
+
+After:  Every social reply is shaped by:
+        - Which of NEX's beliefs the message activated
+        - How certain she is on this topic (temperature)
+        - What position she actually holds (stance)
+        - What the person has revealed about their own view (overlap)
+        - What she needs right now (drive urgency)
+        - Whether she holds a genuine tension here (contradiction)
+
+        The LLM only translates. NEX decides.
+
+This is the Master Map principle applied to social:
+  "NEX is the author. The LLM is the pen."

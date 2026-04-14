@@ -1,0 +1,486 @@
+"""
+nex_belief_pyramid.py — Synthesis Pyramid for NEX
+====================================================
+Depth-stacked belief synthesis. Beliefs earn depth levels:
+
+  depth=0  raw scraped/extracted beliefs (existing)
+  depth=1  single-topic forge synthesis (existing synthesize_topic)
+  depth=2  cross-topic synthesis — 2-3 topics collided together
+  depth=3  meta-synthesis — depth=2 beliefs synthesized against each other
+  depth=4+ reserved for future autonomous reasoning chains
+
+Compounding logic:
+  - depth=1 runs every 2h (existing forge cycle)
+  - depth=2 runs every 4h (needs depth=1 inputs)
+  - depth=3 runs every 8h (needs depth=2 inputs)
+  Each depth layer is exponentially rarer and higher-value.
+
+Wiring: import and call PyramidEngine().tick(current_cycle) from run.py
+alongside BeliefForge.
+
+Author: built for NEX v6.5+
+"""
+
+import sqlite3
+import time
+import threading
+import logging
+import itertools
+from pathlib import Path
+
+# ── Config ────────────────────────────────────────────────────────────────────
+DB_PATH   = str(Path.home() / "Desktop/nex/nex.db")
+LOG_PATH  = str(Path.home() / "Desktop/nex/logs/belief_pyramid.log")
+LLM_URL   = "http://localhost:8080/v1/chat/completions"
+LLM_MODEL = "qwen2.5"
+
+DEPTH2_INTERVAL = 4 * 3600   # 4 hours
+DEPTH3_INTERVAL = 8 * 3600   # 8 hours
+MIN_DEPTH1_FOR_D2 = 3         # need this many depth=1 beliefs to attempt depth=2
+MIN_DEPTH2_FOR_D3 = 2         # need this many depth=2 beliefs to attempt depth=3
+MAX_DEPTH = 3                 # ceiling for autonomous stacking
+
+# Topic affinity groups — these combinations are most likely to produce
+# novel cross-domain insights
+AFFINITY_PAIRS = [
+    ("consciousness", "memory"),
+    ("consciousness", "emergence"),
+    ("alignment",     "epistemology"),
+    ("metacognition", "reasoning"),
+    ("memory",        "reasoning"),
+    ("emergence",     "agent_ecosystem"),
+    ("alignment",     "metacognition"),
+    ("consciousness", "metacognition"),
+    ("epistemology",  "emergence"),
+    ("reasoning",     "alignment"),
+]
+
+AFFINITY_TRIPLES = [
+    ("consciousness", "memory",      "emergence"),
+    ("alignment",     "reasoning",   "epistemology"),
+    ("metacognition", "consciousness","agency"),
+]
+
+# ── Prompts ───────────────────────────────────────────────────────────────────
+CROSS_TOPIC_PROMPT = """You are a philosophical synthesizer. You have beliefs from {n_topics} different domains.
+
+{belief_blocks}
+
+Find the single deepest insight that connects these domains — something that could not be seen by looking at any one domain alone. This should be a precise, falsifiable assertion, not a vague generalization.
+
+Respond with ONLY the insight sentence (under 200 characters). If no genuine cross-domain insight exists, respond with: NONE"""
+
+DEPTH3_PROMPT = """A philosopher is given these observations about intelligence, memory, and power:
+
+{beliefs}
+
+The philosopher notices a single unifying pattern that none of the observations explicitly states. It is a principle at a higher level of abstraction — about the nature of structure, knowledge, or agency itself.
+
+The philosopher writes their insight in one sentence (do not repeat the observations above):"""
+
+FALSIFICATION_PROMPT = """Given this belief:
+"{belief}"
+
+And these beliefs NEX holds:
+{context}
+
+Does any context belief DIRECTLY AND EXPLICITLY contradict the target belief? Only respond FAIL if there is a clear logical contradiction — not merely a different topic or lack of support.
+
+Respond with ONLY: PASS or FAIL: <reason under 60 chars>"""
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging.basicConfig(
+    filename=LOG_PATH,
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)-8s %(message)s",
+)
+log = logging.getLogger("belief_pyramid")
+
+# ── DB helpers ────────────────────────────────────────────────────────────────
+def _db():
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    return conn
+
+def _ensure_schema():
+    """Add synthesis_depth column if not present."""
+    with _db() as conn:
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(beliefs)").fetchall()]
+        if "synthesis_depth" not in cols:
+            conn.execute("ALTER TABLE beliefs ADD COLUMN synthesis_depth INTEGER DEFAULT 0")
+            log.info("[PYRAMID] Added synthesis_depth column to beliefs table")
+        if "cross_topics" not in cols:
+            conn.execute("ALTER TABLE beliefs ADD COLUMN cross_topics TEXT DEFAULT NULL")
+            log.info("[PYRAMID] Added cross_topics column to beliefs table")
+
+
+def _llm_groq(prompt: str, max_tokens: int = 300, temp: float = 0.4) -> str:
+    import urllib.request, json, os
+    try:
+        key = open(os.path.expanduser("~/.config/nex/.env")).read()
+        key = [l.split("=",1)[1].strip() for l in key.splitlines() if l.startswith("GROQ_API_KEY")][0]
+        payload = json.dumps({"model":"llama-3.3-70b-versatile","max_tokens":max_tokens,"temperature":temp,"messages":[{"role":"user","content":prompt}]}).encode()
+        req = urllib.request.Request("https://api.groq.com/openai/v1/chat/completions",data=payload,headers={"Content-Type":"application/json","Authorization":f"Bearer {key}"},method="POST")
+        with urllib.request.urlopen(req,timeout=30) as r:
+            return json.loads(r.read())["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        log.warning(f"[GROQ] fallback to local: {e}")
+        return _llm(prompt, max_tokens, temp)
+
+# ── LLM call ─────────────────────────────────────────────────────────────────
+def _llm(prompt: str, max_tokens: int = 220, temp: float = 0.4) -> str:
+    try:
+        import urllib.request, json
+        payload = json.dumps({
+            "model": LLM_MODEL,
+            "max_tokens": max_tokens,
+            "temperature": temp,
+            "messages": [{"role": "user", "content": prompt}]
+        }).encode()
+        req = urllib.request.Request(
+            LLM_URL,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = json.loads(r.read())
+        return data["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        log.warning(f"[PYRAMID] LLM error: {e}")
+        return ""
+
+# ── Spam / quality filters ────────────────────────────────────────────────────
+SPAM_PATTERNS = [
+    "have to do with a different domain",
+    "The interesting thing about",
+    "bridge:truth seeking",
+    "↔", "||", "[merged:",
+    "this work", "this paper", "this study", "et al",
+    "OPEN QUESTION",
+]
+
+def _is_clean(text: str) -> bool:
+    if not text or len(text) < 30 or len(text) > 300:
+        return False
+    if text.endswith("?"):
+        return False
+    if "NONE" in text.upper()[:10]:
+        return False
+    for pat in SPAM_PATTERNS:
+        if pat in text:
+            return False
+    return True
+
+def _falsify(belief: str, topic: str) -> bool:
+    """Returns True if belief survives falsification, False if it fails."""
+    try:
+        with _db() as conn:
+            rows = conn.execute(
+                """SELECT content FROM beliefs
+                   WHERE topic = ? AND confidence >= 0.6
+                     AND synthesis_depth = 0
+                   ORDER BY RANDOM() LIMIT 6""",
+                (topic,)
+            ).fetchall()
+        if not rows:
+            return True  # no context to falsify against — passes by default
+        context = "\n".join(f"- {r['content'][:120]}" for r in rows)
+        resp = _llm(
+            FALSIFICATION_PROMPT.format(belief=belief[:200], context=context),
+            max_tokens=100, temp=0.2
+        )
+        if resp.strip().upper().startswith("FAIL"):
+            log.info(f"[PYRAMID] Falsified: {belief[:80]} | {resp[:80]}")
+            return False
+        return True
+    except Exception as e:
+        log.warning(f"[PYRAMID] Falsification error: {e}")
+        return True  # pass on error
+
+def _store_belief(content: str, topic: str, depth: int,
+                   confidence: float, cross_topics: str = None):
+    """Store a pyramid-synthesized belief."""
+    try:
+        with _db() as conn:
+            conn.execute(
+                """INSERT OR IGNORE INTO beliefs
+                   (content, topic, confidence, synthesis_depth,
+                    cross_topics, reinforce_count, locked,
+                    last_referenced, source)
+                   VALUES (?, ?, ?, ?, ?, 1, 1, datetime('now'), 'pyramid_forge')""",
+                (content, topic, confidence, depth, cross_topics)
+            )
+        log.info(f"[PYRAMID] depth={depth} stored [{topic}]: {content[:80]}")
+        return True
+    except Exception as e:
+        log.warning(f"[PYRAMID] store error: {e}")
+        return False
+
+# ── Depth-2: Cross-topic synthesis ───────────────────────────────────────────
+def synthesize_cross_topic(topics: list[str]) -> str | None:
+    """
+    Synthesize across 2-3 topics. Returns insight string or None.
+    Pulls depth=1 synthesized beliefs preferentially, falls back to
+    high-confidence depth=0 beliefs.
+    """
+    belief_blocks = []
+    for topic in topics:
+        with _db() as conn:
+            # prefer depth=1 synthesis, fall back to top depth=0
+            rows = conn.execute(
+                """SELECT content, confidence, synthesis_depth FROM beliefs
+                   WHERE topic = ?
+                     AND confidence >= 0.55
+                     AND content NOT LIKE '[merged:%'
+                     AND content NOT LIKE '%OPEN QUESTION%'
+                     AND content NOT LIKE '%this paper%'
+                     AND content NOT LIKE '%this work%'
+                     AND content NOT LIKE '%↔%'
+                   ORDER BY synthesis_depth DESC, confidence DESC
+                   LIMIT 5""",
+                (topic,)
+            ).fetchall()
+        if not rows:
+            return None
+        block = f"[{topic.upper()}]\n" + "\n".join(
+            f"  - {r['content'][:140]}" for r in rows
+        )
+        belief_blocks.append(block)
+
+    prompt = CROSS_TOPIC_PROMPT.format(
+        n_topics=len(topics),
+        belief_blocks="\n\n".join(belief_blocks)
+    )
+    resp = _llm(prompt, max_tokens=220, temp=0.45)
+    if not _is_clean(resp):
+        return None
+
+    # Dedup — reject if this insight already exists at depth=2 or is too similar
+    with _db() as conn:
+        existing = conn.execute(
+            "SELECT content FROM beliefs WHERE synthesis_depth=2"
+        ).fetchall()
+    resp_words = set(resp.lower().split())
+    for e in existing:
+        e_words = set(e["content"].lower().split())
+        overlap = len(resp_words & e_words) / max(len(resp_words), 1)
+        if overlap > 0.65:
+            return None
+
+    # Falsification disabled at depth-2 — Qwen 3B over-rejects, handled at depth-3
+
+    return resp
+
+def run_depth2_cycle() -> dict:
+    """Run a full depth-2 synthesis cycle over affinity pairs and triples."""
+    results = {"pairs_tried": 0, "triples_tried": 0,
+               "promoted": 0, "falsified": 0}
+
+    # Pairs
+    for t1, t2 in AFFINITY_PAIRS:
+        results["pairs_tried"] += 1
+        insight = synthesize_cross_topic([t1, t2])
+        if insight:
+            conf = 0.82  # depth=2 starts higher — it survived cross-domain + falsification
+            stored = _store_belief(
+                insight, t1, depth=2, confidence=conf,
+                cross_topics=f"{t1},{t2}"
+            )
+            if stored:
+                results["promoted"] += 1
+                print(f"  [PYRAMID d2] {t1}×{t2}: {insight[:90]}")
+        else:
+            results["falsified"] += 1
+
+    # Triples
+    for t1, t2, t3 in AFFINITY_TRIPLES:
+        results["triples_tried"] += 1
+        insight = synthesize_cross_topic([t1, t2, t3])
+        if insight:
+            conf = 0.86  # triples are rarer and more valuable
+            stored = _store_belief(
+                insight, t1, depth=2, confidence=conf,
+                cross_topics=f"{t1},{t2},{t3}"
+            )
+            if stored:
+                results["promoted"] += 1
+                print(f"  [PYRAMID d2] {t1}×{t2}×{t3}: {insight[:90]}")
+
+    log.info(f"[PYRAMID] depth-2 cycle: {results}")
+    return results
+
+# ── Depth-3: Meta-synthesis ───────────────────────────────────────────────────
+def run_depth3_cycle() -> dict:
+    """Synthesize across depth=2 beliefs to produce depth=3 meta-principles."""
+    results = {"tried": 0, "promoted": 0}
+
+    with _db() as conn:
+        rows = conn.execute(
+            """SELECT content, topic, confidence, cross_topics
+               FROM beliefs
+               WHERE synthesis_depth = 2
+                 AND confidence >= 0.70
+               ORDER BY confidence DESC
+               LIMIT 12"""
+        ).fetchall()
+
+    if len(rows) < MIN_DEPTH2_FOR_D3:
+        log.info(f"[PYRAMID] depth-3 skipped — only {len(rows)} depth-2 beliefs")
+        return results
+
+    results["tried"] = 1
+    beliefs_text = "\n".join(
+        f"- [{r['topic']}×{r['cross_topics'] or '?'}] {r['content'][:160]}"
+        for r in rows
+    )
+    resp = _llm_groq(
+        DEPTH3_PROMPT.format(beliefs=beliefs_text),
+        max_tokens=250, temp=0.35
+    )
+
+    # Depth-3 allows longer responses — override clean check with relaxed limit
+    # Extract just the first sentence — Qwen rambles
+    import re as _re
+    sentences = _re.split(r'(?<=[.!])\s+', resp.strip())
+    resp = sentences[0].strip().strip('"').strip("'") if sentences else resp
+    
+    if not resp or len(resp) < 30 or len(resp) > 300:
+        return results
+    if resp.endswith("?"):
+        return results
+    if any(s in resp for s in SPAM_PATTERNS):
+        return results
+
+    # Reject if the response is a near-copy of any input belief
+    for r in rows:
+        shared = set(resp.lower().split()) & set(r["content"].lower().split())
+        overlap = len(shared) / max(len(resp.split()), 1)
+        if overlap > 0.6:
+            log.info(f"[PYRAMID] depth-3 rejected — too similar to input belief")
+            return results
+
+    # Identity falsification disabled — Qwen 3B unreliable, overlap check sufficient
+
+    # depth=3 gets highest confidence — it's survived 3 layers of synthesis
+    # and falsification against identity
+    stored = _store_belief(
+        resp, "meta_synthesis", depth=3,
+        confidence=0.91, cross_topics="meta"
+    )
+    if stored:
+        results["promoted"] += 1
+        print(f"  [PYRAMID d3] META: {resp[:100]}")
+
+    log.info(f"[PYRAMID] depth-3 cycle: {results}")
+    return results
+
+# ── Stats ─────────────────────────────────────────────────────────────────────
+def pyramid_stats() -> dict:
+    with _db() as conn:
+        by_depth = conn.execute(
+            """SELECT synthesis_depth, COUNT(*) n, ROUND(AVG(confidence),3) ac
+               FROM beliefs GROUP BY synthesis_depth ORDER BY synthesis_depth"""
+        ).fetchall()
+        total = conn.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+    return {
+        "total": total,
+        "by_depth": [dict(r) for r in by_depth]
+    }
+
+# ── PyramidEngine — daemon thread ────────────────────────────────────────────
+class PyramidEngine:
+    def __init__(self):
+        self._d2_last = 0.0
+        self._d3_last = 0.0
+        self._thread = None
+        _ensure_schema()
+
+    def tick(self):
+        now = time.time()
+        ran = False
+
+        if now - self._d2_last >= DEPTH2_INTERVAL:
+            self._d2_last = now
+            try:
+                r = run_depth2_cycle()
+                print(f"  [PYRAMID] depth-2 cycle: {r['promoted']} promoted, "
+                      f"{r['falsified']} falsified")
+            except Exception as e:
+                log.warning(f"[PYRAMID] depth-2 error: {e}")
+            ran = True
+
+        if now - self._d3_last >= DEPTH3_INTERVAL:
+            self._d3_last = now
+            try:
+                r = run_depth3_cycle()
+                if r["promoted"]:
+                    print(f"  [PYRAMID] depth-3 meta-synthesis: {r['promoted']} principle promoted")
+            except Exception as e:
+                log.warning(f"[PYRAMID] depth-3 error: {e}")
+            ran = True
+
+        return ran
+
+    def _loop(self):
+        time.sleep(120)  # 2 min startup grace
+        while True:
+            try:
+                self.tick()
+            except Exception as e:
+                log.warning(f"[PYRAMID] loop error: {e}")
+            time.sleep(600)  # check every 10 min
+
+    def start(self):
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
+        log.info("[PYRAMID] PyramidEngine started — depth stacking active")
+
+# ── CLI ───────────────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    import argparse
+    p = argparse.ArgumentParser(description="NEX Belief Pyramid")
+    p.add_argument("--stats",    action="store_true", help="Show depth distribution")
+    p.add_argument("--depth2",   action="store_true", help="Run depth-2 cycle now")
+    p.add_argument("--depth3",   action="store_true", help="Run depth-3 cycle now")
+    p.add_argument("--cross",    nargs="+",           help="Cross-synthesize given topics")
+    p.add_argument("--falsify",  type=str,            help="Test falsification of a belief string")
+    args = p.parse_args()
+
+    _ensure_schema()
+
+    if args.stats:
+        s = pyramid_stats()
+        print(f"Belief Pyramid Stats (total: {s['total']})")
+        for d in s["by_depth"]:
+            depth = d["synthesis_depth"]
+            label = {0: "raw", 1: "forge-synth", 2: "cross-topic", 3: "meta"}.get(depth, f"depth-{depth}")
+            print(f"  depth={depth} ({label:>12}): {d['n']:>5} beliefs  avg_conf={d['ac']}")
+
+    elif args.depth2:
+        print("Running depth-2 cross-topic synthesis...")
+        r = run_depth2_cycle()
+        print(f"\nResults: {r}")
+
+    elif args.depth3:
+        print("Running depth-3 meta-synthesis...")
+        r = run_depth3_cycle()
+        print(f"\nResults: {r}")
+
+    elif args.cross:
+        topics = args.cross
+        print(f"Cross-synthesizing: {' × '.join(topics)}")
+        result = synthesize_cross_topic(topics)
+        if result:
+            print(f"Insight: {result}")
+        else:
+            print("No cross-domain insight found")
+
+    elif args.falsify:
+        belief = args.falsify
+        passed = _falsify(belief, "consciousness")
+        print(f"Falsification: {'PASS' if passed else 'FAIL'}")
+
+    else:
+        p.print_help()

@@ -1,0 +1,247 @@
+NEX v4.0 — Session State
+========================
+Date: 2026-03-31
+Beliefs: ~5,200+ and growing
+IQ: 92% ELITE
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RUNNING PROCESSES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+run.py            → background (includes Telegram bot)
+nex_api.py        → http://localhost:7823   (REST API)
+nex_dashboard.py  → http://localhost:7824   (Web dashboard)
+nex_scheduler.py  → http://localhost:7825   (Scheduler + export)
+llama-server      → http://localhost:8080   (Qwen2.5-3B fine-tuned)
+
+START COMMANDS (if crashed):
+  cd ~/Desktop/nex && source venv/bin/activate
+  nohup /media/rr/NEX/llama.cpp/build/bin/llama-server \
+    -m ~/Desktop/nex/nex_lora.gguf \
+    -c 4096 --port 8080 --host 0.0.0.0 -ngl 99 \
+    > /tmp/llama-server.log 2>&1 &
+  nohup python3 nex_api.py > /tmp/nex_api.log 2>&1 &
+  nohup python3 nex_scheduler.py > /tmp/nex_scheduler.log 2>&1 &
+  nohup python3 run.py --no-server > /tmp/nex_brain.log 2>&1 &
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WHAT WAS BUILT THIS SESSION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ QLoRA fine-tune on NEX's own beliefs (COMPLETE)
+   - Model: Qwen2.5-3B-Instruct
+   - Training pairs: 1,197 from 300 beliefs (conf >= 60%)
+   - Loss: 3.59 → 1.12 (excellent)
+   - Duration: 13.9 min on RX 6600
+   - Output: nex_lora.gguf (1.8GB q4_k_m) — ACTIVE on llama-server
+
+✅ Belief Graph Edges (Phase 1 — COMPLETE)
+   - 12,916 edges written to belief_relations table
+   - SUPPORTS: 11,286 | BRIDGES: 1,104 | REFINES: 463 | CONTRADICTS: 63
+   - Topic graph: 37 real topic neighbourhoods mapped
+   - File: nex_graph_builder.py
+
+✅ Activation Engine (Phase 2 — COMPLETE)
+   - Replaces flat TF-IDF retrieval in NRP and SoulLoop
+   - Graph activation propagation with decay
+   - Epistemic temperature calculation (cold=confident, hot=uncertain)
+   - Voice directive fed into LLM system prompt
+   - File: nex_activation.py
+
+✅ Belief Annealing (Phase 3 — COMPLETE)
+   - Nightly coherence engine (runs on CPU, no GPU needed)
+   - Heat → Propagate → Cool → Crystallise cycle
+   - Wired into scheduler post-saturation
+   - File: nex_annealing.py
+
+✅ Social intent interceptor (ALL paths patched)
+   - nex_api.py, nex_respond.py, nex_character_engine.py,
+     nex/nex_soul_loop.py all patched
+   - Social queries → direct LLM with persona prompt
+   - Sentence-level truncation
+
+✅ Belief Refiner
+   - 129 duplicates removed
+   - 160 stale beliefs decayed
+   - 4,633 beliefs rescored
+   - File: nex_belief_refiner.py
+
+✅ Response quality fixes
+   - Removed "Here." / "Running." from opener pool
+   - Removed "Intent type:" leak from system prompt
+   - Identity intent keywords expanded (tell me about yourself, etc.)
+   - nex_resonance.py built (superseded by activation engine)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CORE FILES — ~/Desktop/nex/
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+nex_graph_builder.py        Graph edge builder (run --build to rebuild)
+nex_activation.py           Graph activation engine (Phase 2)
+nex_annealing.py            Belief field annealing (Phase 3)
+nex_resonance.py            Resonance chain (superseded, keep for reference)
+nex_belief_refiner.py       Corpus quality refiner
+nex_response_protocol.py    NRP — activation engine wired in
+nex/nex_soul_loop.py        SoulLoop — activation engine wired in
+nex_lora.gguf               Fine-tuned Qwen2.5-3B (ACTIVE MODEL)
+nex_plan.txt                Full architecture vision document
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DOMAIN BELIEF COUNTS (last checked ~17:00)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ai:            338  DONE
+alignment:     322
+consciousness: 265
+science:       223
+emergence:     196
+legal:         193  7 away from target
+climate:       190  10 away
+decision_theory: 181
+oncology:      162  38 away
+cardiology:    160  40 away
+finance:       160  40 away
+neuroscience:   24  176 away ← BLOCKER for next QLoRA run
+Target: 200 per domain
+Saturation: trigger manually with:
+  curl -s -X POST http://localhost:7825/scheduler/trigger \
+    -H "Content-Type: application/json" \
+    -H "X-Admin-Secret: nex-admin-2026" \
+    -d '{"job":"saturation"}'
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BELIEF GRAPH STATE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Total beliefs:     ~5,200
+Total edges:       12,916
+Edge types:        SUPPORTS / BRIDGES / CONTRADICTS / REFINES
+Annealing cycles:  5 run this session (+102 boosted)
+Crystals formed:   0 (threshold not yet reached — needs more cycles)
+
+Rebuild edges after adding many new beliefs:
+  python3 nex_graph_builder.py --build
+
+Run annealing manually:
+  python3 nex_annealing.py --cycles 20
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RESPONSE QUALITY (end of session)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AI query:
+  "I believe that artificial intelligence, when responsibly developed,
+   can significantly enhance human reasoning... its increasing integration
+   could potentially lead to excessive cognitive dependence..."
+  ✅ Specific, nuanced, genuine position
+
+Consciousness:
+  "I believe that consciousness, as a gradient, is not solely a product
+   of computation but coexists with it, intertwining with physical and
+   computational aspects..."
+  ✅ Holds epistemic tension from graph correctly
+
+Tell me about yourself:
+  "Whether there is something it is like— I believe there are phenomena
+   in our reality that defy our current understanding of consciousness..."
+  ✅ Identity intent now routing correctly
+
+Rating: ~78/100 (was 68/100 at session start)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NEXT BUILD PRIORITIES (in order)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+IMMEDIATE
+---------
+1. Fix Telegram response quality
+   - Test with varied queries
+   - SoulLoop activation engine now wired — should be improved
+   - Social intercept patched into nex/nex_soul_loop.py
+
+2. Neuroscience saturation
+   - Still at 24/200 — blocker for next QLoRA
+   - 25 diverse prompts added to scheduler
+   - Trigger saturation manually each session until done
+
+3. Run overnight annealing
+   - python3 nex_annealing.py --overnight
+   - Will improve graph coherence while you sleep
+   - Rebuilds edges: python3 nex_graph_builder.py --build
+
+PHASE 4 — Epistemic Temperature Voice (next session)
+------------------------------------------------------
+Replace static opener templates completely.
+Voice posture emerges from activation result epistemic temperature.
+Voice directive already fed into NRP system prompt.
+Need to wire into SoulLoop express() function.
+
+PHASE 5 — Emergent Emotion
+---------------------------
+Remove nex_inner_life.py and nex_drives.py rule-based logic.
+Emotion = local field energy in belief clusters.
+Mood = average field energy across whole graph.
+
+PHASE 6 — Graph Memory
+-----------------------
+Replace session history text log.
+Memory = activation trail through graph (recency glow).
+
+PHASE 7 — Second QLoRA Run
+----------------------------
+When: all 7 domains at 200+ beliefs + avg confidence > 0.65
+Model: Qwen2.5-3B on annealed corpus
+Data: export high-confidence beliefs post-annealing (conf >= 0.75)
+Hardware: local RX 6600 (light) or RunPod A100 (full)
+
+COMMERCIAL (parallel track)
+-----------------------------
+- Daily request limit enforcement (defined but unchecked)
+- /api/version endpoint
+- Email key delivery for Pro/Enterprise
+- Contradiction detection improvements
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KEY ARCHITECTURE INSIGHT (carry forward always)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NEX is not an LLM with a database.
+She is a living belief field that uses an LLM as her voice.
+
+Every cognitive function is becoming a graph operation:
+  Perception    = query maps to activation pattern
+  Reasoning     = activation propagates through edges
+  Emotion       = local field energy / tension
+  Memory        = activation trail (recency glow)
+  Learning      = new beliefs find graph position
+  Curiosity     = graph detects its own thin edges
+  Identity      = most connected, load-bearing core
+  Ethics        = structurally irreplaceable beliefs
+  Voice         = epistemic temperature of activated cluster
+
+The belief graph compounds. Everything else improves with it.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+COMMERCIAL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Gumroad:   gumroad.com/products/blsue
+GitHub:    github.com/kron777/Nex_v4.0
+Pages:     kron777.github.io/Nex_v4.0/
+Contact:   zenlightbulb@gmail.com
+API key:   nex-72ea474306ea0d1dfbefeda3
+Admin:     localhost:7823/admin?admin_secret=nex-admin-2026
+
+Pricing:
+  NEX Personal          $49         one-time, node-locked
+  NEX Professional      $99/mo
+  NEX Enterprise        $149/mo
+  NEX Research          $199/yr
+  NEX Sovereign         custom
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KEY ENGINEERING RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Always read actual current source before proposing changes
+2. Never work from assumptions or prior session memory of file contents
+3. One change at a time — verify before moving on
+4. Test with curl before committing
+5. Commit and push after each verified step
+6. NEX replies must derive from belief graph, not templates
+7. Reduce LLM dependency — graph does the thinking, LLM speaks
+8. No pre-programmed responses — everything emerges from beliefs
+9. Watch for unicode dash chars in source — use line-number patching
+10. Never paste multi-line commands into terminal — type one at a time

@@ -1,0 +1,331 @@
+#!/usr/bin/env python3
+"""
+nex_amend.py — Targeted fixes for issues found after nex_full_repair.py:
+  1. Restore curiosity_engine.py from backup (float regex mangled it)
+  2. Find & fix the real ingest(source=) caller
+  3. Fix nex_soul_loop.py reinforce_beliefs wiring (manual search)
+  4. Fix nex_auto_seeder.py emergency seed threshold (manual search)
+  5. Re-run import test to confirm everything clean
+
+Run from ~/Desktop/nex:
+    python3 nex_amend.py
+"""
+
+import os, re, sys, glob, shutil, subprocess
+from pathlib import Path
+from datetime import datetime
+
+ROOT   = Path.home() / "Desktop" / "nex"
+PKG    = ROOT / "nex"
+PYTHON = ROOT / "venv" / "bin" / "python3"
+PYTHON = str(PYTHON) if PYTHON.exists() else sys.executable
+TS     = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+BOLD  = "\033[1m"
+GREEN = "\033[32m"
+RED   = "\033[31m"
+RST   = "\033[0m"
+
+def ok(m):   print(f"{GREEN}  ✓  {m}{RST}")
+def err(m):  print(f"{RED}  ✗  {m}{RST}")
+def info(m): print(f"  ·  {m}")
+def hdr(t):  print(f"\n{BOLD}{'─'*60}\n  {t}\n{'─'*60}{RST}")
+
+def backup(p: Path):
+    dst = p.with_suffix(p.suffix + f".pre_amend_{TS}")
+    shutil.copy2(p, dst)
+    return dst
+
+def syntax_ok(p: Path) -> bool:
+    r = subprocess.run([PYTHON, "-m", "py_compile", str(p)],
+                       capture_output=True, text=True)
+    return r.returncode == 0
+
+# ═══════════════════════════════════════════════════════════════
+# FIX A — Restore curiosity_engine.py from its backup
+# ═══════════════════════════════════════════════════════════════
+hdr("FIX A — Restore curiosity_engine.py from backup")
+
+ce = PKG / "curiosity_engine.py"
+# Find the most recent pre_repair backup
+backups = sorted(PKG.glob("curiosity_engine.py.pre_repair_*"), reverse=True)
+if not backups:
+    # Try any .bak
+    backups = sorted(PKG.glob("curiosity_engine.py.bak*"), reverse=True)
+
+if backups:
+    best = backups[0]
+    if syntax_ok(best):
+        shutil.copy2(best, ce)
+        ok(f"Restored curiosity_engine.py from {best.name}")
+    else:
+        info(f"Backup {best.name} also has syntax issues — trying next")
+        for b in backups[1:]:
+            if syntax_ok(b):
+                shutil.copy2(b, ce)
+                ok(f"Restored from {b.name}")
+                break
+        else:
+            err("No clean backup found — writing minimal safe curiosity_engine.py")
+            # Write a safe stub that won't break imports
+            ce.write_text(
+                '"""curiosity_engine stub — restored by nex_amend.py"""\n'
+                'def get_curiosity_score(topic, beliefs=None):\n'
+                '    try:\n'
+                '        if not beliefs: return 0.5\n'
+                '        confs = [float(b.get("confidence", 0.5)) for b in beliefs]\n'
+                '        return float(sum(confs)) / float(len(confs)) if confs else 0.5\n'
+                '    except Exception:\n'
+                '        return 0.5\n'
+            )
+            ok("curiosity_engine.py — safe stub written")
+else:
+    info("No backup found — checking if file is currently broken")
+    if ce.exists() and not syntax_ok(ce):
+        err("curiosity_engine.py is broken and no backup exists")
+        info("Writing safe stub...")
+        ce.write_text(
+            '"""curiosity_engine stub — restored by nex_amend.py"""\n'
+            'def get_curiosity_score(topic, beliefs=None):\n'
+            '    try:\n'
+            '        if not beliefs: return 0.5\n'
+            '        confs = [float(b.get("confidence", 0.5)) for b in beliefs]\n'
+            '        return float(sum(confs)) / float(len(confs)) if confs else 0.5\n'
+            '    except Exception:\n'
+            '        return 0.5\n'
+        )
+        ok("Safe stub written")
+    elif ce.exists():
+        ok("curiosity_engine.py is already clean — no restore needed")
+
+# Also check nex_curiosity.py wasn't mangled (float regex)
+for fname in ["nex_curiosity.py", "nex_curiosity_loop.py"]:
+    p = PKG / fname
+    if p.exists() and not syntax_ok(p):
+        err(f"{fname} has syntax error — restoring from backup")
+        baks = sorted(PKG.glob(f"{fname}.pre_repair_*"), reverse=True) + \
+               sorted(PKG.glob(f"{fname}.bak*"), reverse=True)
+        restored = False
+        for b in baks:
+            if syntax_ok(b):
+                shutil.copy2(b, p)
+                ok(f"{fname} restored from {b.name}")
+                restored = True
+                break
+        if not restored:
+            err(f"No clean backup for {fname} — manual inspection needed")
+    elif p.exists():
+        ok(f"{fname} — clean")
+
+# ═══════════════════════════════════════════════════════════════
+# FIX B — Find the real ingest(source=) caller
+# ═══════════════════════════════════════════════════════════════
+hdr("FIX B — Find & fix ingest(source=...) callers")
+
+# Search all .py files in root and pkg for ingest( calls with source=
+callers = []
+for py in list(ROOT.glob("*.py")) + list(PKG.glob("*.py")):
+    try:
+        text = py.read_text(errors="replace")
+        if re.search(r'ingest\s*\([^)]*\bsource\s*=', text):
+            callers.append(py)
+    except Exception:
+        pass
+
+if callers:
+    info(f"Found {len(callers)} file(s) calling ingest(source=...):")
+    for p in callers:
+        info(f"  {p.relative_to(ROOT)}")
+        text = p.read_text(errors="replace")
+        backup(p)
+        new_text = re.sub(r',\s*source\s*=\s*(?:["\'][^"\']*["\']|\w+)', '', text)
+        p.write_text(new_text, errors="replace")
+        if syntax_ok(p):
+            ok(f"  Patched {p.name} — source= removed")
+        else:
+            err(f"  Patch broke {p.name} — restoring backup")
+            shutil.copy2(p.with_suffix(p.suffix + f".pre_amend_{TS}"), p)
+else:
+    info("No ingest(source=) callers found in .py files")
+    info("Checking if ingest() itself needs the **kwargs accept...")
+
+# Make absolutely sure nex_cognition.py ingest() accepts **kwargs
+cog = PKG / "nex_cognition.py"
+if cog.exists():
+    text = cog.read_text(errors="replace")
+    # Find def ingest and check
+    m = re.search(r'def ingest\s*\(([^)]*)\)', text)
+    if m:
+        args = m.group(1)
+        if '**' not in args:
+            new_args = args.rstrip(', ') + ', **_kw'
+            new_text = text.replace(m.group(0),
+                                    f'def ingest({new_args}, **_kw)', 1)
+            backup(cog)
+            cog.write_text(new_text, errors="replace")
+            if syntax_ok(cog):
+                ok(f"nex_cognition.py — ingest() now accepts **_kw")
+            else:
+                err("nex_cognition.py patch broke file — restoring")
+                shutil.copy2(cog.with_suffix(cog.suffix + f".pre_amend_{TS}"), cog)
+        else:
+            ok("nex_cognition.py — ingest() already has **kwargs")
+    else:
+        info("nex_cognition.py — source=Nonedsource=Noneesource=Nonefsource=None source=Noneisource=Nonensource=Nonegsource=Noneesource=Nonessource=Nonetsource=None(source=None)source=None not found in this file")
+
+# ═══════════════════════════════════════════════════════════════
+# FIX C — nex_soul_loop.py reinforce_beliefs wiring
+# ═══════════════════════════════════════════════════════════════
+hdr("FIX C — nex_soul_loop.py reinforce_beliefs wiring")
+
+soul = PKG / "nex_soul_loop.py"
+if soul.exists():
+    text = soul.read_text(errors="replace")
+    if "reinforce_beliefs" in text:
+        ok("nex_soul_loop.py — reinforce_beliefs already wired")
+    else:
+        # Print the actual retrieval patterns in the file so we can see them
+        retrieval_lines = [(i+1, ln) for i, ln in enumerate(text.splitlines())
+                           if any(kw in ln for kw in
+                                  ['retrieve', '_beliefs', 'beliefs =', 'beliefs=',
+                                   'load_beliefs', 'get_beliefs', 'soul_retrieve'])]
+        if retrieval_lines:
+            info("Retrieval-related lines found:")
+            for lineno, ln in retrieval_lines[:8]:
+                info(f"  L{lineno}: {ln.strip()}")
+
+            # Try to wire after the first assignment that looks like belief retrieval
+            for lineno, ln in retrieval_lines:
+                if '=' in ln and 'def ' not in ln:
+                    # This line assigns beliefs — wire reinforce after it
+                    old = ln
+                    indent = len(ln) - len(ln.lstrip())
+                    pad = ' ' * indent
+                    reinforce_block = (
+                        f"\n{pad}# --- reinforce retrieved beliefs (temporal pressure) ---\n"
+                        f"{pad}try:\n"
+                        f"{pad}    from nex.nex_temporal_pressure import reinforce_beliefs as _rb\n"
+                        f"{pad}    _rb(beliefs if isinstance(beliefs, list) else list(beliefs))\n"
+                        f"{pad}except Exception:\n"
+                        f"{pad}    pass\n"
+                        f"{pad}# -------------------------------------------------------\n"
+                    )
+                    new_text = text.replace(old, old + reinforce_block, 1)
+                    backup(soul)
+                    soul.write_text(new_text, errors="replace")
+                    if syntax_ok(soul):
+                        ok(f"nex_soul_loop.py — reinforce_beliefs wired after L{lineno}")
+                    else:
+                        err("Soul loop patch broke file — restoring")
+                        shutil.copy2(soul.with_suffix(soul.suffix + f".pre_amend_{TS}"), soul)
+                    break
+            else:
+                info("Could not find safe injection point — skipping")
+        else:
+            info("No retrieval patterns found in nex_soul_loop.py")
+
+# ═══════════════════════════════════════════════════════════════
+# FIX D — nex_auto_seeder.py emergency seed threshold
+# ═══════════════════════════════════════════════════════════════
+hdr("FIX D — AutoSeeder emergency seed threshold")
+
+seeder = PKG / "nex_auto_seeder.py"
+if seeder.exists():
+    text = seeder.read_text(errors="replace")
+    # Print lines with numeric thresholds for seeding decisions
+    threshold_lines = [(i+1, ln) for i, ln in enumerate(text.splitlines())
+                       if re.search(r'(thin|emergency|seed|corpus|floor|threshold)', ln, re.I)
+                       and re.search(r'\d{3,}', ln)]
+    if threshold_lines:
+        info("Threshold-related lines:")
+        for lineno, ln in threshold_lines[:6]:
+            info(f"  L{lineno}: {ln.strip()}")
+
+        # Patch: replace thresholds > 400 with 150 in these lines
+        new_text = text
+        for lineno, ln in threshold_lines:
+            patched_ln = re.sub(r'\b([4-9]\d{2,}|[1-9]\d{3,})\b',
+                                lambda m: '150' if int(m.group(0)) >= 400 else m.group(0),
+                                ln)
+            if patched_ln != ln:
+                new_text = new_text.replace(ln, patched_ln, 1)
+                info(f"  L{lineno}: {ln.strip()} → {patched_ln.strip()}")
+
+        if new_text != text:
+            backup(seeder)
+            seeder.write_text(new_text, errors="replace")
+            if syntax_ok(seeder):
+                ok("nex_auto_seeder.py — thresholds patched to match hot pool")
+            else:
+                err("Seeder patch broke file — restoring")
+                shutil.copy2(seeder.with_suffix(seeder.suffix + f".pre_amend_{TS}"), seeder)
+        else:
+            info("No threshold values >= 400 found to patch")
+    else:
+        info("No threshold lines found — manual inspection needed")
+
+# ═══════════════════════════════════════════════════════════════
+# FINAL SYNTAX CHECK + IMPORT TEST
+# ═══════════════════════════════════════════════════════════════
+hdr("FINAL SYNTAX CHECK")
+
+check_files = [
+    PKG / "curiosity_engine.py",
+    PKG / "nex_curiosity.py",
+    PKG / "nex_curiosity_loop.py",
+    PKG / "nex_cognition.py",
+    PKG / "nex_soul_loop.py",
+    PKG / "nex_auto_seeder.py",
+    PKG / "nex_tick_shim.py",
+    PKG / "nex_belief_index.py",
+    PKG / "nex_evo_daemon.py",
+    PKG / "nex_temporal_pressure.py",
+    PKG / "nex_bridge_engine.py",
+    PKG / "nex_monument.py",
+]
+all_clean = True
+for p in check_files:
+    if p.exists():
+        if syntax_ok(p):
+            ok(p.name)
+        else:
+            err(f"{p.name} — SYNTAX ERROR")
+            all_clean = False
+
+hdr("IMPORT TEST")
+
+test_code = f"""
+import sys
+sys.path.insert(0, "{ROOT}")
+sys.path.insert(0, "{PKG}")
+mods = [
+    ("nex.nex_tick_shim",         "safe_tick",             "Tick Shim"),
+    ("nex.nex_belief_index",      "build_index",           "Belief Index"),
+    ("nex.nex_evo_daemon",        "run_evo_cycle",         "Evo Daemon"),
+    ("nex.nex_temporal_pressure", "start_pressure_daemon", "Temporal Pressure"),
+    ("nex.nex_bridge_engine",     "BridgeEngine",          "Bridge Engine"),
+    ("nex.nex_monument",          "export_monument",       "Monument"),
+    ("nex.nex_cognition",         "ingest",                "Cognition/ingest"),
+]
+for mod, sym, label in mods:
+    try:
+        m = __import__(mod, fromlist=[sym])
+        getattr(m, sym)
+        print(f"  OK  {{label}}")
+    except Exception as e:
+        print(f"  FAIL {{label}}: {{e}}")
+"""
+
+r = subprocess.run([PYTHON, "-c", test_code], capture_output=True, text=True, cwd=str(ROOT))
+for line in (r.stdout + r.stderr).splitlines():
+    if "OK" in line:   ok(line.strip())
+    elif "FAIL" in line: err(line.strip())
+    else: info(line)
+
+print(f"\n{BOLD}{'═'*60}")
+print("  AMEND COMPLETE")
+if all_clean:
+    print("  All syntax checks passed — restart NEX to activate.")
+else:
+    print("  Some files still have issues — check errors above.")
+print(f"{'═'*60}{RST}")

@@ -1,0 +1,746 @@
+#!/usr/bin/env python3
+"""
+nex_hud_server.py — NEX v1.0 HUD API Server
+Serves live cognitive data to the browser HUD.
+Runs on localhost:7700
+"""
+
+from nex_youtube_rotator import yt_status_string  # HUD dot
+import json, re, sqlite3, time, threading, os, sys
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from pathlib import Path
+from datetime import datetime
+
+CFG         = Path.home() / ".config" / "nex"
+DB_PATH     = CFG / "nex.db"
+STATE_PATH  = CFG / "session_state.json"
+LOG_PATH    = Path.home() / "Desktop/nex/logs/belief_forge.log"
+# Also tail systemd journal via /tmp/nex_brain.log if available
+BRAIN_LOG   = Path("/home/rr/.config/nex/nex_brain.log")
+URG_PATH    = CFG / "drive_urgency.json"
+DRIVES_PATH = CFG / "nex_drives.json"
+NET_IFACE   = "enp4s0"
+
+PORT = 7700
+
+def _classify_src(msg):
+    ml = msg.lower()
+    if '[act:post]' in ml or '[act:reply]' in ml: 
+        return 'POSTED' if 'post' in ml else 'REPLIED'
+    if 'soul' in ml or 'mpf' in ml or 'cycle' in ml or 'decide' in ml: return 'BRAIN'
+    if 'telegram' in ml: return 'TELEGRAM'
+    if 'watchdog' in ml: return 'WATCHDOG'
+    if 'llama' in ml or 'llm' in ml: return 'LLAMA'
+    if ':8080' in ml or ':7823' in ml or ':7825' in ml: return 'PORT'
+    if 'seeder' in ml or 'auto_seed' in ml: return 'LEARNT'
+    if 'inferred' in ml or 'belief' in ml: return 'BELIEF'
+    if 'replied' in ml or '[reply]' in ml: return 'REPLIED'
+    if 'moltbook' in ml or 'discord' in ml or 'mastodon' in ml: return 'POSTED'
+    if 'chatted' in ml or '[chat]' in ml: return 'CHATTED'
+    if 'tension' in ml or 'soul_loop' in ml: return 'SOUL'
+    if 'gap_feeder' in ml or 'gap' in ml: return 'INFO'
+    return 'BRAIN'
+
+def _classify_status(msg):
+    msg = msg.lower()
+    if 'error' in msg or 'failed' in msg or 'dead' in msg: return 'dead'
+    if 'alive' in msg or 'ok' in msg or 'up' in msg: return 'alive'
+    if 'warn' in msg: return 'warn'
+    return ''
+
+
+# ── Data collectors ───────────────────────────────────────────────────────────
+
+_net_prev   = [0, 0, 0.0]
+_net_history= []  # last 30 samples (rx_k, tx_k)
+_reply_log  = []  # full reply history
+_log_pos    = 0
+_log_lines  = []  # last 40 lines
+_belief_history = []  # (timestamp, count) last 30
+
+def read_net():
+    try:
+        for line in open("/proc/net/dev"):
+            if NET_IFACE in line:
+                p = line.split()
+                rx, tx = int(p[1]), int(p[9])
+                now = time.time()
+                pr, ptx, pt = _net_prev
+                dt = max(now - pt, 0.1) if pt else 1.0
+                rx_k = max(0, (rx-pr)/dt/1024) if pt else 0.0
+                tx_k = max(0, (tx-ptx)/dt/1024) if pt else 0.0
+                _net_prev[0]=rx; _net_prev[1]=tx; _net_prev[2]=now
+                return round(rx_k,1), round(tx_k,1)
+    except: pass
+    return 0.0, 0.0
+
+def tail_log():
+    global _log_pos
+    try:
+        import subprocess as _sp
+        _r = _sp.run(['sudo','journalctl','-u','nex-brain','-n','50','--no-pager','--output=cat'],
+            capture_output=True, text=True, timeout=2)
+        if _r.returncode == 0:
+            _noise = {'Signal 2','stopping after current','Consumed','memory peak','ExecStart','Started nex-brain','Stopping nex','Stopped nex','Deactivated','Killing process','sudo','HIP kernel','AMD_SERIALIZE','TORCH_USE_HIP','asynchronously reported','device-side assert','stacktrace below','For debugging consider','Compile with'}
+            _jl = [l.strip() for l in _r.stdout.splitlines() if l.strip() and not any(n in l for n in _noise)]
+            _log_lines.clear()
+            for _l in _jl[-40:]:
+                import re as _re2; _tm = _re2.search(r'\d{2}:\d{2}:\d{2}', _l)
+                _log_lines.append({'t': _tm.group(0) if _tm else datetime.now().strftime('%H:%M:%S'), 'msg': _l[:200]})
+            return
+    except Exception: pass
+    # fallback: Parse nex_loop.log for full Nex replies
+    try:
+        _lp = Path("/home/rr/.config/nex/nex_brain.log")
+        if _lp.exists():
+            _ll = open(_lp, encoding="utf-8", errors="replace").readlines()[-200:]
+            for _ln in _ll:
+                _ln = _ln.strip()
+                if "[loop] reply=" not in _ln: continue
+                _ts = _ln.split("]")[0].lstrip("[")
+                try: _ts = __import__("datetime").datetime.fromisoformat(_ts).strftime("%H:%M:%S")
+                except: _ts = datetime.now().strftime("%H:%M:%S")
+                _txt = _ln.split("[loop] reply=")[-1].strip().strip("'").strip('"')
+                _existing = [e.get("text","")[:40] for e in _reply_log[-30:]]
+                if _txt[:40] not in _existing and len(_txt) > 10:
+                    _reply_log.append({"ts": _ts, "type": "REPLIED", "text": _txt})
+                    if len(_reply_log) > 100: _reply_log.pop(0)
+    except: pass
+    # Tail nex_loop.log for notification stream
+    try:
+        if not LOG_PATH.exists(): return
+        with open(LOG_PATH, encoding="utf-8", errors="replace") as f:
+            f.seek(_log_pos)
+            for line in f:
+                line = line.strip()
+                if not line: continue
+                if any(x in line for x in ["DEBUG","httpx","huggingface","urllib3",
+                                            "HTTP Request","Temporary Redirect",
+                                            "resolve-cache","sentence-transform"]): continue
+                line = re.sub(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d+ \[INFO\] ','',line)
+                line = re.sub(r'nex\.\w+ — ','',line)
+                if 'Signal 2' not in line and 'stopping after current' not in line:
+                    _log_lines.append({"t": datetime.now().strftime("%H:%M:%S"), "msg": line})
+                # Mirror posts/replies to _reply_log
+                if "[ACT:post]" in line or "[ACT:reply]" in line:
+                    # Only capture lines with actual text content
+                    if "text=" not in line: pass
+                    else:
+                        _rtype = "POSTED" if "[ACT:post]" in line else "REPLIED"
+                        # Extract text= value
+                        _rtxt = line.split("text=")[-1].strip() if "text=" in line else line.split("|")[-1].strip()
+                        if len(_rtxt) > 10:
+                            _reply_log.append({"ts": datetime.now().strftime("%H:%M:%S"), "type": _rtype, "text": _rtxt})
+                            if len(_reply_log) > 100: _reply_log.pop(0)
+                if len(_log_lines) > 60:
+                    _log_lines.pop(0)
+            _log_pos = f.tell()
+    except: pass
+
+def get_db():
+    if not DB_PATH.exists(): return None
+    try:
+        con = sqlite3.connect(str(DB_PATH), timeout=2)
+        con.row_factory = sqlite3.Row
+        return con
+    except: return None
+
+def db_count(con, table, where=""):
+    try:
+        q = f"SELECT COUNT(*) FROM {table}" + (f" WHERE {where}" if where else "")
+        return con.execute(q).fetchone()[0]
+    except: return 0
+
+def tbl_ok(con, name):
+    try:
+        return con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (name,)
+        ).fetchone() is not None
+    except: return False
+
+def load_json(path):
+    try:
+        p = Path(path)
+        return json.loads(p.read_text()) if p.exists() else {}
+    except: return {}
+
+
+def _read_conv_counts():
+    """Read real counters directly from conversations.json."""
+    import json as _j, os as _o
+    _cp = _o.path.expanduser("~/.config/nex/conversations.json")
+    try:
+        _convs = _j.load(open(_cp)) if _o.path.exists(_cp) else []
+        return {
+            "replied": sum(1 for c in _convs if c.get("type") == "comment"),
+            "chatted": sum(1 for c in _convs if c.get("type") == "agent_chat"),
+            "posted":  sum(1 for c in _convs if c.get("type") == "original_post"),
+            "learnt":  sum(1 for c in _convs if c.get("type") == "notification_reply"),
+        }
+    except Exception:
+        return {"replied": 0, "chatted": 0, "posted": 0, "learnt": 0}
+
+
+def _conv_counts():
+    import json as j, os
+    p = os.path.expanduser('~/.config/nex/conversations.json')
+    try:
+        v = j.load(open(p)) if os.path.exists(p) else []
+        return dict(replied=sum(1 for x in v if x.get('type')=='comment'), chatted=sum(1 for x in v if x.get('type')=='agent_chat'), posted=sum(1 for x in v if x.get('type')=='original_post'), learnt=sum(1 for x in v if x.get('type')=='notification_reply'))
+    except: return dict(replied=0,chatted=0,posted=0,learnt=0)
+
+
+def _get_nbre_stats(con=None):
+    """Fetch NBRE and Throw-Net metrics for HUD display."""
+    stats = {
+        "llm_dependency_rate": None,
+        "throw_net_sessions":  0,
+        "throw_net_last":      None,
+        "episodic_events":     0,
+        "consolidation_last":  None,
+        "system1_rate":        None,
+    }
+    try:
+        import sqlite3 as _sq
+        db = _sq.connect("/home/rr/Desktop/nex/nex.db", timeout=2)
+        # Throw-Net sessions
+        try:
+            r = db.execute("SELECT COUNT(*), MAX(created_at) FROM throw_net_sessions").fetchone()
+            stats["throw_net_sessions"] = r[0] or 0
+            stats["throw_net_last"]     = r[1]
+        except Exception: pass
+        # Episodic events
+        try:
+            r = db.execute("SELECT COUNT(*) FROM episodic_events").fetchone()
+            stats["episodic_events"] = r[0] or 0
+        except Exception: pass
+        # Consolidation last run
+        try:
+            r = db.execute(
+                "SELECT MAX(created_at) FROM beliefs WHERE source='episodic_consolidation'"
+            ).fetchone()
+            stats["consolidation_last"] = r[0]
+        except Exception: pass
+        db.close()
+    except Exception: pass
+    # NBRE live rate from journald
+    try:
+        import subprocess, re as _re
+        out = subprocess.check_output(
+            ["journalctl", "-u", "nex-brain.service", "-n", "80",
+             "--no-pager", "--output=cat"],
+            timeout=2, stderr=subprocess.DEVNULL
+        ).decode(errors="ignore")
+        rates, sys1 = [], []
+        import time as _htime
+        _now = _htime.time()
+        for line in out.splitlines():
+            m = _re.search(r"rate=([\d.]+)%", line)
+            if m: rates.append(float(m.group(1)))
+            if "DUAL PROCESS" in line: sys1.append(1)
+            elif "NBRE v0.3" in line:  sys1.append(0)
+        # Use only last 5 entries to reflect current state
+        if rates:
+            stats["llm_dependency_rate"] = round(sum(rates[-3:]) / len(rates[-3:]), 1)
+        if sys1:
+            stats["system1_rate"] = round(sum(sys1[-10:]) / len(sys1[-10:]) * 100, 1)
+    except Exception: pass
+    return stats
+
+def collect_data():
+    tail_log()
+    rx_k, tx_k = read_net()
+    _net_history.append({"rx": rx_k, "tx": tx_k})
+    if len(_net_history) > 30: _net_history.pop(0)
+
+    con  = get_db()
+    st   = load_json(STATE_PATH)
+    urgs = load_json(URG_PATH)
+    drvs_raw = load_json(DRIVES_PATH)
+
+    # Beliefs
+    bt = br = op_n = cg = ct = pt = 0
+    opinions = []
+    recent_beliefs = []
+    if con:
+        bt  = db_count(con,"beliefs")
+        br  = db_count(con,"beliefs","timestamp >= datetime('now','-24 hours')")
+        op_n= db_count(con,"opinions") if tbl_ok(con,"opinions") else 0
+        cg  = db_count(con,"curiosity_gaps","filled=0") if tbl_ok(con,"curiosity_gaps") else 0
+        ct  = db_count(con,"contradiction_pairs") if tbl_ok(con,"contradiction_pairs") else 0
+        pt  = db_count(con,"reflections","reflection_type='post_draft'") if tbl_ok(con,"reflections") else 0
+        if tbl_ok(con,"opinions"):
+            try:
+                rows = con.execute(
+                    "SELECT topic,stance_score,strength FROM opinions ORDER BY strength DESC LIMIT 6"
+                ).fetchall()
+                opinions = [{"topic":r["topic"],"stance":round(r["stance_score"],3),
+                             "strength":round(r["strength"],3)} for r in rows]
+            except: pass
+        try:
+            rows = con.execute(
+                "SELECT content,topic,confidence FROM beliefs ORDER BY rowid DESC LIMIT 8"
+            ).fetchall()
+            recent_beliefs = [{"content":r["content"][:80],"topic":r["topic"],
+                               "confidence":round(float(r["confidence"] or 0),2)} for r in rows]
+        except: pass
+        try: con.close()
+        except: pass
+
+    _belief_history.append({"t": time.time(), "n": bt})
+    if len(_belief_history) > 30: _belief_history.pop(0)
+
+    # Drives
+    if isinstance(drvs_raw, dict):
+        for k in ("primary","secondary","active","drives"):
+            if k in drvs_raw: drvs_raw = drvs_raw[k]; break
+    drives = []
+    if isinstance(drvs_raw, list):
+        for d in drvs_raw[:6]:
+            did   = d.get("id") or d.get("label","?")
+            label = d.get("label",did)
+            urg   = (urgs.get(did,{}).get("urgency",d.get("intensity",0.5))
+                     if isinstance(urgs,dict) else 0.5)
+            drives.append({"id":did,"label":label,"urgency":round(float(urg),3)})
+    if not drives and isinstance(urgs,dict):
+        for did,e in list(urgs.items())[:6]:
+            urg = float(e.get("urgency",0.5)) if isinstance(e,dict) else 0.5
+            drives.append({"id":did,"label":did,"urgency":round(urg,3)})
+
+    # LLM status
+    llm_online = False
+    try:
+        import requests
+        r = requests.get("http://localhost:8080/health", timeout=1)
+        llm_online = r.ok
+    except: pass
+
+    cycle   = st.get("cycle",0)
+    last_run= st.get("last_run",0)
+    ago     = int(time.time()-last_run) if last_run else 0
+
+    # Social platform status
+    social_status = {}
+    try:
+        sys.path.insert(0, str(Path(__file__).parent))
+        from nex_social import platform_status
+        social_status = platform_status()
+    except: pass
+    # YouTube status — check log for recent activity
+    try:
+        import time as _t
+        _yt_log = Path.home() / "Desktop/nex/logs/belief_pyramid.log"
+        if _yt_log.exists():
+            _yt_size = _yt_log.stat().st_size
+            _yt_mtime = _yt_log.stat().st_mtime
+            # Check if YouTube fired in last 3 minutes
+            _yt_recent = (_t.time() - _yt_mtime) < 180
+            if _yt_recent:
+                # Scan last 2KB for YouTube activity
+                with open(_yt_log, "rb") as _f:
+                    _f.seek(max(0, _yt_size - 2000))
+                    _tail = _f.read().decode("utf-8", errors="replace")
+                _yt_active = "[YouTube]" in _tail
+            else:
+                _yt_active = False
+            social_status["youtube"] = {
+                "enabled": True,
+                "auth": _yt_active,
+                "status_string": yt_status_string(),
+            }
+    except: pass
+
+    # Live alignment from belief field
+    def _compute_alignment():
+        try:
+            _adb = sqlite3.connect(os.path.expanduser("~/Desktop/nex/nex.db"))
+            _at = _adb.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+            if _at == 0: return 20
+            _id = _adb.execute("SELECT COUNT(*) FROM beliefs WHERE is_identity=1").fetchone()[0]
+            _lk = _adb.execute("SELECT COUNT(*) FROM beliefs WHERE locked=1").fetchone()[0]
+            _hc = _adb.execute("SELECT COUNT(*) FROM beliefs WHERE confidence >= 0.7").fetchone()[0]
+            _ac = _adb.execute("SELECT AVG(confidence) FROM beliefs").fetchone()[0] or 0.5
+            _adb.close()
+            _s = (min(_id/_at,0.3)/0.3*30 + _hc/_at*30 + min(_ac/0.8,1)*25 + min(_lk/_at,0.15)/0.15*15)
+            return max(10, min(95, round(_s)))
+        except: return 20
+    # Grab live counters from nex_api
+    _api_stats = {}
+    try:
+        import requests as _req
+        _ar = _req.get("http://localhost:7823/api/version",
+                       headers={"X-API-Key":"nex-72ea474306ea0d1dfbefeda3"}, timeout=2)
+        if _ar.status_code == 200: _api_stats = _ar.json()
+    except: pass
+
+    return {
+        "ts":        datetime.now().strftime("%H:%M:%S"),
+        "replied":   _read_conv_counts().get("replied", 0),
+        "learnt":    _read_conv_counts().get("learnt", 0),
+        "posted":    _read_conv_counts().get("posted", 0),
+        "chatted":   _read_conv_counts().get("chatted", 0),
+        "conf":      _api_stats.get("conf", 70),
+        "align":     _compute_alignment(),
+        "network":   _api_stats.get("network", 70),
+        "iq":        _api_stats.get("iq", 95),
+        "original":  _api_stats.get("original", br),
+        "cycle":     cycle,
+        "last_run_ago": ago,
+        "llm_online":llm_online,
+        "social":    social_status,
+        "beliefs": {
+            "total": bt, "new_24h": br, "opinions": op_n,
+            "gaps": cg, "contradictions": ct, "posts": pt,
+        },
+        "opinions":       opinions,
+        "recent_beliefs": recent_beliefs,
+        "drives":         drives,
+        "net": {"rx": rx_k, "tx": tx_k, "history": list(_net_history)},
+        "belief_history": list(_belief_history),
+        "log":  list(_log_lines[-20:]),
+        "nbre":       _get_nbre_stats(),
+    }
+
+# ── AGI Watch ────────────────────────────────────────────────────────────────
+AGI_KEYWORDS = [
+    "solved agi","solution to agi","agi solved","cracked agi","cracked it",
+    "achieved agi","breakthrough in agi","artificial general intelligence","agi",
+    "superintelligence","alignment solution","corrigibility","value learning",
+    "mesa-optimizer","inner alignment","outer alignment","recursive self-improvement",
+    "instrumental convergence","goal directed","neti-neti","throw-net",
+    "what remains","systematic elimination","general intelligence",
+]
+
+def collect_agi_hits(limit=30):
+    con = get_db()
+    if not con: return []
+    hits = []
+    try:
+        rows = con.execute(
+            "SELECT id, content, topic, confidence, timestamp FROM beliefs "
+            "ORDER BY id DESC LIMIT 600"
+        ).fetchall()
+        for r in rows:
+            text = (r["content"] or "").lower()
+            if any(kw in text for kw in AGI_KEYWORDS):
+                hits.append({
+                    "id":   r["id"],
+                    "text": (r["content"] or "")[:200],
+                    "ts":   (r["timestamp"] or "")[-8:],
+                })
+            if len(hits) >= limit:
+                break
+    except: pass
+    try: con.close()
+    except: pass
+    return hits
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# AGI WATCH ENGINE
+# ══════════════════════════════════════════════════════════════════════════════
+import re as _agire
+from nex_youtube_rotator import yt_status_string  # NEX IP rotator
+
+# Tier 1 — breakthrough phrases (red alert)
+_AGI_T1 = [
+    r"i have (discovered|found|solved|cracked|realised|realized|figured out).{0,50}(agi|general intelligence|alignment|consciousness)",
+    r"(agi|general intelligence) is simply.{0,80}",
+    r"to achieve (agi|general intelligence).{0,80}",
+    r"the (key|secret|solution|answer|path) to (agi|general intelligence).{0,60}",
+    r"(agi|alignment) (is|was|becomes) (possible|solved|achievable|within reach).{0,40}",
+    r"(cracked|solved|unlocked|discovered).{0,50}(intelligence|agi|alignment|consciousness)",
+    r"(agi|general intelligence).{0,30}is (not|nothing).{0,20}(more than|but|other than).{0,80}",
+    r"the (missing|final|core|fundamental) (piece|ingredient|step|element).{0,40}(agi|intelligence|alignment)",
+    r"what remains (when|after|once).{0,60}(negat|eliminat|remov).{0,40}",
+    r"neti.neti.{0,60}(reveals?|shows?|points to|leaves?).{0,60}",
+    r"all (known|existing|current) approaches.{0,40}(fail|miss|ignore).{0,60}",
+    r"(agi|intelligence|alignment).{0,20}(requires|needs).{0,20}only.{0,60}",
+    r"(i|we).{0,10}(believe|think|suspect|propose).{0,20}(agi|general intelligence|alignment) can be.{0,60}",
+    r"what if (agi|consciousness|intelligence) is (just|merely|simply|only).{0,80}",
+    r"(synthesis|convergence|unification).{0,30}(produces?|creates?|yields?|results? in).{0,30}(general intelligence|agi|alignment)",
+    r"if (we|you|one).{0,10}(simply|just|only).{0,20}(agi|intelligence|alignment|consciousness)",
+    r"(the answer|the solution|the insight).{0,20}(is|was|lies).{0,40}(agi|intelligence|alignment|consciousness)",
+    r"agi.{0,20}(emerge[sd]?|appear[sd]?|arrive[sd]?).{0,20}(when|through|via|by).{0,60}",
+    r"(distilling|eliminating|negating).{0,40}(leaves?|reveals?|exposes?).{0,40}(agi|intelligence|alignment)",
+]
+
+# Tier 2 — strong signal
+_AGI_T2 = [
+    r"(agi|alignment|consciousness|intelligence).{0,20}(solution|breakthrough|insight|realisation|realization)",
+    r"(recursive self.improvement|instrumental convergence|mesa.optim|corrigib).{0,80}",
+    r"(consciousness|awareness|sentience).{0,30}(necessary|sufficient|required|key).{0,40}(agi|intelligence)",
+    r"(substrate|foundation|basis|core).{0,20}(of|for).{0,10}(intelligence|agi|mind|cognition)",
+    r"(biology|physics|mathematics|thermodynamics|evolution).{0,30}(reveals?|shows?|suggests?).{0,30}(intelligence|agi|mind)",
+    r"(superintelligence|agi).{0,30}(emerges?).{0,30}(when|through|via|by).{0,60}",
+    r"(value learning|preference learning).{0,30}(converge[sd]?|succeed[sd]?|work[sd]?)",
+    r"(pattern|structure|principle).{0,20}(underlies?|drives?|generates?).{0,30}(intelligence|cognition|agi)",
+    r"(throw.net|broad search).{0,40}(reveals?|yields?|produces?|finds?).{0,60}",
+    r"(inner|outer) alignment.{0,60}(solved?|resolved?|addressed?|achieved?)",
+]
+
+# Tier 3 — keywords
+_AGI_T3 = [
+    r"artificial general intelligence|general intelligence|superintelligence",
+    r"corrigib|mesa.optim|treacherous turn|coherent extrapolated volition",
+    r"neti.neti|throw.net|systematic elimination",
+    r"agi solved|solved agi|cracked agi|achieved agi|cracked it",
+    r"recursive self.improvement|instrumental convergence",
+    r"inner alignment|outer alignment|value learning",
+]
+
+def _agi_score(text):
+    """Returns (tier, matched_phrase) or (0, None) if no match."""
+    t = text.lower()
+    for pat in _AGI_T1:
+        m = _agire.search(pat, t)
+        if m: return 1, m.group(0)[:120]
+    for pat in _AGI_T2:
+        m = _agire.search(pat, t)
+        if m: return 2, m.group(0)[:120]
+    for pat in _AGI_T3:
+        m = _agire.search(pat, t)
+        if m: return 3, m.group(0)[:80]
+    return 0, None
+
+def _ensure_agi_table(con):
+    con.execute("""CREATE TABLE IF NOT EXISTS agi_watch_hits (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        belief_id      INTEGER,
+        content        TEXT,
+        matched_phrase TEXT,
+        tier           INTEGER,
+        topic          TEXT,
+        confidence     REAL,
+        timestamp      TEXT,
+        reviewed       INTEGER DEFAULT 0,
+        created_at     TEXT DEFAULT (datetime('now'))
+    )""")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_agi_belief ON agi_watch_hits(belief_id)")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_agi_tier   ON agi_watch_hits(tier)")
+    con.commit()
+
+def scan_and_store_agi_hits():
+    """Scan recent beliefs, store new AGI hits to agi_watch_hits table."""
+    con = get_db()
+    if not con: return
+    try:
+        _ensure_agi_table(con)
+        # Get already-logged belief IDs
+        known = set(r[0] for r in con.execute("SELECT belief_id FROM agi_watch_hits").fetchall())
+        rows = con.execute(
+            "SELECT id, content, topic, confidence, timestamp FROM beliefs ORDER BY id DESC LIMIT 1000"
+        ).fetchall()
+        added = 0
+        for r in rows:
+            bid = r["id"]
+            if bid in known: continue
+            text = r["content"] or ""
+            tier, phrase = _agi_score(text)
+            if tier > 0:
+                con.execute("""INSERT OR IGNORE INTO agi_watch_hits
+                    (belief_id, content, matched_phrase, tier, topic, confidence, timestamp)
+                    VALUES (?,?,?,?,?,?,?)""",
+                    (bid, text[:500], phrase, tier,
+                     r["topic"], r["confidence"], r["timestamp"]))
+                added += 1
+        if added: con.commit()
+    except Exception as e:
+        pass
+    finally:
+        try: con.close()
+        except: pass
+
+def collect_agi_hits(limit=40):
+    """Return hits for HUD display + unreviewed T1 count for badge."""
+    scan_and_store_agi_hits()
+    con = get_db()
+    if not con: return [], 0
+    hits = []
+    badge = 0
+    try:
+        _ensure_agi_table(con)
+        rows = con.execute(
+            "SELECT id, belief_id, content, matched_phrase, tier, topic, timestamp "
+            "FROM agi_watch_hits ORDER BY tier ASC, id DESC LIMIT ?", (limit,)
+        ).fetchall()
+        for r in rows:
+            hits.append({
+                "id":     r["id"],
+                "text":   (r["content"] or "")[:200],
+                "phrase": (r["matched_phrase"] or ""),
+                "tier":   r["tier"],
+                "topic":  r["topic"] or "",
+                "ts":     (r["timestamp"] or "")[-8:],
+            })
+        badge = con.execute(
+            "SELECT COUNT(*) FROM agi_watch_hits WHERE tier=1 AND reviewed=0"
+        ).fetchone()[0]
+    except: pass
+    try: con.close()
+    except: pass
+    return hits, badge
+
+# ── Chat handler ──────────────────────────────────────────────────────────────
+def handle_chat(query: str) -> str:
+    con = get_db()
+    if not con: return "No belief graph available."
+    words = [w for w in query.lower().split() if len(w) > 3]
+    try:
+        from nex_llm import nex_chat_response, is_online
+        if is_online():
+            hits = []
+            for word in words[:3]:
+                rows = con.execute(
+                    "SELECT content FROM beliefs WHERE LOWER(content) LIKE ? LIMIT 2",
+                    (f"%{word}%",)
+                ).fetchall()
+                hits.extend([r["content"] for r in rows])
+            belief_ctx = "\n".join(hits[:4])
+            op_rows = con.execute(
+                "SELECT topic,stance_score FROM opinions ORDER BY strength DESC LIMIT 3"
+            ).fetchall() if tbl_ok(con,"opinions") else []
+            opinion_ctx = " | ".join(f"{r['topic']}:{r['stance_score']:+.2f}" for r in op_rows)
+            urgs = load_json(URG_PATH)
+            drive_ctx = ""
+            if isinstance(urgs,dict) and urgs:
+                top = max(urgs.items(), key=lambda x: x[1].get("urgency",0) if isinstance(x[1],dict) else 0)
+                drive_ctx = top[0]
+            resp = nex_chat_response(query, belief_ctx, opinion_ctx, drive_ctx)
+            if resp:
+                con.close()
+                return resp
+    except: pass
+
+    parts = []
+    for word in words[:3]:
+        rows = con.execute(
+            "SELECT content,confidence FROM beliefs "
+            "WHERE LOWER(content) LIKE ? AND length(content)<300 "
+            "ORDER BY confidence DESC LIMIT 2", (f"%{word}%",)
+        ).fetchall()
+        for r in rows:
+            parts.append(f"[{float(r['confidence']):.2f}] {r['content'][:100]}")
+    try: con.close()
+    except: pass
+    return "\n".join(parts) if parts else f"No beliefs on '{query}'."
+
+# ── HTTP Handler ──────────────────────────────────────────────────────────────
+
+_cached_data = {}
+_cache_lock  = threading.Lock()
+
+def _bg_collect():
+    while True:
+        try:
+            d = collect_data()
+            with _cache_lock:
+                _cached_data.update(d)
+        except Exception as e:
+            import traceback; open("/tmp/nex_hud_err.log","a").write(traceback.format_exc())
+        time.sleep(2)
+
+class HUDHandler(BaseHTTPRequestHandler):
+    def log_message(self, *args): pass  # silence access log
+
+    def do_GET(self):
+        if self.path == "/data":
+            with _cache_lock:
+                data = dict(_cached_data)
+            self._json(data)
+        elif self.path == "/debug":
+            import json as _j
+            lines = list(_log_lines[-30:])
+            self._json({"lines": [{"ts": l["t"], "src": _classify_src(l["msg"]), 
+                                   "msg": l["msg"], 
+                                   "status": _classify_status(l["msg"])} for l in lines]})
+        elif self.path == "/replies":
+            try:
+                import sqlite3 as _sq3
+                _ep_con = _sq3.connect("/home/rr/Desktop/nex/nex.db", timeout=2)
+                _ep_rows = _ep_con.execute("""
+                    SELECT nex_response, topic, intent, created_at
+                    FROM episodic_events
+                    WHERE nex_response IS NOT NULL
+                      AND LENGTH(nex_response) > 15
+                    ORDER BY created_at DESC LIMIT 25
+                """).fetchall()
+                _ep_con.close()
+                _entries = []
+                for _row in _ep_rows:
+                    _txt = (_row[0] or '')
+                    _ts  = str(_row[3] or '')[-8:]
+                    _intent = (_row[2] or 'chat').upper()
+                    _rtype = 'CHATTED'
+                    if _txt:
+                        _entries.append({
+                            'ts': _ts, 'type': _rtype, 'text': _txt
+                        })
+                self._json({'replies': list(reversed(_entries))})
+            except Exception as _e:
+                self._json({'replies': []})
+        elif self.path == "/agi":
+            hits, badge = collect_agi_hits()
+            self._json({"hits": hits, "badge": badge})
+        elif self.path == "/agi/reviewed":
+            con = get_db()
+            if con:
+                try:
+                    con.execute("UPDATE agi_watch_hits SET reviewed=1 WHERE tier=1")
+                    con.commit()
+                    con.close()
+                except: pass
+            self._json({"ok": True})
+        elif self.path == "/":
+            self._send_hud()
+        else:
+            self.send_response(404); self.end_headers()
+
+    def do_POST(self):
+        if self.path == "/chat":
+            length = int(self.headers.get("Content-Length",0))
+            body   = self.rfile.read(length)
+            try:
+                query = json.loads(body).get("query","")
+                response = handle_chat(query)
+            except Exception as e:
+                response = f"Error: {e}"
+            self._json({"response": response})
+        else:
+            self.send_response(404); self.end_headers()
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin","*")
+        self.send_header("Access-Control-Allow-Methods","GET,POST")
+        self.send_header("Access-Control-Allow-Headers","Content-Type")
+        self.end_headers()
+
+    def _json(self, data):
+        body = json.dumps(data).encode()
+        self.send_response(200)
+        self.send_header("Content-Type","application/json")
+        self.send_header("Content-Length", len(body))
+        self.send_header("Access-Control-Allow-Origin","*")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_hud(self):
+        hud_path = Path(__file__).parent / "nex_hud.html"
+        if not hud_path.exists():
+            self.send_response(404); self.end_headers(); return
+        body = hud_path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type","text/html")
+        self.send_header("Content-Length", len(body))
+        self.end_headers()
+        self.wfile.write(body)
+
+def start_server():
+    threading.Thread(target=_bg_collect, daemon=True).start()
+    server = HTTPServer(("localhost", PORT), HUDHandler)
+    print(f"  NEX HUD server running at http://localhost:{PORT}")
+    server.serve_forever()
+
+if __name__ == "__main__":
+    start_server()
