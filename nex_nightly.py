@@ -809,6 +809,16 @@ def run_nightly(force: bool = False, dry_run: bool = False) -> dict:
     elapsed = time.time() - t0
     phase_report(report, conn, dry_run, elapsed)
 
+    # Phase 7b — Wisdom distillation
+    try:
+        import sys as _ws
+        _ws.path.insert(0, str(__import__("pathlib").Path(__file__).parent))
+        from nex_wisdom import run_wisdom_distillation
+        _wn = run_wisdom_distillation(verbose=not dry_run)
+        report["wisdom_new"] = _wn
+    except Exception as _we:
+        report["wisdom_new"] = 0
+        print(f"  [wisdom] skipped: {_we}")
     conn.close()
     return report
 
