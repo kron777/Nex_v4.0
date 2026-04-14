@@ -1,106 +1,35 @@
-# Virtual environment
-venv/
+# VTT transcripts
+*.vtt
+
+# Books
+book_cache/
+book_drop/
+*.pdf
 
 # Python cache
 __pycache__/
 *.pyc
 *.pyo
-*.pyd
 
-# NEX runtime data (personal/private)
-~/.config/nex/
+# Venv
+venv/
 
-# Credentials & secrets
-*.env
-.env
-credentials.json
-*credentials*
-*secret*
-*token*
-
-# Logs
+# Logs and temp
 *.log
-watchdog.log
-
-# OS junk
-.DS_Store
-Thumbs.db
-
-# Large media
-*.jpg
-*.jpeg
-*.png
-*.mp4
-
-# Disabled/old files
-*.disabled
-*.bak
-*.old
-
-# Empty files
-what
-discord_config.json
-venv_new/
-*.so
-*.bak.*
-nex_debug.jsonl
+*.tmp
 /tmp/
-nex_trained/
-nex_training/
-*.bak*
-run.py.bak*
-nex_adapter_v1_backup/
-nex_lora.gguf
-nex_adapter/
-backups/
-*.bak*
-*.json
-*.jsonl
-*.txt
+
+# DB files
 *.db
-*.db-shm
+*.db-journal
 *.db-wal
-*.npz
-*.live
-*.deb
-nex_training*
 
-!releases/
-!releases/*.deb
-launch_nex.sh
-nex_sales_ledger.jsonl
-*.env
-.env
-!nex_config_backup/beliefs.json
-.patch_backup_*/
-.patch_backup_*/
-.backup_*
-.backup_*
-# Backup files from patch scripts
-*.pre_*
-*.bak*
-trash_backups/
-
-# Database files
-*.db
-*.db.pre_*
-
-# Cache files
-*.pkl
-*.pyc
-__pycache__/
-
-# Repair/fix scripts (one-shot tools, not source)
-nex_full_repair.py
-nex_amend.py
-nex_final_fix.py
-nex_fix_affect.py
-nex_fix_affect_score.py
-nex.db
-*.faiss
-*.pkl
-nex_lora.gguf
+# Model files
 *.gguf
-*.bak_*
-nex_trained/
-models/
+*.pt
+*.bin
+*.safetensors
+
+# HUD broken/old files
+*.broken
+*_old.py
