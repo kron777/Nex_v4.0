@@ -728,6 +728,16 @@ def phase_report(report: dict, conn: sqlite3.Connection, dry_run: bool, elapsed:
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 def run_nightly(force: bool = False, dry_run: bool = False) -> dict:
     t0 = time.time()
+    # Phase 0a — Belief quality audit (auto-quarantine hollow beliefs)
+    try:
+        from nex_belief_audit_daemon import run_audit as _run_audit
+        _audit_result = _run_audit(dry_run=dry_run, verbose=True)
+        report['audit_quarantined'] = _audit_result.get('hard_quarantined', 0) + _audit_result.get('soft_quarantined', 0)
+        report['audit_boosted'] = _audit_result.get('boosted', 0)
+    except Exception as _ae:
+        print(f'  [audit] skipped: {_ae}')
+        report['audit_quarantined'] = 0
+
 
     print(f"\n{C['purple']}  ══════════════════════════════════════════════════{C['reset']}")
     print(f"{C['purple']}  ◆  NEX NIGHTLY CONSOLIDATION{C['reset']}")
