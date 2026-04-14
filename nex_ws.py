@@ -53,7 +53,7 @@ async def _handler(websocket):
     print(f"[GUI] client connected ({len(_clients)} total)", flush=True)
     try:
         async for _ in websocket:
-            pass
+            pass  # keep alive, ignore incoming
     except Exception:
         pass
     finally:
@@ -142,7 +142,7 @@ async def _server_main():
     global _loop
     _loop = asyncio.get_running_loop()
     _loop_ready.set()
-    async with websockets.serve(_handler, "localhost", 8765, reuse_port=True):
+    async with websockets.serve(_handler, "localhost", 8765):
         print("[GUI] ws://localhost:8765 ready", flush=True)
         asyncio.create_task(_sysmon_loop())
         await asyncio.Future()

@@ -34,6 +34,10 @@ _LOG_SKIP = [
     'YouTube','youtube','AGI-YT','transcript','webshare',
     'residential','proxy','DISTILL_PROMPT','Could not retrieve',
     'is blocking','retrievable','jdepoix',
+    'is blocking','retrievable','jdepoix',
+    '[CONTRA]','INNER LIFE','[BUS]','unresolved in','forced topic pull',
+    'soul_loop','CogPressure','colony','Colony','AutoSeeder',
+    'Contemplative','reaching cognitive','resolver','Tension logged',
 ]
 
 _ANSI = re.compile(r'\x1b\[[0-9;]*m')
@@ -328,6 +332,213 @@ class HUDHandler(BaseHTTPRequestHandler):
             self.send_json({"events": rows})
 
         # ── /sse/col2 — SSE log stream (WS fallback) ───────────────────
+
+
+        elif path == "/sse/hub":
+            import time as _t, threading as _th
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+
+            def _send(evt, data):
+                try:
+                    self.wfile.write(f"event: {evt}\ndata: {json.dumps(data)}\n\n".encode())
+                    self.wfile.flush()
+                    return True
+                except:
+                    return False
+
+            # Seed col1 with last 20 YouTube entries
+            try:
+                with open(str(FEED_PATH)) as _ff:
+                    _all = _ff.readlines()
+                _yt = []
+                for _ll in _all[-200:]:
+                    try:
+                        _e = json.loads(_ll)
+                        if _e.get("src") == "YOUTUBE":
+                            _msg = _e.get("msg","").replace("[YouTube]","").strip()
+                            if _msg: _yt.append({"t":_e.get("t",""),"msg":_msg})
+                    except: pass
+                for _ye in _yt[-20:]:
+                    _send("col1", _ye)
+            except: pass
+
+            # Seed col3 with last 10 responses
+            try:
+                _rdb = sqlite3.connect(str(NEX_DIR/"nex.db"), timeout=2)
+                _rrows = _rdb.execute("SELECT response,user_input,timestamp FROM reflexion_log ORDER BY id DESC LIMIT 10").fetchall()
+                _rdb.close()
+                for _rr in reversed(_rrows):
+                    _txt = (_rr[0] or "").strip()
+                    _ui = (_rr[1] or "").lower()
+                    if not _txt: continue
+                    _plat = "discord" if "discord" in _ui else "mastodon" if ("mastodon" in _ui or "@" in (_rr[1] or "")) else "moltbook"
+                    _send("col3", {"t":str(_rr[2] or ""),"plat":_plat,"msg":_txt[:300]})
+            except: pass
+
+            # Track positions
+            _fp = str(FEED_PATH)
+            _off = os.path.getsize(_fp) if os.path.exists(_fp) else 0
+            _blog = "/tmp/nex_brain.log"
+            _boff = max(0, os.path.getsize(_blog)-2000) if os.path.exists(_blog) else 0
+            _last_resp_id = 0
+            _plat_cycle = ["moltbook","discord","mastodon"]
+            _plat_idx = 0
+            _tick = 0
+
+            try:
+                while True:
+                    _tick += 1
+                    # Keepalive every 15s
+                    if _tick % 30 == 0:
+                        try:
+                            self.wfile.write(b": keepalive\n\n")
+                            self.wfile.flush()
+                        except: break
+
+                    # Col1: YouTube from feed_events.jsonl
+                    try:
+                        _sz = os.path.getsize(_fp) if os.path.exists(_fp) else 0
+                        if _sz < _off: _off = 0
+                        if _sz > _off:
+                            with open(_fp,"rb") as _f:
+                                _f.seek(_off); _chunk = _f.read(_sz-_off).decode("utf-8",errors="ignore")
+                            _off = _sz
+                            for _line in _chunk.splitlines():
+                                try:
+                                    _e = json.loads(_line)
+                                    if _e.get("src") != "YOUTUBE": continue
+                                    _msg = _e.get("msg","").replace("[YouTube]","").strip()
+                                    if len(_msg) < 5: continue
+                                    if not _send("col1", {"t":_e.get("t",""),"msg":_msg}): break
+                                except: pass
+                    except: pass
+
+                    # Col2: Debug from brain log
+                    try:
+                        _bsz = os.path.getsize(_blog) if os.path.exists(_blog) else 0
+                        if _bsz < _boff: _boff = 0
+                        if _bsz > _boff:
+                            with open(_blog,"rb") as _f:
+                                _f.seek(_boff); _bc = _f.read(_bsz-_boff).decode("utf-8",errors="ignore")
+                            _boff = _bsz
+                            for _bl in _bc.splitlines():
+                                _bl = _bl.strip()
+                                if not _bl or any(_s in _bl for _s in _LOG_SKIP): continue
+                                _bl = _ANSI.sub("",_bl)
+                                _bl = _TS_PREFIX.sub("",_bl).strip()
+                                if len(_bl) < 5: continue
+                                if not _send("col2", {"msg":_bl}): break
+                    except: pass
+
+                    # Col3: Responses revolving platforms (every 2s)
+                    if _tick % 4 == 0:
+                        try:
+                            _rdb = sqlite3.connect(str(NEX_DIR/"nex.db"), timeout=1)
+                            _rrows = _rdb.execute(
+                                "SELECT id,response,user_input,timestamp FROM reflexion_log WHERE id>? ORDER BY id ASC LIMIT 10",
+                                (_last_resp_id,)
+                            ).fetchall()
+                            _rdb.close()
+                            for _rr in _rrows:
+                                _last_resp_id = max(_last_resp_id, _rr[0])
+                                _txt = (_rr[1] or "").strip()
+                                if not _txt: continue
+                                _ui = (_rr[2] or "")
+                                _ui_low = _ui.lower()
+                                _plat = "discord" if "discord" in _ui_low else "mastodon" if ("mastodon" in _ui_low or "@" in _ui) else "moltbook"
+                                if not _send("col3", {"t":str(_rr[3] or ""),"plat":_plat,"msg":_txt[:300]}): break
+                        except: pass
+
+                    _t.sleep(0.5)
+            except: pass
+            return
+        elif path == "/sse/activity":
+            import time as _t
+            self.send_response(200)
+            self.send_header("Content-Type","text/event-stream")
+            self.send_header("Cache-Control","no-cache")
+            self.send_header("Access-Control-Allow-Origin","*")
+            self.send_header("Connection","keep-alive")
+            self.end_headers()
+            _fp = str(FEED_PATH)
+            _off = max(0, os.path.getsize(_fp) - 8000) if os.path.exists(_fp) else 0
+            _eid = 0
+            _keep = ['YOUTUBE']  # activity = YouTube only
+            try:
+                while True:
+                    sz = os.path.getsize(_fp) if os.path.exists(_fp) else 0
+                    if sz < _off: _off = 0
+                    if sz > _off:
+                        with open(_fp,"rb") as _f:
+                            _f.seek(_off)
+                            chunk = _f.read(sz-_off).decode("utf-8",errors="ignore")
+                        _off = sz
+                        for line in chunk.splitlines():
+                            try:
+                                e = json.loads(line)
+                                msg = e.get("msg","")
+                                if e.get("src") != "YOUTUBE": continue
+                                if len(msg) < 5: continue
+                                _eid += 1
+                                self.wfile.write(("id: {}\ndata: {}\n\n".format(_eid, json.dumps({"t":e.get("t",""),"msg":msg}))).encode())
+                                self.wfile.flush()
+                            except: pass
+                    _t.sleep(0.5)
+            except: pass
+            return
+
+        elif path == "/sse/responses":
+            import time as _t
+            self.send_response(200)
+            self.send_header("Content-Type","text/event-stream")
+            self.send_header("Cache-Control","no-cache")
+            self.send_header("Access-Control-Allow-Origin","*")
+            self.send_header("Connection","keep-alive")
+            self.end_headers()
+            _last_id = 0
+            _eid = 0
+            _plat_cycle = ['moltbook','discord','mastodon']
+            _plat_idx = 0
+            try:
+                while True:
+                    try:
+                        db = sqlite3.connect(str(NEX_DIR/"nex.db"), timeout=2)
+                        rows = db.execute(
+                            "SELECT id,response,user_input,timestamp FROM reflexion_log WHERE id>? ORDER BY id ASC LIMIT 20",
+                            (_last_id,)
+                        ).fetchall()
+                        db.close()
+                        # Sort into platform buckets
+                        buckets = {'moltbook':[], 'discord':[], 'mastodon':[], 'other':[]}
+                        for row in rows:
+                            _last_id = max(_last_id, row[0])
+                            text = (row[1] or "").strip()
+                            if not text: continue
+                            ui = (row[2] or "").lower()
+                            if 'discord' in ui: buckets['discord'].append((row[3],text))
+                            elif 'mastodon' in ui or ui.startswith('@'): buckets['mastodon'].append((row[3],text))
+                            else: buckets['moltbook'].append((row[3],text))
+                        # Emit one from current platform, revolve
+                        for _ in range(3):
+                            plat = _plat_cycle[_plat_idx % 3]
+                            _plat_idx += 1
+                            pool = buckets.get(plat, []) or buckets['moltbook']
+                            if pool:
+                                item = pool.pop(0)
+                                t, text = item[0], item[1]
+                                _eid += 1
+                                self.wfile.write(("id: {}\ndata: {}\n\n".format(_eid, json.dumps({"t":str(t or ""),"plat":plat,"msg":text[:300]}))).encode())
+                                self.wfile.flush()
+                                break
+                    except: pass
+                    _t.sleep(1)
+            except: pass
+            return
         elif path == "/sse/col2":
             self._handle_sse()
 

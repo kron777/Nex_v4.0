@@ -216,8 +216,8 @@ body::after{
 }
 .agi-hdr{font-size:8px;color:var(--cyan);letter-spacing:2px;margin-bottom:3px;display:flex;align-items:center;gap:5px;}
 .agi-badge{
-  background:var(--red);color:#fff;font-size:8px;font-weight:bold;
-  border-radius:8px;padding:0 4px;display:none;
+  background:transparent;color:#fff;font-size:16px;font-weight:bold;
+  border-radius:0;padding:0 4px;display:none;
 }
 .agi-dot{width:5px;height:5px;border-radius:50%;background:#333;display:inline-block;transition:background 0.3s;}
 #agi-feed{
@@ -357,7 +357,7 @@ body::after{
       <div class="metric-block">
         <div style="font-size:8px;color:var(--dim);letter-spacing:2px;">ACTIVE BELIEFS</div>
         <div class="metric-big" id="s-beliefs">0</div>
-        <div class="metric-sub">ORIGINAL: <span id="s-orig">0</span> <span style="font-size:7px;color:#555;">(NEX-generated)</span></div>
+        <div class="metric-sub" style="font-size:20px;font-weight:bold;color:#fff;margin-top:4px;">ORIGINAL: <span id="s-orig" style="color:#ffe000;font-size:22px;">0</span> <span style="font-size:10px;color:#888;">(NEX-generated)</span></div>
       </div>
       <div class="bar-row"><div class="bar-lbl">CONF</div><div class="bar-track"><div class="bar-fill conf" id="b-conf" style="width:0%"></div></div><div class="bar-val" id="v-conf">0%</div></div>
       <div class="bar-row"><div class="bar-lbl">ALIGN</div><div class="bar-track"><div class="bar-fill align" id="b-align" style="width:0%"></div></div><div class="bar-val" id="v-align">0%</div></div>
@@ -518,7 +518,7 @@ function _drainRespQueue() {
   if (_respBusy || _respQueue.length === 0) return;
   _respBusy = true;
   const item = _respQueue.shift();
-  _renderResponse(item, () => { _respBusy=false; setTimeout(_drainRespQueue,60); });
+  _renderResponse(item, () => { _respBusy=false; setTimeout(_drainRespQueue,10); });
 }
 
 function _renderResponse(item, onDone) {
@@ -744,10 +744,11 @@ function sseConnect() {
 
 const _seenAgi=new Set();
 async function pollAgi() {
+  if (_seenAgi.size > 50) _seenAgi.clear();
   try {
     const r=await fetch('http://localhost:7700/agi',{signal:AbortSignal.timeout(2000)});
     const d=await r.json();
-    (d.hits||[]).slice(0,3).forEach(h=>{ if(!_seenAgi.has(h.id||h.text)){ _seenAgi.add(h.id||h.text); pushAgi(h.ts||ts(),h.tier||3,h.text||h.content||''); } });
+    (d.hits||[]).slice(0,10).forEach(h=>{ if(!_seenAgi.has(h.id||h.text)){ _seenAgi.add(h.id||h.text); pushAgi(h.ts||ts(),h.tier||3,h.text||h.content||''); } });
     if (d.badge) { $('agi-badge').textContent=d.badge; $('agi-badge').style.display=d.badge>0?'inline':'none'; }
   } catch(e){}
 }
@@ -760,11 +761,52 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(httpReplies,   4000);
   setInterval(httpDebug,     5000);
   setInterval(httpYtFeed,    8000);
-  setInterval(pollAgi,      20000);
+  setInterval(pollAgi,      3000);
   setInterval(sseConnect,   10000);
   pushDebug(ts(),'HUD','NEX HUD v2.0 — WebSocket-first renderer ready');
   pushDebug(ts(),'HUD',`Connecting to ${WS_URL}…`);
 });
+</script>
+
+
+
+
+<script>
+(function() {
+  window.addEventListener('load', function() {
+    var es = new EventSource('http://localhost:7700/sse/hub');
+
+    es.addEventListener('col1', function(e) {
+      try {
+        var d = JSON.parse(e.data);
+        if (typeof pushFeed === 'function')
+          pushFeed(d.t||'', 'YOUTUBE', '', d.msg||'');
+      } catch(_) {}
+    });
+
+    es.addEventListener('col2', function(e) {
+      try {
+        var d = JSON.parse(e.data);
+        if (typeof pushDebug === 'function')
+          pushDebug('', 'LOG', d.msg||'');
+      } catch(_) {}
+    });
+
+    es.addEventListener('col3', function(e) {
+      try {
+        var d = JSON.parse(e.data);
+        if (typeof pushResponse === 'function')
+          pushResponse(d.t||'', d.plat||'moltbook', d.msg||'');
+      } catch(_) {}
+    });
+
+    es.onerror = function() {
+      console.log('SSE hub reconnecting...');
+    };
+
+    console.log('SSE hub connected — single connection, 3 named event channels');
+  });
+})();
 </script>
 </body>
 </html>
