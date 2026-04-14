@@ -38,6 +38,8 @@ _LOG_SKIP = [
     '[CONTRA]','INNER LIFE','[BUS]','unresolved in','forced topic pull',
     'soul_loop','CogPressure','colony','Colony','AutoSeeder',
     'Contemplative','reaching cognitive','resolver','Tension logged',
+    'Contemplative','reaching cognitive','resolver','Tension logged',
+    '[NIGHTLY]','meta_beliefs','has no column','CharacterEngine','circular import',
 ]
 
 _ANSI = re.compile(r'\x1b\[[0-9;]*m')
@@ -341,14 +343,24 @@ class HUDHandler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-cache")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Connection", "keep-alive")
+            self.send_header("X-Accel-Buffering", "no")
+            self.send_header("Transfer-Encoding", "chunked")
             self.end_headers()
+            # Tell browser to retry in 1s if disconnected
+            try:
+                self.wfile.write(b"retry: 1000\n\n")
+                self.wfile.flush()
+            except: pass
 
             def _send(evt, data):
                 try:
-                    self.wfile.write(f"event: {evt}\ndata: {json.dumps(data)}\n\n".encode())
+                    msg = f"event: {evt}\ndata: {json.dumps(data)}\n\n"
+                    self.wfile.write(msg.encode("utf-8"))
                     self.wfile.flush()
                     return True
-                except:
+                except (BrokenPipeError, ConnectionResetError, OSError):
+                    return False
+                except Exception:
                     return False
 
             # Seed col1 with last 20 YouTube entries
@@ -393,12 +405,13 @@ class HUDHandler(BaseHTTPRequestHandler):
             try:
                 while True:
                     _tick += 1
-                    # Keepalive every 15s
-                    if _tick % 30 == 0:
+                    # Keepalive every 5s — prevents browser timeout
+                    if _tick % 10 == 0:
                         try:
                             self.wfile.write(b": keepalive\n\n")
                             self.wfile.flush()
-                        except: break
+                        except (BrokenPipeError, ConnectionResetError, OSError):
+                            break
 
                     # Col1: YouTube from feed_events.jsonl
                     try:
@@ -454,7 +467,7 @@ class HUDHandler(BaseHTTPRequestHandler):
                                 if not _send("col3", {"t":str(_rr[3] or ""),"plat":_plat,"msg":_txt[:300]}): break
                         except: pass
 
-                    _t.sleep(0.1)
+                    _t.sleep(0.3)
             except: pass
             return
         elif path == "/sse/activity":

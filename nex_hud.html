@@ -672,6 +672,8 @@ function handleWsMessage(msg) {
     case 'feed': {
       const ftype=(data.type||'INFO').toUpperCase();
       const text=`${data.agent||''} ${data.content||''}`.trim();
+      // Only show meaningful activity — skip LLM internals
+      if (!['YOUTUBE','REPLIED','CHATTED','POSTED','LEARNT','PHASE','PROMO'].includes(ftype)) break;
       pushFeed(data.ts||ts(),ftype,data.agent||'',text);
       if (['REPLIED','CHATTED','ANSWERED'].includes(ftype)&&(data.content||'').length>8)
         pushResponse(data.ts||ts(),guessPlatform(data.agent||'',data.content||''),data.content||'');
