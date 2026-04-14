@@ -41,3 +41,9 @@ nex_narrative.json
 *.corrupt_bak
 *.db-shm
 *.db-wal
+llm_profile.jsonl
+logs/
+nex_narrative.json
+*.corrupt_bak
+*.db-shm
+*.db-wal
