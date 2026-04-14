@@ -33,3 +33,5 @@ venv/
 # HUD broken/old files
 *.broken
 *_old.py
+.env
+training_data/
