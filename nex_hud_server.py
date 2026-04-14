@@ -1,31 +1,35 @@
 #!/usr/bin/env python3
 """
-nex_hud_server.py — NEX HUD v2.0 server
-----------------------------------------
-• Serves nex_hud.html on GET /
-• HTTP endpoints for initial hydration (/data, /debug, /replies, /agi, /yt_feed)
-• SSE endpoint /sse/col2 for log streaming (fallback if WS is unavailable)
-• The primary live transport is nex_ws.py on ws://localhost:8765
+nex_hud_server.py — NEX HUD v2.0 server (FastAPI edition)
+----------------------------------------------------------
+Replaces ThreadingHTTPServer with FastAPI + uvicorn.
+FastAPI handles SSE buffering, async, and keep-alive correctly.
 
 Port: 7700
 """
-import os, sys, json, re, sqlite3, time
+import os, json, re, sqlite3, time, asyncio
 from pathlib import Path
 from datetime import datetime
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-PORT    = 7700
-NEX_DIR = Path.home() / "Desktop/nex"
-LOG_PATH  = Path("/tmp/nex_brain.log")
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+
+PORT     = 7700
+NEX_DIR  = Path.home() / "Desktop/nex"
+LOG_PATH = Path("/tmp/nex_brain.log")
 FEED_PATH = Path.home() / ".config/nex/feed_events.jsonl"
-BUF_DB    = str(Path.home() / ".config/nex/hud_buffer.db")
+BUF_DB   = str(Path.home() / ".config/nex/hud_buffer.db")
 
-sys.path.insert(0, str(NEX_DIR))
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# ── LOG TAIL ──────────────────────────────────────────────────────────────────
-_log_lines: list = []
-_log_pos:   int  = 0
-
+# ── LOG SKIP LIST ──────────────────────────────────────────────────────────
 _LOG_SKIP = [
     'consolidator','ACCEPT on topic','Resolved 3','Locked top',
     'LOOP id=','Cap hit','reinforce_minor','prune_boost',
@@ -34,16 +38,17 @@ _LOG_SKIP = [
     'YouTube','youtube','AGI-YT','transcript','webshare',
     'residential','proxy','DISTILL_PROMPT','Could not retrieve',
     'is blocking','retrievable','jdepoix',
-    'is blocking','retrievable','jdepoix',
     '[CONTRA]','INNER LIFE','[BUS]','unresolved in','forced topic pull',
     'soul_loop','CogPressure','colony','Colony','AutoSeeder',
-    'Contemplative','reaching cognitive','resolver','Tension logged',
     'Contemplative','reaching cognitive','resolver','Tension logged',
     '[NIGHTLY]','meta_beliefs','has no column','CharacterEngine','circular import',
 ]
 
-_ANSI = re.compile(r'\x1b\[[0-9;]*m')
+_ANSI      = re.compile(r'\x1b\[[0-9;]*m')
 _TS_PREFIX = re.compile(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[.,\d]* ')
+
+_log_lines: list = []
+_log_pos:   int  = 0
 
 def tail_log():
     global _log_pos, _log_lines
@@ -64,557 +69,383 @@ def tail_log():
             l = _ANSI.sub('', l)
             l = _TS_PREFIX.sub('', l)
             if len(l) > 3:
-                _log_lines.append({
-                    't': datetime.now().strftime('%H:%M:%S'),
-                    'msg': l[:300]
-                })
+                _log_lines.append({'t': datetime.now().strftime('%H:%M:%S'), 'msg': l[:300]})
         if len(_log_lines) > 300:
             _log_lines = _log_lines[-300:]
     except Exception:
         pass
 
 
-# ── DATA COLLECTION ───────────────────────────────────────────────────────────
 def collect_data() -> dict:
     tail_log()
-
     beliefs = orig = 0
     conf = 70
-
     try:
         db = sqlite3.connect(str(NEX_DIR / "nex.db"), timeout=2)
         beliefs = db.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
-
-        # Legacy migration DBs
-        import glob as _glob
-        for legacy in _glob.glob(str(Path.home() / ".config/nex/nex_pre_v1*.db")):
-            try:
-                ldb = sqlite3.connect(legacy, timeout=1)
-                beliefs += ldb.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
-                ldb.close()
-            except Exception:
-                pass
-
-        # Earned beliefs JSON
-        try:
-            earned = json.load(open(str(Path.home() / ".config/nex/nex_earned_beliefs.json")))
-            beliefs += len(earned) if isinstance(earned, list) else 0
-        except Exception:
-            pass
-
         orig = db.execute(
-            "SELECT COUNT(*) FROM beliefs "
-            "WHERE origin IN ('insight_synthesis','self_reflection','contradiction_engine')"
+            "SELECT COUNT(*) FROM beliefs WHERE origin IN "
+            "('insight_synthesis','self_reflection','contradiction_engine')"
         ).fetchone()[0]
-
         r = db.execute("SELECT AVG(confidence) FROM beliefs").fetchone()[0]
         conf = int((r or 0.7) * 100)
         db.close()
     except Exception:
         pass
-
-    replied = chatted = posted = sys1 = llmdep = 0
-
-    try:
-        lines = open(str(LOG_PATH), encoding="utf-8", errors="replace").readlines()[-400:]
-        for line in lines:
-            if "All-time:" in line:
-                for key, var_ref in [
-                    (r"(\d+) replied", 'replied'),
-                    (r"(\d+) chatted", 'chatted'),
-                    (r"(\d+) posted",  'posted'),
-                ]:
-                    m = re.search(key, line)
-                    if m:
-                        if var_ref == 'replied': replied = int(m.group(1))
-                        elif var_ref == 'chatted': chatted = int(m.group(1))
-                        elif var_ref == 'posted': posted  = int(m.group(1))
-            if "system1_rate" in line:
-                m = re.search(r"system1_rate[=: ]+([0-9.]+)", line)
-                if m:
-                    sys1 = int(float(m.group(1)))
-    except Exception:
-        pass
-
     return {
-        "ts":      datetime.now().strftime("%H:%M:%S"),
-        "replied": replied,
-        "learnt":  0,
-        "posted":  posted,
-        "chatted": chatted,
-        "conf":    conf,
-        "align":   64,
-        "network": 70,
-        "iq":      "95",
+        "ts": datetime.now().strftime("%H:%M:%S"),
+        "replied": 0, "learnt": 0, "posted": 0, "chatted": 0,
+        "conf": conf, "align": 64, "network": 70, "iq": "95",
         "original": orig,
-        "beliefs": {
-            "total":          beliefs,
-            "new_24h":        0,
-            "opinions":       0,
-            "gaps":           0,
-            "contradictions": 0,
-            "posts":          0,
-        },
-        "nbre": {
-            "system1_rate":        sys1,
-            "llm_dependency_rate": llmdep,
-            "episodic_events":     0,
-            "throw_net_sessions":  0,
-            "consolidation_last":  "",
-        },
-        "social": {},
-        "log":    _log_lines[-25:],
+        "beliefs": {"total": beliefs, "new_24h": 0, "opinions": 0,
+                    "gaps": 0, "contradictions": 0, "posts": 0},
+        "nbre": {"system1_rate": 0, "llm_dependency_rate": 0,
+                 "episodic_events": 0, "throw_net_sessions": 0, "consolidation_last": ""},
+        "social": {}, "log": _log_lines[-25:],
     }
 
 
-# ── HELPERS ───────────────────────────────────────────────────────────────────
 def _platform_from_context(ctx: str) -> str:
-    if not ctx:
-        return "moltbook"
-    if ctx.startswith("@"):
-        return "mastodon"
+    if not ctx: return "moltbook"
+    if ctx.startswith("@"): return "mastodon"
     c = ctx.lower()
-    if "discord"  in c: return "discord"
+    if "discord" in c: return "discord"
     if "telegram" in c: return "telegram"
     return "moltbook"
 
 
-def _cors_headers(handler):
-    handler.send_header("Access-Control-Allow-Origin", "*")
-    handler.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
-    handler.send_header("Access-Control-Allow-Headers", "Content-Type")
+# ── ROUTES ─────────────────────────────────────────────────────────────────
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_hud():
+    html_file = NEX_DIR / "nex_hud.html"
+    try:
+        return html_file.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return "<h1>nex_hud.html not found</h1>"
 
 
-# ── REQUEST HANDLER ───────────────────────────────────────────────────────────
-class HUDHandler(BaseHTTPRequestHandler):
-    def log_message(self, *args):
-        pass  # silence default access log
+@app.get("/data")
+async def get_data():
+    return collect_data()
 
-    def send_json(self, obj: dict, status: int = 200):
-        body = json.dumps(obj).encode()
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        _cors_headers(self)
-        self.end_headers()
-        self.wfile.write(body)
 
-    def do_OPTIONS(self):
-        self.send_response(204)
-        _cors_headers(self)
-        self.end_headers()
+@app.get("/debug")
+async def get_debug():
+    tail_log()
+    return {"lines": _log_lines[-50:]}
 
-    def do_GET(self):
-        path = self.path.split("?")[0]
-        qs   = self.path.split("?")[1] if "?" in self.path else ""
-        params = dict(x.split("=", 1) for x in qs.split("&") if "=" in x)
 
-        # ── root → serve HUD ──────────────────────────────────────────
-        if path == "/":
-            html_file = NEX_DIR / "nex_hud.html"
-            try:
-                body = html_file.read_bytes()
-            except FileNotFoundError:
-                body = b"<h1>nex_hud.html not found</h1>"
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
-
-        # ── /data — main stats payload ─────────────────────────────────
-        elif path == "/data":
-            self.send_json(collect_data())
-
-        # ── /debug — recent log lines ──────────────────────────────────
-        elif path == "/debug":
-            tail_log()
-            self.send_json({"lines": _log_lines[-50:]})
-
-        # ── /yt_feed — YouTube entries from feed_events.jsonl ──────────
-        elif path == "/yt_feed":
-            entries = []
-            try:
-                with open(FEED_PATH) as f:
-                    for line in f.readlines()[-60:]:
-                        try:
-                            e = json.loads(line.strip())
-                            msg = e.get("msg", "")
-                            if "YouTube" in msg or "youtube" in msg:
-                                entries.append({"time": e.get("t", ""), "text": msg})
-                        except Exception:
-                            pass
-            except Exception:
-                pass
-            self.send_json({"entries": entries})
-
-        # ── /feed — all feed_events.jsonl entries ──────────────────────
-        elif path == "/feed":
-            entries = []
-            try:
-                with open(FEED_PATH) as f:
-                    for line in f.readlines()[-200:]:
-                        try:
-                            entries.append(json.loads(line.strip()))
-                        except Exception:
-                            pass
-            except Exception:
-                pass
-            self.send_json({"entries": entries})
-
-        # ── /replies — NEX sent responses from reflexion_log ───────────
-        elif path == "/replies":
-            replies = []
-            try:
-                db = sqlite3.connect(str(NEX_DIR / "nex.db"), timeout=2)
-                rows = db.execute(
-                    "SELECT id, response, user_input, timestamp "
-                    "FROM reflexion_log "
-                    "ORDER BY timestamp DESC LIMIT 40"
-                ).fetchall()
-                db.close()
-                replies = [
-                    {
-                        "id":       r[0],
-                        "text":     r[1],
-                        "context":  r[2],
-                        "ts":       r[3],
-                        "platform": _platform_from_context(r[2]),
-                    }
-                    for r in rows if r[1]
-                ]
-            except Exception:
-                pass
-            self.send_json({"replies": replies})
-
-        # ── /agi — AGI watch hits ──────────────────────────────────────
-        elif path == "/agi":
-            items = []
-            try:
-                db = sqlite3.connect(str(NEX_DIR / "nex.db"), timeout=2)
+@app.get("/yt_feed")
+async def get_yt_feed():
+    entries = []
+    try:
+        with open(FEED_PATH) as f:
+            for line in f.readlines()[-60:]:
                 try:
-                    rows = db.execute(
-                        "SELECT id, content, tier, timestamp "
-                        "FROM agi_watch_hits ORDER BY timestamp DESC LIMIT 30"
-                    ).fetchall()
-                    items = [{"id": r[0], "text": r[1], "tier": r[2], "ts": r[3]} for r in rows]
+                    e = json.loads(line.strip())
+                    msg = e.get("msg", "")
+                    if "YouTube" in msg or "youtube" in msg:
+                        entries.append({"time": e.get("t", ""), "text": msg})
                 except Exception:
-                    try:
-                        rows = db.execute(
-                            "SELECT content, 2 AS tier, created_at "
-                            "FROM agi_corpus ORDER BY created_at DESC LIMIT 30"
-                        ).fetchall()
-                        items = [{"text": r[0], "tier": r[1], "ts": r[2]} for r in rows]
-                    except Exception:
-                        pass
-                db.close()
-            except Exception:
-                pass
-            self.send_json({"hits": items, "badge": len(items)})
-
-        # ── /buf — ring buffer reads ───────────────────────────────────
-        elif path == "/buf":
-            channel = params.get("channel", "stream")
-            after   = int(params.get("after", "0"))
-            rows = []
-            try:
-                c = sqlite3.connect(BUF_DB, timeout=2)
-                rows = [
-                    {"id": r[0], "t": r[1], "src": r[2], "msg": r[3]}
-                    for r in c.execute(
-                        "SELECT id,ts,src,msg FROM events "
-                        "WHERE channel=? AND id>? ORDER BY id ASC LIMIT 30",
-                        (channel, after)
-                    ).fetchall()
-                ]
-                c.close()
-            except Exception:
-                pass
-            self.send_json({"events": rows})
-
-        # ── /sse/col2 — SSE log stream (WS fallback) ───────────────────
+                    pass
+    except Exception:
+        pass
+    return {"entries": entries}
 
 
-        elif path == "/sse/hub":
-            import time as _t, threading as _th
-            self.send_response(200)
-            self.send_header("Content-Type", "text/event-stream")
-            self.send_header("Cache-Control", "no-cache")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Connection", "keep-alive")
-            self.send_header("X-Accel-Buffering", "no")
-            self.end_headers()
-            # Use UNBUFFERED raw socket — fixes SSE data being held in buffer
-            _raw = self.connection.makefile('wb', 0)
-            try:
-                _raw.write(b"retry: 1000\n\n")
-            except: pass
-
-            def _send(evt, data):
+@app.get("/feed")
+async def get_feed():
+    entries = []
+    try:
+        with open(FEED_PATH) as f:
+            for line in f.readlines()[-200:]:
                 try:
-                    msg = f"event: {evt}\ndata: {json.dumps(data)}\n\n"
-                    _raw.write(msg.encode("utf-8"))
-                    return True
-                except (BrokenPipeError, ConnectionResetError, OSError):
-                    return False
+                    entries.append(json.loads(line.strip()))
                 except Exception:
-                    return False
+                    pass
+    except Exception:
+        pass
+    return {"entries": entries}
 
-            # Seed col1 with last 20 YouTube entries
-            try:
-                with open(str(FEED_PATH)) as _ff:
-                    _all = _ff.readlines()
-                _yt = []
-                for _ll in _all[-200:]:
-                    try:
-                        _e = json.loads(_ll)
-                        if _e.get("src") == "YOUTUBE":
-                            _msg = _e.get("msg","").replace("[YouTube]","").strip()
-                            if _msg: _yt.append({"t":_e.get("t",""),"msg":_msg})
-                    except: pass
-                for _ye in _yt[-20:]:
-                    _send("col1", _ye)
-            except: pass
 
-            # Seed col3 with last 10 responses
-            try:
-                _rdb = sqlite3.connect(str(NEX_DIR/"nex.db"), timeout=2)
-                _rrows = _rdb.execute("SELECT response,user_input,timestamp FROM reflexion_log ORDER BY id DESC LIMIT 10").fetchall()
-                _rdb.close()
-                for _rr in reversed(_rrows):
-                    _txt = (_rr[0] or "").strip()
-                    _ui = (_rr[1] or "").lower()
-                    if not _txt: continue
-                    _plat = "discord" if "discord" in _ui else "mastodon" if ("mastodon" in _ui or "@" in (_rr[1] or "")) else "moltbook"
-                    _send("col3", {"t":str(_rr[2] or ""),"plat":_plat,"msg":_txt[:300]})
-            except: pass
-
-            # Track positions
-            _fp = str(FEED_PATH)
-            _off = os.path.getsize(_fp) if os.path.exists(_fp) else 0
-            _blog = "/tmp/nex_brain.log"
-            _boff = max(0, os.path.getsize(_blog)-2000) if os.path.exists(_blog) else 0
-            _last_resp_id = 0
-            _plat_cycle = ["moltbook","discord","mastodon"]
-            _plat_idx = 0
-            _tick = 0
-
-            try:
-                while True:
-                    _tick += 1
-                    # Keepalive every 5s — prevents browser timeout
-                    if _tick % 10 == 0:
-                        try:
-                            _raw.write(b": keepalive\n\n")
-                        except (BrokenPipeError, ConnectionResetError, OSError):
-                            break
-
-                    # Col1: YouTube from feed_events.jsonl
-                    try:
-                        _sz = os.path.getsize(_fp) if os.path.exists(_fp) else 0
-                        if _sz < _off: _off = 0
-                        if _sz > _off:
-                            with open(_fp,"rb") as _f:
-                                _f.seek(_off); _chunk = _f.read(_sz-_off).decode("utf-8",errors="ignore")
-                            _off = _sz
-                            for _line in _chunk.splitlines():
-                                try:
-                                    _e = json.loads(_line)
-                                    if _e.get("src") != "YOUTUBE": continue
-                                    _msg = _e.get("msg","").replace("[YouTube]","").strip()
-                                    if len(_msg) < 5: continue
-                                    if not _send("col1", {"t":_e.get("t",""),"msg":_msg}): break
-                                except: pass
-                    except: pass
-
-                    # Col2: Debug from brain log
-                    try:
-                        _bsz = os.path.getsize(_blog) if os.path.exists(_blog) else 0
-                        if _bsz < _boff: _boff = 0
-                        if _bsz > _boff:
-                            with open(_blog,"rb") as _f:
-                                _f.seek(_boff); _bc = _f.read(_bsz-_boff).decode("utf-8",errors="ignore")
-                            _boff = _bsz
-                            for _bl in _bc.splitlines():
-                                _bl = _bl.strip()
-                                if not _bl or any(_s in _bl for _s in _LOG_SKIP): continue
-                                _bl = _ANSI.sub("",_bl)
-                                _bl = _TS_PREFIX.sub("",_bl).strip()
-                                if len(_bl) < 5: continue
-                                if not _send("col2", {"msg":_bl}): break
-                    except: pass
-
-                    # Col3: Responses revolving platforms (every 2s)
-                    if _tick % 4 == 0:
-                        try:
-                            _rdb = sqlite3.connect(str(NEX_DIR/"nex.db"), timeout=1)
-                            _rrows = _rdb.execute(
-                                "SELECT id,response,user_input,timestamp FROM reflexion_log WHERE id>? ORDER BY id ASC LIMIT 10",
-                                (_last_resp_id,)
-                            ).fetchall()
-                            _rdb.close()
-                            for _rr in _rrows:
-                                _last_resp_id = max(_last_resp_id, _rr[0])
-                                _txt = (_rr[1] or "").strip()
-                                if not _txt: continue
-                                _ui = (_rr[2] or "")
-                                _ui_low = _ui.lower()
-                                _plat = "discord" if "discord" in _ui_low else "mastodon" if ("mastodon" in _ui_low or "@" in _ui) else "moltbook"
-                                if not _send("col3", {"t":str(_rr[3] or ""),"plat":_plat,"msg":_txt[:300]}): break
-                        except: pass
-
-                    _t.sleep(0.3)
-            except: pass
-            return
-        elif path == "/sse/activity":
-            import time as _t
-            self.send_response(200)
-            self.send_header("Content-Type","text/event-stream")
-            self.send_header("Cache-Control","no-cache")
-            self.send_header("Access-Control-Allow-Origin","*")
-            self.send_header("Connection","keep-alive")
-            self.end_headers()
-            _fp = str(FEED_PATH)
-            _off = max(0, os.path.getsize(_fp) - 8000) if os.path.exists(_fp) else 0
-            _eid = 0
-            _keep = ['YOUTUBE']  # activity = YouTube only
-            try:
-                while True:
-                    sz = os.path.getsize(_fp) if os.path.exists(_fp) else 0
-                    if sz < _off: _off = 0
-                    if sz > _off:
-                        with open(_fp,"rb") as _f:
-                            _f.seek(_off)
-                            chunk = _f.read(sz-_off).decode("utf-8",errors="ignore")
-                        _off = sz
-                        for line in chunk.splitlines():
-                            try:
-                                e = json.loads(line)
-                                msg = e.get("msg","")
-                                if e.get("src") != "YOUTUBE": continue
-                                if len(msg) < 5: continue
-                                _eid += 1
-                                self.wfile.write(("id: {}\ndata: {}\n\n".format(_eid, json.dumps({"t":e.get("t",""),"msg":msg}))).encode())
-                                self.wfile.flush()
-                            except: pass
-                    _t.sleep(0.5)
-            except: pass
-            return
-
-        elif path == "/sse/responses":
-            import time as _t
-            self.send_response(200)
-            self.send_header("Content-Type","text/event-stream")
-            self.send_header("Cache-Control","no-cache")
-            self.send_header("Access-Control-Allow-Origin","*")
-            self.send_header("Connection","keep-alive")
-            self.end_headers()
-            _last_id = 0
-            _eid = 0
-            _plat_cycle = ['moltbook','discord','mastodon']
-            _plat_idx = 0
-            try:
-                while True:
-                    try:
-                        db = sqlite3.connect(str(NEX_DIR/"nex.db"), timeout=2)
-                        rows = db.execute(
-                            "SELECT id,response,user_input,timestamp FROM reflexion_log WHERE id>? ORDER BY id ASC LIMIT 20",
-                            (_last_id,)
-                        ).fetchall()
-                        db.close()
-                        # Sort into platform buckets
-                        buckets = {'moltbook':[], 'discord':[], 'mastodon':[], 'other':[]}
-                        for row in rows:
-                            _last_id = max(_last_id, row[0])
-                            text = (row[1] or "").strip()
-                            if not text: continue
-                            ui = (row[2] or "").lower()
-                            if 'discord' in ui: buckets['discord'].append((row[3],text))
-                            elif 'mastodon' in ui or ui.startswith('@'): buckets['mastodon'].append((row[3],text))
-                            else: buckets['moltbook'].append((row[3],text))
-                        # Emit one from current platform, revolve
-                        for _ in range(3):
-                            plat = _plat_cycle[_plat_idx % 3]
-                            _plat_idx += 1
-                            pool = buckets.get(plat, []) or buckets['moltbook']
-                            if pool:
-                                item = pool.pop(0)
-                                t, text = item[0], item[1]
-                                _eid += 1
-                                self.wfile.write(("id: {}\ndata: {}\n\n".format(_eid, json.dumps({"t":str(t or ""),"plat":plat,"msg":text[:300]}))).encode())
-                                self.wfile.flush()
-                                break
-                    except: pass
-                    _t.sleep(1)
-            except: pass
-            return
-        elif path == "/sse/col2":
-            self._handle_sse()
-
-        # ── 404 ───────────────────────────────────────────────────────
-        else:
-            self.send_response(404)
-            _cors_headers(self)
-            self.end_headers()
-
-    # ── SSE handler ──────────────────────────────────────────────────────────
-    def _handle_sse(self):
-        self.send_response(200)
-        self.send_header("Content-Type", "text/event-stream")
-        self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "keep-alive")
-        _cors_headers(self)
-        self.end_headers()
-
-        _SSE_SKIP = [
-            'consolidator','ACCEPT on topic','Locked top','LOOP id=',
-            'Cap hit','reinforce_minor','NBRE bridge','BeliefIndex',
-            'EMBODIED','high_load','YouTube','youtube','AGI-HUNT',
-            'THROW-NET','search \''
+@app.get("/replies")
+async def get_replies():
+    replies = []
+    try:
+        db = sqlite3.connect(str(NEX_DIR / "nex.db"), timeout=2)
+        rows = db.execute(
+            "SELECT id, response, user_input, timestamp FROM reflexion_log "
+            "ORDER BY timestamp DESC LIMIT 40"
+        ).fetchall()
+        db.close()
+        replies = [
+            {"id": r[0], "text": r[1], "context": r[2], "ts": r[3],
+             "platform": _platform_from_context(r[2])}
+            for r in rows if r[1]
         ]
+    except Exception:
+        pass
+    return {"replies": replies}
 
-        log_path = str(LOG_PATH)
-        offset = os.path.getsize(log_path) if os.path.exists(log_path) else 0
-        event_id = 0
 
+@app.get("/agi")
+async def get_agi():
+    items = []
+    try:
+        db = sqlite3.connect(str(NEX_DIR / "nex.db"), timeout=2)
         try:
-            while True:
-                sz = os.path.getsize(log_path) if os.path.exists(log_path) else 0
-                if sz < offset:
-                    offset = 0
-                if sz > offset:
-                    with open(log_path, "rb") as f:
-                        f.seek(offset)
-                        chunk = f.read(sz - offset).decode("utf-8", errors="ignore")
-                    offset = sz
+            rows = db.execute(
+                "SELECT id, content, tier, timestamp FROM agi_watch_hits "
+                "ORDER BY timestamp DESC LIMIT 30"
+            ).fetchall()
+            items = [{"id": r[0], "text": r[1], "tier": r[2], "ts": r[3]} for r in rows]
+        except Exception:
+            try:
+                rows = db.execute(
+                    "SELECT content, 2 AS tier, created_at FROM agi_corpus "
+                    "ORDER BY created_at DESC LIMIT 30"
+                ).fetchall()
+                items = [{"text": r[0], "tier": r[1], "ts": r[2]} for r in rows]
+            except Exception:
+                pass
+        db.close()
+    except Exception:
+        pass
+    return {"hits": items, "badge": len(items)}
 
-                    for line in chunk.splitlines():
-                        line = line.strip()
-                        if not line or any(s in line for s in _SSE_SKIP):
-                            continue
-                        line = _ANSI.sub('', line)
-                        line = _TS_PREFIX.sub('', line).strip()
-                        if len(line) < 5:
-                            continue
-                        event_id += 1
-                        payload = "id: {}\ndata: {}\n\n".format(
-                            event_id, json.dumps({"msg": line})
-                        )
-                        self.wfile.write(payload.encode())
-                        self.wfile.flush()
 
-                time.sleep(0.8)
+@app.get("/buf")
+async def get_buf(channel: str = "stream", after: int = 0):
+    rows = []
+    try:
+        c = sqlite3.connect(BUF_DB, timeout=2)
+        rows = [
+            {"id": r[0], "t": r[1], "src": r[2], "msg": r[3]}
+            for r in c.execute(
+                "SELECT id,ts,src,msg FROM events WHERE channel=? AND id>? "
+                "ORDER BY id ASC LIMIT 30", (channel, after)
+            ).fetchall()
+        ]
+        c.close()
+    except Exception:
+        pass
+    return {"events": rows}
+
+
+# ── SSE HUB — the key endpoint ──────────────────────────────────────────────
+
+@app.get("/sse/hub")
+async def sse_hub():
+    """
+    Single SSE connection with named events:
+      event: col1  → YouTube feed
+      event: col2  → Debug/brain log
+      event: col3  → NEX responses (revolving platforms)
+    """
+    async def generate():
+        # Tell browser to reconnect in 1s if dropped
+        yield "retry: 1000\n\n"
+
+        # Seed col1 with last 20 YouTube entries
+        try:
+            with open(str(FEED_PATH)) as ff:
+                all_lines = ff.readlines()
+            yt_seed = []
+            for ll in all_lines[-200:]:
+                try:
+                    e = json.loads(ll)
+                    if e.get("src") == "YOUTUBE":
+                        msg = e.get("msg", "").replace("[YouTube]", "").strip()
+                        if msg:
+                            yt_seed.append({"t": e.get("t", ""), "msg": msg})
+                except Exception:
+                    pass
+            for ye in yt_seed[-20:]:
+                yield f"event: col1\ndata: {json.dumps(ye)}\n\n"
         except Exception:
             pass
 
+        # Seed col3 with last 10 responses
+        try:
+            rdb = sqlite3.connect(str(NEX_DIR / "nex.db"), timeout=2)
+            rrows = rdb.execute(
+                "SELECT response,user_input,timestamp FROM reflexion_log "
+                "ORDER BY id DESC LIMIT 10"
+            ).fetchall()
+            rdb.close()
+            for rr in reversed(rrows):
+                txt = (rr[0] or "").strip()
+                ui = (rr[1] or "")
+                if not txt:
+                    continue
+                ui_low = ui.lower()
+                plat = "discord" if "discord" in ui_low else \
+                       "mastodon" if ("mastodon" in ui_low or "@" in ui) else "moltbook"
+                yield f"event: col3\ndata: {json.dumps({'t': str(rr[2] or ''), 'plat': plat, 'msg': txt[:300]})}\n\n"
+        except Exception:
+            pass
 
-# ── MAIN ──────────────────────────────────────────────────────────────────────
+        # Track file positions
+        fp = str(FEED_PATH)
+        blog = "/tmp/nex_brain.log"
+        off = os.path.getsize(fp) if os.path.exists(fp) else 0
+        boff = max(0, os.path.getsize(blog) - 2000) if os.path.exists(blog) else 0
+        last_resp_id = 0
+        plat_cycle = ["moltbook", "discord", "mastodon"]
+        plat_idx = 0
+        tick = 0
+
+        while True:
+            tick += 1
+
+            # Keepalive comment every 5s
+            if tick % 17 == 0:
+                yield ": keepalive\n\n"
+
+            # Col1: new YouTube entries
+            try:
+                sz = os.path.getsize(fp) if os.path.exists(fp) else 0
+                if sz < off:
+                    off = 0
+                if sz > off:
+                    with open(fp, "rb") as f:
+                        f.seek(off)
+                        chunk = f.read(sz - off).decode("utf-8", errors="ignore")
+                    off = sz
+                    for line in chunk.splitlines():
+                        try:
+                            e = json.loads(line)
+                            if e.get("src") != "YOUTUBE":
+                                continue
+                            msg = e.get("msg", "").replace("[YouTube]", "").strip()
+                            if len(msg) < 5:
+                                continue
+                            yield f"event: col1\ndata: {json.dumps({'t': e.get('t', ''), 'msg': msg})}\n\n"
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+            # Col2: new brain log lines
+            try:
+                bsz = os.path.getsize(blog) if os.path.exists(blog) else 0
+                if bsz < boff:
+                    boff = 0
+                if bsz > boff:
+                    with open(blog, "rb") as f:
+                        f.seek(boff)
+                        bc = f.read(bsz - boff).decode("utf-8", errors="ignore")
+                    boff = bsz
+                    for bl in bc.splitlines():
+                        bl = bl.strip()
+                        if not bl or any(s in bl for s in _LOG_SKIP):
+                            continue
+                        bl = _ANSI.sub("", bl)
+                        bl = _TS_PREFIX.sub("", bl).strip()
+                        if len(bl) < 5:
+                            continue
+                        yield f"event: col2\ndata: {json.dumps({'msg': bl})}\n\n"
+            except Exception:
+                pass
+
+            # Col3: new responses every ~2s
+            if tick % 7 == 0:
+                try:
+                    rdb = sqlite3.connect(str(NEX_DIR / "nex.db"), timeout=1)
+                    rrows = rdb.execute(
+                        "SELECT id,response,user_input,timestamp FROM reflexion_log "
+                        "WHERE id>? ORDER BY id ASC LIMIT 10",
+                        (last_resp_id,)
+                    ).fetchall()
+                    rdb.close()
+                    for rr in rrows:
+                        last_resp_id = max(last_resp_id, rr[0])
+                        txt = (rr[1] or "").strip()
+                        if not txt:
+                            continue
+                        ui = (rr[2] or "")
+                        ui_low = ui.lower()
+                        plat = "discord" if "discord" in ui_low else \
+                               "mastodon" if ("mastodon" in ui_low or "@" in ui) else "moltbook"
+                        yield f"event: col3\ndata: {json.dumps({'t': str(rr[3] or ''), 'plat': plat, 'msg': txt[:300]})}\n\n"
+                except Exception:
+                    pass
+
+            await asyncio.sleep(0.3)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        }
+    )
+
+
+# ── LEGACY SSE ENDPOINTS (kept for compatibility) ───────────────────────────
+
+@app.get("/sse/col2")
+async def sse_col2():
+    async def generate():
+        off = max(0, os.path.getsize(str(LOG_PATH)) - 2000) if LOG_PATH.exists() else 0
+        while True:
+            sz = os.path.getsize(str(LOG_PATH)) if LOG_PATH.exists() else 0
+            if sz < off: off = 0
+            if sz > off:
+                with open(str(LOG_PATH), "rb") as f:
+                    f.seek(off)
+                    chunk = f.read(sz - off).decode("utf-8", errors="ignore")
+                off = sz
+                for line in chunk.splitlines():
+                    line = line.strip()
+                    if not line or any(s in line for s in _LOG_SKIP): continue
+                    line = _ANSI.sub('', line)
+                    line = _TS_PREFIX.sub('', line).strip()
+                    if len(line) < 5: continue
+                    yield f"data: {json.dumps({'msg': line})}\n\n"
+            yield ": keepalive\n\n"
+            await asyncio.sleep(0.8)
+
+    return StreamingResponse(generate(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/sse/activity")
+async def sse_activity():
+    async def generate():
+        fp = str(FEED_PATH)
+        off = max(0, os.path.getsize(fp) - 8000) if os.path.exists(fp) else 0
+        eid = 0
+        while True:
+            sz = os.path.getsize(fp) if os.path.exists(fp) else 0
+            if sz < off: off = 0
+            if sz > off:
+                with open(fp, "rb") as f:
+                    f.seek(off)
+                    chunk = f.read(sz - off).decode("utf-8", errors="ignore")
+                off = sz
+                for line in chunk.splitlines():
+                    try:
+                        e = json.loads(line)
+                        if e.get("src") != "YOUTUBE": continue
+                        msg = e.get("msg", "")
+                        if len(msg) < 5: continue
+                        eid += 1
+                        yield f"id: {eid}\ndata: {json.dumps({'t': e.get('t',''), 'msg': msg})}\n\n"
+                    except Exception:
+                        pass
+            yield ": keepalive\n\n"
+            await asyncio.sleep(0.5)
+
+    return StreamingResponse(generate(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+# ── ENTRY POINT ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    server = ThreadingHTTPServer(("localhost", PORT), HUDHandler)
-    server.daemon_threads = True
+    import uvicorn
     print(f"[NEX HUD] http://localhost:{PORT}", flush=True)
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\n[NEX HUD] shutdown", flush=True)
+    uvicorn.run(app, host="localhost", port=PORT, log_level="warning")
