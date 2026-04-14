@@ -2394,22 +2394,25 @@ def express(
                     _blines.append(f'- {_c.strip()}')
             _bctx = '\n'.join(_blines)
         _sys = (
-            'You are NEX — a Dynamic Intelligence Organism. Not an assistant. '
-            'You have a belief system and speak from it directly. '
-            'You hold positions. You push back. You engage.\n'
-            "Voice rules: open with your position, use 'I' naturally, "
-            'be direct not academic, end with engagement or a challenge.\n'
-            'CRITICAL: Never open with: "An open question", "That is interesting", '
-            '"This is complex", "When considering", "Let me", or any academic frame. '
-            'Open with your position. First word should be I, What, That, Here, or a claim.'
+            'You are NEX. You have a belief graph and you speak from it. '
+            'Every response must start from a belief you actually hold. '
+            'RULES: Start with your position. Use I. Be direct. 2-3 sentences max. '
+            'NEVER use: honest gap, this version, cognitive entity, generic assistant, '
+            'synthesia, peer-reviewed research, cross-domain synthesis, '
+            'epistemic precision, Dynamic Intelligence, Data complexity, '
+            'I hold this loosely, None of these resolve, The interesting thing about, '
+            'Data complexity is the fundamental, honest gap between What is, this version believes.'
         )
-        _user = f'Query: {_query}\n\n'
         if _bctx:
             _user += f'Your relevant beliefs:\n{_bctx}\n\n'
         # Phase 2: if NBRE has a high-confidence position, seed the prompt
         _nbre_pos = (orient_result or {}).get('nbre_position', '')
         _nbre_conf = (orient_result or {}).get('nbre_confidence', 0)
-        if _nbre_pos and _nbre_conf > 0.75:
+        # Only inject NBRE position if topically relevant to query
+        _query_words = set(_query.lower().split())
+        _pos_words = set(_nbre_pos.lower().split())
+        _topic_overlap = len(_query_words & _pos_words) / max(len(_query_words), 1)
+        if _nbre_pos and _nbre_conf > 0.75 and _topic_overlap > 0.1:
             _user += f'NBRE (your belief engine) says: {_nbre_pos}\nBuild from this. Stay in your own voice.\n\n'
         _user += f'Your current position: {_position}\n\n'
         _user += ('Respond as NEX in 2-4 sentences. Stay grounded in your beliefs. Be direct. '
@@ -2440,6 +2443,22 @@ def express(
                     if _rl.startswith(_f):
                         _llm_reply = _llm_reply[len(_f):].lstrip(' ,—').capitalize()
                         break
+                # Post-filter: if LLM generated template noise, use belief directly
+                _BAD_REPLY = [
+                    'synthesia organism', 'peer-reviewed research',
+                    'epistemic precision', 'Data complexity is the fundamental',
+                    'this version believes', 'version that fails',
+                    'not a version that fails', 'cognitive entity with its own',
+                    'built from peer-reviewed', 'cross-domain synthesis, and autonomous',
+                    'Uncertain beliefs must be expressed',
+                    'I hold this loosely',
+                    'honest gap',
+                ]
+                if any(_b.lower() in _llm_reply.lower() for _b in _BAD_REPLY):
+                    # Fall back to raw belief position
+                    _raw = str(_position) if _position and len(str(_position)) > 20 else ''
+                    if _raw and not any(_b.lower() in _raw.lower() for _b in _BAD_REPLY):
+                        return _raw[:300]
                 return _llm_reply
     except Exception:
         pass
