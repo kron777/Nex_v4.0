@@ -342,6 +342,34 @@ def gaps_from_auto_check(con) -> list:
 # Core: detect + queue
 # ─────────────────────────────────────────────────────────────
 
+
+def gaps_from_intentions(con) -> list:
+    """Read active intentions from nex_intentions table.
+    Returns gaps with urgency=0.97 — highest priority, above all curiosity sources.
+    This transitions NEX from reactive (what she doesn't know) to purposeful (what she intends).
+    """
+    gaps = []
+    try:
+        rows = con.execute(
+            "SELECT id, statement FROM nex_intentions "
+            "WHERE completed=0 ORDER BY set_at DESC LIMIT 5"
+        ).fetchall()
+        for row in rows:
+            intent_id, statement = row
+            # Extract topic from statement (first 4 words or full if short)
+            words = statement.strip().split()
+            topic = " ".join(words[:4]) if len(words) > 4 else statement.strip()
+            gaps.append({
+                "topic":   topic,
+                "urgency": 0.97,
+                "source":  "nex_intentions",
+                "count":   0,
+                "intent_id": intent_id,
+            })
+    except Exception as e:
+        logger.debug(f"[gap_feeder] intentions read failed: {e}")
+    return gaps
+
 def feed_gaps(max_new: int = TOPICS_PER_CYCLE, verbose: bool = True) -> int:
     """
     Main entry point — call once per ABSORB cycle from run.py.
@@ -364,8 +392,9 @@ def feed_gaps(max_new: int = TOPICS_PER_CYCLE, verbose: bool = True) -> int:
 
         slots = min(max_new, MAX_QUEUE_SIZE - current_queue)
 
-        # Collect gaps from all sources
+        # Collect gaps from all sources — intentions first (highest urgency)
         all_gaps = []
+        all_gaps.extend(gaps_from_intentions(con))       # urgency=0.97 — purposeful
         all_gaps.extend(gaps_from_belief_db(con))
         all_gaps.extend(gaps_from_knowledge_gaps_table(con))
         all_gaps.extend(gaps_from_curiosity_gaps_table(con))
