@@ -35,3 +35,9 @@ venv/
 *_old.py
 .env
 training_data/
+llm_profile.jsonl
+logs/
+nex_narrative.json
+*.corrupt_bak
+*.db-shm
+*.db-wal
