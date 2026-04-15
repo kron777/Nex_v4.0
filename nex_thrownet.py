@@ -667,6 +667,9 @@ def compute_closed_x_vars(live_state):
     internet = live_state.get("internet_belief_id225562", "NOT FOUND")
     if "NOT FOUND" in internet or "QUARANTINED OK" in internet:
         closed.append("X9")
+    # X3: intentions table exists and has entries
+    if live_state.get("intentions", 0) > 0:
+        closed.append("X3")
     return closed
 
 def neti_neti_filter(upgrades):
