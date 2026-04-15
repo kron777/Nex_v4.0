@@ -574,7 +574,9 @@ def generate_inner_life(affect: dict, active_beliefs: list = None, pressure: flo
     parts  = [random.choice(frames)]
 
     if active_beliefs:
-        b = random.choice(active_beliefs[:5])
+        _ab = [b for b in active_beliefs if (b.get("confidence",1) if isinstance(b,dict) else 1) > 0.1]
+        if not _ab: _ab = active_beliefs
+        b = random.choice(_ab[:5])
         b_text = (b.get('content', '') if isinstance(b, dict) else str(b)).strip()
         if b_text:
             parts.append(f"Current thread: {b_text[:110]}")
@@ -728,7 +730,8 @@ def ask_llm_free(prompt: str, context: dict = None) -> str:
     if any(w in p for w in ['inner life', 'feeling', 'emotional state', 'mood', 'how are you', 'what are you']):
         rows = _db("SELECT pressure FROM nex_cognitive_pressure ORDER BY timestamp DESC LIMIT 1")
         pressure = float(rows[0][0]) if rows else 0.3
-        return generate_inner_life(affect, beliefs[:6], pressure)
+        _clean_b = [b for b in beliefs if (b.get("confidence",1) if isinstance(b,dict) else 1) > 0.1]
+        return generate_inner_life(affect, _clean_b[:6], pressure)
 
     # ── Search query generation ──────────────────────────────────────────────
     if any(w in p for w in ['search query', 'query for', 'what to search', 'look up', 'find information about', 'research query']):

@@ -2720,7 +2720,7 @@ def main():
                                     _gw_block = _gw.inject(
                                         "",
                                         goals          = _goals,
-                                        active_beliefs = [b.get("content","")[:60] for b in learner.belief_field[-4:]],
+                                        active_beliefs = [b.get("content","")[:60] for b in learner.belief_field[-4:] if (b.get("confidence",1) if isinstance(b,dict) else 1) > 0.1],
                                     ).rstrip() + "\n\n"
                                 except Exception: pass
                             prompt = (
