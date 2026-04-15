@@ -157,9 +157,9 @@ def run_wisdom_distillation(verbose=True) -> int:
         db.commit()
         last_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
         new_ids.append(last_id)
-        if not _is_good_wisdom(principle):
-            if verbose:
-                print(f"[wisdom] filtered: {principle[:60]}")
+        _bad = ['bridge:','\u2194','interesting thing','What does','have to do','different domain','character and drift','which holds when']
+        if any(b.lower() in principle.lower() for b in _bad) or len(principle.split()) < 8:
+            if verbose: print(f"[wisdom] filtered: {principle[:60]}")
             continue
         if verbose:
             print(f"[wisdom] new: {principle[:100]}")
@@ -308,9 +308,9 @@ def run_wisdom_distillation(verbose=True) -> int:
         db.commit()
         last_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
         new_ids.append(last_id)
-        if not _is_good_wisdom(principle):
-            if verbose:
-                print(f"[wisdom] filtered: {principle[:60]}")
+        _bad = ['bridge:','\u2194','interesting thing','What does','have to do','different domain','character and drift','which holds when']
+        if any(b.lower() in principle.lower() for b in _bad) or len(principle.split()) < 8:
+            if verbose: print(f"[wisdom] filtered: {principle[:60]}")
             continue
         if verbose:
             print(f"[wisdom] new: {principle[:100]}")
