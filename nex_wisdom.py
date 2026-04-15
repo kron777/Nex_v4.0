@@ -155,6 +155,10 @@ def run_wisdom_distillation(verbose=True) -> int:
         db.commit()
         last_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
         new_ids.append(last_id)
+        if not _is_good_wisdom(principle):
+            if verbose:
+                print(f"[wisdom] filtered: {principle[:60]}")
+            continue
         if verbose:
             print(f"[wisdom] new: {principle[:100]}")
 
