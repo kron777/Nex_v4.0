@@ -10,7 +10,7 @@ Each wisdom entry is injected into soul_loop REASON as TIER_1 (source=nex_core).
 import sqlite3, json, time, logging, requests
 from pathlib import Path
 
-DB_PATH   = Path.home() / ".config/nex/nex.db"
+DB_PATH   = Path("/media/rr/NEX/nex_core/nex.db")
 LLM_URL   = "http://localhost:8080/v1/completions"
 LOG       = logging.getLogger("nex.wisdom")
 

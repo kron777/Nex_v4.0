@@ -1096,6 +1096,27 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
     # ─────────────────────────────────────────────────────────────────────
 
     # Cross-domain retrieval — beliefs from adjacent topics
+    # ── U6: Inject wisdom as TIER_1 beliefs into REASON ─────────────
+    try:
+        import sqlite3 as _ws_sq
+        _ws_db = _ws_sq.connect('/media/rr/NEX/nex_core/nex.db', timeout=2)
+        _ws_rows = _ws_db.execute(
+            "SELECT content FROM beliefs WHERE source='nex_core' "
+            "AND topic='wisdom' AND confidence >= 0.9 "
+            "ORDER BY rowid DESC LIMIT 3"
+        ).fetchall()
+        _ws_db.close()
+        for _wr in _ws_rows:
+            top_beliefs.insert(0, {
+                "content": _wr[0], "confidence": 0.97,
+                "source": "nex_core", "topic": "wisdom",
+                "id": None
+            })
+        if _ws_rows:
+            print(f"  [WISDOM] {len(_ws_rows)} wisdom beliefs injected as TIER_1")
+    except Exception:
+        pass
+    # ── END WISDOM INJECT ─────────────────────────────────────────────
     cross_domain = _cross_domain_beliefs(top_beliefs, tokens, limit=3)
 
     # ── Query-topic forcing — if a topic is literally in the query, pull it ──
