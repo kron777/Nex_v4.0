@@ -106,6 +106,8 @@ class BridgeAccelerator:
         conn = sqlite3.connect(str(_DB_PATH), timeout=10)
         conn.execute("PRAGMA journal_mode=WAL")
 
+        _BAD_BRIDGE = ['without mental states', 'Systems without mental', 'autonomous cognitive entity']
+        pairs = [(a,b,c,d) for a,b,c,d in pairs if not any(x in str(b)+str(d) for x in _BAD_BRIDGE)]
         for topic_a, content_a, topic_b, content_b in pairs[:_MAX_BRIDGES]:
             try:
                 prompt = (
