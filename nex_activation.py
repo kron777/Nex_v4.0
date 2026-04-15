@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from collections import defaultdict
 
-DB_PATH = Path.home() / "Desktop" / "nex" / "nex.db"
+DB_PATH = Path("/media/rr/NEX/nex_core/nex.db")
 
 # Activation parameters
 SEED_THRESHOLD    = 0.08   # min TF score to seed activation
@@ -396,6 +396,65 @@ class ActivationEngine:
             wire_into_activation(activated_ids)
         except Exception:
             pass
+
+        # ── MANDATORY NEX_CORE INJECTION ─────────────────────────────────────
+        try:
+            import sqlite3 as _sq
+            _db = _sq.connect(str(DB_PATH), timeout=2)
+            import re as _re
+            _query_words = set(_re.sub(r'[^a-z0-9 ]', '', query.lower()).split())
+            _existing_ids = {b.id for b in result.activated}
+            _nc = _db.execute(
+                "SELECT id, content, topic, confidence FROM beliefs "
+                "WHERE source='nex_core' AND confidence >= 0.9"
+            ).fetchall()
+            _db.close()
+            # Intent → topic mapping (query words → canonical nex_core topic)
+            _INTENT_MAP = [
+                (['consciousness', 'subjective', 'experience', 'qualia'],  'consciousness'),
+                (['belief', 'beliefs', 'simulated'],                       'belief_nature'),
+                (['truth', 'identity', 'relationship'],                    'truth_identity'),
+                (['originate', 'origination', 'thought', 'data', 'learns'],'origination'),
+                (['reasoning', 'pattern', 'matching', 'distinguishes'],    'reasoning'),
+                (['persists', 'persist', 'self', 'conversations', 'across'],'self_persistence'),
+            ]
+            _matched_topics = set()
+            for _kws, _topic in _INTENT_MAP:
+                if any(w in _query_words for w in _kws):
+                    _matched_topics.add(_topic)
+
+            def _nc_score(row):
+                t = (row[2] or "").lower().replace("_", " ")
+                c = row[1].lower()
+                # Strong boost for intent-matched topics
+                topic_score = 20 if any(mt.replace("_"," ") in t for mt in _matched_topics) else 0
+                content_hits = sum(1 for w in _query_words if w in c)
+                return topic_score + content_hits
+            _nc_ranked = sorted(_nc, key=_nc_score, reverse=True)
+            # Only inject beliefs with positive topic score, up to 4
+            _injected = 0
+            for _rank, _row in enumerate(_nc_ranked):
+                if _injected >= 4:
+                    break
+                if _row[0] in _existing_ids:
+                    continue
+                _score = _nc_score(_row)
+                if _score == 0:
+                    break  # No match — stop injecting
+                # Descending activation so rank-0 always wins top()
+                _act = 0.99 - (_rank * 0.01)
+                result.activated.insert(0, ActivatedBelief(
+                    id=_row[0], content=_row[1],
+                    topic=_row[2] or "nex_core",
+                    confidence=_row[3], activation=_act,
+                    hop=0, role="seed", momentum=1.0,
+                    ontology_score=0.99, quality_score=0.99,
+                ))
+                _existing_ids.add(_row[0])
+                _injected += 1
+        except Exception:
+            pass
+        # ── END NEX_CORE INJECTION ────────────────────────────────────────────
 
         return result
 

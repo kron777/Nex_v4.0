@@ -1331,6 +1331,31 @@ def generate(query: str) -> str:
             print(f'  [RESIDUE] capture error: {_rce}')
     # ─────────────────────────────────────────────────────────────────
 
+    # ── NRP POST-FILTER ─────────────────────────────────────────────────────
+    _BAD = [
+        'synthesia organism', 'autonomous cognitive entity',
+        'peer-reviewed research', 'fractal nature',
+        'systems without mental states', 'not a generic assistant',
+        'What I know about you:', 'Known world facts:',
+        "Where I'm genuinely uncertain:", 'The honest gap in knowledge',
+    ]
+    _resp_low = (response or "").lower()
+    if any(b.lower() in _resp_low for b in _BAD):
+        try:
+            import sqlite3 as _pf_sq
+            _pf_db = _pf_sq.connect(str(__import__('pathlib').Path.home()/"Desktop/nex/nex.db"), timeout=2)
+            _pf_row = _pf_db.execute(
+                "SELECT content FROM beliefs WHERE source='nex_core' "
+                "AND confidence=1.0 ORDER BY RANDOM() LIMIT 1"
+            ).fetchone()
+            _pf_db.close()
+            if _pf_row:
+                response = _pf_row[0]
+                print("  [NRP POST-FILTER] blocked contaminated response, used nex_core fallback")
+        except Exception:
+            pass
+    # ── END NRP POST-FILTER ──────────────────────────────────────────────────
+
     return response
 
 
