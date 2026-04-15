@@ -7,7 +7,7 @@ Called from soul_loop REASON step.
 import sqlite3, json, time
 from pathlib import Path
 
-DB_PATH = Path.home() / ".config/nex/nex.db"
+DB_PATH = Path("/media/rr/NEX/nex_core/nex.db")
 
 def get_user_profile(user_id: str = "terminal") -> dict:
     """Read user_model table — what we know about this user."""
@@ -124,3 +124,161 @@ def get_integration_delta(conversation_id: str) -> float:
     # More depth signals per turn = positive integration delta
     delta = len(depth_signals) / max(turn_count, 1)
     return min(1.0, delta)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# InterlocutorGraph — class wrapper for API integration (U7)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class InterlocutorGraph:
+    """
+    Per-session model of the interlocutor.
+    Wraps the standalone functions into the interface nex_api.py expects.
+    Tracks: epistemic state, depth signals, resistance, integration delta.
+    """
+
+    def __init__(self, session_id: str):
+        self.session_id     = session_id
+        self.turn_count     = 0
+        self.topics_seen    = []
+        self.depth_signals  = []
+        self.resistance     = []
+        self.last_query     = ""
+        self.last_response  = ""
+        self.integration_deltas = []
+        self._hints         = {}
+
+    @classmethod
+    def load(cls, session_id: str):
+        """Load existing state from DB or return None."""
+        try:
+            state = get_conversation_state(session_id)
+            if not state or state.get("turn_count", 0) == 0:
+                return None
+            g = cls(session_id)
+            g.turn_count    = state.get("turn_count", 0)
+            g.topics_seen   = state.get("topics_seen", [])
+            g.depth_signals = state.get("depth_signals", [])
+            g.last_query    = state.get("last_query", "")
+            return g
+        except Exception:
+            return None
+
+    def update(self, query: str, last_response: str) -> dict:
+        """Process a new exchange. Returns turn summary."""
+        self.turn_count   += 1
+        self.last_query    = query
+        self.last_response = last_response
+
+        # Detect depth: long queries or philosophical terms
+        depth_words = ['why', 'how', 'what if', 'distinguish', 'relationship',
+                       'consciousness', 'belief', 'identity', 'originate']
+        q_lower = query.lower()
+        is_deep = len(query.split()) > 12 or any(w in q_lower for w in depth_words)
+        if is_deep:
+            self.depth_signals.append(time.time())
+            self.depth_signals = self.depth_signals[-10:]
+
+        # Detect resistance: short follow-ups, "but", "however", "that's not"
+        resistance_words = ['but ', 'however', "that's not", 'disagree', 'wrong']
+        if any(w in q_lower for w in resistance_words):
+            self.resistance.append(query[:50])
+
+        # Update hint cache
+        self._hints = {
+            "depth_level":   min(len(self.depth_signals) / 3.0, 1.0),
+            "turn_count":    self.turn_count,
+            "resistance":    len(self.resistance),
+            "topics_seen":   self.topics_seen[-5:],
+        }
+
+        # Persist
+        update_conversation_state(
+            self.session_id, query, last_response,
+            self.topics_seen[-3:]
+        )
+        return {"turn": self.turn_count, "depth": self._hints["depth_level"]}
+
+    def get_translation_hints(self) -> dict:
+        """Return hints for belief activation weighting."""
+        profile = get_user_profile()
+        boost  = get_interest_boost_topics()
+        return {
+            "boost_topics":  boost,
+            "depth_level":   self._hints.get("depth_level", 0.5),
+            "turn_count":    self.turn_count,
+            "user_profile":  profile,
+        }
+
+    def get_kairos_signal(self) -> dict:
+        """
+        Kairos check — is the interlocutor primed for this response?
+        Returns readiness score and recommendation.
+        """
+        depth = self._hints.get("depth_level", 0)
+        turns = self.turn_count
+        # Primed if: 2+ turns deep, depth signal present, no recent resistance
+        recent_resistance = any(
+            r for r in self.resistance
+            if r in self.last_query
+        )
+        primed = turns >= 2 and depth > 0.2 and not recent_resistance
+        return {
+            "primed":     primed,
+            "turns":      turns,
+            "depth":      depth,
+            "hold":       not primed and turns == 1,
+        }
+
+    def landing_field(self, response: str) -> dict:
+        """
+        Post-response: did this land?
+        Measures integration delta — did the exchange deepen?
+        """
+        depth = self._hints.get("depth_level", 0)
+        delta = {
+            "session_id":  self.session_id,
+            "turn":        self.turn_count,
+            "depth":       depth,
+            "landed":      depth > 0.3,
+            "ts":          time.time(),
+        }
+        self.integration_deltas.append(delta)
+        # Boost wisdom beliefs that produced landing
+        if delta["landed"]:
+            try:
+                db = sqlite3.connect(str(DB_PATH), timeout=2)
+                db.execute(
+                    "UPDATE nex_wisdom SET use_count=use_count+1 "
+                    "WHERE id=(SELECT id FROM nex_wisdom ORDER BY use_count ASC LIMIT 1)"
+                )
+                db.commit(); db.close()
+            except Exception:
+                pass
+        return delta
+
+    def persist(self):
+        """Write current state to DB."""
+        try:
+            db = sqlite3.connect(str(DB_PATH), timeout=2)
+            state = {
+                "topics_seen":   self.topics_seen,
+                "depth_signals": self.depth_signals,
+                "last_query":    self.last_query,
+                "turn_count":    self.turn_count,
+                "resistance":    self.resistance[-5:],
+            }
+            db.execute(
+                """INSERT INTO interlocutor_graphs
+                   (conversation_id, turn_count, state_json, updated_at)
+                   VALUES (?,?,?,?)
+                   ON CONFLICT(conversation_id) DO UPDATE SET
+                   turn_count=excluded.turn_count,
+                   state_json=excluded.state_json,
+                   updated_at=excluded.updated_at""",
+                (self.session_id, self.turn_count,
+                 __import__('json').dumps(state), time.time())
+            )
+            db.commit(); db.close()
+        except Exception:
+            pass
