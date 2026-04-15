@@ -2453,12 +2453,22 @@ def express(
                     'Uncertain beliefs must be expressed',
                     'I hold this loosely',
                     'honest gap',
+                    'fractal nature of reality',
+                    'structure of these images',
+                    'not merely aesthetic',
+                    'She is an autonomous',
                 ]
                 if any(_b.lower() in _llm_reply.lower() for _b in _BAD_REPLY):
-                    # Fall back to raw belief position
-                    _raw = str(_position) if _position and len(str(_position)) > 20 else ''
-                    if _raw and not any(_b.lower() in _raw.lower() for _b in _BAD_REPLY):
-                        return _raw[:300]
+                    # Fall back to top nex_core belief directly
+                    try:
+                        import sqlite3 as _sq3
+                        _fdb = _sq3.connect('/media/rr/NEX/nex_core/nex.db', timeout=2)
+                        _fb = _fdb.execute("SELECT content FROM beliefs WHERE source='nex_core' AND confidence>0.9 ORDER BY RANDOM() LIMIT 1").fetchone()
+                        _fdb.close()
+                        if _fb and not any(_b.lower() in _fb[0].lower() for _b in _BAD_REPLY):
+                            return _fb[0][:300]
+                    except Exception:
+                        pass
                 return _llm_reply
     except Exception:
         pass
