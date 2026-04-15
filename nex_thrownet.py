@@ -647,6 +647,72 @@ def activate_domain_beliefs(domain):
     except Exception as e:
         return []
 
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# INTEGRATION DELTA — what actually landed, not just what was built
+# ══════════════════════════════════════════════════════════════════════════════
+
+def read_effect_metrics():
+    m = {}
+    try:
+        import sqlite3 as _em_sq, time as _em_t
+        db = _em_sq.connect('/media/rr/NEX/nex_core/nex.db', timeout=3)
+        m['residue_24h'] = db.execute(
+            "SELECT COUNT(*) FROM nex_residue WHERE ts > ?",
+            (_em_t.time() - 86400,)
+        ).fetchone()[0]
+        m['residue_total'] = db.execute("SELECT COUNT(*) FROM nex_residue").fetchone()[0]
+        m['wisdom_entries'] = db.execute("SELECT COUNT(*) FROM nex_wisdom").fetchone()[0]
+        m['wisdom_use_count'] = db.execute("SELECT COALESCE(SUM(use_count),0) FROM nex_wisdom").fetchone()[0]
+        m['wisdom_in_beliefs'] = db.execute(
+            "SELECT COUNT(*) FROM beliefs WHERE source='nex_core' AND topic='wisdom'"
+        ).fetchone()[0]
+        m['intentions_active'] = db.execute(
+            "SELECT COUNT(*) FROM nex_intentions WHERE completed=0"
+        ).fetchone()[0]
+        try:
+            row = db.execute("SELECT fired_count FROM nbre_log ORDER BY id DESC LIMIT 1").fetchone()
+            m['nbre_last_tensions'] = row[0] if row else 0
+        except Exception:
+            m['nbre_last_tensions'] = 'unavailable'
+        m['beliefs_added_24h'] = db.execute(
+            "SELECT COUNT(*) FROM beliefs WHERE created_at > ?",
+            (str(_em_t.time() - 86400),)
+        ).fetchone()[0]
+        total = db.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+        high = db.execute("SELECT COUNT(*) FROM beliefs WHERE confidence > 0.7").fetchone()[0]
+        m['high_conf_ratio'] = f"{high}/{total} ({100*high//max(total,1)}%)" if total else "0/0"
+        m['nex_core_count'] = db.execute(
+            "SELECT COUNT(*) FROM beliefs WHERE source='nex_core' AND confidence=1.0"
+        ).fetchone()[0]
+        db.close()
+    except Exception as e:
+        m['error'] = str(e)
+    return m
+
+
+def score_effect(metrics):
+    verdicts = []
+    score = 0
+    checks = [
+        ("Residue capturing",     metrics.get('residue_24h', 0) >= 5,        2, "U3 not accumulating — check soul_loop REASON path"),
+        ("Wisdom growing",        metrics.get('wisdom_entries', 0) >= 3,      1, "Run nex_wisdom.run_wisdom_distillation()"),
+        ("Wisdom in belief pool", metrics.get('wisdom_in_beliefs', 0) >= 2,   2, "inject_wisdom_into_beliefs() needed"),
+        ("Wisdom being used",     metrics.get('wisdom_use_count', 0) >= 1,    1, "use_count=0 — TIER_1 injection not firing"),
+        ("Intentions active",     metrics.get('intentions_active', 0) >= 1,   1, "No active intentions"),
+        ("Graph growing",         metrics.get('beliefs_added_24h', 0) >= 1,   1, "No new beliefs in 24h"),
+        ("nex_core stable",       metrics.get('nex_core_count', 0) >= 15,     2, "Identity anchor count low"),
+    ]
+    max_score = sum(c[2] for c in checks)
+    for label, condition, points, rec in checks:
+        if condition:
+            score += points
+            verdicts.append(("✓", label, None))
+        else:
+            verdicts.append(("✗", label, rec))
+    return score, max_score, verdicts
+
 # ══════════════════════════════════════════════════════════════════════════════
 # FILTERS AND SCORING
 # ══════════════════════════════════════════════════════════════════════════════
@@ -660,7 +726,15 @@ def compute_closed_x_vars(live_state):
     if live_state.get("tensions_unresolved", 9999) < live_state.get("tensions_total", 9999):
         closed.append("X2")
     if live_state.get("residue_table") == "EXISTS":
-        closed.append("X6")
+        try:
+            import sqlite3 as _x6_sq
+            _x6_db = _x6_sq.connect('/media/rr/NEX/nex_core/nex.db', timeout=2)
+            _x6_count = _x6_db.execute("SELECT COUNT(*) FROM nex_residue").fetchone()[0]
+            _x6_db.close()
+            if _x6_count > 0:
+                closed.append("X6")
+        except Exception:
+            closed.append("X6")
     if live_state.get("throw_net_sessions_table") == "EXISTS":
         closed.append("X7")
     # X9: closed if belief not found (no entry in live state) OR quarantined
@@ -670,13 +744,16 @@ def compute_closed_x_vars(live_state):
     # X3: intentions table exists and has entries
     if live_state.get("intentions", 0) > 0:
         closed.append("X3")
-    # X11: wisdom layer active — nex_wisdom table has entries
+    # X11: wisdom in beliefs AND injected (effect check)
     try:
         import sqlite3 as _xs_sq
         _xs_db = _xs_sq.connect('/media/rr/NEX/nex_core/nex.db', timeout=2)
-        _wisdom_count = _xs_db.execute("SELECT COUNT(*) FROM nex_wisdom").fetchone()[0]
+        _wc = _xs_db.execute("SELECT COUNT(*) FROM nex_wisdom").fetchone()[0]
+        _wb = _xs_db.execute(
+            "SELECT COUNT(*) FROM beliefs WHERE source='nex_core' AND topic='wisdom'"
+        ).fetchone()[0]
         _xs_db.close()
-        if _wisdom_count > 0:
+        if _wc > 0 and _wb > 0:
             closed.append("X11")
     except Exception:
         pass
@@ -859,6 +936,30 @@ def format_output(upgrades, live_state, domain, mode):
     else:
         w(f"  NEX BELIEF ACTIVATION — unavailable (activation engine not reachable)")
         w()
+
+
+    # ── INTEGRATION DELTA — what actually landed ──────────────────────────
+    _em = read_effect_metrics()
+    _score, _max, _verdicts = score_effect(_em)
+    section(f"INTEGRATION DELTA — landing score {_score}/{_max}")
+    w("  Effect check: what was built vs what is functioning:")
+    w()
+    for _v, _label, _rec in _verdicts:
+        w(f"  {_v}  {_label}")
+        if _rec:
+            w(f"       → {_rec}")
+    w()
+    w("  Raw metrics:")
+    w(f"    residue_24h:        {_em.get('residue_24h','?')} entries captured last 24h")
+    w(f"    residue_total:      {_em.get('residue_total','?')}")
+    w(f"    wisdom_entries:     {_em.get('wisdom_entries','?')}")
+    w(f"    wisdom_use_count:   {_em.get('wisdom_use_count','?')}")
+    w(f"    wisdom_in_beliefs:  {_em.get('wisdom_in_beliefs','?')}")
+    w(f"    intentions_active:  {_em.get('intentions_active','?')}")
+    w(f"    beliefs_added_24h:  {_em.get('beliefs_added_24h','?')}")
+    w(f"    high_conf_ratio:    {_em.get('high_conf_ratio','?')}")
+    w(f"    nex_core_count:     {_em.get('nex_core_count','?')}")
+    w()
 
     section("LOGIC DISTILL — KNOWN variables")
     _lo = {
