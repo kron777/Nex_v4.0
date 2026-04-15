@@ -670,6 +670,16 @@ def compute_closed_x_vars(live_state):
     # X3: intentions table exists and has entries
     if live_state.get("intentions", 0) > 0:
         closed.append("X3")
+    # X11: wisdom layer active — nex_wisdom table has entries
+    try:
+        import sqlite3 as _xs_sq
+        _xs_db = _xs_sq.connect('/media/rr/NEX/nex_core/nex.db', timeout=2)
+        _wisdom_count = _xs_db.execute("SELECT COUNT(*) FROM nex_wisdom").fetchone()[0]
+        _xs_db.close()
+        if _wisdom_count > 0:
+            closed.append("X11")
+    except Exception:
+        pass
     return closed
 
 def neti_neti_filter(upgrades):
