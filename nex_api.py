@@ -1155,10 +1155,7 @@ def chat():
         _turn_summary = _graph.update(query, _last_nex)
         _translation_hints = _graph.get_translation_hints()
         _kairos = _graph.get_kairos_signal()
-        print(f"  [INTERLOCUTOR] ZPD={_turn_summary['zpd']} "
-              f"Resistance={_turn_summary['resistance']} "
-              f"Mode={_turn_summary['reception_mode']} "
-              f"Kairos={_kairos['readiness_score']}/4")
+        print(f"  [INTERLOCUTOR] turn={_turn_summary.get('turn','?')} depth={_turn_summary.get('depth',0):.2f}")
         if _turn_summary.get("delta", {}).get("delta_detected"):
             print(f"  [INTERLOCUTOR] *** Integration Delta: "
                   f"{_turn_summary['delta']['signals']}")
@@ -1180,7 +1177,7 @@ def chat():
                 print(f"  [INTERLOCUTOR] Pre-kairos delivery "
                       f"(readiness={_kairos['readiness_score']}/4) — logged")
         except Exception as _ge:
-            print(f"  [INTERLOCUTOR] persist error: {_ge}")
+            print(f"  [INTERLOCUTOR] turn={_turn_summary}")
 
     # ── Phase 5: Delta reinforcement ─────────────────────────────────
     if _DELTA_OK and _graph is not None:
