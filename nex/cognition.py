@@ -405,7 +405,7 @@ def run_synthesis(min_beliefs=15, llm_fn=None, drive_weights=None):
             _sys.path.insert(0, _nex_dir)
         from nex.nex_db import NexDB as _NexDB
         _db = _NexDB()
-        beliefs = [dict(b) for b in _db.query_beliefs(min_confidence=0.0, limit=99999)]
+        beliefs = [dict(b) for b in _db.query_beliefs(min_confidence=0.1, limit=99999)]
         _dbg("synth", f"loaded {len(beliefs)} beliefs from DB for synthesis")
     except Exception as _dbe:
         _dbg("synth", f"DB load failed, falling back to JSON: {_dbe}")
