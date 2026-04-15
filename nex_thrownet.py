@@ -757,6 +757,18 @@ def compute_closed_x_vars(live_state):
             closed.append("X11")
     except Exception:
         pass
+    # X4/X5/X12/X13: interlocutor model active
+    try:
+        import sqlite3 as _x4_sq
+        _x4_db = _x4_sq.connect('/media/rr/NEX/nex_core/nex.db', timeout=2)
+        _x4_count = _x4_db.execute(
+            "SELECT COUNT(*) FROM interlocutor_graphs WHERE turn_count > 0"
+        ).fetchone()[0]
+        _x4_db.close()
+        if _x4_count >= 3:
+            closed.extend(["X4","X5","X12","X13"])
+    except Exception:
+        pass
     return closed
 
 def neti_neti_filter(upgrades):
