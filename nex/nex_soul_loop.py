@@ -964,6 +964,24 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
             if _id_to_topic.get(bid, "general") in _expanded_topics
         }
 
+    # ── U3: Load pre-propositional residue from last session ─────────
+    _residue_boost = {}
+    try:
+        import sqlite3 as _rs_sq, time as _rs_t
+        _rs_db = _rs_sq.connect('/media/rr/NEX/nex_core/nex.db', timeout=2)
+        _rs_rows = _rs_db.execute(
+            "SELECT belief_id, activation FROM nex_residue "
+            "WHERE ts > ? ORDER BY activation DESC LIMIT 20",
+            (_rs_t.time() - 3600,)  # last 1 hour
+        ).fetchall()
+        _rs_db.close()
+        for _rid, _ract in _rs_rows:
+            _residue_boost[_rid] = min(0.2, _ract * 0.3)
+        if _residue_boost:
+            print(f"  [RESIDUE] loaded {len(_residue_boost)} warm beliefs from prior session")
+    except Exception:
+        pass
+    # ── END RESIDUE LOAD ──────────────────────────────────────────────
     # U7: Load user interest topics for activation boost
     _interlocutor_boost_topics = []
     try:
@@ -1284,6 +1302,37 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
 
     # Common thread — what multiple beliefs actually share
     all_retrieved = top_beliefs + cross_domain
+
+    # ── U3: Capture pre-propositional residue ─────────────────────────
+    try:
+        import sqlite3 as _rc_sq, time as _rc_t
+        _rc_db = _rc_sq.connect('/media/rr/NEX/nex_core/nex.db', timeout=2)
+        _rc_session = str(hash(query + str(int(_rc_t.time() // 3600))))
+        _rc_ts = _rc_t.time()
+        _utterance_ids = {b.get('id') for b in (top_beliefs or [])[:3]}
+        _rc_count = 0
+        for _rb in (all_retrieved or []):
+            _bid = _rb.get('id')
+            if not _bid or _bid in _utterance_ids:
+                continue
+            _ract = _rb.get('confidence', 0.5)
+            if _ract > 0.3:
+                _rc_db.execute(
+                    "INSERT OR REPLACE INTO nex_residue "
+                    "(session_id, belief_id, content, activation, topic, ts) "
+                    "VALUES (?,?,?,?,?,?)",
+                    (_rc_session, _bid,
+                     _rb.get('content','')[:200],
+                     _ract, _rb.get('topic',''), _rc_ts)
+                )
+                _rc_count += 1
+        _rc_db.commit()
+        _rc_db.close()
+        if _rc_count:
+            print(f"  [RESIDUE] {_rc_count}/{len(all_retrieved or [])} beliefs in utterance | {_rc_count} residue captured")
+    except Exception:
+        pass
+    # ── END RESIDUE CAPTURE ───────────────────────────────────────────
     common_thread = _find_common_thread(all_retrieved) if len(all_retrieved) >= 3 else ""
 
     # Conversational memory — relevant prior exchange

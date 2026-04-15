@@ -412,10 +412,11 @@ class ActivationEngine:
             # Intent → topic mapping (query words → canonical nex_core topic)
             _INTENT_MAP = [
                 (['consciousness', 'subjective', 'experience', 'qualia'],  'consciousness'),
-                (['belief', 'beliefs', 'simulated'],                       'belief_nature'),
-                (['truth', 'identity', 'relationship'],                    'truth_identity'),
+                (['beliefs', 'simulated'],                                 'belief_nature'),
+                (['truth', 'relationship'],                                'truth_identity'),
                 (['originate', 'origination', 'thought', 'data', 'learns'],'origination'),
                 (['reasoning', 'pattern', 'matching', 'distinguishes'],    'reasoning'),
+                (['epistemology', 'epistemic'],                              'epistemology'),
                 (['persists', 'persist', 'self', 'conversations', 'across'],'self_persistence'),
             ]
             _matched_topics = set()

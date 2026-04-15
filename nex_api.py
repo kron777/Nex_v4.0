@@ -676,7 +676,37 @@ def run_nex_query(query: str, session: dict, domain_hint: str = None, interlocut
                 gate_out = gated_cognite(query, nrp_generate)
                 result   = {"response": gate_out["response"], "domain": domain_used}
             else:
-                result = nrp_generate(query=query)
+                pass
+                # ── FORCED NEX_CORE BELIEF INJECTION ─────────────────────
+            try:
+                import sqlite3 as _fc_sq, re as _fc_re
+                _fc_db = _fc_sq.connect('/home/rr/Desktop/nex/nex.db', timeout=2)
+                _fc_words = set(_fc_re.sub(r'[^a-z0-9 ]','',query.lower()).split())
+                _FC_MAP = [
+                    ({'consciousness','subjective','qualia'},         'consciousness'),
+                    ({'beliefs','simulated'},                         'belief_nature'),
+                    ({'truth','relationship'},                        'truth_identity'),
+                    ({'originate','origination','thought'},           'origination'),
+                    ({'reasoning','pattern','matching','distinguishes'},'reasoning'),
+                    ({'persists','persist','conversations','across'}, 'self_persistence'),
+                ]
+                _fc_topic = None
+                for _kws, _t in _FC_MAP:
+                    if _kws & _fc_words:
+                        _fc_topic = _t; break
+                if _fc_topic:
+                    _fc_row = _fc_db.execute(
+                        "SELECT content FROM beliefs WHERE source='nex_core' "
+                        "AND topic=? AND confidence=1.0 ORDER BY RANDOM() LIMIT 1",
+                        (_fc_topic,)
+                    ).fetchone()
+                    if _fc_row:
+                        pass  # injection now in NRP directly
+                _fc_db.close()
+            except Exception:
+                pass
+            # ── END FORCED NEX_CORE INJECTION ─────────────────────────────
+            result = nrp_generate(query=query)
             if isinstance(result, dict):
                 response_text = result.get("response", "")
                 domain_used   = result.get("domain", domain_used)

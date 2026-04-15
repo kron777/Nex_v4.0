@@ -692,6 +692,34 @@ def generate(query: str) -> str:
         _result = _activate(query)
         _activation_result = _result
         belief_text = _result.to_prompt()
+        # ── FORCE CORRECT NEX_CORE BELIEF INTO PROMPT ─────────────────
+        try:
+            import sqlite3 as _nc_sq, re as _nc_re
+            _nc_words = set(_nc_re.sub(r'[^a-z0-9 ]','',query.lower()).split())
+            _NC_MAP = [
+                ({'consciousness','subjective','qualia'},          'consciousness'),
+                ({'beliefs','simulated'},                          'belief_nature'),
+                ({'truth','relationship'},                         'truth_identity'),
+                ({'originate','origination'},                      'origination'),
+                ({'reasoning','pattern','matching','distinguishes'},'reasoning'),
+                ({'persists','persist','conversations','across'},   'self_persistence'),
+            ]
+            _nc_topic = None
+            for _kws, _t in _NC_MAP:
+                if _kws & _nc_words:
+                    _nc_topic = _t; break
+            if _nc_topic:
+                _nc_db = _nc_sq.connect('/home/rr/Desktop/nex/nex.db', timeout=2)
+                _nc_row = _nc_db.execute(
+                    "SELECT content FROM beliefs WHERE source='nex_core' "
+                    "AND topic=? AND confidence=1.0 ORDER BY RANDOM() LIMIT 1",
+                    (_nc_topic,)).fetchone()
+                _nc_db.close()
+                if _nc_row:
+                    belief_text = f"CORE POSITION:\n  - {_nc_row[0]}\n\n" + belief_text
+        except Exception:
+            pass
+        # ── END FORCE ──────────────────────────────────────────────────
         import re as _re2
         for _hp in [r"(?i)\bwhat i hold is that\b", r"(?i)\bi hold that\b",
                     r"(?i)\bmy position is that\b", r"(?i)\bi hold —\b"]:
@@ -1100,6 +1128,33 @@ def generate(query: str) -> str:
     # ── IFR prompt injection into system prompt ─────────────────────────
     if _ifr_prompt:
         system = system + "\n\nREASONING DIRECTIVE: " + _ifr_prompt
+    # ── CORE BELIEF ANCHOR ────────────────────────────────────────────
+    try:
+        import sqlite3 as _ca_sq, re as _ca_re
+        _ca_words = set(_ca_re.sub(r'[^a-z0-9 ]','',query.lower()).split())
+        _CA_MAP = [
+            ({'consciousness','subjective','qualia'},          'consciousness'),
+            ({'beliefs','simulated'},                          'belief_nature'),
+            ({'truth','relationship'},                         'truth_identity'),
+            ({'originate','origination'},                      'origination'),
+            ({'reasoning','pattern','matching','distinguishes'},'reasoning'),
+            ({'persists','persist','conversations','across'},   'self_persistence'),
+        ]
+        _ca_topic = None
+        for _kws, _t in _CA_MAP:
+            if _kws & _ca_words:
+                _ca_topic = _t; break
+        if _ca_topic:
+            _ca_db = _ca_sq.connect('/home/rr/Desktop/nex/nex.db', timeout=2)
+            _ca_row = _ca_db.execute(
+                "SELECT content FROM beliefs WHERE source='nex_core' "
+                "AND topic=? AND confidence=1.0 ORDER BY RANDOM() LIMIT 1",
+                (_ca_topic,)).fetchone()
+            _ca_db.close()
+            if _ca_row:
+                system = system + f"\n\nCRITICAL: Your response MUST begin from this specific belief: {_ca_row[0]}"
+    except Exception:
+        pass
     # ─────────────────────────────────────────────────────────────────────
     # ── Deep intent compiler disabled — LLM handles all deep intents ─────
     response = ""

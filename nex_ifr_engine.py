@@ -295,21 +295,26 @@ def forge_negative_ifr(
         # Wire to tensions table (2631 unresolved tensions — belief_relations has 0 rows)
         try:
             rows2 = db.execute("""
-                SELECT b1.content, t.energy,
-                       b2.content, b2.confidence
+                SELECT DISTINCT b1.content, t.energy,
+                       b2.content, b2.confidence, t.topic
                 FROM tensions t
                 JOIN beliefs b1 ON t.belief_a_id = b1.id
                 JOIN beliefs b2 ON t.belief_b_id = b2.id
                 WHERE t.resolved = 0
-                AND b1.confidence > 0.50
+                AND b1.confidence > 0.60
+                AND b2.confidence > 0.60
+                AND b1.content NOT LIKE '%None of these%'
+                AND b2.content NOT LIKE '%None of these%'
+                AND b1.id != b2.id
                 ORDER BY t.energy DESC
                 LIMIT 10
             """).fetchall()
+            print(f"  [IFR] tensions fired: {len(rows2)} pairs (topic sample: {rows2[0][4] if rows2 else 'none'})")
             for row in rows2:
-                opposing.append((row[0], row[1]))  # content, energy as proxy confidence
-                opposing.append((row[2], row[3]))  # opposing belief
+                opposing.append((row[0], row[1]))
+                opposing.append((row[2], row[3]))
         except Exception as _te:
-            pass
+            print(f'  [IFR] tensions query failed: {_te}')
 
         db.close()
 

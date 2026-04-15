@@ -25,7 +25,8 @@ from pathlib import Path
 
 TIMESTAMP = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 NEX_DIR   = Path.home() / "Desktop/nex"
-NEX_DB    = Path.home() / ".config/nex/nex.db"
+NEX_DB    = Path("/media/rr/NEX/nex_core/nex.db")  # canonical live DB
+NEX_DB_FALLBACK = Path.home() / ".config/nex/nex.db"  # fallback if canonical missing
 OUT_DIR   = Path.home() / "Desktop"
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -41,7 +42,8 @@ def _table_exists(db, name):
 def read_live_nex_state():
     s = {}
     try:
-        db = sqlite3.connect(str(NEX_DB), timeout=3)
+        _db_path = NEX_DB if NEX_DB.exists() else NEX_DB_FALLBACK
+        db = sqlite3.connect(str(_db_path), timeout=3)
         s['belief_count']       = db.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
         s['belief_locked']      = db.execute("SELECT COUNT(*) FROM beliefs WHERE locked=1").fetchone()[0]
         s['belief_high_conf']   = db.execute("SELECT COUNT(*) FROM beliefs WHERE confidence>0.7").fetchone()[0]
@@ -208,6 +210,67 @@ TIME_FETCH = {
         "IFR (Dirksen/Ecker) — Identified Failure Reality as navigation instrument. → already in TN.",
     ],
 }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TERRAIN LOG — reads prior throw-net runs, enables V12
+# ══════════════════════════════════════════════════════════════════════════════
+
+TERRAIN_LOG = Path.home() / "Desktop" / "thrownet_log.jsonl"
+
+
+def read_terrain_log(n=5):
+    """Return last n run summaries. Empty list if log missing."""
+    if not TERRAIN_LOG.exists():
+        return []
+    entries = []
+    try:
+        with open(TERRAIN_LOG) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    entries.append(json.loads(line))
+    except Exception:
+        return []
+    return entries[-n:]
+
+
+def write_terrain_log(domain, mode, live_state, ranked_ids, immediate_ids):
+    """Append this run to terrain log."""
+    entry = {
+        "ts":           TIMESTAMP,
+        "domain":       domain,
+        "mode":         mode,
+        "belief_count": live_state.get("belief_count", 0),
+        "belief_locked": live_state.get("belief_locked", 0),
+        "tensions":     live_state.get("tensions_unresolved", 0),
+        "upgrades_ranked": ranked_ids,
+        "upgrades_immediate": immediate_ids,
+    }
+    try:
+        with open(TERRAIN_LOG, 'a') as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception:
+        pass
+
+
+def terrain_delta(prior_runs):
+    """Compute what changed since the last run."""
+    if len(prior_runs) < 2:
+        return None
+    first, last = prior_runs[0], prior_runs[-1]
+    return {
+        "runs_read":       len(prior_runs),
+        "belief_delta":    last.get("belief_count", 0) - first.get("belief_count", 0),
+        "tension_delta":   last.get("tensions", 0) - first.get("tensions", 0),
+        "locked_delta":    last.get("belief_locked", 0) - first.get("belief_locked", 0),
+        "first_ts":        first.get("ts", "?"),
+        "last_ts":         last.get("ts", "?"),
+        "upgrades_repeated": list(
+            set(first.get("upgrades_immediate", [])) &
+            set(last.get("upgrades_immediate", []))
+        ),
+    }
 
 # ══════════════════════════════════════════════════════════════════════════════
 # NEX-NATIVE EQUIVALENTS (annotation layer from net.txt)
@@ -566,9 +629,43 @@ UPGRADES = [
     },
 ]
 
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LIVE BELIEF ACTIVATION — sweep NEX's actual knowledge for the domain
+# ══════════════════════════════════════════════════════════════════════════════
+
+def activate_domain_beliefs(domain):
+    """Pull top beliefs NEX actually holds about this domain via activation."""
+    try:
+        sys.path.insert(0, str(NEX_DIR))
+        sys.path.insert(0, str(NEX_DIR.parent / "nex_core"))
+        import nex_activation as _na
+        result = _na.activate(domain)
+        return [(b.content, b.confidence, b.topic, b.activation)
+                for b in result.top(8)]
+    except Exception as e:
+        return []
+
 # ══════════════════════════════════════════════════════════════════════════════
 # FILTERS AND SCORING
 # ══════════════════════════════════════════════════════════════════════════════
+
+
+
+def compute_closed_x_vars(live_state):
+    """Mark X-variables as closed based on live state."""
+    closed = []
+    if live_state.get("tensions_unresolved", 0) == 0:
+        closed.append("X2")  # tensions wired
+    if live_state.get("residue_table") == "EXISTS":
+        closed.append("X6")  # residue capture active
+    if live_state.get("throw_net_sessions_table") == "EXISTS":
+        closed.append("X7")  # throw-net sessions tracked
+    internet = live_state.get("internet_belief_id225562", "")
+    if "QUARANTINED OK" in internet:
+        closed.append("X9")
+    return closed
 
 def neti_neti_filter(upgrades):
     return ([u for u in upgrades if u['neti_pass']],
@@ -690,11 +787,59 @@ def format_output(upgrades, live_state, domain, mode):
             w(f"  {k:<38} {v}{flag}")
     w()
 
+    # ── TERRAIN DELTA ─────────────────────────────────────────────────────────
+    prior = read_terrain_log()
+    delta = terrain_delta(prior)
+    if delta:
+        section("TERRAIN DELTA — how the landscape shifted")
+        w(f"  Runs read:          {delta['runs_read']} (last {delta['first_ts']} → {delta['last_ts']})")
+        d = delta['belief_delta']
+        w(f"  Belief delta:       {'+' if d >= 0 else ''}{d}")
+        t = delta['tension_delta']
+        w(f"  Tension delta:      {'+' if t >= 0 else ''}{t}")
+        l = delta['locked_delta']
+        w(f"  Locked delta:       {'+' if l >= 0 else ''}{l}")
+        if delta['upgrades_repeated']:
+            w(f"  ⚠ Still immediate:  {', '.join(delta['upgrades_repeated'])} — not yet built")
+        else:
+            w(f"  Immediate upgrades: rotating — good sign")
+        w()
+    elif prior:
+        section("TERRAIN DELTA")
+        w(f"  Only {len(prior)} run logged — need 2+ for delta. Run again to accumulate.")
+        w()
+    else:
+        section("TERRAIN DELTA")
+        w("  No prior runs logged. This is run #1.")
+        w("  Subsequent runs will show belief delta, tension delta, what's still unbuilt.")
+        w()
+
+    # ── CLOSED X-VARIABLES ────────────────────────────────────────────────────
+    closed = compute_closed_x_vars(live_state)
+    if closed:
+        section("CLOSED X-VARIABLES (solved since last build)")
+        for xv in closed:
+            match = [x for x in NEX_X if x[0] == xv]
+            desc = match[0][1] if match else "?"
+            w(f"  ✓ [{xv}] {desc}")
+        w()
+
     section("TIME FETCH — sweep past / present / pending")
     for sec_title, items in TIME_FETCH.items():
         w(f"  {sec_title}:")
         for item in items:
             w(f"    • {item}")
+        w()
+
+    # ── LIVE BELIEF ACTIVATION for this domain ────────────────────────────────
+    live_beliefs = activate_domain_beliefs(domain)
+    if live_beliefs:
+        w(f"  NEX BELIEF ACTIVATION — what NEX actually holds on '{domain}':")
+        for content, conf, topic, act in live_beliefs:
+            w(f"    [{act:.2f}|{conf:.2f}] ({topic}) {content[:90]}")
+        w()
+    else:
+        w(f"  NEX BELIEF ACTIVATION — unavailable (activation engine not reachable)")
         w()
 
     section("LOGIC DISTILL — KNOWN variables")
@@ -835,11 +980,28 @@ def main():
     immediate = [u for u in ranked
                  if u['prerequisite'] is None and
                  any(x in u['effort'] for x in ['20 min', '30 min', '1 h', '2 h'])]
+
+    # Write terrain log for this run
+    write_terrain_log(
+        domain=args.domain,
+        mode=args.mode,
+        live_state=live,
+        ranked_ids=[u['id'] for u in ranked],
+        immediate_ids=[u['id'] for u in immediate[:3]],
+    )
+    print(f"[THROW-NET v11] terrain log updated → {TERRAIN_LOG}")
+
     print("── TOP 3 IMMEDIATE ──────────────────────────────────────────────")
     for u in immediate[:3]:
         print(f"  [{u['id']}] {u['name']}")
         print(f"       {u['effort']} | {u['metric']}")
         print(f"       Solves: {', '.join(u['x_solves'])}")
+        print()
+
+    # Report closed X-variables
+    closed = compute_closed_x_vars(live)
+    if closed:
+        print(f"── CLOSED X-VARS: {', '.join(closed)} ──────────────────────────────")
         print()
 
 
