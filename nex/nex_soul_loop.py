@@ -1114,6 +1114,19 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
             })
         if _ws_rows:
             print(f"  [WISDOM] {len(_ws_rows)} wisdom beliefs injected as TIER_1")
+            # Increment use_count for each wisdom belief used
+            try:
+                import sqlite3 as _wu_sq, time as _wu_t
+                _wu_db = _wu_sq.connect('/media/rr/NEX/nex_core/nex.db', timeout=2)
+                for _wr in _ws_rows:
+                    _wu_db.execute(
+                        "UPDATE nex_wisdom SET use_count=use_count+1, last_used=? "
+                        "WHERE principle=?",
+                        (_wu_t.time(), _wr[0])
+                    )
+                _wu_db.commit(); _wu_db.close()
+            except Exception:
+                pass
     except Exception:
         pass
     # ── END WISDOM INJECT ─────────────────────────────────────────────

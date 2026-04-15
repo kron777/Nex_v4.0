@@ -1411,6 +1411,43 @@ def generate(query: str) -> str:
             pass
     # ── END NRP POST-FILTER ──────────────────────────────────────────────────
 
+    # ── U3: Capture residue from NRP activation ─────────────────────
+    try:
+        import sqlite3 as _nr_sq, time as _nr_t
+        if _activation_result is not None:
+            _nr_db = _nr_sq.connect('/media/rr/NEX/nex_core/nex.db', timeout=2)
+            _nr_session = str(hash(query + str(int(_nr_t.time() // 3600))))
+            _nr_ts = _nr_t.time()
+            _utterance_content = set()
+            if response:
+                for _w in response.lower().split():
+                    _utterance_content.add(_w[:6])
+            _nr_count = 0
+            for _rb in (_activation_result.activated or []):
+                _bid = getattr(_rb, 'id', None)
+                _bconf = getattr(_rb, 'confidence', 0)
+                _bcontent = getattr(_rb, 'content', '')
+                if not _bid or _bconf < 0.3:
+                    continue
+                # Not in utterance = residue
+                _in_utterance = any(w[:6] in _utterance_content
+                                    for w in _bcontent.lower().split()[:5])
+                if not _in_utterance:
+                    _nr_db.execute(
+                        "INSERT OR REPLACE INTO nex_residue "
+                        "(session_id, belief_id, content, activation, topic, ts) "
+                        "VALUES (?,?,?,?,?,?)",
+                        (_nr_session, _bid, _bcontent[:200],
+                         _bconf, getattr(_rb,'topic',''), _nr_ts)
+                    )
+                    _nr_count += 1
+            _nr_db.commit()
+            _nr_db.close()
+            if _nr_count:
+                print(f"  [NRP RESIDUE] {_nr_count} residue beliefs captured")
+    except Exception:
+        pass
+    # ── END NRP RESIDUE ───────────────────────────────────────────────
     return response
 
 
