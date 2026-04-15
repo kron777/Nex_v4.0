@@ -676,14 +676,17 @@ def refinement_score(u):
     return sum(1 for x in u['refinement'] if x)
 
 
-def derive_build_order(ranked):
-    immediate = [u for u in ranked
+def derive_build_order(ranked, closed_x=None):
+    closed_x = set(closed_x or [])
+    open_ranked = [u for u in ranked
+                   if not all(x in closed_x for x in u['x_solves'])]
+    immediate = [u for u in open_ranked
                  if u['prerequisite'] is None and
                  any(x in u['effort'] for x in ['20 min', '30 min', '1 h', '2 h'])]
-    week  = [u for u in ranked
+    week  = [u for u in open_ranked
              if u['prerequisite'] is None and
              any(x in u['effort'] for x in ['3 h', '4 h'])]
-    later = [u for u in ranked if u['prerequisite'] is not None]
+    later = [u for u in open_ranked if u['prerequisite'] is not None]
     return immediate, week, later
 
 
@@ -843,8 +846,12 @@ def format_output(upgrades, live_state, domain, mode):
         w()
 
     section("LOGIC DISTILL — KNOWN variables")
+    _lo = {
+        "tensions": f"{live_state.get('tensions_unresolved','?')} unresolved (total {live_state.get('tensions_total','?')})" + f" — {'wired to IFR' if live_state.get('tensions_unresolved',9999) < 2631 else 'NOT wired to NBRE (X2)'}",
+        "throw_net_refinery": f"exists — {'X7 closed' if live_state.get('throw_net_sessions_table') == 'EXISTS' else 'not native (X7)'}",
+    }
     for k, v in NEX_KNOWN:
-        w(f"  {k:<28} {v}")
+        w(f"  {k:<28} {_lo.get(k, v)}")
     w()
 
     section("LOGIC DISTILL — X-VARIABLES (what NEX cannot do)")
@@ -873,7 +880,8 @@ def format_output(upgrades, live_state, domain, mode):
 
     passed, eliminated = neti_neti_filter(upgrades)
     ranked = sorted(passed, key=refinement_score, reverse=True)
-    immediate, week, later = derive_build_order(ranked)
+    _cx = compute_closed_x_vars(live_state)
+    immediate, week, later = derive_build_order(ranked, closed_x=list(_cx))
 
     section(f"UPGRADE CANDIDATES — {len(ranked)} passed neti-neti, ranked by refinement score")
     for u in ranked:
@@ -977,9 +985,8 @@ def main():
     print(f"[THROW-NET v11] → {out_path}")
     print()
 
-    immediate = [u for u in ranked
-                 if u['prerequisite'] is None and
-                 any(x in u['effort'] for x in ['20 min', '30 min', '1 h', '2 h'])]
+    _cx2 = compute_closed_x_vars(live)
+    immediate, _, _ = derive_build_order(ranked, closed_x=list(_cx2))
 
     # Write terrain log for this run
     write_terrain_log(

@@ -964,24 +964,24 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
             if _id_to_topic.get(bid, "general") in _expanded_topics
         }
 
-    # ── U3: Load pre-propositional residue from last session ─────────
+    # ── U8: Recurrent soul loop — 4h residue window, +0.2 warm-start ──
     _residue_boost = {}
     try:
         import sqlite3 as _rs_sq, time as _rs_t
         _rs_db = _rs_sq.connect('/media/rr/NEX/nex_core/nex.db', timeout=2)
         _rs_rows = _rs_db.execute(
-            "SELECT belief_id, activation FROM nex_residue "
-            "WHERE ts > ? ORDER BY activation DESC LIMIT 20",
-            (_rs_t.time() - 3600,)  # last 1 hour
+            "SELECT belief_id, activation, content FROM nex_residue "
+            "WHERE ts > ? ORDER BY activation DESC LIMIT 30",
+            (_rs_t.time() - 14400,)
         ).fetchall()
         _rs_db.close()
-        for _rid, _ract in _rs_rows:
-            _residue_boost[_rid] = min(0.2, _ract * 0.3)
+        for _rid, _ract, _rcontent in _rs_rows:
+            _residue_boost[_rid] = 0.2
         if _residue_boost:
-            print(f"  [RESIDUE] loaded {len(_residue_boost)} warm beliefs from prior session")
+            print(f"  [RECURRENT] {len(_residue_boost)} residue beliefs warm-started (+0.2 boost)")
     except Exception:
         pass
-    # ── END RESIDUE LOAD ──────────────────────────────────────────────
+    # ── END RECURRENT LOAD ────────────────────────────────────────────
     # U7: Load user interest topics for activation boost
     _interlocutor_boost_topics = []
     try:
