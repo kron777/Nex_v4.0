@@ -714,6 +714,18 @@ def generate(query: str) -> str:
                     "SELECT content FROM beliefs WHERE source='nex_core' "
                     "AND topic=? AND confidence=1.0 ORDER BY RANDOM() LIMIT 1",
                     (_nc_topic,)).fetchone()
+                # Also pull top wisdom belief and increment use_count
+                _wis_row = _nc_db.execute(
+                    "SELECT id, principle FROM nex_wisdom "
+                    "ORDER BY use_count ASC, id DESC LIMIT 1"
+                ).fetchone()
+                if _wis_row:
+                    import time as _wt
+                    _nc_db.execute(
+                        "UPDATE nex_wisdom SET use_count=use_count+1, last_used=? WHERE id=?",
+                        (_wt.time(), _wis_row[0])
+                    )
+                _nc_db.commit()
                 _nc_db.close()
                 if _nc_row:
                     belief_text = f"CORE POSITION:\n  - {_nc_row[0]}\n\n" + belief_text
