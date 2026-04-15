@@ -757,6 +757,13 @@ def compute_closed_x_vars(live_state):
             closed.append("X11")
     except Exception:
         pass
+    # X1: terrain audit has run at least once
+    try:
+        _audit_log = __import__('pathlib').Path.home() / "Desktop/terrain_audit_log.jsonl"
+        if _audit_log.exists() and _audit_log.stat().st_size > 0:
+            closed.append("X1")
+    except Exception:
+        pass
     # X4/X5/X12/X13: interlocutor model active
     try:
         import sqlite3 as _x4_sq
