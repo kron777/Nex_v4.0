@@ -697,6 +697,30 @@ def cognite(query: str) -> str:
             pass
     # ─────────────────────────────────────────────────────────────────────────
 
+    # Post-filter: reject contaminating LLM output
+    _BAD_OUT = [
+        'fractal nature of reality', 'structure of these images',
+        'not merely aesthetic', 'autonomous cognitive entity',
+        'honest gap is not that NEX', 'She is an autonomous',
+        'synthesia organism', 'peer-reviewed research',
+        'epistemic precision',
+    ]
+    if ctx.response and any(b.lower() in ctx.response.lower() for b in _BAD_OUT):
+        # Use already-loaded beliefs in context
+        _clean = [b[0] for b in ctx.beliefs if b and not any(x.lower() in str(b[0]).lower() for x in _BAD_OUT)]
+        if _clean:
+            import random as _rand
+            ctx.response = _rand.choice(_clean[:5])
+        else:
+            # Try DB with timeout
+            try:
+                import sqlite3 as _sq, random as _rand2
+                _fd = _sq.connect('/media/rr/NEX/nex_core/nex.db', timeout=1)
+                _rows = _fd.execute("SELECT content FROM beliefs WHERE source='nex_core' AND confidence>=1.0").fetchall()
+                _fd.close()
+                _clean2 = [r[0] for r in _rows if not any(x.lower() in r[0].lower() for x in _BAD_OUT)]
+                if _clean2: ctx.response = _rand2.choice(_clean2)
+            except Exception: pass
     return ctx.response
 
 def generate_reply(user_input: str) -> str:
