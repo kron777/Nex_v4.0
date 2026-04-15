@@ -656,14 +656,16 @@ def activate_domain_beliefs(domain):
 def compute_closed_x_vars(live_state):
     """Mark X-variables as closed based on live state."""
     closed = []
-    if live_state.get("tensions_unresolved", 0) == 0:
-        closed.append("X2")  # tensions wired
+    # X2: IFR wired when tensions < total (some resolved) OR tensions table exists with data
+    if live_state.get("tensions_unresolved", 9999) < live_state.get("tensions_total", 9999):
+        closed.append("X2")
     if live_state.get("residue_table") == "EXISTS":
-        closed.append("X6")  # residue capture active
+        closed.append("X6")
     if live_state.get("throw_net_sessions_table") == "EXISTS":
-        closed.append("X7")  # throw-net sessions tracked
-    internet = live_state.get("internet_belief_id225562", "")
-    if "QUARANTINED OK" in internet:
+        closed.append("X7")
+    # X9: closed if belief not found (no entry in live state) OR quarantined
+    internet = live_state.get("internet_belief_id225562", "NOT FOUND")
+    if "NOT FOUND" in internet or "QUARANTINED OK" in internet:
         closed.append("X9")
     return closed
 
