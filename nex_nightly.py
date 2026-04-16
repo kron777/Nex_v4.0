@@ -828,6 +828,17 @@ def run_nightly(force: bool = False, dry_run: bool = False) -> dict:
         report["wisdom_new"] = _wn
     except Exception as _we:
         report["wisdom_new"] = 0
+    # ── Phase 7d: AGI gap analysis ────────────────────────────────────
+    try:
+        import subprocess
+        subprocess.run(
+            ["python3", "/media/rr/NEX/nex_core/nex_agi_gap_analysis.py"],
+            capture_output=True, timeout=180,
+            env={**__import__("os").environ, "GROQ_API_KEY": __import__("os").environ.get("GROQ_API_KEY","")}
+        )
+        print("  [agi_gap] analysis complete")
+    except Exception as _ag_e:
+        print(f"  [agi_gap] skipped: {_ag_e}")
     # ── Phase 7c: Groq gap seeder (runs if gaps detected) ────────────
     try:
         import subprocess
