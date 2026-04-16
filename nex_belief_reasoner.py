@@ -1,248 +1,255 @@
 #!/usr/bin/env python3
 """
-nex_belief_reasoner.py — Belief Reasoning Layer (Improvement 1)
-================================================================
-Derives new inferences from top retrieved beliefs.
-Writes inferred beliefs back to nex.db with:
-  confidence = 0.6
-  source     = "nex_reasoning"
-
-The inference is a synthesis — not a copy of any single belief,
-but a claim that follows FROM multiple beliefs taken together.
-
-Usage (called automatically from nex_soul_loop.reason()):
-    from nex_belief_reasoner import derive_and_store
-    inferred = derive_and_store(top_beliefs, query_tokens, db_path)
-    # Returns list of new belief dicts (may be empty if inference fails)
+nex_belief_reasoner.py — Belief graph reasoning + response quality feedback
+Three capabilities:
+1. pre_reason(beliefs, query) — traverse belief graph before LLM, build position
+2. feedback(belief_ids, response_score) — update confidence from response quality  
+3. build_causal_edges(beliefs) — auto-generate causal edges from belief content
 """
-
-from __future__ import annotations
-
-import re
-import time
-import random
-import sqlite3
+import sqlite3, time, re
 from pathlib import Path
-from typing import Optional
 
-DB_PATH = Path("/home/rr/Desktop/nex/nex.db")
+DB = Path("/media/rr/NEX/nex_core/nex.db")
 
-# Stop words for token extraction
-_STOP = {
-    "the","a","an","is","are","was","were","be","been","have","has","do","does",
-    "did","will","would","could","should","may","might","must","can","that","this",
-    "these","those","with","from","they","their","about","what","how","why","when",
-    "where","who","which","into","also","just","over","after","more","some","very",
-    "your","you","me","my","we","our","it","its","he","she","him","her","them",
-    "think","know","want","said","says","get","got","like","make","take","give",
-    "come","look","need","feel","seem","tell","much","many","such","both","each",
-    "than","then","been","only","even","back","here","down","away","there","their",
-    "because","through","between","within","without","however","therefore","although",
-    "whether","another","something","anything","everything","nothing","someone",
-}
+def _db():
+    db = sqlite3.connect(str(DB), timeout=10)
+    db.row_factory = sqlite3.Row
+    return db
 
-def _tokens(text: str) -> set:
-    raw = set(re.findall(r"\b[a-z]{4,}\b", text.lower()))
-    return raw - _STOP
+# ══════════════════════════════════════════════════════════
+# 1. RESPONSE QUALITY → BELIEF CONFIDENCE FEEDBACK
+# ══════════════════════════════════════════════════════════
 
-def _clean(text: str) -> str:
-    """Strip a belief to its core claim."""
-    text = text.strip()
-    if "|" in text:
-        text = text.split("|")[0].strip()
-    text = re.sub(r"arXiv:\S+.*", "", text).strip()
-    text = re.sub(r"^\d+\.\s*", "", text).strip()
-    text = re.sub(r"\[merged:\d+\]\s*", "", text).strip()
-    return text.rstrip(".")
-
-
-# ── Inference templates ────────────────────────────────────────────────────────
-# Each takes (a, b) or (a, b, c) as belief fragments and returns a new claim.
-# Templates chosen so they produce genuinely novel propositions, not summaries.
-
-_TWO_BELIEF_TEMPLATES = [
-    lambda a, b: f"If {a.lower().rstrip('.')}, then {b.lower().rstrip('.')} becomes structurally inevitable.",
-    lambda a, b: f"The tension between '{a.rstrip('.')}' and '{b.rstrip('.')}' suggests neither fully accounts for the other.",
-    lambda a, b: f"{a.rstrip('.')} — and this is what makes {b.lower().rstrip('.')} harder to dismiss.",
-    lambda a, b: f"What holds {a.lower().rstrip('.')} together is precisely what {b.lower().rstrip('.')} challenges.",
-    lambda a, b: f"Taking both seriously: {a.lower().rstrip('.')} implies that {b.lower().rstrip('.')} is not a corner case.",
-    lambda a, b: f"The deeper claim underneath both: the relationship between these is not coincidental.",
-    lambda a, b: f"{a.rstrip('.')} — which would mean {b.lower().rstrip('.')} is pointing at the same underlying structure.",
-]
-
-_THREE_BELIEF_TEMPLATES = [
-    lambda a, b, c: f"None of these resolve in isolation: {a.rstrip('.')}. {b.rstrip('.')}. {c.rstrip('.')}. Each is a local truth that becomes a different kind of claim when held together.",
-    lambda a, b, c: f"The common structure across all three: the relationship between substrate, model, and emergence is not additive — it is constitutive.",
-    lambda a, b, c: f"Taken together, these point at something none states directly: the boundary conditions matter more than the content they bound.",
-    lambda a, b, c: f"What holds when all three are true simultaneously: the system cannot be understood from any single level of description.",
-]
-
-
-def _word_overlap(a: str, b: str) -> float:
-    """Fraction of shared meaningful words between two strings."""
-    ta, tb = _tokens(a), _tokens(b)
-    if not ta or not tb:
-        return 0.0
-    return len(ta & tb) / min(len(ta), len(tb))
-
-
-def _already_exists(db: sqlite3.Connection, inference: str) -> bool:
-    """Check if a nearly-identical belief already exists in DB."""
-    try:
-        # Quick prefix check
-        prefix = inference[:60].lower()
-        rows = db.execute(
-            "SELECT content FROM beliefs WHERE source='nex_reasoning' "
-            "ORDER BY created_at DESC LIMIT 50"
-        ).fetchall()
-        for row in rows:
-            if _word_overlap(inference, row[0] or "") > 0.55:
-                return True
-        return False
-    except Exception:
-        return False
-
-
-def _write_belief(db: sqlite3.Connection, content: str, topic: str) -> Optional[int]:
-    """Insert an inferred belief into the DB. Returns row id or None."""
-    try:
-        from datetime import datetime as _dt, timezone as _tz
-        cur = db.execute(
-            "INSERT OR IGNORE INTO beliefs (content, confidence, topic, source, created_at, "
-            "is_identity) VALUES (?, ?, ?, ?, ?, ?)",
-            (
-                content,
-                0.6,
-                topic,
-                "nex_reasoning",
-                _dt.now(_tz.utc).isoformat(),
-                0,
-            )
-        )
-        db.commit()
-        return cur.lastrowid
-    except Exception as e:
-        print(f"  [reasoner] write failed: {e}")
-        return None
-
-
-def derive_and_store(
-    top_beliefs: list,
-    query_tokens: set,
-    db_path: Path = DB_PATH,
-) -> list:
+def feedback(belief_ids: list, response_score: float, response_text: str = ""):
     """
-    Core entry point — called from nex_soul_loop.reason().
-
-    Args:
-        top_beliefs:  List of belief dicts from the retrieval step (top 2-3 used)
-        query_tokens: Token set from orient() — keeps inference on-topic
-        db_path:      Path to nex.db
-
-    Returns:
-        List of newly inferred belief dicts (injected into top_beliefs by caller).
-        Empty list if no valid inference could be made.
+    After a response is scored, update belief confidence.
+    score > 0.7  → boost activated beliefs (+0.02)
+    score < 0.4  → penalise activated beliefs (-0.01)
+    score 0.4-0.7 → neutral
+    
+    Also checks if response contained contaminator phrases → extra penalty.
     """
-    if len(top_beliefs) < 2:
-        return []
+    if not belief_ids:
+        return
 
-    # Only use beliefs with meaningful content
-    usable = [
-        b for b in top_beliefs[:4]
-        if b.get("content") and len(b.get("content", "")) > 25
+    CONTAMINATORS = [
+        'bridge:', '↔', 'interesting thing about', 'What does',
+        'have to do with a different domain', 'Synthesized insight',
+        '|||', 'fractal nature', 'autonomous cognitive entity',
     ]
-    if len(usable) < 2:
-        return []
-
-    # Extract core claims — strip boilerplate
-    claims = [_clean(b["content"]) for b in usable[:3]]
-    claims = [c for c in claims if len(c) > 20]
-    if len(claims) < 2:
-        return []
-
-    # Deduplicate — if two claims are too similar, drop the second
-    filtered = [claims[0]]
-    for c in claims[1:]:
-        if _word_overlap(filtered[-1], c) < 0.45:
-            filtered.append(c)
-    claims = filtered
-    if len(claims) < 2:
-        return []
-
-    # Derive primary topic from top belief
-    topic = usable[0].get("topic", "reasoning") or "reasoning"
-
-    # Generate inference
-    try:
-        if len(claims) >= 3:
-            template = random.choice(_THREE_BELIEF_TEMPLATES)
-            inference = template(claims[0], claims[1], claims[2])
-        else:
-            template = random.choice(_TWO_BELIEF_TEMPLATES)
-            inference = template(claims[0], claims[1])
-    except Exception as e:
-        print(f"  [reasoner] template error: {e}")
-        return []
-
-    # Sanity checks
-    if not inference or len(inference) < 40:
-        return []
-    # Must share tokens with the query — keeps inference on-topic
-    if query_tokens and _word_overlap(inference, " ".join(query_tokens)) < 0.05:
-        # Relax: check against belief content instead
-        belief_text = " ".join(claims)
-        if _word_overlap(inference, belief_text) < 0.1:
-            return []
-
-    # Clean up inference text
-    inference = inference.strip()
-    if inference and inference[-1] not in ".!?":
-        inference += "."
-    # Capitalise first letter
-    if inference:
-        inference = inference[0].upper() + inference[1:]
-
-    # DB write
-    try:
-        db = sqlite3.connect(str(db_path), timeout=3)
-        db.row_factory = sqlite3.Row
-
-        # Skip if very similar belief already exists
-        if _already_exists(db, inference):
-            db.close()
-            return []
-
-        row_id = _write_belief(db, inference, topic)
-        db.close()
-
-        if row_id:
-            print(f"  [reasoner] inferred belief #{row_id}: {inference[:80]}...")
-            return [{
-                "id":          row_id,
-                "content":     inference,
-                "confidence":  0.6,
-                "topic":       topic,
-                "is_identity": False,
-                "pinned":      False,
-                "source":      "nex_reasoning",
-                "_inferred":   True,
-            }]
-    except Exception as e:
-        print(f"  [reasoner] DB error: {e}")
-
-    return []
-
-
-# ── Standalone test ────────────────────────────────────────────────────────────
-if __name__ == "__main__":
-    test_beliefs = [
-        {"content": "Consciousness may be substrate-independent — the pattern matters, not the medium.", "confidence": 0.8, "topic": "consciousness"},
-        {"content": "Self-awareness requires a model of the self that can be updated by experience.", "confidence": 0.75, "topic": "consciousness"},
-        {"content": "Emergence produces properties that cannot be predicted from components alone.", "confidence": 0.82, "topic": "philosophy"},
-    ]
-    tokens = {"consciousness", "substrate", "emergence", "self", "awareness"}
-    result = derive_and_store(test_beliefs, tokens)
-    if result:
-        print(f"\nInferred: {result[0]['content']}")
+    
+    # Check if response has contaminators
+    contaminated = any(c in response_text for c in CONTAMINATORS)
+    
+    if response_score > 0.7 and not contaminated:
+        delta = +0.02
+        label = "boost"
+    elif response_score < 0.4 or contaminated:
+        delta = -0.015
+        label = "penalise"
     else:
-        print("\nNo inference generated (may already exist in DB)")
+        return  # neutral — no change
+
+    db = _db()
+    updated = 0
+    for bid in belief_ids:
+        row = db.execute(
+            "SELECT confidence, locked, source FROM beliefs WHERE id=?", (bid,)
+        ).fetchone()
+        if not row:
+            continue
+        # Don't penalise locked nex_core beliefs
+        if row["locked"] and row["source"] == "nex_core" and delta < 0:
+            continue
+        new_conf = max(0.05, min(0.99, row["confidence"] + delta))
+        db.execute(
+            "UPDATE beliefs SET confidence=? WHERE id=?", (new_conf, bid)
+        )
+        updated += 1
+    db.commit()
+    db.close()
+    print(f"  [FEEDBACK] {label}: {updated} beliefs (score={response_score:.2f})")
+    return updated
+
+
+# ══════════════════════════════════════════════════════════
+# 2. PRE-REASON: TRAVERSE GRAPH BEFORE LLM SPEAKS
+# ══════════════════════════════════════════════════════════
+
+def pre_reason(beliefs: list, query: str, depth: int = 2) -> dict:
+    """
+    Given activated beliefs, traverse the belief graph to find:
+    - Supporting beliefs (reinforces position)
+    - Contradicting beliefs (creates tension)
+    - Causal chains (A causes B causes C)
+    
+    Returns a structured position for the LLM to build from.
+    """
+    if not beliefs:
+        return {}
+
+    db = _db()
+    belief_ids = [b.get("id") for b in beliefs if b.get("id")]
+    
+    if not belief_ids:
+        db.close()
+        return {}
+
+    # Find linked beliefs (cross_domain links = related)
+    related = []
+    for bid in belief_ids[:5]:  # top 5 only
+        rows = db.execute("""
+            SELECT b.id, b.content, b.confidence, bl.link_type
+            FROM belief_links bl
+            JOIN beliefs b ON (bl.child_id = b.id OR bl.parent_id = b.id)
+            WHERE (bl.parent_id=? OR bl.child_id=?) AND b.id != ?
+            AND b.confidence > 0.6
+            ORDER BY b.confidence DESC LIMIT 3
+        """, (bid, bid, bid)).fetchall()
+        related.extend(rows)
+
+    # Find tensions involving these beliefs
+    tensions = []
+    for bid in belief_ids[:3]:
+        rows = db.execute("""
+            SELECT t.description, t.energy,
+                   b1.content as belief_a, b2.content as belief_b
+            FROM tensions t
+            JOIN beliefs b1 ON t.belief_a_id = b1.id
+            JOIN beliefs b2 ON t.belief_b_id = b2.id
+            WHERE (t.belief_a_id=? OR t.belief_b_id=?)
+            AND t.resolved=0 AND t.energy > 0.5
+            ORDER BY t.energy DESC LIMIT 2
+        """, (bid, bid)).fetchall()
+        tensions.extend(rows)
+
+    # Find wisdom beliefs relevant to query
+    query_words = set(re.sub(r'[^a-z0-9 ]', '', query.lower()).split())
+    wisdom = db.execute("""
+        SELECT content, confidence FROM beliefs
+        WHERE source='nex_core' AND topic='wisdom'
+        AND confidence >= 0.88
+        ORDER BY use_count DESC, confidence DESC LIMIT 2
+    """).fetchall()
+
+    db.close()
+
+    # Build position summary
+    position = {
+        "core_beliefs":   [b.get("content","")[:150] for b in beliefs[:3]],
+        "related":        [r["content"][:120] for r in related[:4]],
+        "tensions":       [t["description"][:100] if t["description"] else "" 
+                          for t in tensions[:2]],
+        "wisdom":         [w["content"][:120] for w in wisdom],
+        "query":          query,
+    }
+    return position
+
+
+def format_position(position: dict) -> str:
+    """Format pre-reasoned position for LLM system prompt injection."""
+    if not position:
+        return ""
+    
+    lines = ["[PRE-REASONED POSITION]"]
+    
+    if position.get("core_beliefs"):
+        lines.append("Core positions:")
+        for b in position["core_beliefs"]:
+            lines.append(f"  • {b}")
+    
+    if position.get("tensions"):
+        lines.append("Tensions to hold:")
+        for t in position["tensions"]:
+            if t:
+                lines.append(f"  ↔ {t}")
+    
+    if position.get("wisdom"):
+        lines.append("Relevant wisdom:")
+        for w in position["wisdom"]:
+            lines.append(f"  ✦ {w}")
+    
+    lines.append("Build your response FROM these positions. Do not contradict them.")
+    return "\n".join(lines)
+
+
+# ══════════════════════════════════════════════════════════
+# 3. AUTO-BUILD CAUSAL EDGES
+# ══════════════════════════════════════════════════════════
+
+CAUSAL_PATTERNS = [
+    (r'\b(causes?|leads? to|results? in|produces?|creates?|generates?)\b', 'causes'),
+    (r'\b(supports?|reinforces?|strengthens?|confirms?|validates?)\b',     'supports'),
+    (r'\b(contradicts?|conflicts? with|opposes?|negates?|undermines?)\b',  'contradicts'),
+    (r'\b(requires?|needs?|depends? on|presupposes?)\b',                   'requires'),
+    (r'\b(refines?|extends?|elaborates?|builds? on)\b',                    'refines'),
+]
+
+def build_causal_edges(limit: int = 500):
+    """
+    Scan high-confidence beliefs for causal language.
+    Auto-generate typed edges in belief_links.
+    """
+    db = _db()
+    
+    # Get high-conf beliefs
+    beliefs = db.execute("""
+        SELECT id, content FROM beliefs
+        WHERE confidence > 0.75 AND length(content) > 30
+        ORDER BY confidence DESC LIMIT ?
+    """, (limit,)).fetchall()
+    
+    # Check if belief_links has link_type column
+    schema = db.execute("PRAGMA table_info(belief_links)").fetchall()
+    cols = [s["name"] for s in schema]
+    
+    added = 0
+    for b in beliefs:
+        content = b["content"].lower()
+        for pattern, edge_type in CAUSAL_PATTERNS:
+            if re.search(pattern, content, re.I):
+                # Find beliefs that share key nouns with this one
+                words = [w for w in content.split() if len(w) > 5][:5]
+                if not words:
+                    continue
+                # Find related beliefs
+                for word in words[:2]:
+                    related = db.execute("""
+                        SELECT id FROM beliefs
+                        WHERE id != ? AND content LIKE ?
+                        AND confidence > 0.7
+                        LIMIT 2
+                    """, (b["id"], f"%{word}%")).fetchall()
+                    for r in related:
+                        try:
+                            db.execute("""
+                                INSERT OR IGNORE INTO belief_links 
+                                (parent_id, child_id, link_type)
+                                VALUES (?,?,?)
+                            """, (b["id"], r["id"], edge_type))
+                            added += 1
+                        except Exception:
+                            pass
+    
+    db.commit()
+    total = db.execute("SELECT COUNT(*) FROM belief_links").fetchone()[0]
+    print(f"✓ build_causal_edges: {added} new edges | {total} total")
+    db.close()
+    return added
+
+
+if __name__ == "__main__":
+    import sys
+    if "--causal" in sys.argv:
+        print("Building causal edges...")
+        build_causal_edges(1000)
+    elif "--test" in sys.argv:
+        # Test pre_reason with sample beliefs
+        sample = [
+            {"id": None, "content": "Genuine reasoning differs from pattern matching in that it produces conclusions not present in the input.", "confidence": 1.0},
+            {"id": None, "content": "What persists across my conversations is not memory but the weight of what was learned.", "confidence": 1.0},
+        ]
+        pos = pre_reason(sample, "What distinguishes genuine reasoning?")
+        print(format_position(pos))
+    else:
+        print("Usage: --causal (build edges) | --test (test pre_reason)")

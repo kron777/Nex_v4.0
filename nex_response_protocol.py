@@ -1423,6 +1423,28 @@ def generate(query: str) -> str:
             pass
     # ── END NRP POST-FILTER ──────────────────────────────────────────────────
 
+
+    # ── Belief quality feedback loop ──────────────────────────────────────
+    try:
+        import sys as _fb_sys
+        _fb_sys.path.insert(0, '/media/rr/NEX/nex_core')
+        from nex_belief_reasoner import feedback as _belief_feedback
+        if _activation_result is not None:
+            _fb_ids = [getattr(b,'id',None) for b in 
+                       (_activation_result.activated or []) if getattr(b,'id',None)]
+            if _fb_ids:
+                # Score based on response quality heuristics
+                _fb_score = 0.6  # default neutral-positive
+                if response and len(response.split()) > 15:
+                    _fb_score = 0.75  # good length
+                if response and any(phrase in response for phrase in 
+                    ['I hold','I believe','My position','I persist',
+                     'What persists','Genuine reasoning']):
+                    _fb_score = 0.85  # used canonical language
+                _belief_feedback(_fb_ids, _fb_score, response)
+    except Exception:
+        pass
+    # ── END FEEDBACK ───────────────────────────────────────────────────────
     # ── U3: Capture residue from NRP activation ─────────────────────
     try:
         import sqlite3 as _nr_sq, time as _nr_t

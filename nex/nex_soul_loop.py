@@ -1096,6 +1096,10 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
     # ─────────────────────────────────────────────────────────────────────
 
     # Cross-domain retrieval — beliefs from adjacent topics
+    # ── Inject pre-reasoned position into system prompt ─────────────────
+    if reason_result.get("pre_reasoned_position"):
+        _pre_pos_str = reason_result["pre_reasoned_position"]
+        # Will be picked up by EXPRESS step
     # ── U6: Inject wisdom as TIER_1 beliefs into REASON ─────────────
     try:
         import sqlite3 as _ws_sq
@@ -1130,6 +1134,20 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
     except Exception:
         pass
     # ── END WISDOM INJECT ─────────────────────────────────────────────
+
+    # ── Belief graph pre-reasoning ────────────────────────────────────────
+    try:
+        import sys as _br_sys
+        _br_sys.path.insert(0, '/media/rr/NEX/nex_core')
+        from nex_belief_reasoner import pre_reason, format_position
+        _pre_pos = pre_reason(top_beliefs[:5], query)
+        _pre_str = format_position(_pre_pos)
+        if _pre_str and len(_pre_str) > 50:
+            reason_result["pre_reasoned_position"] = _pre_str
+            print(f"  [PRE-REASON] position built from {len(top_beliefs)} beliefs")
+    except Exception as _pr_e:
+        pass
+    # ── END PRE-REASON ─────────────────────────────────────────────────────
     cross_domain = _cross_domain_beliefs(top_beliefs, tokens, limit=3)
 
     # ── Query-topic forcing — if a topic is literally in the query, pull it ──
@@ -2760,6 +2778,8 @@ class SoulLoop:
             _belief_ids = [b.get("id") for b in reason_result.get("beliefs", []) if b.get("id")]
             _topic = reason_result.get("topic", "")
             record_activation(_belief_ids, query, _topic)
+            # Store activated belief IDs for feedback after reflexion
+            _last_activated_ids = list(_belief_ids)
             # Boost confidence of high-momentum beliefs
             reason_result["beliefs"] = apply_momentum_boost(reason_result["beliefs"])
         except Exception as _em_err:
