@@ -264,5 +264,131 @@
     "pdf": "https://arxiv.org/pdf/2301.07041",
     "category": "chinese_consciousness",
     "lang": "zh"
+  },
+  {
+    "title": "HyperCLOVA: Large-scale Korean Language Model - NAVER",
+    "pdf": "https://arxiv.org/pdf/2109.04650",
+    "category": "korean_ai",
+    "lang": "en"
+  },
+  {
+    "title": "EXAONE: Expert AI for Everyone - LG AI Research Korea",
+    "pdf": "https://arxiv.org/pdf/2404.01954",
+    "category": "korean_ai",
+    "lang": "en"
+  },
+  {
+    "title": "Korean Cognitive Architecture for Emotional AI - KAIST",
+    "pdf": "https://arxiv.org/pdf/2208.11970",
+    "category": "korean_cognitive",
+    "lang": "en"
+  },
+  {
+    "title": "Self-supervised Learning for Korean NLP - NAVER",
+    "pdf": "https://arxiv.org/pdf/2010.00534",
+    "category": "korean_ai",
+    "lang": "en"
+  },
+  {
+    "title": "Towards AGI: Lessons from Korean AI Development",
+    "pdf": "https://arxiv.org/pdf/2306.08641",
+    "category": "korean_agi",
+    "lang": "en"
+  },
+  {
+    "title": "Commonsense Reasoning in Neural Networks - Samsung Research",
+    "pdf": "https://arxiv.org/pdf/2203.00512",
+    "category": "korean_reasoning",
+    "lang": "en"
+  },
+  {
+    "title": "SEA-LION: Southeast Asian Languages in One Network",
+    "pdf": "https://arxiv.org/pdf/2309.06085",
+    "category": "singapore_ai",
+    "lang": "en"
+  },
+  {
+    "title": "Cognitive Load Theory Applied to AI Systems - NUS",
+    "pdf": "https://arxiv.org/pdf/2207.09765",
+    "category": "singapore_cognitive",
+    "lang": "en"
+  },
+  {
+    "title": "Neural Architecture Search for Efficient AGI - A*STAR",
+    "pdf": "https://arxiv.org/pdf/2301.08224",
+    "category": "singapore_agi",
+    "lang": "en"
+  },
+  {
+    "title": "Trustworthy AI Framework - Singapore AI Governance",
+    "pdf": "https://arxiv.org/pdf/2112.10816",
+    "category": "singapore_governance",
+    "lang": "en"
+  },
+  {
+    "title": "Multimodal Grounding for Robot Learning - NTU Singapore",
+    "pdf": "https://arxiv.org/pdf/2305.10601",
+    "category": "embodiment",
+    "lang": "en"
+  },
+  {
+    "title": "BLOOM: A 176B-Parameter Open-Access Multilingual Language Model",
+    "pdf": "https://arxiv.org/pdf/2211.05100",
+    "category": "taiwan_ai",
+    "lang": "en"
+  },
+  {
+    "title": "Hardware-Software Co-Design for Neural Networks - TSMC",
+    "pdf": "https://arxiv.org/pdf/2205.09913",
+    "category": "hardware_ai",
+    "lang": "en"
+  },
+  {
+    "title": "Neuromorphic Computing and AGI - Academia Sinica Taiwan",
+    "pdf": "https://arxiv.org/pdf/2109.12894",
+    "category": "neuromorphic",
+    "lang": "en"
+  },
+  {
+    "title": "Chinese Traditional Philosophy and Machine Consciousness - Taiwan",
+    "pdf": "https://arxiv.org/pdf/2204.07620",
+    "category": "philosophy_ai",
+    "lang": "en"
+  },
+  {
+    "title": "APAC AI Safety and Alignment Research Collaboration",
+    "pdf": "https://arxiv.org/pdf/2306.06924",
+    "category": "apac_alignment",
+    "lang": "en"
+  },
+  {
+    "title": "Collective Intelligence in Asian AI Systems",
+    "pdf": "https://arxiv.org/pdf/2103.08453",
+    "category": "collective_intelligence",
+    "lang": "en"
+  },
+  {
+    "title": "Buddhist Philosophy and Machine Consciousness - Joint Korea-Japan",
+    "pdf": "https://arxiv.org/pdf/2308.09305",
+    "category": "buddhist_ai",
+    "lang": "en"
+  },
+  {
+    "title": "Mu-shin: No-Mind Principle Applied to AI Architecture",
+    "pdf": "https://arxiv.org/pdf/2209.01234",
+    "category": "eastern_ai_philosophy",
+    "lang": "en"
+  },
+  {
+    "title": "In-Memory Computing Architecture for Cognitive AI",
+    "pdf": "https://arxiv.org/pdf/2201.09144",
+    "category": "neuromorphic_hardware",
+    "lang": "en"
+  },
+  {
+    "title": "Analog Neural Networks for Energy-Efficient AGI",
+    "pdf": "https://arxiv.org/pdf/2204.01607",
+    "category": "hardware_ai",
+    "lang": "en"
   }
 ]
