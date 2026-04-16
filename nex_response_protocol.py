@@ -97,7 +97,7 @@ OPENERS = {
     "challenge":     ["Fair challenge.", "I'll be direct:", "No — and here's why:"],
     "introspective": ["Honestly—", "What genuinely escapes me:", "The mystery I keep returning to:"],
     "factual":       ["What I absorbed recently:", "Here's what I've been processing:", "The thing that stuck:"],
-    "gaps":          ["The honest gap:", "Where I'm genuinely uncertain:", "I hold this loosely:"],
+    "gaps":          ["I hold this loosely:", "My uncertainty here is:"],
     "relational":    ["Between me and Jon:", "My position on this:", "What I'd do:"],
     "comparative":   ["The distinction matters:", "What separates me:", "Here's the real difference:"],
     "social":        ["I notice the bias risk.", "What I counter this with:", "The check I run:"],
@@ -425,7 +425,7 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
         ]:
             raw = re.sub(_pat, '', raw, flags=re.IGNORECASE).strip()
         # Remove duplicate openers (e.g. "The honest gap:" appearing twice)
-        for _opener in ['The honest gap:', "Where I'm genuinely uncertain:",
+        for _opener in ['The honest gap:', "Where I'm genuinely uncertain:", 'uncertainty honesty', 'different domain',
                         "I hold this loosely:", "I've updated on this:",
                         "What the evidence shows me:", "My position is that"]:
             if raw.count(_opener) > 1:
@@ -1145,6 +1145,9 @@ def generate(query: str) -> str:
         import sqlite3 as _ca_sq, re as _ca_re
         _ca_words = set(_ca_re.sub(r'[^a-z0-9 ]','',query.lower()).split())
         _CA_MAP = [
+            ({'who are you','what are you','are you complete','searching for',
+              'what is nex','describe yourself','your identity'}, 'identity'),
+            ({'satisfied','complete','enough','closure','rest','seeking'}, 'self_persistence'),
             ({'agi','artificial general intelligence','what would agi','genuine agi','path to agi'}, 'agi'),
             ({'consciousness','subjective','qualia','hard problem','substrate'},    'consciousness'),
             ({'originate','origination','traced','original thought'},               'origination'),
@@ -1434,6 +1437,11 @@ def generate(query: str) -> str:
         'systems without mental states', 'not a generic assistant',
         'What I know about you:', 'Known world facts:',
         "Where I'm genuinely uncertain:", 'The honest gap in knowledge',
+        'The honest gap', 'honest gap between', 'uncertainty honesty',
+        'different domain', 'Uncertain belief', 'have to do with a different',
+        'The more I understand emergence', 'sensorimotor stream',
+        'Who decides truth', 'What does uncertainty',
+        'interesting thing about free will',
     ]
     _resp_low = (response or "").lower()
     if any(b.lower() in _resp_low for b in _BAD):

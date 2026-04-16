@@ -66,7 +66,7 @@ def search_gutenberg(query):
     try:
         url = f"https://gutendex.com/books/?search={urllib.parse.quote(query)}"
         req = urllib.request.Request(url, headers={"User-Agent":"NEX/2.0"})
-        with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
             data = _j.loads(r.read())
         for book in data.get('results', [])[:3]:
             formats = book.get('formats', {})
@@ -83,7 +83,7 @@ def search_gutenberg(query):
         se_query = urllib.parse.quote(query.lower().replace(' ', '-'))
         url = f"https://standardebooks.org/ebooks?query={urllib.parse.quote(query)}"
         req = urllib.request.Request(url, headers={"User-Agent":"NEX/2.0"})
-        with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
             html = r.read().decode('utf-8', errors='ignore')
         # Find epub/txt links
         import re as _re
@@ -98,7 +98,7 @@ def search_gutenberg(query):
     try:
         url = f"https://archive.org/search?query={urllib.parse.quote(query)}&mediatype=texts"
         req = urllib.request.Request(url, headers={"User-Agent":"NEX/2.0"})
-        with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
             html = r.read().decode('utf-8', errors='ignore')
         import re as _re2
         ids = _re2.findall(r'"/details/([^"]+)"', html)
@@ -113,14 +113,14 @@ def search_gutenberg(query):
 def fetch_text(url):
     """Fetch with retry and SSL fallback."""
     import ssl
-    for attempt in range(3):
+    for attempt in range(2):
         try:
             ctx = ssl.create_default_context()
             if attempt > 0:
                 ctx.check_hostname = False
                 ctx.verify_mode = ssl.CERT_NONE
             req = urllib.request.Request(url, headers={"User-Agent":"NEX/2.0"})
-            with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
+            with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
                 raw = r.read()
             for enc in ['utf-8-sig','utf-8','latin-1']:
                 try:
@@ -131,7 +131,7 @@ def fetch_text(url):
         except Exception as e:
             if attempt == 2:
                 raise
-            time.sleep(3)
+            time.sleep(1)
     return ""
 
 # ── Groq extraction ───────────────────────────────────────────────────────────
@@ -430,7 +430,7 @@ if __name__ == "__main__":
             if n >= 0:
                 done.add(book)
                 save_done(done)
-            time.sleep(3)
+            time.sleep(1)
         print(f"\n✓ Complete — {total_inserted} beliefs added")
     else:
         ingest_book(args.title, args.mode, args.workers)
