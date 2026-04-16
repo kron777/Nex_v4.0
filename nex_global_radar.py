@@ -116,6 +116,82 @@ def groq_assess(title, abstract, center):
         pass
     return None
 
+
+# ArXiv category feeds — genuinely latest papers by topic
+ARXIV_FEEDS = {
+    "cs.AI":    "Artificial Intelligence",
+    "cs.LG":    "Machine Learning", 
+    "cs.CL":    "Computation and Language",
+    "cs.NE":    "Neural and Evolutionary Computing",
+    "cs.RO":    "Robotics",
+    "q-bio.NC": "Neurons and Cognition",
+    "cs.HC":    "Human-Computer Interaction",
+}
+
+def fetch_arxiv_feed(category, max_results=10):
+    """Fetch latest papers from ArXiv category feed."""
+    try:
+        url = f"https://export.arxiv.org/api/query?search_query=cat:{category}&start=0&max_results={max_results}&sortBy=submittedDate&sortOrder=descending"
+        r = requests.get(url, timeout=15)
+        titles    = re.findall(r'<title>(.*?)</title>', r.text)[1:]
+        ids       = re.findall(r'<id>http://arxiv.org/abs/(.*?)</id>', r.text)
+        abstracts = re.findall(r'<summary>(.*?)</summary>', r.text, re.DOTALL)
+        authors   = re.findall(r'<author>.*?<name>(.*?)</name>.*?</author>', r.text, re.DOTALL)
+        papers = []
+        for i, (title, arxiv_id) in enumerate(zip(titles, ids)):
+            abstract = abstracts[i].strip() if i < len(abstracts) else ""
+            papers.append({
+                "title": title.strip().replace("\n"," "),
+                "pdf": f"https://arxiv.org/pdf/{arxiv_id}",
+                "url": f"https://arxiv.org/abs/{arxiv_id}",
+                "abstract": abstract[:500],
+                "category": category,
+                "source": "arxiv_feed",
+            })
+        return papers
+    except Exception:
+        return []
+
+def scan_feeds():
+    """Scan ArXiv category feeds for latest relevant papers."""
+    db = sqlite3.connect(DB, timeout=15)
+    print("\nScanning ArXiv category feeds...")
+    total_new = 0
+    
+    seen_ids = set()
+    
+    for cat, desc in ARXIV_FEEDS.items():
+        papers = fetch_arxiv_feed(cat, max_results=15)
+        relevant = []
+        for p in papers:
+            if p['url'] in seen_ids:
+                continue
+            seen_ids.add(p['url'])
+            score = score_abstract(p['abstract'], p['title'])
+            if score >= 4:  # higher threshold for feed papers
+                p['score'] = score
+                relevant.append(p)
+                try:
+                    db.execute("""INSERT OR IGNORE INTO nex_papers
+                        (title, pdf_url, category, fetched_at, score, abstract)
+                        VALUES (?,?,?,?,?,?)""",
+                        (p['title'], p['pdf'], f"arxiv_{cat.replace('.','_')}",
+                         time.time(), score, p['abstract']))
+                    total_new += 1
+                except Exception:
+                    pass
+        
+        db.commit()
+        if relevant:
+            print(f"  [{cat}] {desc}: {len(relevant)} relevant")
+            for p in relevant[:3]:
+                print(f"    • {p['title'][:65]} ({p['score']})")
+        time.sleep(0.5)
+    
+    print(f"  Total new from feeds: {total_new}")
+    db.close()
+    return total_new
+
 def run():
     db = sqlite3.connect(DB, timeout=15)
     
@@ -127,6 +203,7 @@ def run():
     total_relevant = 0
     center_results = {}
 
+    seen_paper_ids = set()  # global dedup across centers
     for center_name, center_info in RESEARCH_CENTERS.items():
         country = center_info['country']
         query   = center_info['arxiv_search']
@@ -139,7 +216,8 @@ def run():
         relevant = []
         for p in papers:
             score = score_abstract(p['abstract'], p['title'])
-            if score >= 2:
+            if score >= 2 and p['url'] not in seen_paper_ids:
+                seen_paper_ids.add(p['url'])
                 p['score']    = score
                 p['center']   = center_name
                 p['country']  = country
@@ -186,6 +264,9 @@ def run():
         "by_center": {k: [p['title'] for p in v] 
                       for k,v in center_results.items()}
     }
+    # Also scan ArXiv feeds for genuinely latest papers
+    scan_feeds()
+    
     Path('/media/rr/NEX/nex_core/radar_report.json').write_text(
         json.dumps(report, indent=2))
     print(f"\n✓ Radar report saved")

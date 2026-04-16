@@ -1,0 +1,78 @@
+{
+  "timestamp": "2026-04-16 18:38",
+  "centers_scanned": 33,
+  "papers_found": 54,
+  "relevant": 34,
+  "by_center": {
+    "OpenAI": [
+      "From $P(y|x)$ to $P(y)$: Investigating Reinforcement Learning in Pre-train Space",
+      "LongCoT: Benchmarking Long-Horizon Chain-of-Thought Reasoning"
+    ],
+    "DeepMind": [
+      "SpatialEvo: Self-Evolving Spatial Intelligence via Deterministic Geometric Environments",
+      "From $P(y|x)$ to $P(y)$: Investigating Reinforcement Learning in Pre-train Space",
+      "LongCoT: Benchmarking Long-Horizon Chain-of-Thought Reasoning"
+    ],
+    "Google Brain": [
+      "Seedance 2.0: Advancing Video Generation for World Complexity",
+      "Geometric Context Transformer for Streaming 3D Reconstruction"
+    ],
+    "MIT CSAIL": [
+      "Seedance 2.0: Advancing Video Generation for World Complexity"
+    ],
+    "Stanford HAI": [
+      "SpatialEvo: Self-Evolving Spatial Intelligence via Deterministic Geometric Environments",
+      "From $P(y|x)$ to $P(y)$: Investigating Reinforcement Learning in Pre-train Space"
+    ],
+    "Berkeley BAIR": [
+      "SpatialEvo: Self-Evolving Spatial Intelligence via Deterministic Geometric Environments",
+      "From $P(y|x)$ to $P(y)$: Investigating Reinforcement Learning in Pre-train Space"
+    ],
+    "CMU AI": [
+      "TDCOSMO XXV: A \"soup-to-nuts\" 6.5% $H_0$ measurement $-$ strong lensing and dynamics with a maximally flexible mass sheet"
+    ],
+    "Allen AI": [
+      "SpatialEvo: Self-Evolving Spatial Intelligence via Deterministic Geometric Environments",
+      "From $P(y|x)$ to $P(y)$: Investigating Reinforcement Learning in Pre-train Space",
+      "LongCoT: Benchmarking Long-Horizon Chain-of-Thought Reasoning"
+    ],
+    "MILA Montreal": [
+      "TDCOSMO XXV: A \"soup-to-nuts\" 6.5% $H_0$ measurement $-$ strong lensing and dynamics with a maximally flexible mass sheet",
+      "From $P(y|x)$ to $P(y)$: Investigating Reinforcement Learning in Pre-train Space",
+      "LongCoT: Benchmarking Long-Horizon Chain-of-Thought Reasoning"
+    ],
+    "DeepMind London": [
+      "LongCoT: Benchmarking Long-Horizon Chain-of-Thought Reasoning"
+    ],
+    "Oxford FHI": [
+      "TDCOSMO XXV: A \"soup-to-nuts\" 6.5% $H_0$ measurement $-$ strong lensing and dynamics with a maximally flexible mass sheet"
+    ],
+    "ETH Zurich": [
+      "From $P(y|x)$ to $P(y)$: Investigating Reinforcement Learning in Pre-train Space",
+      "LongCoT: Benchmarking Long-Horizon Chain-of-Thought Reasoning"
+    ],
+    "Max Planck AI": [
+      "TDCOSMO XXV: A \"soup-to-nuts\" 6.5% $H_0$ measurement $-$ strong lensing and dynamics with a maximally flexible mass sheet",
+      "SpatialEvo: Self-Evolving Spatial Intelligence via Deterministic Geometric Environments"
+    ],
+    "INRIA France": [
+      "SpatialEvo: Self-Evolving Spatial Intelligence via Deterministic Geometric Environments"
+    ],
+    "Amsterdam AI": [
+      "SpatialEvo: Self-Evolving Spatial Intelligence via Deterministic Geometric Environments",
+      "From $P(y|x)$ to $P(y)$: Investigating Reinforcement Learning in Pre-train Space",
+      "LongCoT: Benchmarking Long-Horizon Chain-of-Thought Reasoning"
+    ],
+    "RIKEN Japan": [
+      "SpatialEvo: Self-Evolving Spatial Intelligence via Deterministic Geometric Environments",
+      "From $P(y|x)$ to $P(y)$: Investigating Reinforcement Learning in Pre-train Space"
+    ],
+    "NTT Research JP": [
+      "SpatialEvo: Self-Evolving Spatial Intelligence via Deterministic Geometric Environments"
+    ],
+    "KAIST Korea": [
+      "SpatialEvo: Self-Evolving Spatial Intelligence via Deterministic Geometric Environments",
+      "From $P(y|x)$ to $P(y)$: Investigating Reinforcement Learning in Pre-train Space"
+    ]
+  }
+}
