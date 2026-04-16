@@ -1102,8 +1102,7 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
         # Inject into system context for EXPRESS step
         if "system_context" not in reason_result:
             reason_result["system_context"] = ""
-        reason_result["system_context"] = _pre_pos_str + "
-" + reason_result["system_context"]
+        reason_result["system_context"] = _pre_pos_str + " | " + reason_result["system_context"]
         # Write to temp file so NRP can read it
         try:
             with open('/tmp/nex_pre_reason.txt', 'w') as _prf:
