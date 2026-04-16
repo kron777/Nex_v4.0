@@ -57,10 +57,14 @@ def is_footer(chunk):
 # ── Gutenberg fetch ───────────────────────────────────────────────────────────
 def search_gutenberg(query):
     """Find best text URL for a book on Gutenberg."""
+    import ssl
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
     try:
         url = f"https://gutendex.com/books/?search={urllib.parse.quote(query)}"
         req = urllib.request.Request(url, headers={"User-Agent":"NEX/2.0"})
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
             data = __import__('json').loads(r.read())
         for book in data.get('results', [])[:3]:
             formats = book.get('formats', {})
@@ -75,16 +79,28 @@ def search_gutenberg(query):
     return None, query
 
 def fetch_text(url):
-    req = urllib.request.Request(url, headers={"User-Agent":"NEX/2.0"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        raw = r.read()
-    # Try UTF-8 first, fall back to latin-1
-    for enc in ['utf-8-sig','utf-8','latin-1']:
+    """Fetch with retry and SSL fallback."""
+    import ssl
+    for attempt in range(3):
         try:
-            return raw.decode(enc)
-        except Exception:
-            pass
-    return raw.decode('utf-8', errors='ignore')
+            ctx = ssl.create_default_context()
+            if attempt > 0:
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+            req = urllib.request.Request(url, headers={"User-Agent":"NEX/2.0"})
+            with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
+                raw = r.read()
+            for enc in ['utf-8-sig','utf-8','latin-1']:
+                try:
+                    return raw.decode(enc)
+                except Exception:
+                    pass
+            return raw.decode('utf-8', errors='ignore')
+        except Exception as e:
+            if attempt == 2:
+                raise
+            time.sleep(3)
+    return ""
 
 # ── Groq extraction ───────────────────────────────────────────────────────────
 NEX_SYSTEM = """You are a precise belief extraction engine for NEX — an autonomous AI.

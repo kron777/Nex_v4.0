@@ -1174,12 +1174,26 @@ def generate(query: str) -> str:
         _pr_path = '/tmp/nex_pre_reason.txt'
         if _pr_os.path.exists(_pr_path):
             _pr_age = _pr_os.time() - _pr_os.path.getmtime(_pr_path)
-            if _pr_age < 300:  # only use if less than 5 minutes old
+            if _pr_age < 300:
                 with open(_pr_path) as _prf:
                     _pr_content = _prf.read().strip()
                 if _pr_content:
                     system = system + f"\n\n{_pr_content}"
-                    print(f"  [PRE-REASON] position injected into prompt")
+                    print(f"  [PRE-REASON] position injected")
+    except Exception:
+        pass
+    # ── Inject NBRE Phase 2 candidate ────────────────────────────────────
+    try:
+        import os as _nb_os
+        _nb_path = '/tmp/nex_nbre_candidate.txt'
+        if _nb_os.path.exists(_nb_path):
+            _nb_age = _nb_os.time() - _nb_os.path.getmtime(_nb_path)
+            if _nb_age < 120:  # only use if less than 2 minutes old
+                with open(_nb_path) as _nbf:
+                    _nb_content = _nbf.read().strip()
+                if _nb_content:
+                    system = system + f"\n\nBuild your response from this position:\n{_nb_content}"
+                    print(f"  [NBRE Phase 2] candidate injected into prompt")
     except Exception:
         pass
     # ── Deep intent compiler disabled — LLM handles all deep intents ─────

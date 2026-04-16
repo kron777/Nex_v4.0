@@ -43,7 +43,7 @@ def _nbre_preload():
     import threading, sys, os
     def _load():
         try:
-            _p = os.path.expanduser("~/Downloads")
+            _p = "/media/rr/NEX/nex_core"
             if _p not in sys.path:
                 sys.path.insert(0, _p)
             from nex_belief_reservoir_engine import NexBeliefReservoirEngine
@@ -1492,7 +1492,28 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
                 )
             except Exception:
                 pass
-            if _nf_fired >= 8 and _nf_conf >= 0.5:
+            print(f"  [NBRE] fired={_nf_fired} conf={_nf_conf:.3f} topics={_nf_topics[:2]}")
+            # Phase 2: inject NBRE candidate into system prompt when confident
+            if _nf_fired >= 5 and _nf_conf >= 0.75:
+                # Get best candidate from supporting beliefs
+                _nf_supporting = _nf_result.get("supporting_beliefs") or []
+                if _nf_supporting:
+                    _nf_candidate = getattr(_nf_supporting[0], 'content', '')
+                    if _nf_candidate and len(_nf_candidate.split()) > 8:
+                        # Write to temp file for NRP to inject
+                        try:
+                            _nf_existing = ""
+                            try:
+                                with open('/tmp/nex_pre_reason.txt') as _f:
+                                    _nf_existing = _f.read()
+                            except Exception:
+                                pass
+                            with open('/tmp/nex_nbre_candidate.txt', 'w') as _nf_f:
+                                _nf_f.write(f"NBRE CANDIDATE (conf={_nf_conf:.2f}):\n{_nf_candidate}")
+                            print(f"  [NBRE Phase 2] candidate written: {_nf_candidate[:60]}")
+                        except Exception:
+                            pass
+            if _nf_fired >= 5 and _nf_conf >= 0.5:
                 _existing_ids = {b.get("id") for b in top_beliefs}
                 _nf_injected  = 0
                 for _nfb in (_nf_result.get("supporting_beliefs") or []):
