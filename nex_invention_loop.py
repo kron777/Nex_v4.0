@@ -234,6 +234,103 @@ Return JSON:
     db.close()
     return result
 
+
+# ── QUALITY GATE ─────────────────────────────────────────────────────────────
+
+REAL_NEX_COMPONENTS = [
+    'belief_graph', 'belief graph', 'nbre', 'soul_loop', 'soul loop',
+    'irf', 'ifr', 'nrp', 'tpe', 'tei', 'eunoia', 'belief_links',
+    'tensions', 'nex_intentions', 'epistemic_momentum', 'nex_core',
+    'pre_reason', 'feedback', 'consolidate', 'thrownet', 'faiss',
+    'belief_reasoner', 'causal', 'synthesis', 'emergence',
+]
+
+def quality_score(inv: dict) -> tuple:
+    """
+    Score an invention 0-10. Return (score, reasons).
+    Must score >= 6 to appear in NEX_SUGGESTS.txt
+    """
+    if not inv: return 0, ["empty"]
+    
+    score = 0
+    reasons = []
+    fails = []
+    
+    name        = inv.get('name', '')
+    one_liner   = inv.get('one_liner', '')
+    mechanism   = inv.get('mechanism', '')
+    module      = inv.get('python_module', '')
+    connects    = inv.get('connects_to', [])
+    gap         = inv.get('gap_closed', '')
+    nex_pos     = inv.get('nex_position', '')
+    
+    all_text = (name + one_liner + mechanism + nex_pos).lower()
+    
+    # 1. Has a real name (not generic)
+    generic = ['protocol', 'system', 'engine', 'module', 'framework', 'layer']
+    if name and not all(g in name.lower() for g in generic[:2]):
+        score += 1
+        reasons.append("✓ named")
+    else:
+        fails.append("✗ generic name")
+    
+    # 2. Specifies a Python module
+    if module and module.endswith('.py') and 'nex_' in module:
+        score += 2
+        reasons.append("✓ specifies nex_*.py module")
+    else:
+        fails.append("✗ no module spec")
+    
+    # 3. Connects to real NEX components
+    real_connections = [c for c in REAL_NEX_COMPONENTS
+                       if c in all_text or c in str(connects).lower()]
+    if len(real_connections) >= 2:
+        score += 2
+        reasons.append(f"✓ connects to {len(real_connections)} real components")
+    elif len(real_connections) == 1:
+        score += 1
+        reasons.append(f"✓ connects to {real_connections[0]}")
+    else:
+        fails.append("✗ no real NEX connections")
+    
+    # 4. Addresses a known gap
+    gap_words = ' '.join(NEX_GAPS).lower()
+    gap_match = any(w in all_text for w in gap_words.split() if len(w) > 5)
+    if gap_match:
+        score += 2
+        reasons.append("✓ addresses known gap")
+    else:
+        fails.append("✗ gap not addressed")
+    
+    # 5. Has a mechanism (not just words)
+    if len(mechanism.split()) >= 15:
+        score += 1
+        reasons.append("✓ mechanism described")
+    else:
+        fails.append("✗ mechanism too vague")
+    
+    # 6. NEX has a genuine position
+    if nex_pos and len(nex_pos.split()) >= 10:
+        score += 1
+        reasons.append("✓ NEX position stated")
+    else:
+        fails.append("✗ no genuine position")
+    
+    # 7. Novelty — not a repeat of existing modules
+    EXISTING = ['tpe.py', 'tei.py', 'eunoia.py', 'nex_soul_loop',
+                'nex_belief_engine', 'nex_belief_forge', 'nex_causal_extractor',
+                'nex_synthesis_engine', 'nex_nbre', 'nex_thrownet_refinery']
+    is_repeat = any(e.replace('.py','') in name.lower().replace(' ','_')
+                   for e in EXISTING)
+    if not is_repeat:
+        score += 1
+        reasons.append("✓ novel")
+    else:
+        score -= 2
+        fails.append("✗ repeats existing module")
+    
+    return score, reasons + fails
+
 def generate_invention(thrownet_result, gap):
     """Generate a concrete invention/protocol from thrownet + gap."""
     convergences = thrownet_result.get("convergences", [])
@@ -393,8 +490,14 @@ def run_cycle(cycle_num):
             log(f"  Inventing for gap: {gap[:50]}")
             inv = generate_invention(thrownet_result, gap)
             if inv:
-                inventions.append(inv)
-                log(f"  ✓ {inv.get('name','?')}: {inv.get('one_liner','')[:60]}")
+                q_score, q_reasons = quality_score(inv)
+                log(f"  Quality score: {q_score}/10 — {q_reasons[0] if q_reasons else "?"}")
+                if q_score >= 6:
+                    inventions.append(inv)
+                    inv['quality_score'] = q_score
+                    log(f"  ✓ PASSED [{q_score}/10] {inv.get('name','?')}: {inv.get('one_liner','')[:60]}")
+                else:
+                    log(f"  ✗ REJECTED [{q_score}/10] {inv.get('name','?')}: {[', '.join(r for r in q_reasons if '✗' in r)]}")
             time.sleep(1)
 
     # 5. Write suggests
