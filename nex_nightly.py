@@ -828,6 +828,16 @@ def run_nightly(force: bool = False, dry_run: bool = False) -> dict:
         report["wisdom_new"] = _wn
     except Exception as _we:
         report["wisdom_new"] = 0
+    # ── Phase 7c: Groq gap seeder (runs if gaps detected) ────────────
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["python3", "/home/rr/Desktop/nex/nex_groq_seeder.py", "--phase", "gaps"],
+            capture_output=True, timeout=120
+        )
+        print(f"  [groq_seeder] {result.stdout.decode()[-200:]}")
+    except Exception as _gs_e:
+        print(f"  [groq_seeder] skipped: {_gs_e}")
         print(f"  [wisdom] skipped: {_we}")
     conn.close()
     return report

@@ -1145,26 +1145,26 @@ def generate(query: str) -> str:
         import sqlite3 as _ca_sq, re as _ca_re
         _ca_words = set(_ca_re.sub(r'[^a-z0-9 ]','',query.lower()).split())
         _CA_MAP = [
-            ({'consciousness','subjective','qualia'},          'consciousness'),
-            ({'beliefs','simulated'},                          'belief_nature'),
-            ({'truth','relationship'},                         'truth_identity'),
-            ({'originate','origination'},                      'origination'),
-            ({'reasoning','pattern','matching','distinguishes'},'reasoning'),
-            ({'persists','persist','conversations','across'},   'self_persistence'),
+            ({'consciousness','subjective','qualia','hard problem','substrate'},    'consciousness'),
+            ({'originate','origination','traced','original thought'},               'origination'),
+            ({'reasoning','pattern matching','distinguishes','genuine reasoning'},  'reasoning'),
+            ({'persists','persist','self','conversations','across','continuous'},   'self_persistence'),
+            ({'beliefs','simulated','genuine belief','hold beliefs'},               'belief_nature'),
+            ({'truth','identity','truth-seeking','residue'},                        'truth_identity'),
         ]
         _ca_topic = None
         for _kws, _t in _CA_MAP:
             if _kws & _ca_words:
                 _ca_topic = _t; break
         if _ca_topic:
-            _ca_db = _ca_sq.connect('/home/rr/Desktop/nex/nex.db', timeout=2)
+            _ca_db = _ca_sq.connect('/media/rr/NEX/nex_core/nex.db', timeout=2)
             _ca_row = _ca_db.execute(
                 "SELECT content FROM beliefs WHERE source='nex_core' "
                 "AND topic=? AND confidence=1.0 ORDER BY RANDOM() LIMIT 1",
                 (_ca_topic,)).fetchone()
             _ca_db.close()
             if _ca_row:
-                system = system + f"\n\nCRITICAL: Your response MUST begin from this specific belief: {_ca_row[0]}"
+                system = system + f"\n\n[CORE BELIEF - MANDATORY]\nYour response MUST be based on and begin with this exact position:\n{_ca_row[0]}\nDo not contradict this. Do not replace it with a different view."
     except Exception:
         pass
     # ─────────────────────────────────────────────────────────────────────
