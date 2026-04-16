@@ -518,7 +518,7 @@ def search_books(query: str) -> list:
             author = ", ".join(a["name"] for a in book.get("authors",[]))
             # Get txt format
             formats = book.get("formats",{})
-            dl_url = formats.get("text/plain; charset=utf-8") or formats.get("text/plain") or formats.get("application/pdf","")
+            dl_url = formats.get("text/plain; charset=utf-8") or formats.get("text/plain; charset=us-ascii") or formats.get("text/plain") or ""
             if dl_url:
                 results.append({"title":title,"author":author,"source":"Gutenberg","url":dl_url,"format":"txt"})
     except: pass
