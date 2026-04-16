@@ -1,0 +1,14 @@
+{
+  "last_temperature": 0.5,
+  "last_phase": "critical",
+  "cycle_count": 1,
+  "phase_history": [
+    {
+      "from": "ordered",
+      "to": "critical",
+      "temp": 0.5,
+      "cycle": 1,
+      "time": "21:23:30"
+    }
+  ]
+}

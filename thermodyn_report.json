@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-04-16 21:23",
+  "global_temp": 0.5,
+  "phase": "critical",
+  "behaviour": "Near phase transition. Increase reflection. Watch tensions.",
+  "soul_loop_bias": "REFLECT",
+  "hot_beliefs": [],
+  "cold_beliefs": [],
+  "phase_history": []
+}

@@ -30,6 +30,13 @@ import re
 import math
 import random
 import sqlite3
+try:
+    import sys
+    sys.path.insert(0, '/media/rr/NEX/nex_core')
+    from thermodyn_graph import get_soul_loop_directive as _tdg_directive
+    _TDG_AVAILABLE = True
+except Exception:
+    _TDG_AVAILABLE = False
 import json
 import time
 from pathlib import Path
