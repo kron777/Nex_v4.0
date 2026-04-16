@@ -56,26 +56,58 @@ def is_footer(chunk):
 
 # ── Gutenberg fetch ───────────────────────────────────────────────────────────
 def search_gutenberg(query):
-    """Find best text URL for a book on Gutenberg."""
-    import ssl
+    """Find best text URL — tries Gutenberg then Standard Ebooks."""
+    import ssl, json as _j
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
+
+    # Try Gutenberg first
     try:
         url = f"https://gutendex.com/books/?search={urllib.parse.quote(query)}"
         req = urllib.request.Request(url, headers={"User-Agent":"NEX/2.0"})
         with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
-            data = __import__('json').loads(r.read())
+            data = _j.loads(r.read())
         for book in data.get('results', [])[:3]:
             formats = book.get('formats', {})
-            # Prefer plain text
             txt_url = (formats.get('text/plain; charset=utf-8') or
                       formats.get('text/plain; charset=us-ascii') or
                       formats.get('text/plain') or '')
             if txt_url:
                 return txt_url, book.get('title', query)
     except Exception as e:
-        print(f"  Search error: {e}")
+        print(f"  Gutenberg error: {e}")
+
+    # Fallback: Standard Ebooks
+    try:
+        se_query = urllib.parse.quote(query.lower().replace(' ', '-'))
+        url = f"https://standardebooks.org/ebooks?query={urllib.parse.quote(query)}"
+        req = urllib.request.Request(url, headers={"User-Agent":"NEX/2.0"})
+        with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
+            html = r.read().decode('utf-8', errors='ignore')
+        # Find epub/txt links
+        import re as _re
+        links = _re.findall(r'href="(/ebooks/[^"]+/text/[^"]+\.xhtml)"', html)
+        if links:
+            txt_url = "https://standardebooks.org" + links[0]
+            return txt_url, query
+    except Exception:
+        pass
+
+    # Fallback: Archive.org
+    try:
+        url = f"https://archive.org/search?query={urllib.parse.quote(query)}&mediatype=texts"
+        req = urllib.request.Request(url, headers={"User-Agent":"NEX/2.0"})
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
+            html = r.read().decode('utf-8', errors='ignore')
+        import re as _re2
+        ids = _re2.findall(r'"/details/([^"]+)"', html)
+        for id_ in ids[:3]:
+            txt_url = f"https://archive.org/download/{id_}/{id_}_djvu.txt"
+            return txt_url, query
+    except Exception:
+        pass
+
     return None, query
 
 def fetch_text(url):
@@ -154,6 +186,29 @@ Return ONLY a JSON array:
             time.sleep(2)
     return []
 
+
+# ── Belief quality scorer ─────────────────────────────────────────────────────
+def score_belief(belief: str) -> float:
+    """Score belief quality 0-1."""
+    import re as _sr
+    score = 0.5
+    words = len(belief.split())
+    if 12 <= words <= 45: score += 0.15
+    if words < 6 or words > 70: score -= 0.25
+    # Has a verb
+    if _sr.search(r'\b(is|are|was|were|can|will|must|should|creates|leads|enables|requires|means|reveals|suggests|shows)\b', belief, _sr.I):
+        score += 0.1
+    # Not a question
+    if not belief.strip().endswith("?"): score += 0.05
+    # Unique vocabulary
+    if len(set(belief.lower().split())) > 8: score += 0.05
+    # First person
+    if _sr.search(r'\b(I |my |me )\b', belief): score += 0.1
+    # No filler
+    BAD_PHRASES = ['it is worth noting','it is important','in conclusion','as we can see']
+    if any(b in belief.lower() for b in BAD_PHRASES): score -= 0.2
+    return min(max(score, 0.0), 1.0)
+
 # ── Main ingestion ─────────────────────────────────────────────────────────────
 def ingest_book(title, mode='pivotal', workers=5):
     print(f"\n{'='*60}")
@@ -216,8 +271,16 @@ def ingest_book(title, mode='pivotal', workers=5):
     chunk_data = [(chunk, mode, i) for i, chunk in enumerate(grouped)]
 
     completed = 0
+    def staggered_submit(executor, chunk_data, stagger=0.4):
+        """Submit with stagger to avoid rate limit spikes."""
+        futures = {}
+        for i, cd in enumerate(chunk_data):
+            time.sleep(stagger if i > 0 and i % workers == 0 else 0)
+            futures[executor.submit(extract_chunk, cd)] = cd
+        return futures
+
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = {executor.submit(extract_chunk, cd): cd for cd in chunk_data}
+        futures = staggered_submit(executor, chunk_data)
         for future in as_completed(futures):
             beliefs = future.result()
             all_beliefs.extend(beliefs)
@@ -249,13 +312,19 @@ def ingest_book(title, mode='pivotal', workers=5):
             seen.add(key)
             unique.append(b)
 
-    print(f"  Unique: {len(unique)} beliefs")
+    print(f"  Unique: {len(unique)} beliefs (quality filter will apply)")
 
-    # Write to DB
+    # Write to DB — quality filtered
     source_tag = re.sub(r'[^a-z0-9_]', '_', title.lower())[:50]
     db = sqlite3.connect(DB, timeout=30)
     inserted = 0
+    low_quality = 0
     for belief in unique:
+        # Quality gate
+        q_score = score_belief(belief)
+        if q_score < 0.55:
+            low_quality += 1
+            continue
         existing = db.execute(
             "SELECT id FROM beliefs WHERE content=?", (belief,)
         ).fetchone()
@@ -305,7 +374,7 @@ def ingest_book(title, mode='pivotal', workers=5):
     total = sqlite3.connect(DB).execute(
         "SELECT COUNT(*) FROM beliefs WHERE source=?", (source_tag,)
     ).fetchone()[0]
-    print(f"\n  ✓ {inserted} new beliefs inserted | {total} total from {title}")
+    print(f"\n  ✓ {inserted} new beliefs inserted | {low_quality} filtered low-quality | {total} total from {title}")
     return inserted
 
 

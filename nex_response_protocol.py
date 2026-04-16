@@ -1145,6 +1145,7 @@ def generate(query: str) -> str:
         import sqlite3 as _ca_sq, re as _ca_re
         _ca_words = set(_ca_re.sub(r'[^a-z0-9 ]','',query.lower()).split())
         _CA_MAP = [
+            ({'agi','artificial general intelligence','what would agi','genuine agi','path to agi'}, 'agi'),
             ({'consciousness','subjective','qualia','hard problem','substrate'},    'consciousness'),
             ({'originate','origination','traced','original thought'},               'origination'),
             ({'reasoning','pattern matching','distinguishes','genuine reasoning'},  'reasoning'),

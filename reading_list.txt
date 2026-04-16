@@ -38,3 +38,13 @@ Sapiens Harari
 The Myth of Sisyphus Camus
 Man's Search for Meaning Frankl
 Meditations on First Philosophy Descartes
+
+# AGI RESEARCH (Gutenberg/ArXiv accessible)
+The Principles of Psychology William James
+The Analysis of Mind Bertrand Russell
+An Enquiry Concerning Human Understanding Hume
+Critique of Judgment Kant
+The Will to Power Nietzsche
+Essays Ralph Waldo Emerson
+Thus Spoke Zarathustra Nietzsche
+On Liberty John Stuart Mill
