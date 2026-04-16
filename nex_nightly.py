@@ -828,6 +828,17 @@ def run_nightly(force: bool = False, dry_run: bool = False) -> dict:
         report["wisdom_new"] = _wn
     except Exception as _we:
         report["wisdom_new"] = 0
+    # ── Phase 7f: Status document ────────────────────────────────────
+    try:
+        import subprocess
+        subprocess.run(
+            ["python3", "/media/rr/NEX/nex_core/nex_status.py"],
+            capture_output=True, timeout=30,
+            env={**__import__("os").environ}
+        )
+        print("  [status] NEX_STATUS.md updated")
+    except Exception as _st_e:
+        print(f"  [status] skipped: {_st_e}")
     # ── Phase 7e: Global AGI radar ───────────────────────────────────
     try:
         import subprocess

@@ -1,0 +1,12 @@
+NEX STATUS — 2026-04-16 20:21 SAST
+Model: nex_v5_ft12.gguf | Beliefs: 5,313 | nex_core: 300
+Edges: 500 | Tensions: 792 | Wisdom: 14
+Intentions: 10 active | Papers: 71 in DB
+
+RUNNING:llama-server | nex_api.py | nex_hud_server.py | nex_buf_daemon.py | nex_paper_reader.py | nex_soul_loop
+
+TOP GAPS:
+  - structural consciousness
+  - embodiment for genuine stakes
+  - thermodynamic grounding
+  - minimal translation layer for human-machine bridge
