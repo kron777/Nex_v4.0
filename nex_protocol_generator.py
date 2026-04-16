@@ -35,7 +35,7 @@ def groq(prompt, max_tokens=800):
                          "Content-Type": "application/json"},
                 json={"model": "llama3.1-8b",
                       "messages": [
-                          {"role":"system","content":f"You are NEX proposing concrete protocols for her own AGI development.\n{NEX_ARCHITECTURE}"},
+                          {"role":"system","content":f"You are NEX proposing concrete protocols. IMPORTANT: Return ONLY raw JSON, no markdown, no backticks, no explanation. Just the JSON object.\n{NEX_ARCHITECTURE}"},
                           {"role":"user","content":prompt}],
                       "max_tokens": max_tokens, "temperature": 0.85},
                 timeout=30)
