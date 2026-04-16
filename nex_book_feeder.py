@@ -382,16 +382,76 @@ Write exactly 3 sentences in first person: what shifted, what tension you're hol
 <|assistant|>
 """
 
+
+# ── GROQ EXTRACTION (replaces local LLM for belief extraction) ────────────────
+def _groq_extract(chunk: str, mode: str) -> list:
+    """Use Groq for high-quality belief extraction from book chunks."""
+    import os, requests as _req
+    key = os.environ.get("GROQ_API_KEY", "")
+    if not key:
+        return []
+    
+    FOOTER_SIGNALS = ['project gutenberg','end of the project','gutenberg license',
+                      'electronic work','copyright notice','terms of use']
+    if any(s in chunk.lower() for s in FOOTER_SIGNALS):
+        return []
+
+    system = """You are a precise belief extraction engine for NEX — an autonomous AI.
+Extract what NEX would genuinely hold as beliefs from this text passage.
+Rules: Each belief is a complete sentence (15-60 words). Cover different ideas.
+Do NOT start with "The author" or "This book". No chapter titles or meta-commentary.
+Return ONLY a JSON array of strings."""
+
+    n = "10-15" if mode == "pivotal" else "5-10"
+    prompt = f"""Extract {n} distinct belief statements from this passage.
+Each on its own line as a JSON array:
+
+PASSAGE:
+{chunk[:2500]}
+
+Return ONLY valid JSON array like: ["Belief one.", "Belief two."]"""
+
+    for attempt in range(3):
+        try:
+            r = _req.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {key}",
+                         "Content-Type": "application/json"},
+                json={"model": "llama-3.3-70b-versatile",
+                      "messages": [{"role":"system","content":system},
+                                   {"role":"user","content":prompt}],
+                      "max_tokens": 800, "temperature": 0.3},
+                timeout=30)
+            if r.status_code == 200:
+                import json as _j, re as _re
+                text = r.json()['choices'][0]['message']['content'].strip()
+                # Extract JSON array
+                match = _re.search(r'\[.*\]', text, _re.DOTALL)
+                if match:
+                    beliefs = _j.loads(match.group())
+                    return [b for b in beliefs
+                            if isinstance(b, str) and len(b.split()) >= 8
+                            and not any(s in b.lower() for s in
+                                       ['project gutenberg','copyright','electronic work'])]
+            if r.status_code == 429:
+                import time as _t; _t.sleep(25*(attempt+1))
+        except Exception:
+            pass
+    return []
+
 def extract_beliefs_from_chunk(chunk: str, existing_sample: list, mode: str) -> list:
     """Use llama to extract beliefs from a text chunk."""
     # Note: prompt ends with [ so llama continues the JSON array directly
+    # Try Groq first (much better extraction quality)
+    groq_results = _groq_extract(chunk, mode)
+    if groq_results:
+        return groq_results
+
+    # Fallback: local LLM
     prompt = (EXTRACT_PROMPT_PIVOTAL if mode == "pivotal" else EXTRACT_PROMPT).format(chunk=chunk[:2800])
-    # The prompt ends with [ — llama continues from there
     raw = llama_complete(prompt, max_tokens=700, temperature=0.35)
     if not raw:
         return []
-
-    # The response is the continuation after [, so prepend [
     to_parse = "[" + raw if not raw.strip().startswith("[") else raw
 
     # Strategy 1: parse the whole thing
@@ -464,8 +524,13 @@ def integrate_beliefs(candidates: list, existing_beliefs: list, mode: str) -> tu
     # Build a simple dedup set from existing
     existing_lower = {b.lower().strip() for b in existing_beliefs}
 
+    FOOTER_BAD = ['project gutenberg','copyright','electronic work',
+                  'cease using','fine print','gutenberg license']
     for b in candidates:
         if not b or len(b.strip()) < 15:
+            dropped.append(b)
+            continue
+        if any(s in b.lower() for s in FOOTER_BAD):
             dropped.append(b)
             continue
 
