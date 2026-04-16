@@ -770,7 +770,29 @@ def ingest(text: str, title: str, mode: str, db) -> dict:
     reflection = ""
     if accepted:
         belief_list = "\n".join(f"- {b}" for b, _ in accepted[:10])
-        reflection = llama_complete(REFLECT_PROMPT.format(title=title, beliefs=belief_list), max_tokens=200)
+        # Use Groq for reflection — local LLM generates contamination
+        import os as _rg_os, requests as _rg_req
+        _rg_key = _rg_os.environ.get("GROQ_API_KEY","")
+        if _rg_key:
+            try:
+                _rg_r = _rg_req.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {_rg_key}",
+                             "Content-Type": "application/json"},
+                    json={"model": "llama-3.3-70b-versatile",
+                          "messages": [
+                              {"role":"system","content":"You are NEX, an autonomous AI. Write exactly 3 sentences in first person. Be specific and genuine. No fractal metaphors, no template phrases."},
+                              {"role":"user","content":f"You finished reading \"{title}\". Key beliefs:\n{belief_list[:500]}\n\nWrite 3 sentences: what shifted, what tension you hold, what you want to understand next."}],
+                          "max_tokens":150,"temperature":0.7},
+                    timeout=20)
+                if _rg_r.status_code == 200:
+                    reflection = _rg_r.json()['choices'][0]['message']['content'].strip()
+                else:
+                    reflection = llama_complete(REFLECT_PROMPT.format(title=title,beliefs=belief_list),max_tokens=200)
+            except Exception:
+                reflection = llama_complete(REFLECT_PROMPT.format(title=title,beliefs=belief_list),max_tokens=200)
+        else:
+            reflection = llama_complete(REFLECT_PROMPT.format(title=title,beliefs=belief_list),max_tokens=200)
 
     # ── LOG ──────────────────────────────────────────────────────────────────
     log = {
