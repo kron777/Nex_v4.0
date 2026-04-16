@@ -192,5 +192,77 @@
     "title": "Recursive Self-Awareness in Dynamical Systems",
     "pdf": "https://vixra.org/pdf/2209.0087v1.pdf",
     "category": "fringe"
+  },
+  {
+    "title": "ChatGLM: An Open Bilingual Dialogue Language Model",
+    "pdf": "https://arxiv.org/pdf/2103.10360",
+    "category": "chinese_ai",
+    "lang": "en"
+  },
+  {
+    "title": "ERNIE 3.0: Large-scale Knowledge Enhanced Pre-training",
+    "pdf": "https://arxiv.org/pdf/2107.02137",
+    "category": "chinese_ai",
+    "lang": "en"
+  },
+  {
+    "title": "PanGu-Alpha: Large-scale Autoregressive Pretrained Chinese Language Models",
+    "pdf": "https://arxiv.org/pdf/2104.12369",
+    "category": "chinese_ai",
+    "lang": "en"
+  },
+  {
+    "title": "Cognitive Intelligence: Deep Learning to Parallel Intelligence",
+    "pdf": "https://arxiv.org/pdf/2012.03417",
+    "category": "chinese_ai",
+    "lang": "en"
+  },
+  {
+    "title": "A Survey of Artificial General Intelligence Projects for Ethics",
+    "pdf": "https://arxiv.org/pdf/2109.11249",
+    "category": "agi_survey",
+    "lang": "en"
+  },
+  {
+    "title": "Japanese Cognitive Architecture: Emotion and Consciousness in Robots",
+    "pdf": "https://arxiv.org/pdf/2006.13798",
+    "category": "japanese_ai",
+    "lang": "en"
+  },
+  {
+    "title": "Whole Brain Architecture Initiative - Whole Brain Emulation",
+    "pdf": "https://arxiv.org/pdf/2301.08095",
+    "category": "brain_emulation",
+    "lang": "en"
+  },
+  {
+    "title": "Confucian Ethics and Artificial Intelligence",
+    "pdf": "https://arxiv.org/pdf/2109.07906",
+    "category": "chinese_philosophy_ai",
+    "lang": "en"
+  },
+  {
+    "title": "Towards AGI in Computer Vision: Lessons Learned from Data",
+    "pdf": "https://arxiv.org/pdf/2306.08641",
+    "category": "chinese_ai",
+    "lang": "en"
+  },
+  {
+    "title": "InstructBLIP: Towards General-purpose Vision-Language Models",
+    "pdf": "https://arxiv.org/pdf/2305.06500",
+    "category": "multimodal",
+    "lang": "en"
+  },
+  {
+    "title": "\u901a\u7528\u4eba\u5de5\u667a\u80fd\u7684\u8ba4\u77e5\u67b6\u6784 (Cognitive Architecture for AGI) - translate",
+    "pdf": "https://arxiv.org/pdf/2205.01068",
+    "category": "chinese_agi",
+    "lang": "zh"
+  },
+  {
+    "title": "\u4eba\u5de5\u667a\u80fd\u610f\u8bc6\u95ee\u9898 (The Problem of AI Consciousness) - translate",
+    "pdf": "https://arxiv.org/pdf/2301.07041",
+    "category": "chinese_consciousness",
+    "lang": "zh"
   }
 ]

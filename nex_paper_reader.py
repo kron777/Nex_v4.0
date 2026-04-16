@@ -50,6 +50,30 @@ def fetch_pdf_text(url):
     except Exception as e:
         return None
 
+
+def translate_if_needed(text, lang, title):
+    """Translate non-English text via Groq before extraction."""
+    if lang == 'en' or not text or not GROQ_KEY:
+        return text
+    try:
+        r = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {GROQ_KEY}",
+                     "Content-Type": "application/json"},
+            json={"model": "llama-3.3-70b-versatile",
+                  "messages": [
+                      {"role":"system","content":"Translate the following academic text to English. Preserve technical terms. Output only the translation."},
+                      {"role":"user","content":f"Translate this {lang} text:\n{text[:3000]}"}],
+                  "max_tokens": 1000, "temperature": 0.3},
+            timeout=30)
+        if r.status_code == 200:
+            translated = r.json()["choices"][0]["message"]["content"].strip()
+            print(f"  ✓ Translated from {lang}")
+            return translated
+    except Exception:
+        pass
+    return text
+
 def groq_extract(text, title):
     """Extract NEX's beliefs from paper text."""
     if not GROQ_KEY or not text:
@@ -132,6 +156,10 @@ def run():
             save_done(done)
             continue
         
+        # Translate if needed
+        lang = paper.get('lang', 'en')
+        if lang != 'en':
+            text = translate_if_needed(text, lang, title)
         # Extract beliefs
         beliefs = groq_extract(text, title)
         score = score_paper(beliefs, title)
