@@ -235,6 +235,160 @@ Return JSON:
     return result
 
 
+
+# ── REFINEMENT FILTER (Throw-Net Refinery stages) ────────────────────────────
+
+def _jaccard(a: str, b: str) -> float:
+    """Jaccard similarity between two strings."""
+    wa = set(a.lower().split())
+    wb = set(b.lower().split())
+    if not wa or not wb: return 0.0
+    return len(wa & wb) / len(wa | wb)
+
+def _gate_invention(inv: dict) -> tuple:
+    """
+    Stage 2 GATE — instant reject patterns.
+    Returns (passes: bool, reason: str)
+    """
+    name     = inv.get("name", "")
+    oneliner = inv.get("one_liner", "")
+    module   = inv.get("python_module", "")
+    text     = (name + oneliner).lower()
+
+    # Reject if too short
+    if len(oneliner.split()) < 5:
+        return False, "one_liner too short"
+
+    # Reject if ends with question mark (not an invention, a question)
+    if oneliner.strip().endswith("?"):
+        return False, "is a question not an invention"
+
+    # Reject obvious garbage patterns
+    GARBAGE = ["i don't", "i cannot", "as an ai", "language model",
+               "unclear", "tbd", "placeholder", "example", "todo"]
+    if any(g in text for g in GARBAGE):
+        return False, f"garbage pattern detected"
+
+    # Reject if no module name
+    if not module or not module.endswith(".py"):
+        return False, "no python module specified"
+
+    # Reject repetitive — name must be unique-ish
+    GENERIC_NAMES = ["protocol", "system", "engine", "ai", "nex protocol",
+                     "new system", "new protocol"]
+    if name.lower().strip() in GENERIC_NAMES:
+        return False, "name too generic"
+
+    return True, "passed gate"
+
+def _challenge_invention(inv: dict) -> float:
+    """
+    Stage 3 CHALLENGE — LLM scores novelty/coherence/substance 0.0-1.0.
+    Score < 0.5 → rejected.
+    """
+    name     = inv.get("name", "")
+    oneliner = inv.get("one_liner", "")
+    mechanism= inv.get("mechanism", "")
+    module   = inv.get("python_module", "")
+    connects = ", ".join(inv.get("connects_to", []))
+
+    prompt = f"""Score this AI architecture invention for NEX (0.0 to 1.0):
+
+Name: {name}
+One-liner: {oneliner}
+Mechanism: {mechanism[:200]}
+Module: {module}
+Connects to: {connects}
+
+Score criteria:
+- Novelty: Is this genuinely new, not just renaming existing things? (0.4 weight)
+- Coherence: Does the mechanism actually do what the name claims? (0.3 weight)  
+- Substance: Is there enough technical detail to actually build it? (0.3 weight)
+
+Respond with ONLY a decimal number between 0.0 and 1.0. Nothing else."""
+
+    raw = llm(prompt, max_tokens=10,
+              system="You are a strict technical reviewer. Output only a decimal number.")
+    if not raw: return 0.5
+
+    try:
+        score = float(re.search(r'0?\.\d+|1\.0', raw).group())
+        return min(1.0, max(0.0, score))
+    except Exception:
+        return 0.5
+
+def _compress_invention(inv: dict) -> dict:
+    """
+    Stage 4 COMPRESS — distill invention to precise, minimal form.
+    Removes fluff, sharpens the one-liner to <120 chars.
+    """
+    oneliner = inv.get("one_liner", "")
+    name     = inv.get("name", "")
+
+    prompt = f"""Compress this invention description to a single precise sentence under 120 chars.
+No fluff. Technical. Specific. What it does, not what it aspires to.
+
+Invention: {name}
+Current description: {oneliner}
+
+Output ONLY the compressed sentence."""
+
+    compressed = llm(prompt, max_tokens=60,
+                    system="You compress technical descriptions. Output only the compressed text.")
+    if compressed and len(compressed) < 150:
+        inv = {**inv, "one_liner": compressed.strip().strip('"')}
+    return inv
+
+def _dedup_invention(inv: dict, existing_names: list) -> tuple:
+    """
+    Stage 5 DEDUP — Jaccard similarity against existing inventions.
+    >0.7 similarity = duplicate, reject.
+    """
+    name = inv.get("name", "").lower()
+    oneliner = inv.get("one_liner", "").lower()
+
+    for existing in existing_names:
+        sim_name = _jaccard(name, existing.lower())
+        sim_line = _jaccard(oneliner, existing.lower())
+        if sim_name > 0.7 or sim_line > 0.7:
+            return False, f"duplicate of: {existing[:50]}"
+
+    return True, "unique"
+
+def refinery_filter(inv: dict, existing_names: list) -> tuple:
+    """
+    Full refinery pipeline: GATE → CHALLENGE → COMPRESS → DEDUP
+    Returns (passes: bool, filtered_inv: dict, log: list)
+    """
+    log = []
+
+    # Stage 2: Gate
+    passes, reason = _gate_invention(inv)
+    log.append(f"GATE: {reason}")
+    if not passes:
+        return False, inv, log
+
+    # Stage 3: Challenge
+    challenge_score = _challenge_invention(inv)
+    log.append(f"CHALLENGE: {challenge_score:.2f}")
+    if challenge_score < 0.5:
+        log.append(f"CHALLENGE FAIL: score {challenge_score:.2f} < 0.5")
+        return False, inv, log
+
+    # Stage 4: Compress
+    inv = _compress_invention(inv)
+    log.append(f"COMPRESS: → {inv.get('one_liner','')[:60]}")
+
+    # Stage 5: Dedup
+    passes, reason = _dedup_invention(inv, existing_names)
+    log.append(f"DEDUP: {reason}")
+    if not passes:
+        return False, inv, log
+
+    inv["challenge_score"] = round(challenge_score, 3)
+    log.append("PROMOTED ✓")
+    return True, inv, log
+
 # ── QUALITY GATE ─────────────────────────────────────────────────────────────
 
 REAL_NEX_COMPONENTS = [
@@ -492,12 +646,19 @@ def run_cycle(cycle_num):
             if inv:
                 q_score, q_reasons = quality_score(inv)
                 log(f"  Quality score: {q_score}/10 — {q_reasons[0] if q_reasons else "?"}")
-                if q_score >= 6:
+                # Run refinery filter first
+                existing_names = [i.get('name','') for i in inventions]
+                ref_passes, inv, ref_log = refinery_filter(inv, existing_names)
+                log(f"  Refinery: {ref_log[-1]}")
+                if not ref_passes:
+                    log(f"  ✗ REFINERY FAIL: {ref_log[-2] if len(ref_log)>1 else ref_log[0]}")
+                elif q_score >= 6:
                     inventions.append(inv)
                     inv['quality_score'] = q_score
-                    log(f"  ✓ PASSED [{q_score}/10] {inv.get('name','?')}: {inv.get('one_liner','')[:60]}")
+                    inv['challenge_score'] = inv.get('challenge_score', 0)
+                    log(f"  ✓ PASSED [Q:{q_score}/10 C:{inv['challenge_score']:.2f}] {inv.get('name','?')}: {inv.get('one_liner','')[:60]}")
                 else:
-                    log(f"  ✗ REJECTED [{q_score}/10] {inv.get('name','?')}: {[', '.join(r for r in q_reasons if '✗' in r)]}")
+                    log(f"  ✗ QUALITY FAIL [{q_score}/10] {inv.get('name','?')}: {[', '.join(r for r in q_reasons if '✗' in r)]}")
             time.sleep(1)
 
     # 5. Write suggests
