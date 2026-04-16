@@ -1168,6 +1168,20 @@ def generate(query: str) -> str:
     except Exception:
         pass
     # ─────────────────────────────────────────────────────────────────────
+    # ── Inject pre-reasoned position if available ───────────────────────
+    try:
+        import os as _pr_os
+        _pr_path = '/tmp/nex_pre_reason.txt'
+        if _pr_os.path.exists(_pr_path):
+            _pr_age = _pr_os.time() - _pr_os.path.getmtime(_pr_path)
+            if _pr_age < 300:  # only use if less than 5 minutes old
+                with open(_pr_path) as _prf:
+                    _pr_content = _prf.read().strip()
+                if _pr_content:
+                    system = system + f"\n\n{_pr_content}"
+                    print(f"  [PRE-REASON] position injected into prompt")
+    except Exception:
+        pass
     # ── Deep intent compiler disabled — LLM handles all deep intents ─────
     response = ""
     if False and _deep_intent and _activation_result is not None:

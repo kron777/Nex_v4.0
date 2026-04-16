@@ -1099,7 +1099,18 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
     # ── Inject pre-reasoned position into system prompt ─────────────────
     if reason_result.get("pre_reasoned_position"):
         _pre_pos_str = reason_result["pre_reasoned_position"]
-        # Will be picked up by EXPRESS step
+        # Inject into system context for EXPRESS step
+        if "system_context" not in reason_result:
+            reason_result["system_context"] = ""
+        reason_result["system_context"] = _pre_pos_str + "
+" + reason_result["system_context"]
+        # Write to temp file so NRP can read it
+        try:
+            with open('/tmp/nex_pre_reason.txt', 'w') as _prf:
+                _prf.write(_pre_pos_str)
+        except Exception:
+            pass
+        print(f"  [PRE-REASON] injected into system_context + /tmp/nex_pre_reason.txt")
     # ── U6: Inject wisdom as TIER_1 beliefs into REASON ─────────────
     try:
         import sqlite3 as _ws_sq
