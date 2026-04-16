@@ -34,10 +34,12 @@ def feed_book(title, mode):
     print(f"FEEDING: {title} [{mode}]")
     print(f"{'='*60}")
     try:
+        # Pass mode as number: 1=core, 2=enjoy, 3=pivotal
+        mode_num = {"core":"1","enjoy":"2","pivotal":"3"}.get(mode,"3")
         result = subprocess.run(
             [PYTHON, FEEDER, "--search", title, "--mode", mode],
-            timeout=600,
-            input=b"1\n",  # auto-select first result
+            timeout=3600,  # 1 hour for large books
+            input=mode_num.encode() + b"\n1\n",  # select mode then first result
         )
         return result.returncode == 0
     except subprocess.TimeoutExpired:
