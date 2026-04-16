@@ -259,7 +259,15 @@ def extract_text_from_pdf(path: str) -> str:
         return extract_text(path)
     except:
         pass
-    err("Could not extract PDF text. Install pdftotext (poppler-utils) or pypdf.")
+    # Last resort: try reading as plain text (some Gutenberg "PDFs" are actually text)
+    try:
+        with open(path, 'r', encoding='utf-8-sig', errors='ignore') as _f:
+            content = _f.read()
+        if len(content) > 500:
+            return content
+    except Exception:
+        pass
+    err("Could not extract text from file.")
     return ""
 
 def load_file_text(path: str) -> str:
