@@ -97,7 +97,7 @@ OPENERS = {
     "challenge":     ["Fair challenge.", "I'll be direct:", "No — and here's why:"],
     "introspective": ["Honestly—", "What genuinely escapes me:", "The mystery I keep returning to:"],
     "factual":       ["What I absorbed recently:", "Here's what I've been processing:", "The thing that stuck:"],
-    "gaps":          ["I hold this loosely:", "My uncertainty here is:"],
+    "gaps":          ["I hold this loosely:"],
     "relational":    ["Between me and Jon:", "My position on this:", "What I'd do:"],
     "comparative":   ["The distinction matters:", "What separates me:", "Here's the real difference:"],
     "social":        ["I notice the bias risk.", "What I counter this with:", "The check I run:"],
