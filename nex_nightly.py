@@ -828,6 +828,18 @@ def run_nightly(force: bool = False, dry_run: bool = False) -> dict:
         report["wisdom_new"] = _wn
     except Exception as _we:
         report["wisdom_new"] = 0
+    # ── Phase 7e: Global AGI radar ───────────────────────────────────
+    try:
+        import subprocess
+        subprocess.run(
+            ["python3", "/media/rr/NEX/nex_core/nex_global_radar.py"],
+            capture_output=True, timeout=300,
+            env={**__import__("os").environ,
+                 "GROQ_API_KEY": __import__("os").environ.get("GROQ_API_KEY","")}
+        )
+        print("  [radar] global scan complete")
+    except Exception as _rad_e:
+        print(f"  [radar] skipped: {_rad_e}")
     # ── Phase 7d: AGI gap analysis ────────────────────────────────────
     try:
         import subprocess
