@@ -1442,6 +1442,11 @@ def generate(query: str) -> str:
         'The more I understand emergence', 'sensorimotor stream',
         'Who decides truth', 'What does uncertainty',
         'interesting thing about free will',
+        'what does laughter have to do',
+        'synthesising evidence from multiple',
+        'what does this have to do',
+        "what's your read on this",
+        'Is there something you used to think',
     ]
     _resp_low = (response or "").lower()
     if any(b.lower() in _resp_low for b in _BAD):
