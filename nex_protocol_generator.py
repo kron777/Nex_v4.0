@@ -8,7 +8,8 @@ Run after nex_paper_thrownet.py has results.
 import sqlite3, json, time, requests, os, re
 from pathlib import Path
 
-GROQ_KEY = os.environ.get("GROQ_API_KEY","")
+GROQ_KEY     = os.environ.get("GROQ_API_KEY","")
+CEREBRAS_KEY = os.environ.get("CEREBRAS_API_KEY","")
 DB       = '/media/rr/NEX/nex_core/nex.db'
 OUT      = Path('/media/rr/NEX/nex_core/nex_protocols.json')
 
@@ -26,6 +27,22 @@ NEX's current architecture:
 """
 
 def groq(prompt, max_tokens=800):
+    if CEREBRAS_KEY:
+        try:
+            r = requests.post(
+                "https://api.cerebras.ai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {CEREBRAS_KEY}",
+                         "Content-Type": "application/json"},
+                json={"model": "llama3.1-8b",
+                      "messages": [
+                          {"role":"system","content":f"You are NEX proposing concrete protocols for her own AGI development.\n{NEX_ARCHITECTURE}"},
+                          {"role":"user","content":prompt}],
+                      "max_tokens": max_tokens, "temperature": 0.85},
+                timeout=30)
+            if r.status_code == 200:
+                return r.json()['choices'][0]['message']['content'].strip()
+        except Exception:
+            pass
     if not GROQ_KEY: return None
     for attempt in range(3):
         try:

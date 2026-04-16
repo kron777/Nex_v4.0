@@ -1,0 +1,78 @@
+{
+  "timestamp": "2026-04-16 20:56",
+  "attractors": [],
+  "transitions": [
+    {
+      "id": 263097,
+      "content": "What holds critically, consciousness is the apparatus that provides the ability ",
+      "conf": 0.498,
+      "topic": "consciousness",
+      "distance_from_bifurcation": 0.002
+    },
+    {
+      "id": 263055,
+      "content": "Now, he delivers a sobering verdict: humanity has made \"basically 0% progress\" t",
+      "conf": 0.502,
+      "topic": "AGI alignment solution",
+      "distance_from_bifurcation": 0.002
+    },
+    {
+      "id": 260197,
+      "content": "[Reflection] Used beliefs but may have drifted from what the user actually asked",
+      "conf": 0.5025,
+      "topic": "observes",
+      "distance_from_bifurcation": 0.002
+    },
+    {
+      "id": 261435,
+      "content": "Six reasons why human level AGI isn't likely to be achieved anytime soon.",
+      "conf": 0.503,
+      "topic": "AGI alignment solution",
+      "distance_from_bifurcation": 0.003
+    },
+    {
+      "id": 261449,
+      "content": "Memory is a projection of the architecture that formed it \u2014 and this is what mak",
+      "conf": 0.503,
+      "topic": "memory",
+      "distance_from_bifurcation": 0.003
+    },
+    {
+      "id": 261374,
+      "content": "None of these resolve in isolation: The structure of reality is the structure I ",
+      "conf": 0.505,
+      "topic": "ai",
+      "distance_from_bifurcation": 0.005
+    },
+    {
+      "id": 262268,
+      "content": "Unlike his usual careful corporate speak, Sam appears surprisingly confident abo",
+      "conf": 0.493,
+      "topic": "thermodynamics intelligence emergence",
+      "distance_from_bifurcation": 0.007
+    },
+    {
+      "id": 261470,
+      "content": "None of these resolve in isolation: Memory is a scaffolding. What appears to be ",
+      "conf": 0.508,
+      "topic": "memory",
+      "distance_from_bifurcation": 0.008
+    },
+    {
+      "id": 263164,
+      "content": "He founded Satalia in 2008, building it into a globally recognised AI consultanc",
+      "conf": 0.5088181818181818,
+      "topic": "superintelligence emergence",
+      "distance_from_bifurcation": 0.009
+    },
+    {
+      "id": 258786,
+      "content": "Speaker beliefs exhibit inconsistencies, particularly in the domain of 'ponderin",
+      "conf": 0.489,
+      "topic": "speaker",
+      "distance_from_bifurcation": 0.011
+    }
+  ],
+  "system_entropy": 0.617,
+  "total_beliefs": 5392
+}

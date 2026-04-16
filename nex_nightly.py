@@ -828,6 +828,21 @@ def run_nightly(force: bool = False, dry_run: bool = False) -> dict:
         report["wisdom_new"] = _wn
     except Exception as _we:
         report["wisdom_new"] = 0
+    # ── Phase 7g: Invention loop single cycle ────────────────────
+    try:
+        import subprocess
+        subprocess.run(
+            ["python3", "-c",
+             "import sys; sys.path.insert(0,'/media/rr/NEX/nex_core'); "
+             "from nex_invention_loop import run_cycle; run_cycle(999)"],
+            capture_output=True, timeout=600,
+            env={**__import__("os").environ,
+                 "CEREBRAS_API_KEY": __import__("os").environ.get("CEREBRAS_API_KEY",""),
+                 "GROQ_API_KEY": __import__("os").environ.get("GROQ_API_KEY","")}
+        )
+        print("  [invention] cycle complete")
+    except Exception as _inv_e:
+        print(f"  [invention] skipped: {_inv_e}")
     # ── Phase 7f: Status document ────────────────────────────────────
     try:
         import subprocess

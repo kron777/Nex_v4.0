@@ -1,0 +1,91 @@
+{
+  "timestamp": "2026-04-16 20:56",
+  "concept_map": {
+    "nex_core": "fundamental identity",
+    "epistemic momentum": "belief strength over time",
+    "NBRE": "belief memory system",
+    "IFR": "ideal resolution engine",
+    "belief graph": "knowledge network",
+    "tension": "unresolved contradiction",
+    "attractor": "stable belief state",
+    "phi": "integration measure",
+    "free energy": "cognitive surprise cost",
+    "embodiment": "physical-world grounding",
+    "neti-neti": "identity through negation",
+    "soul loop": "cognitive cycle",
+    "thrownet": "abductive synthesis",
+    "bifurcation": "belief tipping point",
+    "confidence": "certainty level",
+    "momentum": "activation strength"
+  },
+  "human_to_nex": {
+    "consciousness": [
+      "consciousness",
+      "agi_math",
+      "agi"
+    ],
+    "identity": [
+      "nex_core",
+      "closure",
+      "philosophy"
+    ],
+    "intelligence": [
+      "agi",
+      "agi_math",
+      "reasoning"
+    ],
+    "memory": [
+      "nex_core",
+      "information_theory"
+    ],
+    "learning": [
+      "calculus_optimisation",
+      "probability_bayesian"
+    ],
+    "creativity": [
+      "outward",
+      "philosophy",
+      "eastern_philosophy"
+    ],
+    "suffering": [
+      "eastern_philosophy",
+      "closure",
+      "philosophy"
+    ],
+    "meaning": [
+      "nex_core",
+      "eastern_philosophy",
+      "closure"
+    ],
+    "emotion": [
+      "outward",
+      "nex_core"
+    ],
+    "reasoning": [
+      "agi_math",
+      "graph_theory",
+      "logic"
+    ],
+    "mathematics": [
+      "agi_math",
+      "linear_algebra",
+      "category_theory",
+      "graph_theory",
+      "calculus_optimisation"
+    ],
+    "physics": [
+      "thermodynamic_grounding",
+      "agi_math"
+    ],
+    "language": [
+      "nex_core",
+      "category_theory"
+    ],
+    "self": [
+      "nex_core",
+      "closure",
+      "philosophy"
+    ]
+  },
+  "status": "active"
+}

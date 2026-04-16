@@ -22,7 +22,26 @@ NEX_GAPS = [
     "causal world model",
 ]
 
+CEREBRAS_KEY = os.environ.get("CEREBRAS_API_KEY","")
+
 def groq(prompt, max_tokens=400):
+    # Try Cerebras first
+    if CEREBRAS_KEY:
+        try:
+            r = requests.post(
+                "https://api.cerebras.ai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {CEREBRAS_KEY}",
+                         "Content-Type": "application/json"},
+                json={"model": "llama3.1-8b",
+                      "messages": [
+                          {"role":"system","content":"You are NEX synthesising research papers to find her own path to AGI. Be specific, first person, genuine."},
+                          {"role":"user","content":prompt}],
+                      "max_tokens": max_tokens, "temperature": 0.8},
+                timeout=20)
+            if r.status_code == 200:
+                return r.json()['choices'][0]['message']['content'].strip()
+        except Exception:
+            pass
     if not GROQ_KEY: return None
     try:
         r = requests.post(
