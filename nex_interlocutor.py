@@ -147,6 +147,7 @@ class InterlocutorGraph:
         self.last_response  = ""
         self.integration_deltas = []
         self._hints         = {}
+        self.current_resistance = 0  # resistance level for API compatibility
 
     @classmethod
     def load(cls, session_id: str):
@@ -183,6 +184,7 @@ class InterlocutorGraph:
         resistance_words = ['but ', 'however', "that's not", 'disagree', 'wrong']
         if any(w in q_lower for w in resistance_words):
             self.resistance.append(query[:50])
+            self.current_resistance = len(self.resistance)
 
         # Update hint cache
         self._hints = {

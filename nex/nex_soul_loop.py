@@ -1145,17 +1145,24 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
         pass
     # ── END WISDOM INJECT ─────────────────────────────────────────────
 
-    # ── Belief graph pre-reasoning ────────────────────────────────────────
+    # ── Belief graph pre-reasoning (with timeout) ───────────────────────
     try:
-        import sys as _br_sys
+        import sys as _br_sys, threading as _br_th
         _br_sys.path.insert(0, '/media/rr/NEX/nex_core')
         from nex_belief_reasoner import pre_reason, format_position
-        _pre_pos = pre_reason(top_beliefs[:5], query)
-        _pre_str = format_position(_pre_pos)
-        if _pre_str and len(_pre_str) > 50:
-            reason_result["pre_reasoned_position"] = _pre_str
-            print(f"  [PRE-REASON] position built from {len(top_beliefs)} beliefs")
-    except Exception as _pr_e:
+        _pre_result = [None]
+        def _pre_run():
+            try:
+                _pre_result[0] = format_position(pre_reason(top_beliefs[:5], query))
+            except Exception:
+                pass
+        _pre_t = _br_th.Thread(target=_pre_run, daemon=True)
+        _pre_t.start()
+        _pre_t.join(timeout=2.0)  # 2 second max
+        if _pre_result[0] and len(_pre_result[0]) > 50:
+            reason_result["pre_reasoned_position"] = _pre_result[0]
+            print(f"  [PRE-REASON] position built")
+    except Exception:
         pass
     # ── END PRE-REASON ─────────────────────────────────────────────────────
     cross_domain = _cross_domain_beliefs(top_beliefs, tokens, limit=3)
