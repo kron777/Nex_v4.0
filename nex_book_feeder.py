@@ -173,7 +173,7 @@ def llama_complete(prompt: str, max_tokens: int = 800, temperature: float = 0.3)
 def get_db():
     if not os.path.exists(DB_PATH):
         return None
-    conn = sqlite3.connect(DB_PATH, timeout=15)
+    conn = sqlite3.connect(DB_PATH, timeout=60)
     conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
