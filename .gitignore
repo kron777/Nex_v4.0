@@ -47,3 +47,9 @@ nex_narrative.json
 *.corrupt_bak
 *.db-shm
 *.db-wal
+
+# Local backup files from diagnostic sessions
+*.bak
+*.bak_*
+*.DANGEROUS_BACKUP
+nohup.out

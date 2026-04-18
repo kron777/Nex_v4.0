@@ -41,7 +41,7 @@ def u3_drift_check(db_path=None, current_cycle: int = 0) -> bool:
     if not topic:
         return False
     path = db_path or DB_PATH
-    conn = sqlite3.connect(str(path), timeout=10)
+    conn = sqlite3.connect(str(path), timeout=30, isolation_level=None)
     conn.row_factory = sqlite3.Row
     row = conn.execute("""
         SELECT topic, COUNT(*) as ct FROM beliefs
@@ -62,7 +62,7 @@ def u1_lock_top_beliefs(n: int = 30, db_path=None):
     path = db_path or DB_PATH
     for _attempt in range(5):
         try:
-            conn = sqlite3.connect(str(path), timeout=30)
+            conn = sqlite3.connect(str(path), timeout=30, isolation_level=None)
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA busy_timeout=10000")
             conn.execute("""
@@ -88,7 +88,7 @@ def u1_lock_top_beliefs(n: int = 30, db_path=None):
 
 def u1_is_locked(belief_id: int, db_path=None) -> bool:
     path = db_path or DB_PATH
-    conn = sqlite3.connect(str(path), timeout=10)
+    conn = sqlite3.connect(str(path), timeout=30, isolation_level=None)
     row = conn.execute("SELECT locked FROM beliefs WHERE id=?", (belief_id,)).fetchone()
     conn.close()
     return bool(row and row[0])
@@ -102,16 +102,18 @@ def u2_run_contradiction_resolution(llm_fn, db_path=None, limit: int = 5):
     Decisions: MERGE / OVERRIDE_A / OVERRIDE_B / SPLIT / UNCERTAINTY
     """
     path = db_path or DB_PATH
-    conn = sqlite3.connect(str(path), timeout=10)
+    conn = sqlite3.connect(str(path), timeout=30, isolation_level=None)
     conn.row_factory = sqlite3.Row
+    conn.execute("CREATE TABLE IF NOT EXISTS u2_reviewed (aid INTEGER, bid INTEGER, decision TEXT, reviewed_at REAL, PRIMARY KEY (aid,bid))")
     pairs = conn.execute("""
         SELECT a.id as aid, a.content as ac, a.confidence as aconf,
                b.id as bid, b.content as bc, b.confidence as bconf,
                a.topic
         FROM beliefs a JOIN beliefs b
           ON a.topic = b.topic AND a.id < b.id
-         AND a.locked = 0 AND b.locked = 0
+         AND a.locked = 0 AND b.locked = 0 AND a.topic NOT IN ('identity','agency','theory_x','core','self_location','nex_core','vantage','self','consciousness')
         WHERE ABS(a.confidence - b.confidence) > 0.40
+          AND NOT EXISTS (SELECT 1 FROM u2_reviewed r WHERE r.aid=a.id AND r.bid=b.id AND r.reviewed_at > strftime('%s','now')-604800)
         LIMIT ?
     """, (limit,)).fetchall()
     conn.close()
@@ -134,7 +136,7 @@ def u2_run_contradiction_resolution(llm_fn, db_path=None, limit: int = 5):
     return resolved
 
 def _u2_apply(row, decision: str, path):
-    conn = sqlite3.connect(str(path), timeout=10)
+    conn = sqlite3.connect(str(path), timeout=30, isolation_level=None)
     try:
         if decision == "OVERRIDE_A":
             conn.execute("UPDATE beliefs SET confidence=MIN(confidence+0.05,0.95) WHERE id=?", (row["aid"],))
@@ -149,6 +151,8 @@ def _u2_apply(row, decision: str, path):
         elif decision == "UNCERTAINTY":
             conn.execute("UPDATE beliefs SET confidence=0.35 WHERE id IN (?,?)",
                          (row["aid"], row["bid"]))
+        import time
+        conn.execute("INSERT OR REPLACE INTO u2_reviewed (aid,bid,decision,reviewed_at) VALUES (?,?,?,?)", (row["aid"], row["bid"], decision, time.time()))
         conn.commit()
         log.info(f"[U2] {decision} on topic='{row['topic']}'")
     finally:
@@ -198,7 +202,7 @@ def u5_reweight_confidence(db_path=None, cycle: int = 0):
     if cycle % 10 != 0:
         return 0
     path = db_path or DB_PATH
-    conn = sqlite3.connect(str(path), timeout=10)
+    conn = sqlite3.connect(str(path), timeout=30, isolation_level=None)
     try:
         # Stable = old, not loop-flagged, used at least twice, not locked already
         conn.execute("""
@@ -223,7 +227,7 @@ def u5_reweight_confidence(db_path=None, cycle: int = 0):
 # Requires insights table — adds expires_at and belief_id FK
 def u6_migrate_insights(db_path=None):
     path = db_path or DB_PATH
-    conn = sqlite3.connect(str(path), timeout=10)
+    conn = sqlite3.connect(str(path), timeout=30, isolation_level=None)
     try:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS insights (
@@ -248,7 +252,7 @@ def u6_migrate_insights(db_path=None):
 def u6_add_insight(content: str, ttl_cycles: int = 20, db_path=None):
     """Add an insight with a TTL. Must attach to a belief or it expires."""
     path = db_path or DB_PATH
-    conn = sqlite3.connect(str(path), timeout=10)
+    conn = sqlite3.connect(str(path), timeout=30, isolation_level=None)
     now = time.strftime("%Y-%m-%dT%H:%M:%S")
     conn.execute("""
         INSERT OR IGNORE INTO insights (content, created_at, expires_at, attached)
@@ -259,7 +263,7 @@ def u6_add_insight(content: str, ttl_cycles: int = 20, db_path=None):
 
 def u6_attach_insight(insight_id: int, belief_id: int, db_path=None):
     path = db_path or DB_PATH
-    conn = sqlite3.connect(str(path), timeout=10)
+    conn = sqlite3.connect(str(path), timeout=30, isolation_level=None)
     conn.execute("UPDATE insights SET attached=1, belief_id=? WHERE id=?",
                  (belief_id, insight_id))
     conn.commit()
@@ -268,7 +272,7 @@ def u6_attach_insight(insight_id: int, belief_id: int, db_path=None):
 def u6_prune_expired_insights(current_cycle: int, db_path=None):
     """Delete unattached insights past their TTL (ttl stored as cycle count in expires_at)."""
     path = db_path or DB_PATH
-    conn = sqlite3.connect(str(path), timeout=10)
+    conn = sqlite3.connect(str(path), timeout=30, isolation_level=None)
     conn.row_factory = sqlite3.Row
     rows = conn.execute("SELECT id, expires_at, created_at FROM insights WHERE attached=0").fetchall()
     pruned = 0
@@ -298,7 +302,7 @@ def u7_compress_memory(db_path=None, target_floor: int = 500, cycle: int = 0):
     if cycle % 25 != 0:
         return 0
     path = db_path or DB_PATH
-    conn = sqlite3.connect(str(path), timeout=10)
+    conn = sqlite3.connect(str(path), timeout=30, isolation_level=None)
     try:
         conn.execute("SELECT COUNT(*) FROM beliefs").fetchone()
         total = conn.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
@@ -379,7 +383,7 @@ def u10_stability_check(db_path=None, current_cycle: int = 0) -> dict:
     Triggers fallback mode if multiple signals fire simultaneously.
     """
     path = db_path or DB_PATH
-    conn = sqlite3.connect(str(path), timeout=10)
+    conn = sqlite3.connect(str(path), timeout=30, isolation_level=None)
     conn.row_factory = sqlite3.Row
     avg_conf = conn.execute("SELECT AVG(confidence) FROM beliefs").fetchone()[0] or 0
     loop_count = conn.execute("SELECT COUNT(*) FROM beliefs WHERE loop_flag=1").fetchone()[0]
@@ -409,7 +413,7 @@ def u11_ground_output(response: str, db_path=None, min_overlap: int = 1) -> bool
     high-confidence beliefs. Flags abstract drift if False.
     """
     path = db_path or DB_PATH
-    conn = sqlite3.connect(str(path), timeout=10)
+    conn = sqlite3.connect(str(path), timeout=30, isolation_level=None)
     conn.row_factory = sqlite3.Row
     top = conn.execute("""
         SELECT content FROM beliefs
