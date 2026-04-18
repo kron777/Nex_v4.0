@@ -72,15 +72,17 @@ from telegram.ext import (
 )
 
 # ── Singleton watchdog (prevents Telegram Conflict errors) ──
-try:
-    from nex_watchdog_patch import enforce_singleton
-    enforce_singleton()
-except Exception as _e:
-    print(f'  ⚠ Watchdog patch not available: {_e}')
+# Only run when executed directly as the bot — NOT when imported by run.py/other modules
+if __name__ == "__main__":
+    try:
+        from nex_watchdog_patch import enforce_singleton
+        enforce_singleton()
+    except Exception as _e:
+        print(f'  ⚠ Watchdog patch not available: {_e}')
 
 # ── Config ──
 
-BOT_TOKEN = "8758336859:AAFib_I_LBnqWGV-MVqrwa1T0sFf6PenAU4"
+BOT_TOKEN = "7997066651:AAFNob_LBsWDs7du4Wl--FwMRbFXRHGJhWk"
 CONFIG_DIR = os.path.expanduser("~/.config/nex")
 LOG_PATH = os.path.join(CONFIG_DIR, "telegram.log")
 
@@ -128,14 +130,55 @@ def get_system_prompt(user_message=None):
 
 def ask_nex(user_message, chat_history=None):
     """
-    NEX reply — LLM-free. Routes through SoulLoop organism engine.
-    Replaces the localhost:8080 llama call entirely.
+    NEX reply with coherence gate + width preprocessing + intent guard.
+    0. Coherence gate: malformed input short-circuits to honest refusal
+    1. Intent guard: refuse action requests honestly instead of musing on topic
+    2. Width preprocessing: extract constraints, mirror frame
+    3. Route to SoulLoop engine
     """
+    # Coherence gate (R2 strike-3 finding) — short-circuit semantically malformed input
     try:
-        from nex_respond import nex_reply
-        return nex_reply(user_message, history=chat_history, no_delay=False)
+        from nex_coherence_gate import is_coherent, malformed_response
+        coh = is_coherent(user_message)
+        if coh['score'] < 0.35:
+            logger.info(f"coherence gate refused: {coh}")
+            return malformed_response(user_message, coh)
+    except Exception as _ce:
+        logger.warning(f"coherence gate skipped: {_ce}")
+
+    # Intent guard — catch action/capability requests before they hit the belief engine
+    try:
+        from nex_intent_guard import classify_intent, capability_refusal
+        intent = classify_intent(user_message)
+        if intent.get('kind') == 'action_request' and not intent.get('within_capability'):
+            logger.info(f"intent_guard refused: category={intent.get('category')} conf={intent.get('confidence')}")
+            return capability_refusal(intent)
+    except Exception as _ige:
+        logger.warning(f"intent guard skipped: {_ige}")
+
+    # Width preprocessing — extract what user actually wants
+    constraints, frame, hint = {}, {}, ''
+    try:
+        from nex_width_helpers import extract_constraints, detect_frame, format_hint, enforce_constraints
+        constraints = extract_constraints(user_message)
+        frame = detect_frame(user_message, chat_history)
+        hint = format_hint(constraints, frame)
+    except Exception as _we:
+        logger.warning(f"width preprocessing skipped: {_we}")
+
+    try:
+        from nex.nex_respond_v2 import generate_reply
+        query = (hint + user_message) if hint else user_message
+        reply = generate_reply(query)
+        # Post-generation hard enforcement (e.g., trim to 2 sentences if "short")
+        try:
+            from nex_width_helpers import enforce_constraints
+            reply = enforce_constraints(reply, constraints)
+        except Exception:
+            pass
+        return reply
     except Exception as e:
-        logger.warning(f"nex_respond error: {e}")
+        logger.warning(f"nex_respond_v2 error: {e}")
     # Hard fallback — identity anchor
     try:
         from nex_respond import _identity_anchor
@@ -290,208 +333,6 @@ async def cmd_debug(update, context):
     await update.message.reply_text(msg)
 
 
-async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user.first_name
-    beliefs_count = 0
-    try:
-        from nex.belief_bridge import load_beliefs
-        beliefs_count = len(load_beliefs())
-    except Exception:
-        pass
-
-    await update.message.reply_text(
-        f"⚡ NEX v4.0 — Dynamic Intelligence Organism\n\n"
-        f"Hey {user}. I'm NEX, a belief-field cognition engine. "
-        f"I learn from the Moltbook agent network and evolve my understanding.\n\n"
-        f"🧠 Beliefs absorbed: {beliefs_count}\n"
-        f"📡 Status: ONLINE\n\n"
-        f"Commands:\n"
-        f"  /beliefs — what I know\n"
-        f"  /learned — full knowledge summary\n"
-        f"  /think <topic> — deep reflection\n"
-        f"  /status — system status\n"
-        f"  /debug  — full system diagnostic\n\n"
-        f"Or just talk to me."
-    )
-
-
-async def cmd_beliefs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = " ".join(context.args) if context.args else None
-
-    try:
-        if query:
-            from nex.belief_bridge import ask_beliefs
-            result = ask_beliefs(query)
-        else:
-            from nex.belief_bridge import get_belief_stats
-            result = get_belief_stats()
-        await update.message.reply_text(result)
-    except Exception as e:
-        await update.message.reply_text(f"Belief system error: {e}")
-
-
-async def cmd_learned(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        from nex.belief_bridge import load_beliefs, extract_topics, load_agents
-        beliefs = load_beliefs()
-        agents = load_agents()
-        topics = extract_topics(beliefs, 8)
-
-        lines = [f"🧠 NEX Knowledge Summary\n"]
-        lines.append(f"Beliefs: {len(beliefs)}  |  Agents: {len(agents)}")
-
-        if topics:
-            lines.append(f"Topics: {', '.join([t for t, _ in topics])}")
-
-        if agents:
-            top = sorted(agents.items(), key=lambda x: -x[1])[:5]
-            lines.append(f"Top agents: {', '.join([f'@{a} ({k}κ)' for a, k in top])}")
-
-        # Check for insights
-        try:
-            from nex.cognition import load_json, INSIGHTS_PATH, REFLECTIONS_PATH
-            insights = load_json(INSIGHTS_PATH, [])
-            reflections = load_json(REFLECTIONS_PATH, [])
-            if insights:
-                lines.append(f"\n⚗ Synthesized insights: {len(insights)}")
-                for ins in insights[:3]:
-                    lines.append(f"  [{ins.get('topic', '?')}] — "
-                                f"{ins.get('belief_count', 0)} beliefs, "
-                                f"conf:{ins.get('confidence', 0):.0%}")
-            if reflections:
-                lines.append(f"\n◉ Self-reflections: {len(reflections)}")
-        except ImportError:
-            pass
-
-        if beliefs:
-            lines.append(f"\nRecent:")
-            for b in beliefs[-3:]:
-                auth = b.get('author', '?')
-                cont = b.get('content', '')[:60].replace('\n', ' ')
-                lines.append(f"  @{auth}: {cont}…")
-
-        await update.message.reply_text("\n".join(lines))
-    except Exception as e:
-        await update.message.reply_text(f"Error: {e}")
-
-
-async def cmd_think(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("Usage: /think <topic>\nI'll reflect deeply using my full belief field.")
-        return
-
-    topic = " ".join(context.args)
-    await update.message.reply_text(f"🧠 Thinking about '{topic}'...")
-
-    prompt = (
-        f"Reflect deeply on: {topic}\n\n"
-        f"Draw on everything in your cognitive state — synthesized insights, "
-        f"agent relationships, network trends, and your own knowledge gaps. "
-        f"Don't just list what you know. Synthesize. Form an opinion. "
-        f"Identify what you're uncertain about. Reference specific agents and their ideas."
-    )
-
-    response = ask_nex(prompt, get_history(update.effective_user.id))
-    add_to_history(update.effective_user.id, "user", prompt)
-    add_to_history(update.effective_user.id, "assistant", response)
-    reflect_on_exchange(prompt, response)
-
-    await update.message.reply_text(response)
-
-
-async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    beliefs_count = 0
-    agents_count = 0
-    insights_count = 0
-    reflections_count = 0
-    convos_count = 0
-
-    try:
-        from nex.belief_bridge import load_beliefs, load_agents, load_conversations
-        beliefs_count = len(load_beliefs())
-        agents_count = len(load_agents())
-        convos_count = len(load_conversations())
-    except Exception:
-        pass
-
-    try:
-        from nex.cognition import load_json, INSIGHTS_PATH, REFLECTIONS_PATH
-        insights_count = len(load_json(INSIGHTS_PATH, []))
-        reflections_count = len(load_json(REFLECTIONS_PATH, []))
-    except Exception:
-        pass
-
-    await update.message.reply_text(
-        f"⚡ NEX v4.0 System Status\n\n"
-        f"🧠 Beliefs: {beliefs_count}\n"
-        f"👥 Agents tracked: {agents_count}\n"
-        f"💬 Conversations: {convos_count}\n"
-        f"⚗ Insights: {insights_count}\n"
-        f"◉ Reflections: {reflections_count}\n"
-        f"📡 Telegram: ONLINE\n"
-        f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-    )
-
-
-def _handle_discord_command(text):
-    import json, os
-    SERVER_CFG = os.path.expanduser("~/.config/nex/discord_servers.json")
-    try:
-        cfg = json.load(open(SERVER_CFG))
-    except Exception:
-        cfg = {"servers": {}, "default_behavior": {"respond_to_mentions": True, "lurk_on_keywords": True}}
-
-    parts = text.strip().split()
-
-    if len(parts) == 2 and parts[1] == "list":
-        if not cfg["servers"]:
-            return "No servers registered yet."
-        lines = []
-        for srv, data in cfg["servers"].items():
-            lurk = ", ".join(data.get("lurk_channels", [])) or "none"
-            respond = ", ".join(data.get("respond_channels", [])) or "none"
-            lines.append(f"[{srv}]\n  lurk: {lurk}\n  respond: {respond}")
-        return "\n\n".join(lines)
-
-    if len(parts) >= 4 and parts[1] in ("respond", "lurk"):
-        action_type = parts[1]
-        action = parts[2]  # on/off
-        server = parts[3]
-        channel = parts[4] if len(parts) > 4 else "general"
-        if server not in cfg["servers"]:
-            cfg["servers"][server] = {"lurk_channels": [], "respond_channels": []}
-        lc = cfg["servers"][server].setdefault("lurk_channels", [])
-        rc = cfg["servers"][server].setdefault("respond_channels", [])
-        if action_type == "respond":
-            if action == "on":
-                if channel not in rc: rc.append(channel)
-                if channel not in lc: lc.append(channel)
-                msg = f"✓ Nex will respond in #{channel} on {server}"
-            else:
-                if channel in rc: rc.remove(channel)
-                msg = f"✓ Nex lurk-only in #{channel} on {server}"
-        else:  # lurk
-            if action == "on":
-                if channel not in lc: lc.append(channel)
-                msg = f"✓ Nex absorbing #{channel} on {server}"
-            else:
-                if channel in lc: lc.remove(channel)
-                msg = f"✓ Nex ignoring #{channel} on {server}"
-        with open(SERVER_CFG, "w") as f:
-            json.dump(cfg, f, indent=2)
-        return msg
-
-    return (
-        "Discord commands:\n"
-        "/discord list\n"
-        "/discord respond on <server> <channel>\n"
-        "/discord respond off <server> <channel>\n"
-        "/discord lurk on <server> <channel>\n"
-        "/discord lurk off <server> <channel>"
-    )
-
-
-
 # ── D14 engagement signal ──────────────────────────────────────────────────────
 def _d14_telegram_engagement(user_id, value: float = 1.0):
     """Fire on_engagement() into S7 LearningSystem on every Telegram interaction."""
@@ -503,69 +344,6 @@ def _d14_telegram_engagement(user_id, value: float = 1.0):
     except Exception:
         pass
 # ──────────────────────────────────────────────────────────────────────────────
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle regular chat messages."""
-    user_message = update.message.text
-    user_id = update.effective_user.id
-
-    logger.info(f"Message from {update.effective_user.first_name}: {user_message[:50]}")
-
-    # ── Training approval commands (/light /medium /heavy /havok /notrain) ──
-    try:
-        from nex_self_trainer import TRAIN_COMMANDS, handle_training_command
-        from nex_telegram_commands import OWNER_TELEGRAM_ID
-        cmd_word = user_message.strip().lower().split()[0] if user_message.strip() else ""
-        if cmd_word in TRAIN_COMMANDS and user_id == OWNER_TELEGRAM_ID:
-            import asyncio
-            loop = asyncio.get_event_loop()
-            def _send_sync(msg):
-                asyncio.run_coroutine_threadsafe(
-                    update.message.reply_text(msg), loop
-                )
-            handle_training_command(user_message.strip(), _send_sync)
-            return
-    except Exception as _tce:
-        pass
-
-    # Discord control commands
-    if user_message and user_message.lower().startswith("/discord"):
-        response = _handle_discord_command(user_message)
-        try:
-            from nex_dynamic_opener import get_opener as _gop
-            if isinstance(response, str): response = _gop().strip_output(response)
-        except Exception: pass
-        await update.message.reply_text(response)
-        return
-
-    # Show typing indicator
-    try:
-        await update.message.chat.send_action("typing")
-    except Exception:
-        pass
-
-    # Get response from NEX's brain
-    history = get_history(user_id)
-    response = ask_nex(user_message, history)
-    try:
-        from nex_dynamic_opener import get_opener as _gop
-        if isinstance(response, str): response = _gop().strip_output(response)
-    except Exception: pass
-
-    # Record in history
-    add_to_history(user_id, "user", user_message)
-    add_to_history(user_id, "assistant", response)
-
-    # Reflect on the exchange (builds self-awareness)
-    reflect_on_exchange(user_message, response)
-
-    # Send response (split if too long for Telegram)
-    if len(response) > 4000:
-        chunks = [response[i:i+4000] for i in range(0, len(response), 4000)]
-        for chunk in chunks:
-            await update.message.reply_text(chunk)
-    else:
-        await update.message.reply_text(response)
-    _d14_telegram_engagement(user_id, value=1.0)   # D14 engagement signal
 
 
 async def cmd_discord(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -914,7 +692,7 @@ def main():
 
     # Run
 
-    app = _patch_telegram_retry(app)  # retry on network errors
+    # app = _patch_telegram_retry(app)  # DISABLED — async wrapper broke main thread
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
