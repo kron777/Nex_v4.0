@@ -14,3 +14,7 @@ def get_next_train_time(**kwargs):
 
 def record_train_run(**kwargs):
     pass
+
+def get_scheduler(*args, **kwargs):
+    """Stub — training disabled."""
+    return None
