@@ -47,7 +47,8 @@ def ensure_table() -> None:
                 llm_server_up   INTEGER,
                 status          TEXT,
                 error_detail    TEXT,
-                source          TEXT
+                source          TEXT,
+                finish_reason   TEXT
             )
             """
         )
@@ -70,6 +71,7 @@ def log_call(
     status: str = "success",
     error_detail: str = "",
     source: str = "ad_hoc",
+    finish_reason: str = "",
 ) -> None:
     """
     Record one PATH 2 attempt. Never raises — instrumentation must not crash
@@ -92,8 +94,8 @@ def log_call(
                 INSERT INTO path2_log
                   (timestamp, query, query_clean, belief_count, system_prompt,
                    response_raw, response_words, latency_ms, llm_server_up,
-                   status, error_detail, source)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   status, error_detail, source, finish_reason)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     datetime.now().isoformat(),
@@ -108,6 +110,7 @@ def log_call(
                     status,
                     error_detail[:1000] if error_detail else "",
                     source,
+                    finish_reason or "",
                 ),
             )
             conn.commit()

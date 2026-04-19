@@ -1,0 +1,38 @@
+================================================================================
+THEORY_X_PHASE_1C — COMPLETE DISPATCH PACKAGE
+================================================================================
+
+NEX Theory X — Phase 1C: PATH 2 Hygiene + Clean Measurement
+================================================================================
+
+Phase 1B shipped as commit 2fd3bcc — PATH 1 bypass flag, PATH 2 structured-
+prompt repair, path2_log instrumentation. Phase 1C's job is to clean the
+PATH 2 substrate of three contamination issues (belief syntax leak, identity
+drift, unknown truncation rate) and re-measure with rigor at temperature=0.
+
+SUCCESS CRITERIA:
+  C1: Zero occurrences of internal graph syntax in 12 PATH 2 responses.
+      Regex: bridge:|↔|conf=|SUPPORTS|CONTRADICTS|REFINES|\bid=\d+
+  C2: Zero identity-drift responses in 12 runs.
+      Detector: "I am a human"/"I'm a human"/"as an AI assistant"/
+                "as a language model"/"as a chatbot"/"I am an AI model"/
+                "I'm just an AI"
+  C3: finish_reason='length' rate < 20%.
+
+Tasks:
+  1. finish_reason column + logger update + re-baseline. Auto-accept,
+     show 10-line diff for completeness.
+  2. REVIEW-GATED: belief serialization sanitizer in build_prompt.
+  3. REVIEW-GATED: identity hard-lock prepended to SYSTEM_PROMPT.
+  4. 12-run characterization (N=3 each × 4 conditions) at temp=0 via
+     NEX_TEMP_OVERRIDE. Auto-accept.
+  5. THEORY_X_PHASE_1C_RESULTS.md from fresh sqlite3 queries.
+  6. Single commit. No push.
+
+Constraints:
+  - Review gates on Tasks 2, 3. Auto on the rest.
+  - Experimental data → nex_experiments.db. Cognition data → nex.db.
+  - Backup before live-code edits (.bak_phase1c_sanitize, .bak_phase1c_identity).
+  - AST-check after each edit.
+  - Session budget 2h; cut to N=2 per condition if long.
+  - Results doc built from SQL queries, not session memory.

@@ -42,6 +42,40 @@ TEMPERATURE     = 0.3
 MAX_REPLY_WORDS = 120
 MIN_REPLY_CHARS = 20
 
+# ── Belief sanitization for PATH 2 injection ─────────────────────────────────
+# When NEX_BYPASS_PATH1=1, beliefs pass through _sanitize_belief before
+# serialization into the LLM prompt so internal graph syntax doesn't leak
+# into generation. The graph itself is never modified.
+_BELIEF_SYNTAX_PATTERNS = [
+    (re.compile(r'bridge:', re.IGNORECASE), ''),
+    (re.compile(r'↔'), ' '),
+    (re.compile(r'\s*\(\s*conf(?:idence)?\s*[=:]\s*[0-9.]+\s*\)'), ''),
+    (re.compile(r'\bconf(?:idence)?\s*[=:]\s*[0-9.]+\b'), ''),
+    (re.compile(r'\[(?:SUPPORTS|CONTRADICTS|REFINES|BRIDGES|OPPOSES|CAUSES|'
+                r'ENABLES|REQUIRES|SYNTHESISES|SUBSUMES)\]'), ''),
+    (re.compile(r'\bid\s*=\s*\d+\b'), ''),
+    (re.compile(r'\[#\d+\]'), ''),
+    (re.compile(r'\bbelief_\d+\b'), ''),
+    (re.compile(r'<[^>]{1,50}>'), ''),
+    (re.compile(r'Page contents not supported in other languages\.?', re.IGNORECASE), ''),
+    (re.compile(r'Please search for [^.]{1,200} in Wikipedia[^.]*\.?', re.IGNORECASE), ''),
+]
+# Detector for C1 success criterion — also used by Phase 1C detector script
+_BELIEF_SYNTAX_DETECTOR = re.compile(
+    r'bridge:|↔|conf=|SUPPORTS|CONTRADICTS|REFINES|\bid=\d+'
+)
+
+def _sanitize_belief(text: str) -> str:
+    """Strip internal graph syntax before LLM injection. Graph untouched."""
+    if not text:
+        return ""
+    s = text
+    for pat, repl in _BELIEF_SYNTAX_PATTERNS:
+        s = pat.sub(repl, s)
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
+
 # ── TF-IDF index (built once, cached) ────────────────────────────────────────
 
 _TFIDF_CACHE: dict = {}   # keys: "vectorizer", "matrix", "contents", "topics"
@@ -660,7 +694,10 @@ def _keyword_fallback(query: str, n: int) -> list:
 
 def build_prompt(query: str, beliefs: list, intent: str) -> tuple:
     if beliefs:
-        belief_block = "\n".join(f"• {b.strip()}" for b in beliefs)
+        if os.environ.get("NEX_BYPASS_PATH1") == "1":
+            belief_block = "\n".join(f"• {_sanitize_belief(b)}" for b in beliefs)
+        else:
+            belief_block = "\n".join(f"• {b.strip()}" for b in beliefs)
     else:
         belief_block = "(no relevant beliefs found for this topic)"
 
@@ -799,6 +836,7 @@ def call_llm(system: str, prompt: str, **kwargs) -> str:
     _p2_result = ""
     _p2_status = "http_error"
     _p2_err    = ""
+    _p2_finish = ""
     try:
         import requests as _req
         belief_block = "\n".join(f"- {b}" for b in belief_lines) if belief_lines else "(none)"
@@ -815,6 +853,13 @@ def call_llm(system: str, prompt: str, **kwargs) -> str:
             )
             user_content = query_clean
         _p2_sys = final_system
+        _temp = kwargs.get("temperature", TEMPERATURE)
+        _temp_override = os.environ.get("NEX_TEMP_OVERRIDE")
+        if _temp_override is not None:
+            try:
+                _temp = float(_temp_override)
+            except ValueError:
+                pass
         resp = _req.post(
             "http://localhost:8080/v1/chat/completions",
             json={
@@ -823,16 +868,18 @@ def call_llm(system: str, prompt: str, **kwargs) -> str:
                     {"role": "user",   "content": user_content},
                 ],
                 "max_tokens": kwargs.get("max_tokens", MAX_TOKENS),
-                "temperature": kwargs.get("temperature", TEMPERATURE),
+                "temperature": _temp,
             },
             timeout=15,
         )
         resp.raise_for_status()
-        result = resp.json()["choices"][0]["message"]["content"].strip()
+        _j = resp.json()
+        result = _j["choices"][0]["message"]["content"].strip()
+        _p2_finish = _j["choices"][0].get("finish_reason", "") or ""
         _p2_result = result
         if result and len(result) > 20:
             _p2_status = "success"
-            log.info("PATH 2 (localhost:8080) succeeded")
+            log.info("PATH 2 (localhost:8080) succeeded (finish=%s)", _p2_finish)
             return result
         else:
             _p2_status = "empty"
@@ -854,6 +901,7 @@ def call_llm(system: str, prompt: str, **kwargs) -> str:
                 status=_p2_status,
                 error_detail=_p2_err,
                 source=os.environ.get("NEX_PATH2_LOG_SOURCE", "live"),
+                finish_reason=_p2_finish,
             )
         except Exception:
             pass
