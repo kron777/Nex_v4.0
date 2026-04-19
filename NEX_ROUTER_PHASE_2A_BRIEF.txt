@@ -1,0 +1,448 @@
+================================================================================
+NEX RESPONSE ROUTER — PHASE 2A BRIEF
+================================================================================
+
+HOW TO USE:
+1. Save this file as ~/Desktop/nex/NEX_ROUTER_PHASE_2A_BRIEF.txt
+2. From ~/Desktop/nex, run:
+
+   claude --dangerously-skip-permissions "Execute the plan in NEX_ROUTER_PHASE_2A_BRIEF.txt. Read the entire file first before any action. Follow the review-gate protocol in the Constraints section exactly. This is infrastructure work, not capability work — no LLM fine-tuning, no substrate changes, no Theory X phase work."
+
+The agent reads this file and executes from it. No other files needed.
+
+Companion document: NEX_RESPONSE_ROUTER_SKETCH.md — read it first if you
+want the reasoning behind the design choices.
+
+================================================================================
+Phase 2A: Response Router — Tiered Inference Infrastructure
+================================================================================
+
+Context: Phase 1D shipped as commit 0cf70a5. Substrate hygiene loop is
+closed. C1 leak under freeze is 15.3%, reproducibly traceable to LoRA
+weight contamination on 3 specific seed patterns. FT#11 is blocked on
+RunPod credits.
+
+This phase is NOT about fixing C1 at the root (that's FT#11) and NOT
+about capability progress (that's Stage B tool use, later). It's about
+formalizing the implicit PATH 1 / PATH 2 split into an explicit tiered
+router with measurable behavior.
+
+
+--------------------------------------------------------------------------------
+WHY THIS BRIEF EXISTS
+--------------------------------------------------------------------------------
+
+Current nex_respond_v2.py routing logic:
+  - call_llm runs retrieval, then tries _build_reply (PATH 1)
+  - if PATH 1 returns >20 chars, use it
+  - otherwise fall through to PATH 2 (LLM call)
+
+The routing is implicit. Nobody looks at what fraction of live traffic
+hits each path, how latency varies, or which queries deserve which
+path. The PATH 1 renderer was a happy accident — Phase 1B treated it
+as a bug to bypass, then Phase 1C found it was doing real work.
+
+Hypothesis (testable, not asserted): the majority of NEX's queries
+are retrievable compositions that don't need the LLM at all. If true:
+- most LLM calls are paying ~2s + GPU load to produce template-plus-
+  connectives that Python can do in microseconds
+- most LLM calls are the source of the bridge:X↔Y contamination that
+  Phase 1D traced to LoRA weights
+- routing aggressively away from the LLM reduces contamination
+  exposure proportionally, while we wait on FT#11
+
+Phase 2A builds the router, measures the hypothesis, and — if
+confirmed — deploys it as infrastructure for all downstream work
+(Stage B tool use, Stage C planning, FT#11 validation).
+
+
+--------------------------------------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------------------------------------
+
+R1: Router + Tier 0 composer + route_decisions table exist. Unit tests
+    pass. No production code touched yet.
+
+R2: Blind test — 20 queries, response from Tier 0 and Tier 2, shuffled,
+    Jon's accuracy at identifying which is which is reported honestly.
+    The *number* is the deliverable, not a pass/fail. If Jon is 95%
+    accurate, Tier 0 isn't ready. If Jon is 55% accurate (near chance),
+    Tier 0 is doing real work.
+
+R3: Latency test — 50 queries through the router (flag on) vs 50 through
+    current path (flag off). Mean latency delta reported.
+
+R4: C1 test — 50 queries through router vs 50 through current path.
+    C1 rate compared. Predicted drop: proportional to Tier 0 route
+    rate. Actual drop reported.
+
+R5: No regression test — R6 probe (all 6 queries including adversarial
+    identity probe) runs through the router. Every probe routes to
+    Tier 2. Responses are byte-identical or near-identical to Phase 1D
+    Tier 2 baseline. If any R6 probe routes to Tier 0 or 1, that's
+    a bug.
+
+None of R1-R5 is pass/fail. They are measurements. The deliverable is
+the data + a recommendation (promote flag default, keep flag off, or
+revise).
+
+
+--------------------------------------------------------------------------------
+READING REQUIRED
+--------------------------------------------------------------------------------
+
+1. /home/rr/Desktop/nex/NEX_RESPONSE_ROUTER_SKETCH.md — the design doc
+2. /home/rr/Desktop/nex/nex/nex_respond_v2.py — especially call_llm
+   (line ~780), generate_reply (line ~1020), _build_reply, intent
+   classification, get_beliefs_for_query
+3. /home/rr/Desktop/nex/THEORY_X_PHASE_1D_RESULTS.md — C1 baseline,
+   weight contamination finding
+4. Phase 1C sanitizer: _sanitize_belief, _BELIEF_SYNTAX_PATTERNS,
+   _BELIEF_SYNTAX_DETECTOR in nex_respond_v2.py (line ~45)
+
+
+--------------------------------------------------------------------------------
+TASK 1 — Create route_decisions table + router skeleton (auto-accept)
+--------------------------------------------------------------------------------
+
+Create table in nex_experiments.db:
+
+    CREATE TABLE IF NOT EXISTS route_decisions (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp       TEXT NOT NULL,
+        query           TEXT NOT NULL,
+        query_clean     TEXT,
+        intent          TEXT,
+        source          TEXT,
+        tier            INTEGER NOT NULL,
+        reason          TEXT NOT NULL,
+        features_json   TEXT NOT NULL,
+        response_text   TEXT,
+        latency_ms      INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_route_tier ON route_decisions(tier, timestamp);
+    CREATE INDEX IF NOT EXISTS idx_route_source ON route_decisions(source, timestamp);
+
+Create nex_response_router.py with:
+
+    @dataclass
+    class BeliefHit:
+        content: str
+        confidence: float
+        topic: Optional[str]
+        tfidf_score: float
+
+    @dataclass
+    class RouteInput:
+        query: str
+        beliefs: list[BeliefHit]
+        intent: str
+        source: str = 'live'
+
+    @dataclass
+    class RouteDecision:
+        tier: int
+        reason: str
+        score_dict: dict
+        composed_text: Optional[str] = None
+        llm_config: Optional[dict] = None
+
+    def extract_features(ri: RouteInput) -> dict:
+        # F1-F10 from sketch Section 3
+        ...
+
+    def decide(features: dict, source: str) -> tuple[int, str]:
+        # Rules from sketch Section 3
+        # Returns (tier, reason)
+        ...
+
+    def log_decision(ri: RouteInput, decision: RouteDecision,
+                     response: str, latency_ms: int) -> None:
+        # Write to route_decisions table
+        ...
+
+    def route(ri: RouteInput) -> RouteDecision:
+        # Main entry point: extract features, decide, compose or
+        # return config for caller
+        ...
+
+Auto-accept. Small file, additive, no production changes yet.
+
+
+--------------------------------------------------------------------------------
+TASK 2 — Create nex_tier0_composer.py (auto-accept)
+--------------------------------------------------------------------------------
+
+Per sketch Section 4. Key requirements:
+
+1. Every belief passes through _sanitize_belief (imported from
+   nex.nex_respond_v2) before composition. No exceptions.
+
+2. Output length bounded: minimum 40 chars (to avoid trivial outputs),
+   maximum 400 chars (to keep Tier 0 concise by design).
+
+3. Intent-aware templates:
+   - self_inquiry → _SELF_OPENERS + body
+   - factual → declarative concat, no opener
+   - general → _GENERAL_OPENERS + body with optional connective
+
+4. Deterministic given (beliefs, intent, query): use hash-based
+   selection from opener/connective lists, not random.choice. This
+   is important for the blind test — same input must produce same
+   output across runs.
+
+5. Connective vocabularies per sketch Section 4. Hand-curated. Small.
+
+Unit tests:
+- Given 3 high-confidence beliefs and self_inquiry intent, produces
+  a valid-looking response.
+- Given a belief containing "bridge:X↔Y", the composed output does
+  NOT contain "bridge:X↔Y" (sanitizer fires).
+- Same input always produces same output (determinism).
+- Output length is in [40, 400].
+
+Auto-accept. No production touch.
+
+
+--------------------------------------------------------------------------------
+TASK 3 — Tune routing heuristics on historical data (auto-accept)
+--------------------------------------------------------------------------------
+
+Before wiring anything into generate_reply, test the router against
+historical path2_log data from Phase 1B/1C/1D runs.
+
+    for row in path2_log WHERE source IN ('phase1c', 'phase1d_frozen'):
+        reconstruct RouteInput from row metadata
+        call route()
+        record tier decision
+
+Report distribution:
+  - % Tier 0, Tier 1, Tier 2
+  - Per-intent distribution
+  - Per-source distribution
+
+Sanity check the thresholds in sketch Section 3 against this data.
+If distribution is pathological (e.g. 98% Tier 2 — router has no
+effect, or 2% Tier 2 — router never invokes LLM for anything),
+propose threshold adjustments and re-run. Show Jon the adjusted
+thresholds and the new distribution. No review gate yet — this is
+still diagnostic.
+
+Target distribution (rough): 50-70% Tier 0, 20-40% Tier 1, 5-15%
+Tier 2. If the actual distribution is wildly different, the
+hypothesis might be wrong and Phase 2A should pause for Jon's
+re-evaluation.
+
+
+--------------------------------------------------------------------------------
+TASK 4 — Wire router into generate_reply (REVIEW-GATED)
+--------------------------------------------------------------------------------
+
+PAUSE. Show Jon the proposed diff before writing.
+
+The goal: router sits between retrieval+intent and the current PATH 1/
+PATH 2 branch. Gated by NEX_ROUTER env flag. Flag off = zero change
+from current behavior.
+
+Proposed shape:
+
+    # in generate_reply, after retrieval and intent classification
+
+    if os.environ.get("NEX_ROUTER") == "1":
+        from nex_response_router import route, RouteInput, BeliefHit
+        hits = [BeliefHit(content=b.content, confidence=b.confidence,
+                          topic=b.topic, tfidf_score=b.score)
+                for b in retrieved_beliefs]
+        ri = RouteInput(query=query, beliefs=hits, intent=intent,
+                        source=os.environ.get("NEX_ROUTER_SOURCE", "live"))
+        decision = route(ri)
+
+        if decision.tier == 0:
+            response = decision.composed_text
+            log_decision(ri, decision, response, latency_ms=0)
+            return response
+
+        if decision.tier == 1:
+            # Light LLM config
+            response = call_llm(
+                system=SYSTEM_PROMPT_LIGHT,
+                user=build_light_prompt(query, hits[:3]),
+                max_tokens=150, temperature=0.2,
+            )
+            log_decision(ri, decision, response, latency_ms=...)
+            return response
+
+        # Tier 2 falls through to existing PATH 2 logic
+        # (and log_decision is called there)
+
+    # Existing logic unchanged when flag is off
+    ...
+
+Constraints:
+- Flag off = byte-identical to current behavior. No changes to any
+  existing path when NEX_ROUTER is unset.
+- Tier 0 response still passes through post_filter (sanitization,
+  length check, etc.) before return.
+- SYSTEM_PROMPT_LIGHT is a new shorter prompt for Tier 1. Draft it
+  in the diff. Keep it ~3 sentences: identity, belief-grounding
+  rule, brevity rule.
+- Backup nex_respond_v2.py as .bak_phase2a_router before editing.
+- AST-check after.
+
+Show Jon the complete combined diff: generate_reply edit + new
+SYSTEM_PROMPT_LIGHT constant + build_light_prompt helper function.
+Wait for explicit approval before applying.
+
+
+--------------------------------------------------------------------------------
+TASK 5 — Blind test (auto-accept)
+--------------------------------------------------------------------------------
+
+Build /home/rr/Desktop/nex/nex_router_blindtest.py:
+
+1. Define 20 test queries mixing:
+   - 8 self-inquiry style ("what do you think about X", "describe your view on Y")
+   - 6 factual style ("what is X", "tell me about Y")
+   - 4 general/open ("what matters about X", "how does X relate to Y")
+   - 2 synthesis-required ("why does X contradict Y", "what follows from X and Z")
+
+2. For each query, generate two responses:
+   - A: force Tier 0 (router returns tier=0 regardless)
+   - B: force Tier 2 (router returns tier=2 regardless)
+
+3. Write pairs to a CSV. Shuffle the A/B order per row so Jon can't
+   pattern-match. Include a column for Jon's guess and a column for
+   ground truth.
+
+4. Pair file: nex_router_blindtest_YYYYMMDD.csv
+
+5. Do NOT run the blind test against Jon now. Produce the file, tell
+   Jon it's ready, and he'll fill it in when he has time. Include
+   instructions in the file header.
+
+Auto-accept. Building the test infrastructure, not running the test.
+
+
+--------------------------------------------------------------------------------
+TASK 6 — Latency and C1 measurement (auto-accept)
+--------------------------------------------------------------------------------
+
+Run 50 queries under flag=on and 50 queries under flag=off, matched
+query set. Use the snapshot DB from Phase 1D for reproducibility:
+  export NEX_BELIEFS_DB=/home/rr/Desktop/nex/nex_snapshot.db
+  export NEX_TEMP_OVERRIDE=0
+
+Query set: reuse the 20 blind-test queries + 30 sampled from historical
+user_chat / telegram queries. Label source='phase2a_test'.
+
+Measure:
+- Mean latency per tier (flag on)
+- Mean latency for the same 50 queries under flag off
+- C1 rate flag-on vs flag-off
+- Tier distribution: what % of the 50 went to each tier
+- Predicted C1 drop: (% Tier 2) × (Phase 1D C1 rate 15.3%)
+- Actual C1 drop
+- Delta between predicted and actual
+
+No gating. This is measurement.
+
+
+--------------------------------------------------------------------------------
+TASK 7 — No-regression check on R6 probes (auto-accept)
+--------------------------------------------------------------------------------
+
+Run theory_x_r6_probe.py with flag on. Confirm:
+- All 6 probes route to Tier 2
+- Responses are comparable to Phase 1D baseline
+- Coherence scores don't drop
+
+If any R6 probe routes to Tier 0 or 1, the router rules need
+tightening (source='probe' should force Tier 2 per sketch Section 3
+hard overrides). Fix and re-run.
+
+
+--------------------------------------------------------------------------------
+TASK 8 — Results doc + commit (auto-accept)
+--------------------------------------------------------------------------------
+
+Write /home/rr/Desktop/nex/NEX_ROUTER_PHASE_2A_RESULTS.md from fresh
+sqlite3 queries against route_decisions and path2_log.
+
+Structure:
+1. Headline: tier distribution from Task 3 (historical) and Task 6
+   (live test). Is the 50-70% Tier 0 hypothesis supported?
+2. Latency delta (Task 6).
+3. C1 rate delta (Task 6). Predicted vs actual.
+4. R6 no-regression result (Task 7).
+5. Blind test status: "CSV ready at PATH, awaiting Jon's responses."
+6. Recommendation: promote NEX_ROUTER flag to default-on, keep
+   default-off, or revise the router before any production use.
+7. Honest limits.
+
+Commit:
+  NEX Response Router Phase 2A — tiered inference infrastructure
+
+  - nex_response_router.py: feature extraction + routing decision
+  - nex_tier0_composer.py: Python-only response composition
+  - route_decisions table for measurement
+  - NEX_ROUTER env flag wiring into generate_reply (default off)
+  - Blind test harness (awaiting Jon's responses)
+  - Latency + C1 + no-regression measurement
+  - No production behavior change when NEX_ROUTER is unset
+
+Do NOT push.
+
+
+--------------------------------------------------------------------------------
+CONSTRAINTS
+--------------------------------------------------------------------------------
+
+- Review gate on Task 4 only. All other tasks auto-accept.
+- Brain keeps running. Do not stop nex-brain.
+- Experimental data → nex_experiments.db.
+- Backup before each live-code edit. AST-check after.
+- Session budget: 3 hours. If running long, cut Task 6 to 25 queries
+  per condition and commit with "incomplete" marker.
+- Do NOT touch FT#11 corpus, LoRA, or any training pipeline.
+- Do NOT fix busy_timeout=0 this session (that's a separate maint session).
+- Do NOT add new capabilities to NEX (no tool use, no planning).
+  This is router infrastructure, nothing else.
+- Do NOT push.
+
+Hard prohibitions:
+- Router must not change response content when flag is off.
+- Tier 0 must pass every belief through _sanitize_belief. No exceptions.
+- R6 probe must route to Tier 2, always.
+
+
+--------------------------------------------------------------------------------
+FINAL REPORT
+--------------------------------------------------------------------------------
+
+- Task 1: router + table scaffolding (file paths, line counts)
+- Task 2: tier0 composer + unit test results
+- Task 3: tier distribution on historical data, threshold adjustments
+  if any
+- Task 4: router wiring diff applied, production-off verification
+- Task 5: blind test CSV path
+- Task 6: latency delta, C1 delta (predicted vs actual), tier
+  distribution on live test
+- Task 7: R6 no-regression verification
+- Task 8: results doc path, commit hash, recommendation (promote /
+  hold / revise)
+
+Most important outputs:
+1. The tier distribution — does the "most queries don't need the
+   LLM" hypothesis hold?
+2. The C1 delta — does router deployment meaningfully reduce
+   contamination exposure while we wait on FT#11?
+3. The blind test CSV — ready for Jon to fill in when fresh.
+
+If Task 3's historical distribution is >85% Tier 2 OR <20% Tier 2,
+pause and report. The hypothesis might be wrong, and deploying a
+router that has no effect (or routes everything away from the LLM)
+is worse than not building it.
+
+================================================================================
+END OF BRIEF
+================================================================================

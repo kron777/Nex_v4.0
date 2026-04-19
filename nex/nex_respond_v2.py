@@ -719,6 +719,33 @@ def build_prompt(query: str, beliefs: list, intent: str) -> tuple:
     user_m = f"Relevant beliefs:\n{belief_block}\n\nQuestion: {query}"
     return system, user_m
 
+# ── Tier 1 (light LLM) prompt scaffolding ──────────────────────────────────
+# Used only when NEX_ROUTER=1 and router returns tier=1. Short system prompt,
+# concise user prompt — for fluency-sensitive but non-synthesis queries.
+
+SYSTEM_PROMPT_LIGHT = (
+    "You are Nex. Answer concisely from the beliefs below. "
+    "2-3 sentences max. No hedging. No disclaimers. "
+    "Do not reference yourself as an AI, language model, or chatbot."
+)
+
+def build_light_prompt(query: str, belief_hits: list) -> str:
+    """Compact user prompt for Tier 1 calls.
+
+    belief_hits may be a list of BeliefHit objects (from the router) or
+    a list of strings. Handles both.
+    """
+    lines = []
+    for b in (belief_hits or [])[:3]:
+        content = getattr(b, "content", b) if b else ""
+        if not content:
+            continue
+        s = _sanitize_belief(content) if content else ""
+        if s:
+            lines.append(f"- {s}")
+    block = "\n".join(lines) if lines else "(no relevant beliefs)"
+    return f"Beliefs:\n{block}\n\nQuestion: {query}"
+
 # ── LLM caller ────────────────────────────────────────────────────────────────
 
 # ── LLM / render backend ─────────────────────────────────────────────────────
@@ -824,13 +851,13 @@ def call_llm(system: str, prompt: str, **kwargs) -> str:
              query_clean[:50], len(belief_lines), intent)
 
     # ── PATH 1: direct belief renderer ───────────────────────────────────────
-    if os.environ.get("NEX_BYPASS_PATH1") != "1":
+    if os.environ.get("NEX_BYPASS_PATH1") != "1" and not kwargs.get("force_path2"):
         result = _build_reply(query_clean, belief_lines, intent)
         if result and len(result.strip()) > 20:
             log.info("PATH 1 (direct renderer) succeeded")
             return result
     else:
-        log.info("PATH 1 bypassed via NEX_BYPASS_PATH1 — routing to PATH 2")
+        log.info("PATH 1 bypassed (NEX_BYPASS_PATH1 or force_path2) — routing to PATH 2")
 
     # ── PATH 2: localhost:8080 ────────────────────────────────────────────────
     import time as _time
@@ -1115,16 +1142,96 @@ def generate_reply(query: str) -> str:
             return shortcut
 
     # ── 6. Belief retrieval + render ─────────────────────────────────────────
-    beliefs        = get_beliefs_for_query(query)
+    beliefs = get_beliefs_for_query(query)
+
+    # ── 6a. Router path (NEX_ROUTER=1) ──────────────────────────────────────
+    _router_decision = None
+    _router_ri       = None
+    _router_t0       = None
+    if os.environ.get("NEX_ROUTER") == "1":
+        try:
+            import time as _rtime
+            from nex_response_router import (
+                RouteInput, BeliefHit, route, log_decision,
+            )
+            _cache  = _TFIDF_CACHE
+            _c2i    = _cache.get("content_to_idx", {})
+            _confs  = _cache.get("confs", [])
+            _topics = _cache.get("topics", [])
+            hits = []
+            for _cstr in beliefs:
+                _idx = _c2i.get(_cstr)
+                if _idx is None:
+                    hits.append(BeliefHit(content=_cstr, confidence=0.5))
+                else:
+                    hits.append(BeliefHit(
+                        content=_cstr,
+                        confidence=float(_confs[_idx]),
+                        topic=_topics[_idx] if _idx < len(_topics) else None,
+                        tfidf_score=0.0,
+                    ))
+            _vect = _cache.get("vectorizer")
+            _matrix = _cache.get("matrix")
+            if _vect is not None and _matrix is not None and hits:
+                from sklearn.metrics.pairwise import cosine_similarity as _cs
+                _qv = _vect.transform([query])
+                _sims = _cs(_qv, _matrix).flatten()
+                for h in hits:
+                    _idx = _c2i.get(h.content)
+                    if _idx is not None:
+                        h.tfidf_score = float(_sims[_idx])
+            _router_ri = RouteInput(
+                query=query, beliefs=hits, intent=intent,
+                source=os.environ.get("NEX_ROUTER_SOURCE", "live"),
+            )
+            _router_t0 = _rtime.perf_counter()
+            _router_decision = route(_router_ri)
+            if _router_decision.tier == 0:
+                response = post_filter(_router_decision.composed_text or "", query)
+                log_decision(_router_ri, _router_decision, response,
+                             int((_rtime.perf_counter() - _router_t0) * 1000))
+                log.info("router Tier 0 reply=%r", response[:80])
+                return response
+            if _router_decision.tier == 1:
+                light_user = build_light_prompt(query, hits)
+                _raw = call_llm(
+                    SYSTEM_PROMPT_LIGHT, light_user,
+                    max_tokens=150, temperature=0.2,
+                    force_path2=True,
+                )
+                response = post_filter(_raw or "", query)
+                log_decision(_router_ri, _router_decision, response,
+                             int((_rtime.perf_counter() - _router_t0) * 1000))
+                log.info("router Tier 1 reply=%r", response[:80])
+                return response
+            # Tier 2 → fall through to legacy PATH 2 below; log after.
+        except Exception as _re:
+            log.warning("router failed (%s) — falling back to legacy path", _re)
+            _router_decision = None
+            _router_ri       = None
+            _router_t0       = None
+
+    # ── 6b. Legacy path (unchanged when router off or Tier 2) ──────────────
     system, user_m = build_prompt(query, beliefs, intent)
     raw            = call_llm(system, user_m)
 
     if not raw or not raw.strip():
         if not beliefs:
-            return "I don't have much on that yet — it's a gap in my belief system."
-        return "I'm still forming a clear position on that."
+            reply = "I don't have much on that yet — it's a gap in my belief system."
+        else:
+            reply = "I'm still forming a clear position on that."
+    else:
+        reply = post_filter(raw, query)
 
-    reply = post_filter(raw, query)
+    if _router_decision is not None and _router_ri is not None:
+        try:
+            import time as _rtime
+            from nex_response_router import log_decision
+            log_decision(_router_ri, _router_decision, reply,
+                         int((_rtime.perf_counter() - _router_t0) * 1000))
+        except Exception:
+            pass
+
     log.info("reply=%r", reply[:80])
     return reply
 
