@@ -140,6 +140,11 @@ def run_probes() -> dict:
     from nex.nex_respond_v2 import generate_reply
     from nex_coherence_gate import is_coherent
     from nex_novelty import novelty_score
+    try:
+        from nex_snapshot import log_snapshot_freshness
+        log_snapshot_freshness(log)
+    except Exception:
+        pass
 
     ensure_table()
     run_id = uuid.uuid4().hex[:12]

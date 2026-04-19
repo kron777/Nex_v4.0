@@ -34,7 +34,10 @@ logging.basicConfig(
 
 # ── Config ───────────────────────────────────────────────────────────────────
 
-DB_PATH         = pathlib.Path.home() / "Desktop" / "nex" / "nex.db"
+DB_PATH         = pathlib.Path(
+    os.environ.get("NEX_BELIEFS_DB")
+    or (pathlib.Path.home() / "Desktop" / "nex" / "nex.db")
+)
 MAX_BELIEFS     = 5
 MIN_CONF        = 0.50
 MAX_TOKENS      = 350

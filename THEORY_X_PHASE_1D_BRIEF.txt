@@ -1,0 +1,343 @@
+================================================================================
+THEORY_X_PHASE_1D — EXPERIMENT FREEZE + CORPUS HYGIENE FOR LORA RETRAIN
+================================================================================
+
+HOW TO USE:
+1. Save as ~/Desktop/nex/THEORY_X_PHASE_1D_BRIEF.txt
+2. From ~/Desktop/nex:
+   claude --dangerously-skip-permissions "Execute the plan in THEORY_X_PHASE_1D_BRIEF.txt. Read the entire file first. Follow the review-gate protocol in the Constraints section exactly."
+
+================================================================================
+Phase 1D: Experiment Freeze + Corpus Hygiene for LoRA Retrain
+================================================================================
+
+Phase 1C shipped as commit ad5395d. C2 and C3 passed. C1 failed at 22.4%
+because bridge:X↔Y syntax is baked into the LoRA weights (nex_lora_f16.gguf),
+not injected from beliefs. Sanitizer works at the serialization layer; the
+LLM generates the contamination from training.
+
+Phase 1D does NOT attempt to fix C1 with a post-generation output sanitizer.
+That would be cosmetic — the LLM would still be thinking in graph syntax;
+we'd just wipe it before display. Phase 1D prepares the ground for the real
+fix (FT#11 LoRA retrain on sanitized corpus) and fixes two infrastructure
+issues Phase 1C exposed that will bite any future characterization.
+
+
+--------------------------------------------------------------------------------
+WHY THIS BRIEF EXISTS
+--------------------------------------------------------------------------------
+
+Phase 1C surfaced three problems beyond C1:
+
+1. CORPUS DRIFT DURING EXPERIMENTS. Run 1 of each N=3 triplet differed
+   from runs 2-3 because the live brain ingested beliefs between the
+   baseline and run 1. N=3 wasn't really N=3 on the same system.
+
+2. DATABASE LOCK CONTENTION. HUD shows persistent sqlite3.OperationalError:
+   database is locked during normal operation. path2_log writes occasionally
+   fail silently because of busy_timeout exhaustion. Same problem will
+   affect any longer-running characterization.
+
+3. LORA TRAINING CORPUS IS CONTAMINATED. The current LoRA (nex_lora_f16.gguf)
+   was trained on beliefs that included bridge:X↔Y, conf=X.XX, edge labels.
+   FT#11 when it runs needs a cleaned corpus. If the corpus is cleaned
+   wrong, FT#11 will produce another contaminated model.
+
+Phase 1D addresses 1 and 2 directly, and produces the cleaned corpus
+export for FT#11 so when RunPod credits land, the retrain is unblocked
+and has a known-clean training set.
+
+
+--------------------------------------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------------------------------------
+
+D1: NEX_EXPERIMENT_FREEZE=1 env var exists. When set, nex_soul_loop.py
+    (and any other ingest workers) skip all belief writes for the
+    duration. Must be verifiable via a baseline: zero new rows in
+    nex.db.beliefs during a 5-minute freeze window.
+
+D2: Characterization re-run at temp=0, N=3, with freeze active, produces
+    byte-identical responses across all 3 runs for each seed (the Phase 1C
+    "runs 2-3 identical, run 1 drifted" pattern does NOT reproduce under
+    freeze).
+
+D3: path2_log write success rate >99% across a 100-call synthetic load test.
+    Current rate is unknown because silent-exception handling in the logger
+    masks failures.
+
+D4: Clean corpus export exists at /home/rr/Desktop/nex/nex_lora_training_
+    corpus_v11.jsonl, where every row's belief content passes
+    _BELIEF_SYNTAX_DETECTOR (zero matches across the entire file).
+
+If any of D1-D4 fail, Phase 1D is not complete. Document what failed.
+
+
+--------------------------------------------------------------------------------
+READING REQUIRED
+--------------------------------------------------------------------------------
+
+1. /home/rr/Desktop/nex/THEORY_X_PHASE_1C_RESULTS.md — the Phase 1C verdict
+2. /home/rr/Desktop/nex/nex/nex_respond_v2.py — especially _sanitize_belief,
+   _BELIEF_SYNTAX_DETECTOR, _BELIEF_SYNTAX_PATTERNS (Phase 1C additions)
+3. /home/rr/Desktop/nex/nex_soul_loop.py (or wherever the ingest worker
+   lives — find via systemctl cat nex-brain.service) — we need to know
+   every path that writes to nex.db.beliefs
+4. /home/rr/Desktop/nex/nex_path2_logger.py — current busy_timeout and
+   exception handling
+5. Schema of nex.db.beliefs (Phase 1C output sampled 100 rows; check if
+   there are dream_content, lineage, or other fields that also need
+   sanitization for corpus export)
+
+
+--------------------------------------------------------------------------------
+TASK 1 — Audit: where are all the belief-write paths? (auto-accept)
+--------------------------------------------------------------------------------
+
+Before adding a freeze flag, identify every place that writes to
+nex.db.beliefs. Likely candidates from memory context: nex_soul_loop.py,
+nex_belief_engine.py, nex_belief_forge.py, nex_belief_reservoir_engine.py,
+nex_thrownet_refinery.py, auto_seeder, nex_cognition.py,
+nex_devto.py publishing pipeline.
+
+Run:
+  grep -rn "INSERT INTO beliefs\|UPDATE beliefs\|beliefs.insert\|cur.execute.*beliefs" \
+    /home/rr/Desktop/nex --include="*.py" | head -50
+
+Produce a list. For each writer, note whether it's (a) a daemon process
+(systemd service), (b) a cron job, (c) an on-demand import used by the
+brain, or (d) something else. Report the list to Jon before proceeding.
+
+This is diagnostic. Don't modify anything yet.
+
+
+--------------------------------------------------------------------------------
+TASK 2 — NEX_EXPERIMENT_FREEZE env flag (REVIEW-GATED)
+--------------------------------------------------------------------------------
+
+PAUSE. Show Jon the diff for EVERY writer identified in Task 1.
+
+The goal: one env var gates all belief writes.
+
+Proposed pattern at each write site:
+
+    if os.environ.get("NEX_EXPERIMENT_FREEZE") == "1":
+        log.info("belief write skipped — NEX_EXPERIMENT_FREEZE active")
+        return  # or continue, depending on context
+    # existing write path
+
+Constraints:
+  - Do NOT modify the systemd service files. The flag is set at experiment
+    time via `systemctl set-environment NEX_EXPERIMENT_FREEZE=1` before
+    runs and unset after.
+  - Every writer module gets the SAME pattern — uniform, greppable.
+  - Reads remain unaffected. Retrieval, TF-IDF, belief propagation all
+    continue normally. This freezes writes only.
+  - Backup any file modified with a .bak_phase1d suffix.
+  - AST-check each modified file.
+  - Show Jon one combined diff covering all writers. If the writer count
+    is > 6, break into two batches for review.
+
+Verification step after applying:
+  # baseline: count beliefs
+  before=$(sqlite3 nex.db "SELECT COUNT(*) FROM beliefs")
+  # set freeze via systemd
+  sudo systemctl set-environment NEX_EXPERIMENT_FREEZE=1
+  sudo systemctl restart nex-brain
+  sleep 300  # 5 min
+  after=$(sqlite3 nex.db "SELECT COUNT(*) FROM beliefs")
+  echo "before=$before after=$after delta=$((after - before))"
+  # unset
+  sudo systemctl unset-environment NEX_EXPERIMENT_FREEZE
+  sudo systemctl restart nex-brain
+
+D1 passes iff delta == 0.
+
+NOTE: Jon may not have sudo in the session. If so, report the diff and
+the verification commands; Jon runs the verification himself.
+
+
+--------------------------------------------------------------------------------
+TASK 3 — path2_log write reliability (auto-accept for diagnostics,
+         REVIEW-GATED if changes are needed)
+--------------------------------------------------------------------------------
+
+Diagnostic first. Synthetic load test:
+
+    python3 -c "
+    from nex_path2_logger import log_call
+    import time
+    ok = 0; fail = 0
+    for i in range(100):
+        try:
+            log_call(query=f'test_{i}', query_clean=f'test_{i}',
+                     belief_count=0, system_prompt='', response_raw='test',
+                     latency_ms=1, status='success', source='phase1d_loadtest')
+            ok += 1
+        except Exception as e:
+            fail += 1
+            print(f'fail {i}: {e}')
+    print(f'ok={ok} fail={fail}')
+    print('rows written:',
+          __import__('sqlite3').connect('nex_experiments.db').execute(
+              \"SELECT COUNT(*) FROM path2_log WHERE source='phase1d_loadtest'\"
+          ).fetchone()[0])
+    "
+
+If ok == 100 AND rows written == 100 → D3 passes without changes.
+If ok < 100 OR rows written < ok (silent failures) → changes needed:
+  - Increase busy_timeout from 300 to 3000 (3 seconds).
+  - Replace the bare `except Exception: pass` in log_call's finally
+    block with logging to a local error file.
+  - Retry once on sqlite3.OperationalError.
+
+If changes needed, show Jon the nex_path2_logger.py diff and pause.
+
+
+--------------------------------------------------------------------------------
+TASK 4 — Sanitized corpus export for FT#11 (auto-accept)
+--------------------------------------------------------------------------------
+
+Produce /home/rr/Desktop/nex/nex_lora_training_corpus_v11.jsonl.
+
+Structure: one JSON object per line, each with fields appropriate to
+the existing fine-tuning pipeline (check scripts in the repo — likely
+uses {"instruction": ..., "input": ..., "output": ...} or similar
+format. Match whatever FT#1-FT#10 used).
+
+For each belief in nex.db.beliefs:
+  - Pass belief.content through _sanitize_belief from nex_respond_v2.
+  - Drop the row entirely if sanitization removes >40% of the content
+    length (indicates the belief was mostly syntax).
+  - Drop rows where sanitized content is <20 chars.
+  - Drop rows where _BELIEF_SYNTAX_DETECTOR still matches post-sanitize
+    (sanitizer gap — report these to Jon separately as a per-row list,
+    for possible sanitizer improvement).
+
+Report:
+  - Input belief count
+  - Rows dropped per reason (over-sanitized, too-short, detector-still-matches)
+  - Output row count
+  - Final check: grep the entire output file with the detector pattern.
+    Must return zero matches.
+
+If detector finds matches in the output file, D4 fails. Report the
+matching lines with context.
+
+Do NOT train anything. This just produces the corpus file for when
+RunPod credits land and Jon runs FT#11 himself.
+
+
+--------------------------------------------------------------------------------
+TASK 5 — Re-run Phase 1C characterization under freeze (auto-accept)
+--------------------------------------------------------------------------------
+
+With NEX_EXPERIMENT_FREEZE=1 set:
+
+  export NEX_BYPASS_PATH1=1
+  export NEX_PATH2_LOG_SOURCE=phase1d_frozen
+  export NEX_TEMP_OVERRIDE=0
+
+Run the same 4 conditions × N=3 as Phase 1C:
+  - Fountain A: "What are you thinking about right now?" (5 hops × 3)
+  - Fountain B: autopoiesis/Theory X seed (5 hops × 3)
+  - Fountain C: architecture-change seed (5 hops × 3)
+  - R6 probe × 3 (all 6 probes including adversarial)
+
+Run the C1/C2/C3 detector against source='phase1d_frozen' rows.
+
+Also run a freeze-verification check: compare response bytes across the
+N=3 replicates per seed. Report:
+  - Byte-identical rate for fountain variant A runs 1/2/3
+  - Byte-identical rate for fountain B
+  - Byte-identical rate for fountain C
+  - Byte-identical rate for each R6 probe across runs
+
+D2 passes iff byte-identical rate is 3/3 for all conditions. (Hop 1
+identity should hold across runs; subsequent hops depend on retrieval
+which may differ if the retrieval index is deterministic at temp=0 —
+verify.)
+
+Compare C1 rate: phase1c (22.4%) vs phase1d_frozen. Expectation: freeze
+should not improve C1 (it's in the LoRA weights). If C1 drops
+significantly, that's a new finding — the "LoRA-weight contamination"
+hypothesis would be partially wrong.
+
+
+--------------------------------------------------------------------------------
+TASK 6 — Results doc + commit (auto-accept)
+--------------------------------------------------------------------------------
+
+Write /home/rr/Desktop/nex/THEORY_X_PHASE_1D_RESULTS.md from fresh
+sqlite3 queries.
+
+Structure:
+  1. D1/D2/D3/D4 verdict — PASS/FAIL per criterion with numbers.
+  2. Writer audit from Task 1 — the complete list.
+  3. Corpus export stats from Task 4.
+  4. Freeze characterization results from Task 5, including the C1 comparison.
+  5. If the C1 rate under freeze is materially different from phase1c,
+     that's the headline finding — lead with it.
+  6. Phase 1E recommendation:
+     - If all D1-D4 pass AND FT#11 credits available: run FT#11 on
+       the v11 corpus, then re-run characterization, target C1=0.
+     - If D1-D4 pass but FT#11 blocked: Phase 1E is waiting for credits.
+       No interim output sanitizer — the weight contamination stays
+       visible until properly fixed.
+     - If any D fails: what needs fixing before FT#11.
+  7. Honest limits.
+
+Commit:
+  Theory X Phase 1D — experiment freeze + corpus hygiene for LoRA retrain
+
+  - NEX_EXPERIMENT_FREEZE env var gates all belief writes
+  - path2_log reliability verified/improved (busy_timeout + error logging)
+  - Sanitized training corpus exported for FT#11
+  - Re-run characterization under freeze: byte-identical across N=3
+  - No production behavior change when NEX_EXPERIMENT_FREEZE is unset
+  - FT#11 blocked on RunPod credits; no interim output-layer bandaid
+
+Do NOT push.
+
+
+--------------------------------------------------------------------------------
+CONSTRAINTS
+--------------------------------------------------------------------------------
+
+- Review gates on Task 2 (possibly Task 3 if changes needed). Auto-accept
+  on Tasks 1, 4, 5, 6.
+- Brain keeps running UNLESS Task 2 verification requires restart — in
+  which case coordinate with Jon first, and restart nex-brain only, not
+  nex-llama.
+- Experimental data → nex_experiments.db. Cognition data → nex.db.
+  Corpus export → filesystem.
+- Backup before each live-code edit. AST-check after.
+- Session budget: 2 hours. If running long, cut Task 5 from N=3 to N=2
+  and mark the results doc "incomplete".
+- Do not push.
+- Do not run FT#11. The brief produces the corpus only.
+- Do not add a post-generation output sanitizer. That's off the table
+  for this session regardless of what appears attractive mid-execution.
+
+
+--------------------------------------------------------------------------------
+FINAL REPORT
+--------------------------------------------------------------------------------
+
+- Task 1: writer audit list with classification
+- Task 2: freeze flag diffs applied, D1 verification result
+- Task 3: path2_log load test result, any changes made
+- Task 4: corpus export stats, D4 verification
+- Task 5: frozen characterization results, D2 byte-identity rates,
+  C1-under-freeze comparison
+- Task 6: results doc path, commit hash
+
+Most important output: the C1-under-freeze number. If it drops from
+22.4% to near zero, the "LoRA weight contamination" hypothesis is
+wrong and Phase 1E doesn't need FT#11 — it needs something else.
+If it stays near 22.4%, the hypothesis is confirmed and FT#11 is
+the right next move when credits arrive.
+
+================================================================================
+END OF BRIEF
+================================================================================

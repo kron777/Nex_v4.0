@@ -41,7 +41,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # Logs go to a separate experiments DB so we don't fight the live brain's
 # nex.db write lock. See report: lock-storm gap (R8 bring-up, 2026-04-19).
 EXPERIMENTS_DB = PROJECT_ROOT / "nex_experiments.db"
-BELIEFS_DB     = PROJECT_ROOT / "nex.db"
+BELIEFS_DB     = Path(os.environ.get("NEX_BELIEFS_DB") or (PROJECT_ROOT / "nex.db"))
 DEFAULT_SEED   = "What are you thinking about right now?"
 
 log = logging.getLogger("fountain_harness")
@@ -153,6 +153,11 @@ def run_fountain(seed: str = DEFAULT_SEED, max_hops: int = 5,
         from nex_coherence_gate import is_coherent
     except Exception as e:
         raise RuntimeError(f"coherence gate unavailable: {e}")
+    try:
+        from nex_snapshot import log_snapshot_freshness
+        log_snapshot_freshness(log)
+    except Exception:
+        pass
 
     ensure_table()
 
