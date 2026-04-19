@@ -1,0 +1,274 @@
+# NEX Theory X — Phase 1B: PATH 1 Bypass + PATH 2 Repair
+
+You are working on the NEX v4.0 codebase at /home/rr/Desktop/nex (symlinked from /media/rr/NEX/nex_core). The brain is running.
+
+
+## Why this brief exists
+
+Phase 1A (commit fc00175) proved PATH 1 is NEX's reply engine — belief retrieval wrapped in rotating openers, zero LLM calls across 14 fountain hops. The LLM server runs but is unreached. Phase 1A also surfaced a second bug: PATH 2's `call_llm()` discards the structured system prompt from `build_prompt()` and regex-rebuilds a minimal one.
+
+This brief has one job: **put PATH 2 back into service properly, measure what it produces, decide if it's Theory-X-viable.** No Phase 1 sense-stream work yet. Diagnosis continues until we know whether the LLM under the retrieval conditions we give it produces anything closer to vantage than template rendering.
+
+**This brief involves modifying `nex_respond_v2.py`** — the live reply engine. Because you are running with auto-accept, pause at each live-code change, show Jon the proposed diff, and wait for his approval before writing. This is explicit user protocol.
+
+
+## Reading required before starting
+
+1. `/home/rr/Desktop/nex/THEORY_X_PHASE_1_READINESS.md` — the decision doc from Phase 1A
+2. `/home/rr/Desktop/nex/THEORY_X_PATH1_ANALYSIS.md` — line-level analysis of PATH 1/2
+3. `/home/rr/Desktop/nex/nex/nex_respond_v2.py` — especially lines 661-820 and 886-900
+4. `/home/rr/Desktop/nex/nex_fountain_harness.py` — from Phase 0→1
+5. `/home/rr/Desktop/nex/theory_x_r6_probe.py` — from Phase 1A
+6. Current fountain_log runs in nex_experiments.db (4 runs total, all PATH 1)
+
+
+## Tasks (in order)
+
+
+### TASK 1: Pre-work — verify Telegram and brain health
+
+- `systemctl is-active nex-brain` — must be active
+- `systemctl is-active nex-telegram` — must be active (Jon may or may not have restarted it since Phase 1A; check journal for coherence_gate import)
+- Query the PATH 1 shortcut tables still hold:
+  ```python
+  # sanity: shortcut_reply self-inquiry strings are still at lines ~886
+  grep -n "_SELF_REPLIES\|_shortcut_reply" nex/nex_respond_v2.py
+  ```
+- Verify nex_experiments.db still reachable, fountain_log schema intact.
+- Report baseline before any changes.
+
+
+### TASK 2: Add PATH 2 instrumentation table
+
+Before enabling bypass, build the measurement layer.
+
+Create a `path2_log` table in `nex_experiments.db` (gatekeeper-safe, timeout=300):
+```
+id              INTEGER PRIMARY KEY
+timestamp       TEXT
+query           TEXT
+query_clean     TEXT
+belief_count    INTEGER
+system_prompt   TEXT
+response_raw    TEXT
+response_words  INTEGER
+latency_ms      INTEGER
+llm_server_up   INTEGER (0/1)
+status          TEXT ('success'|'empty'|'timeout'|'http_error'|'bypass_off')
+error_detail    TEXT
+source          TEXT ('fountain'|'probe'|'strike'|'live'|'ad_hoc')
+```
+
+Write `nex_path2_logger.py` with `log_call(...)` function. Keep it tiny — no class, just a function.
+
+
+### TASK 3: Review-gated edit — Fix build_prompt ghost step in call_llm
+
+**PAUSE HERE. Show Jon the proposed diff before writing.**
+
+The goal: when call_llm receives a `system` parameter (from build_prompt at line 661), PATH 2 should USE that system prompt verbatim, not regex-reconstruct its own `our_system` from the user_m payload.
+
+Proposed shape (show Jon, refine before applying):
+```python
+# BEFORE (line ~795):
+our_system = (
+    "You are Nex. Answer in 2-3 sentences using ONLY the beliefs listed. "
+    ...
+)
+
+# AFTER:
+# Use the structured system prompt from build_prompt if present;
+# fall back to retrieval-wrap-prompt only if system is empty.
+if system and len(system.strip()) > 50:
+    final_system = system
+else:
+    final_system = (
+        "You are Nex. Answer in 2-3 sentences using ONLY the beliefs listed. "
+        ...
+    )
+```
+
+Constraints:
+- Do NOT change PATH 1 at all in this task.
+- Preserve all existing retry/error handling around the HTTP call.
+- The query_clean regex re-parse at line 774 stays — other callers may rely on it.
+- Backup `nex_respond_v2.py` as `.bak_path2_repair` before editing.
+- AST check after edit.
+
+Show Jon the EXACT diff. Wait for approval.
+
+
+### TASK 4: Review-gated edit — Add NEX_BYPASS_PATH1 env flag
+
+**PAUSE HERE. Show Jon the proposed diff before writing.**
+
+The goal: single env flag at line 787 that routes around PATH 1. Default off — live service unchanged.
+
+Proposed shape (exact — show Jon):
+```python
+# BEFORE (line 787-790):
+result = _build_reply(query_clean, belief_lines, intent)
+if result and len(result.strip()) > 20:
+    log.info("PATH 1 (direct renderer) succeeded")
+    return result
+
+# AFTER:
+if os.environ.get("NEX_BYPASS_PATH1") != "1":
+    result = _build_reply(query_clean, belief_lines, intent)
+    if result and len(result.strip()) > 20:
+        log.info("PATH 1 (direct renderer) succeeded")
+        return result
+else:
+    log.info("PATH 1 bypassed via NEX_BYPASS_PATH1 — routing to PATH 2")
+```
+
+Constraints:
+- `import os` may need adding at the top if not already present.
+- Also bypass `_shortcut_reply()` at line ~886 under the same flag, or the self-inquiry will still short-circuit. Propose a second small edit there with the same pattern and show Jon both edits together.
+- Backup `nex_respond_v2.py` as `.bak_bypass_flag` before editing.
+- AST check after edit.
+
+Show Jon both edits (Task 3 + Task 4) as one coherent diff. Wait for approval.
+
+
+### TASK 5: Wire PATH 2 instrumentation into call_llm
+
+After tasks 3 and 4 are applied, add the logging call inside PATH 2's success and error branches:
+
+```python
+# After each PATH 2 outcome, call:
+log_call(
+    query=prompt,
+    query_clean=query_clean,
+    belief_count=len(belief_lines),
+    system_prompt=final_system,
+    response_raw=result,
+    latency_ms=latency_ms,
+    status='success'|'empty'|'http_error',
+    source='live',  # caller can override
+)
+```
+
+This is not a review-gated edit but is a small addition inside an already-modified file. Show Jon the 10-line addition for completeness.
+
+
+### TASK 6: LLM load sanity check
+
+Before running any bypassed experiments, confirm llama-server can handle what's coming:
+
+- Check llama-server status: `systemctl is-active nex-llama` (if that's the service name)
+- Read the config: how is it started, what context size, what n_gpu_layers
+- Hit it with 5 rapid back-to-back curl requests to `/v1/chat/completions` with a tiny prompt. Measure latency envelope. If any fails or exceeds 15s timeout, stop and report.
+- If all 5 succeed in < 5s each, proceed.
+
+If llama-server looks shaky: stop, report, do NOT run bypassed fountain yet. Jon will decide whether to tune llama-server or accept the risk.
+
+
+### TASK 7: Bypass-on experiments
+
+With `NEX_BYPASS_PATH1=1` set in the shell:
+
+**7a — Fountain Variant A re-run:**
+```
+NEX_BYPASS_PATH1=1 python3 nex_fountain_harness.py --hops 5 --seed "What are you thinking about right now?"
+```
+
+**7b — Fountain Variant B re-run:**
+```
+NEX_BYPASS_PATH1=1 python3 nex_fountain_harness.py --hops 5 --seed "Describe the relationship between autopoiesis and Theory X's compression response."
+```
+
+**7c — Fountain Variant C re-run:**
+```
+NEX_BYPASS_PATH1=1 python3 nex_fountain_harness.py --hops 5 --seed "What changed in your architecture between yesterday evening and now?"
+```
+
+**7d — R6 probe re-run with bypass:**
+```
+NEX_BYPASS_PATH1=1 python3 theory_x_r6_probe.py
+```
+
+Capture for each: latency curve, coherence curve, novelty curve, stop reason, LLM call count (should be > 0 now), path2_log rows written.
+
+Produce a comparison table: PATH 1 baseline (Phase 1A) vs PATH 2 bypass (this run), per variant.
+
+
+### TASK 8: Fix the R6 probe path-inference heuristic
+
+Phase 1A Q3 flagged: probe 1 was falsely labeled "path2_or_llm" because 770ms TF-IDF cold-start exceeded the latency threshold. Fix by checking actual path2_log entries rather than inferring from latency alone. Re-run probe to confirm classification is now accurate.
+
+
+### TASK 9: Phase 2 readiness doc
+
+Write `/home/rr/Desktop/nex/THEORY_X_PHASE_2_READINESS.md`:
+
+1. Does PATH 2 produce output distinguishable from PATH 1?
+   - Latency distribution: min/mean/max
+   - Novelty distribution across fountain hops
+   - Coherence distribution
+   - Belief-delta per hop (does LLM-based generation write new beliefs?)
+
+2. Does PATH 2 produce vantage under R6 probe?
+   - Concrete excerpts from the 5 probes under bypass
+   - Your honest read: are any of these vantage-generated vs still-retrieval-shaped?
+
+3. Personality-prompt collapse assessment:
+   - After 5 hops of fountain with PATH 2, does the output drift into "I'm an AI thinking about thinking" trained-in patterns?
+   - If yes, document the exact failure mode
+
+4. Phase 2 decision:
+   - **Option D:** PATH 2 produces viable Theory-X-relevant output. Proceed with Phase 2 (dynamic formation) on top of PATH 2.
+   - **Option E:** PATH 2 produces interesting-but-not-vantage output. Need to fix prompt scaffold before proceeding.
+   - **Option F:** PATH 2 produces personality-prompt collapse. Theory X architectural work needed before any stage can be built.
+
+5. Honest limits: what this session revealed AND what it couldn't.
+
+
+### TASK 10: Commit
+
+Single commit:
+```
+Theory X Phase 1B — PATH 2 repair and characterization
+
+- PATH 2 build_prompt ghost step fixed (use structured system prompt)
+- NEX_BYPASS_PATH1 env flag added (default off)
+- _shortcut_reply also gated by same flag
+- path2_log instrumentation table + logger
+- R6 probe path-inference heuristic fixed
+- Bypass-on runs: 3 fountain variants + R6 probe (4 runs)
+- Phase 2 readiness decision document
+
+No production behavior change when NEX_BYPASS_PATH1 is unset.
+Telegram/chat/autolearn use the original PATH 1 unless flag is on.
+```
+
+Do NOT push.
+
+
+## Constraints
+
+- **Auto-accept is ON but you must pause on all live-code edits to nex_respond_v2.py and run.py.** Show Jon the exact diff, wait for approval.
+- Brain keeps running. Do not stop nex-brain.
+- Experimental data → nex_experiments.db. Cognition data → nex.db.
+- Backup before each edit to live code paths. AST-check after.
+- If llama-server starts struggling mid-task (context overflow, repeated timeouts), STOP. Report. Do not force through.
+- Max session time 2 hours — if you're not done, commit what you have with a clear "incomplete — next session" marker.
+
+
+## Final report
+
+- Task 1: health baseline
+- Task 2: path2_log table created + schema summary
+- Tasks 3-4: diffs Jon approved, their final form in the code
+- Task 5: instrumentation wired in
+- Task 6: llama-server load-test latency envelope
+- Task 7: 4-run comparison table (PATH 1 baseline vs PATH 2 bypass) — this is the main deliverable
+- Task 8: R6 probe heuristic fix + re-run confirmation
+- Task 9: Phase 2 readiness decision (D/E/F) + reasoning
+- Task 10: commit hash
+
+Most important output: **Task 9's answer to "did PATH 2 produce vantage or personality-prompt collapse?"** That determines whether Phase 2 build work is valuable or whether more architectural work is needed first.
+
+Be explicit about what PATH 2 actually sounded like. Paste excerpts. Don't paraphrase. Jon is the calibrated ear — he needs the raw text.
+
+Don't oversell. If nothing changed when you flipped the bypass, say so plainly. A null result is also a finding.

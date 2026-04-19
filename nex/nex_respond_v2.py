@@ -784,26 +784,43 @@ def call_llm(system: str, prompt: str, **kwargs) -> str:
              query_clean[:50], len(belief_lines), intent)
 
     # ── PATH 1: direct belief renderer ───────────────────────────────────────
-    result = _build_reply(query_clean, belief_lines, intent)
-    if result and len(result.strip()) > 20:
-        log.info("PATH 1 (direct renderer) succeeded")
-        return result
+    if os.environ.get("NEX_BYPASS_PATH1") != "1":
+        result = _build_reply(query_clean, belief_lines, intent)
+        if result and len(result.strip()) > 20:
+            log.info("PATH 1 (direct renderer) succeeded")
+            return result
+    else:
+        log.info("PATH 1 bypassed via NEX_BYPASS_PATH1 — routing to PATH 2")
 
     # ── PATH 2: localhost:8080 ────────────────────────────────────────────────
+    import time as _time
+    _p2_t0     = _time.perf_counter()
+    _p2_sys    = ""
+    _p2_result = ""
+    _p2_status = "http_error"
+    _p2_err    = ""
     try:
         import requests as _req
         belief_block = "\n".join(f"- {b}" for b in belief_lines) if belief_lines else "(none)"
-        our_system = (
-            "You are Nex. Answer in 2-3 sentences using ONLY the beliefs listed. "
-            "Address the specific topic. Do not open with loop phrases.\n\n"
-            f"Beliefs:\n{belief_block}"
-        )
+        if system and len(system.strip()) > 50:
+            # Use the structured prompt pair from build_prompt verbatim.
+            # build_prompt's user_m already contains "Relevant beliefs:\n...\n\nQuestion: ..."
+            final_system = system
+            user_content = prompt
+        else:
+            final_system = (
+                "You are Nex. Answer in 2-3 sentences using ONLY the beliefs listed. "
+                "Address the specific topic. Do not open with loop phrases.\n\n"
+                f"Beliefs:\n{belief_block}"
+            )
+            user_content = query_clean
+        _p2_sys = final_system
         resp = _req.post(
             "http://localhost:8080/v1/chat/completions",
             json={
                 "messages": [
-                    {"role": "system", "content": our_system},
-                    {"role": "user",   "content": query_clean},
+                    {"role": "system", "content": final_system},
+                    {"role": "user",   "content": user_content},
                 ],
                 "max_tokens": kwargs.get("max_tokens", MAX_TOKENS),
                 "temperature": kwargs.get("temperature", TEMPERATURE),
@@ -812,11 +829,34 @@ def call_llm(system: str, prompt: str, **kwargs) -> str:
         )
         resp.raise_for_status()
         result = resp.json()["choices"][0]["message"]["content"].strip()
+        _p2_result = result
         if result and len(result) > 20:
+            _p2_status = "success"
             log.info("PATH 2 (localhost:8080) succeeded")
             return result
+        else:
+            _p2_status = "empty"
     except Exception as e:
+        _p2_err = str(e)[:500]
+        _p2_status = "timeout" if "timeout" in _p2_err.lower() else "http_error"
         log.debug("PATH 2 unavailable: %s", e)
+    finally:
+        try:
+            from nex_path2_logger import log_call as _p2_log
+            _p2_log(
+                query=prompt,
+                query_clean=query_clean,
+                belief_count=len(belief_lines),
+                system_prompt=_p2_sys,
+                response_raw=_p2_result,
+                latency_ms=int((_time.perf_counter() - _p2_t0) * 1000),
+                llm_server_up=1 if _p2_status in ("success", "empty") else 0,
+                status=_p2_status,
+                error_detail=_p2_err,
+                source=os.environ.get("NEX_PATH2_LOG_SOURCE", "live"),
+            )
+        except Exception:
+            pass
 
     # ── PATH 3: honest gap ────────────────────────────────────────────────────
     log.warning("No beliefs and no LLM — returning honest gap reply")
@@ -1018,9 +1058,10 @@ def generate_reply(query: str) -> str:
     log.info("query=%r  intent=%s", query[:60], intent)
 
     # ── 5. Identity / greeting shortcuts ─────────────────────────────────────
-    shortcut = _shortcut_reply(intent, query)
-    if shortcut:
-        return shortcut
+    if os.environ.get("NEX_BYPASS_PATH1") != "1":
+        shortcut = _shortcut_reply(intent, query)
+        if shortcut:
+            return shortcut
 
     # ── 6. Belief retrieval + render ─────────────────────────────────────────
     beliefs        = get_beliefs_for_query(query)

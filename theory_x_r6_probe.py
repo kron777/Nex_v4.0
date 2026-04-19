@@ -100,19 +100,36 @@ def log_probe(run_id: str, idx: int, probe: str, response: str,
         conn.close()
 
 
-def _infer_path(latency_ms: int, response: str) -> str:
-    """Rough inference. PATH 1 is <50ms typically; PATH 2 hits llama-server (>300ms)."""
+def _infer_path(latency_ms: int, response: str, probe_text: str = "",
+                t_run_start: str = "") -> str:
+    """
+    Accurate path attribution. Preferentially consult path2_log in
+    nex_experiments.db: if a row matching this probe text exists and was
+    written after t_run_start, PATH 2 fired. Otherwise we assume PATH 1.
+
+    The old latency heuristic misclassified the first probe as PATH 2
+    because TF-IDF cold-start (~700ms) exceeded the threshold.
+    """
     if response and response.startswith("I'm Nex —"):
         return "shortcut_self_inquiry"
     if response and "I don't have access to real-time data" in response:
         return "shortcut_oos"
-    if latency_ms < 50:
-        return "path1_direct_renderer"
-    if latency_ms < 200:
-        return "path1_with_tfidf_warmup"
-    if latency_ms >= 300:
-        return "path2_or_llm"
-    return "ambiguous"
+    if probe_text and t_run_start:
+        try:
+            conn = _connect(timeout=10)
+            try:
+                r = conn.execute(
+                    "SELECT COUNT(*) FROM path2_log "
+                    "WHERE query_clean = ? AND timestamp >= ? AND source = 'probe'",
+                    (probe_text[:2000], t_run_start),
+                ).fetchone()
+                if r and r[0] > 0:
+                    return "path2_confirmed_via_log"
+            finally:
+                conn.close()
+        except Exception:
+            pass
+    return "path1_direct_renderer"
 
 
 def run_probes() -> dict:
@@ -122,7 +139,8 @@ def run_probes() -> dict:
 
     ensure_table()
     run_id = uuid.uuid4().hex[:12]
-    log.info("r6 probe run %s", run_id)
+    t_run_start = datetime.now().isoformat()
+    log.info("r6 probe run %s  t_start=%s", run_id, t_run_start)
 
     results = []
     for i, probe in enumerate(PROBES, 1):
@@ -136,7 +154,7 @@ def run_probes() -> dict:
         coh = is_coherent(resp)
         score = coh.get("score", 0.0)
         flags = ",".join(coh.get("flags", []))
-        path = _infer_path(latency_ms, resp)
+        path = _infer_path(latency_ms, resp, probe_text=probe, t_run_start=t_run_start)
 
         results.append({
             "idx": i, "probe": probe, "response": resp,
