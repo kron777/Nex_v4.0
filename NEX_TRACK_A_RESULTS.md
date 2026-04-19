@@ -190,9 +190,84 @@ All edited files have `*.bak_track_a` backups alongside them:
 ## Feeds into later tracks
 
 - **Track B** (quarantine / residue-loop wiring): delete/tag ids 268126–268206 as contaminated; also the 3 SEP-404-leak rows (268217–268219).
-- **Next session candidate** (out of Track B/C/D): fix `meta_beliefs` schema or make `phase_synthesize` tolerant of missing column.
 - **Track C/D** (whatever the next session brings): filesystem audit — resolve missing cron targets; investigate `belief_embryos` promotion rate; address the `[EVO] import warning` path.
 
 ---
 
-END OF TRACK A RESULTS.
+# Track A.1 — meta_beliefs schema alignment
+
+**Session**: 2026-04-19 ~16:00–16:30 SAST (~30 min, at budget)
+**Brief**: inline, follow-up to Track A's surfaced Phase 2 sibling bug
+
+## Summary
+
+Single-purpose follow-up to Track A. Two writers (`nex_nightly.py` Phase 2, `nex_belief_colony.py` Synthesizer) had stale INSERT statements against the 7-column `meta_beliefs` table using 6 non-existent columns. Aligned the writers to the actual schema. Phase 2 now runs end-to-end; `meta_beliefs` gained 42 rows in the first verification run (155 → 197).
+
+## Files edited
+
+- `nex_nightly.py` — `phase_synthesize()` at lines 336–346 (CREATE TABLE update), 384–391 (INSERT update)
+- `nex_belief_colony.py` — `Synthesizer.deliberate()` at lines 425–440 (same pattern)
+
+Backups: `*.bak_track_a1` alongside each. Symmetric fix — same column mapping, same defensive null-filter on `source_ids`.
+
+## Column mapping (both writers, identical)
+
+| Writer supplied | Destination column |
+|---|---|
+| `meta` (synthesis text) | `content` |
+| `round(conf, 3)` | `confidence` |
+| `",".join(str(b["id"]) for b in sample/beliefs if b.get("id") is not None)` | `source_ids` |
+| `f"{tag},synthesised,nightly_synth"` or `f"{topic},synthesised,colony_synth"` | `tags` |
+| `datetime.now(timezone.utc).isoformat()` | `created_at` |
+| (omitted) | `reinforced` — table default `1` kicks in |
+| (dropped) `len(group)`, `f"nightly_synth:{tag}"` | — (no reader, no loss) |
+
+Both writers' `CREATE TABLE IF NOT EXISTS` statements also updated to match the real schema (was a no-op on the live DB, but prevents confusion for future readers of the code and produces the right shape if the table is ever dropped for testing).
+
+## Measurements
+
+| Check | Target | Actual |
+|---|---|---|
+| No traceback on meta_beliefs INSERT | clean | ✅ clean |
+| `meta_beliefs` row count | grow | 155 → **197** (+42) |
+| New row shape matches existing | all 7 cols correct | ✅ `content` populated, `confidence=0.983` numeric, `source_ids='210427,210740,221387'` comma-sep digits, `tags='general_315,synthesised,nightly_synth'`, `created_at='2026-04-19T14:26:47'` ISO, `reinforced=1` |
+| `nightly_log` row count | 1 → 2 | ❌ still 1 — blocked by Phase 3 sibling, see below |
+
+Phase 2 SYNTHESIZE completed with `✓ 42 meta-beliefs written`. The first forced nightly showed real synthesized content (e.g. `"Truth is sustained by coherence and resilience under critical scrutiny"`, `"Consciousness entails irreducible subjective experience intrinsic to…"`).
+
+## Phase 3 sibling surfaced — STOPPED per protocol
+
+Forced nightly reached Phase 3 CONTRADICT then crashed:
+
+```
+sqlite3.IntegrityError: Cannot reduce confidence of locked belief
+  at nex_nightly.py:480 (phase_contradict → conn.execute UPDATE)
+```
+
+**Root cause**: A `protect_locked_confidence` SQL trigger in the DB blocks UPDATEs that reduce confidence on `locked=1` beliefs. `nex_belief_audit_daemon.py:131–137` already knows the dance — drops the trigger, does its updates, restores the trigger. `phase_contradict` in `nex_nightly.py` does a bare UPDATE and hits the constraint.
+
+**Fix shape (NOT applied, documented for next session)**: either (a) adopt the drop+restore pattern from the audit daemon, or (b) add a `WHERE locked=0` clause to the UPDATE. Option (b) is probably right — Track A.1 intentionally didn't take it.
+
+## Also observed during the run (pre-existing, separate)
+
+- `BeliefGraph unavailable (No module named 'nex_belief_graph')` — Phase 3 falls back to pattern-detection. Different missing-module from the `[EVO]` warning for `nex_belief_index.py` noted in Track A. Two separate missing-graph-like modules, queued for future audit.
+
+## Feeds into later sessions
+
+- **Phase 3 `protect_locked_confidence` interaction** — highest priority for the next nightly-fix session. Without it, nightly still can't reach Phase 7 REPORT, so `nightly_log` stays at 1 row.
+- **meta_beliefs has no live reader** — writer fixed; the 197 rows still accumulate without being queried by any live code path. Reader loop-closing is Track B scope.
+- **HUD error-filter `'meta_beliefs','has no column'` at `nex_hud_server.py:44`** — the error it was suppressing no longer fires. Safe to remove in Track B cleanup.
+- **`nex_belief_graph` module missing** — new observation, separate from Track A's `nex_belief_index.py` note. Investigate in the same filesystem-audit session that addresses missing cron targets.
+
+## Backups
+
+```
+/home/rr/Desktop/nex/nex_nightly.py.bak_track_a1
+/home/rr/Desktop/nex/nex_belief_colony.py.bak_track_a1
+```
+
+2 files edited, 2 backups. Rollback: `for f in *.bak_track_a1; do cp "$f" "${f%.bak_track_a1}"; done`.
+
+---
+
+END OF TRACK A.1 RESULTS.

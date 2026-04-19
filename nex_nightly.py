@@ -335,13 +335,13 @@ def phase_synthesize(
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS meta_beliefs (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            topic        TEXT,
-            meta_belief  TEXT,
-            confidence   REAL,
-            belief_count INTEGER,
-            source       TEXT,
-            created_at   TEXT
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            content     TEXT NOT NULL,
+            confidence  REAL DEFAULT 0.80,
+            source_ids  TEXT,
+            tags        TEXT,
+            created_at  TEXT,
+            reinforced  INTEGER DEFAULT 1
         )
     """)
 
@@ -382,10 +382,13 @@ def phase_synthesize(
 
         if not dry_run:
             conn.execute(
-                "INSERT INTO meta_beliefs (topic, meta_belief, confidence, belief_count, source, created_at) "
-                "VALUES (?,?,?,?,?,?)",
-                (tag, meta, round(avg_conf, 3), len(group),
-                 f"nightly_synth:{tag}", datetime.now(timezone.utc).isoformat())
+                "INSERT INTO meta_beliefs (content, confidence, source_ids, tags, created_at) "
+                "VALUES (?,?,?,?,?)",
+                (meta,
+                 round(avg_conf, 3),
+                 ",".join(str(b["id"]) for b in sample if b.get("id") is not None),
+                 f"{tag},synthesised,nightly_synth",
+                 datetime.now(timezone.utc).isoformat())
             )
         written += 1
         _info(f"  [{tag}]  {meta[:70]}…")

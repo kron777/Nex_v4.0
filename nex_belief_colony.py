@@ -423,20 +423,23 @@ Return ONLY:
             try:
                 self.conn.execute("""
                     CREATE TABLE IF NOT EXISTS meta_beliefs (
-                        id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                        topic        TEXT,
-                        meta_belief  TEXT,
-                        confidence   REAL,
-                        belief_count INTEGER,
-                        source       TEXT,
-                        created_at   TEXT
+                        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                        content     TEXT NOT NULL,
+                        confidence  REAL DEFAULT 0.80,
+                        source_ids  TEXT,
+                        tags        TEXT,
+                        created_at  TEXT,
+                        reinforced  INTEGER DEFAULT 1
                     )
                 """)
                 self.conn.execute(
-                    "INSERT INTO meta_beliefs (topic, meta_belief, confidence, belief_count, source, created_at) "
-                    "VALUES (?,?,?,?,?,?)",
-                    (topic, meta, round(conf, 3), len(beliefs),
-                     f"colony_synthesizer", datetime.now(timezone.utc).isoformat())
+                    "INSERT INTO meta_beliefs (content, confidence, source_ids, tags, created_at) "
+                    "VALUES (?,?,?,?,?)",
+                    (meta,
+                     round(conf, 3),
+                     ",".join(str(b["id"]) for b in beliefs if b.get("id") is not None),
+                     f"{topic},synthesised,colony_synth",
+                     datetime.now(timezone.utc).isoformat())
                 )
                 self.conn.commit()
                 written = True
