@@ -60,11 +60,11 @@ def u1_lock_top_beliefs(n: int = 30, db_path=None):
     """Lock top N beliefs by composite score. Run every 50 cycles."""
     import time as _t
     path = db_path or DB_PATH
-    for _attempt in range(5):
+    for _attempt in range(2):
         try:
-            conn = sqlite3.connect(str(path), timeout=30, isolation_level=None)
+            conn = sqlite3.connect(str(path), timeout=5, isolation_level=None)
             conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA busy_timeout=10000")
+            conn.execute("PRAGMA busy_timeout=5000")
             conn.execute("""
                 UPDATE beliefs SET locked = CASE
                     WHEN id IN (
@@ -78,7 +78,7 @@ def u1_lock_top_beliefs(n: int = 30, db_path=None):
             log.info(f"[U1] Locked top {n} beliefs")
             return
         except sqlite3.OperationalError as _e:
-            if "locked" in str(_e) and _attempt < 4:
+            if "locked" in str(_e) and _attempt < 1:
                 _t.sleep(1 + _attempt)
             else:
                 log.warning(f"[U1] lock_top_beliefs failed after {_attempt+1} attempts: {_e}")
