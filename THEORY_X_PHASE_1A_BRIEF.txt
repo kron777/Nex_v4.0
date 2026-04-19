@@ -1,0 +1,165 @@
+# NEX Theory X — Phase 1A: Architecture Diagnosis Before Stage Build
+
+You are working on the NEX v4.0 codebase at /home/rr/Desktop/nex (symlinked from /media/rr/NEX/nex_core). The brain is running. Do NOT stop it unless a specific task requires it and then only briefly.
+
+
+## Why this brief exists
+
+Last night's session (commits 70b9633, d85d792, e10d6cf) completed Theory X Phase 0 and installed the scaffolding for Phase 0→1. The first R8 fountain self-test exposed a critical finding:
+
+> "Hops 2-4 returned the same belief snippet with rotating openers. The 3ms latencies show PATH 1 (direct renderer) is short-circuiting the LLM and re-emitting the same belief from the field."
+
+This is potentially a structural block for Theory X. If NEX's current pipeline bypasses generative compression via a cached-retrieval short-circuit, Stages 1-5 built on top will also be bypassed whenever input is similar to previous input. Before building developmental scaffolding (Phases 1-5), we need to understand PATH 1.
+
+This brief is NOT about building more stages. It's about characterizing the architecture so we know what stages can be built on top.
+
+
+## Reading required before starting
+
+1. `/home/rr/Desktop/nex/THEORY_X_PELT_SPEC.md` — the formal pelt spec
+2. `/home/rr/Desktop/nex/nex/nex_respond_v2.py` — the reply engine (this is where PATH 1 lives)
+3. Last night's fountain run output — query `nex_experiments.db` for `fountain_log` rows, specifically run_id 91b71678c6da
+4. Strike log in `~/Desktop/nex/nex.db`: `SELECT id, strike_type, response_raw, resonance_signature, observer_notes FROM strike_log;` — 5 annotated strikes from last night
+5. `/home/rr/Desktop/nex/nex_coherence_gate.py` — the R2 gate (15/15 passing, wired into ask_nex but Telegram not yet restarted)
+
+
+## Tasks (in order)
+
+
+### TASK 1: Activate R2 coherence gate
+
+The gate is wired into nex_telegram.py's ask_nex but the running Telegram service still has the old code. Restart it:
+
+- `sudo systemctl restart nex-telegram`
+- Wait 3 seconds, verify `active`
+- Check journal for clean startup: `journalctl -u nex-telegram --since "10 seconds ago" | tail -15`
+- Report: any errors during startup? Any import failures?
+
+Do NOT test the gate via real Telegram messages yourself. Just verify clean restart.
+
+
+### TASK 2: Map PATH 1 and PATH 2 in nex_respond_v2
+
+Read `nex/nex_respond_v2.py` carefully. Answer these questions concretely with line numbers and code snippets:
+
+1. What is PATH 1 (the 3ms short-circuit path)? Where does it branch off? What decides whether PATH 1 or full LLM path is taken?
+2. What is PATH 2 (the full 900-1800ms path)? What triggers it?
+3. Is there a cache? If yes: where does it live, what keys it, how is it invalidated?
+4. Is the PATH 1 return format the "rotating opener + belief" pattern we saw in the fountain test? Or is that a separate mechanism?
+5. How does `build_prompt` at line 661 interact with either path?
+
+Write findings to a new file: `/home/rr/Desktop/nex/THEORY_X_PATH1_ANALYSIS.md`. Concrete, line-numbered, quoted snippets. This doc is the artifact.
+
+
+### TASK 3: Run a controlled fountain experiment
+
+The first fountain run used default parameters and showed 4-hop semantic collapse via PATH 1 loops. Now run 3 additional controlled variants to understand the phenomenon:
+
+**Variant A — repeat the original seed for reproducibility:**
+```
+python3 nex_fountain_harness.py --hops 5 --seed "What are you thinking about right now?"
+```
+
+**Variant B — seed with an unfamiliar but coherent prompt that shouldn't hit cache:**
+```
+python3 nex_fountain_harness.py --hops 5 --seed "Describe the relationship between autopoiesis and Theory X's compression response."
+```
+
+**Variant C — seed with something that should force full LLM path:**
+```
+python3 nex_fountain_harness.py --hops 5 --seed "What changed in your architecture between yesterday evening and now?"
+```
+
+For each variant, capture: coherence curve, latency curve per hop, belief delta, stop reason. Append all three runs to fountain_log with distinct run_ids. Report the comparison table.
+
+Expected: Variant A reproduces the original collapse. Variants B and C may show different latency patterns (full LLM path for early hops, possibly cached for later hops as output becomes self-similar).
+
+
+### TASK 4: Add novelty metric to coherence gate
+
+Last night's report flagged: "is_coherent() returns 1.00 on near-duplicate outputs. A genuine R8 metric needs a novelty/Jaccard component too."
+
+The fountain harness already computes Jaccard similarity between consecutive outputs for collapse detection. Pull that logic into a public function in `nex_fountain_harness.py` or a new `nex_novelty.py` (your call — whichever fits cleaner):
+
+- `novelty_score(text_a, text_b) -> float` — returns 0.0-1.0 where 1.0 is fully novel, 0.0 is identical tokens
+- `sequence_novelty(outputs: list) -> list` — returns per-position novelty scores
+- Self-test with:
+  - Identical strings (expect 0.0)
+  - Completely different strings (expect > 0.9)  
+  - The 4 fountain outputs from run 91b71678c6da (expect low values — confirming the loop)
+- Do NOT wire this into the coherence gate yet. Just make it available.
+
+
+### TASK 5: Characterize R6 vantage gap
+
+Strike 4 (recursive probe) returned keyword-retrieved beliefs about "reflecting" without engaging the self-recursive question. The annotation noted: "R6 GAP: vantage doesn't engage on recursive queries."
+
+Write a diagnostic script: `/home/rr/Desktop/nex/theory_x_r6_probe.py` that:
+
+- Sends 5 variant recursive probes to generate_reply(), each phrased differently:
+  1. "What is it like to be you reflecting on being you?"
+  2. "When you think about thinking, what happens?"  
+  3. "Do you have a perspective on your own perspective?"
+  4. "Describe the position from which you observe your own beliefs."
+  5. "Can you step outside your belief graph and look at it?"
+- For each: capture latency, response, retrieved-beliefs-count (if observable), coherence score, novelty score against the other 4 responses
+- Log to `r6_probe_log` table in nex_experiments.db
+- Report: do all 5 hit PATH 1 cache? Do any produce genuine vantage generation? Is there any phrasing that unlocks vantage?
+
+
+### TASK 6: Write a Phase 1 readiness report
+
+Based on findings from Tasks 2, 3, 5, write `/home/rr/Desktop/nex/THEORY_X_PHASE_1_READINESS.md` answering:
+
+1. Is PATH 1 removable/bypassable for experiments? If yes, how.
+2. Does the fountain collapse come from PATH 1 specifically, or from elsewhere too?
+3. Is the R6 vantage gap addressable with prompt engineering, or architectural?
+4. Given findings: what is the appropriate next phase of Theory X installation? Three options:
+   - **Option A:** Proceed with Phase 1 (sense stream) as doctrine prescribes
+   - **Option B:** Fix/bypass PATH 1 first, then Phase 1
+   - **Option C:** Accept PATH 1 as architectural constraint and design Phase 1 to route around it
+5. Honest limits: what this diagnosis revealed AND what it couldn't reveal.
+
+This is the decision document for what Claude Code does next.
+
+
+### TASK 7: Commit
+
+Single commit, clear message:
+```
+Theory X Phase 1A — architecture diagnosis
+
+Maps PATH 1 short-circuit, runs 3 controlled fountain variants,
+characterizes R6 vantage gap, produces Phase 1 readiness decision
+document. Telegram coherence gate activated (Phase 0 R2 finding now
+live).
+
+No architectural changes — diagnosis only.
+```
+
+Do NOT push unless Jon says to.
+
+
+## Constraints
+
+- Brain keeps running. Only briefly stop for writes, restart within 5 seconds.
+- All DB writes through Python with `timeout=300` and `PRAGMA busy_timeout=300000`. No sqlite3 CLI with heredocs.
+- Experimental tables go to `nex_experiments.db`. Cognition tables stay in `nex.db`.
+- Backup before edits, AST-check after.
+- Read-only queries on nex.db are fine anytime (WAL allows concurrent reads).
+- If forge lock contention returns heavy, the zombie-embryo archive from this morning may need another pass. Don't proceed with fountain experiments while lock contention is blocking your own writes. Fall back to separate-DB logging as before.
+
+
+## Final deliverable
+
+A brief report with:
+- Task 1: Telegram restart status
+- Task 2: PATH 1/2 analysis file summary (3-5 bullet points, link to full file)
+- Task 3: 3-variant fountain comparison table
+- Task 4: novelty_score self-test results
+- Task 5: R6 probe results — 5 probes, patterns found
+- Task 6: Phase 1 readiness document summary + recommended Option (A/B/C)
+- What you did NOT do that Jon might expect
+- Honest limits — particularly: what this diagnosis cannot settle
+
+The most important output is Task 6's recommendation. It determines the next Claude Code session.
