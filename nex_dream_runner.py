@@ -3,6 +3,7 @@
 nex_dream_runner.py — runs dream cycle with local LLM wired in.
 Called by cron during low-activity periods.
 """
+import nex_db_gatekeeper  # write-serialization + PRAGMA busy_timeout/WAL on every sqlite3.connect
 import sys, importlib.util
 sys.path.insert(0, '/home/rr/Desktop/nex')
 

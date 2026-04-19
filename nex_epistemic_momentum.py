@@ -7,6 +7,7 @@ Recurring tensions get flagged. Preoccupations emerge naturally.
 This turns NEX from a stateless responder into a mind that develops.
 """
 
+import nex_db_gatekeeper  # write-serialization + PRAGMA busy_timeout/WAL on every sqlite3.connect
 import sqlite3, json, time, os
 from pathlib import Path
 from datetime import datetime, timedelta

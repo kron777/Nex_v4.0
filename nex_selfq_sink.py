@@ -3,6 +3,7 @@
 nex_selfq_sink.py — saves self-questioning output into episodic_memory
 and nex_identity. Run daily after nex_self_questioning.py.
 """
+import nex_db_gatekeeper  # write-serialization + PRAGMA busy_timeout/WAL on every sqlite3.connect
 import sys, sqlite3, hashlib, glob
 sys.path.insert(0, '/home/rr/Desktop/nex')
 

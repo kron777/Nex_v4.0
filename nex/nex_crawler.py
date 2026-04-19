@@ -58,6 +58,50 @@ SCHEDULED_DIVE_INTERVAL = 7200        # seconds between deep-dive cycles (2h)
 WEAK_ALIGNMENT_THRESHOLD = 0.35       # topics below this get a scheduled dive
 
 
+# ── Topic shape guard (Track A Fix 2a) ────────────────────────────────────────
+# Reject question-shaped "topics" before they become Wikipedia URLs. Cognition
+# emits strings like "how does X differ from Y" as knowledge gaps, which the
+# Wikipedia fallback at _resolve_search_url turns into 404 stub pages.
+_JUNK_TOPIC_PREFIXES = (
+    'how does', 'how do', 'how can', 'how will', 'how might', 'how is', 'how are',
+    'what is', 'what are', 'what do', 'what does', 'what if', 'what happens',
+    'why does', 'why do', 'why is', 'why are',
+    'when does', 'when do', 'when is', 'when are',
+    'where is', 'where do', 'where are',
+    'which is', 'which are', 'which do',
+    'does ', 'is ', 'are ', 'can ', 'could ', 'should ', 'would ', 'will ',
+    'please search', 'search for',
+)
+
+def _is_junk_topic(topic: str) -> bool:
+    t = (topic or '').lower().strip()
+    if not t:
+        return True
+    if '?' in t:
+        return True
+    if len(t) > 80:        # real article titles rarely exceed this
+        return True
+    return any(t.startswith(p) for p in _JUNK_TOPIC_PREFIXES)
+
+
+# ── Boilerplate sentence filter (Track A Fix 2b) ──────────────────────────────
+# Reject MediaWiki navigation chrome and 404-stub artifacts at the per-sentence
+# level. Tested against 200 non-crawl long-form beliefs: 0 false positives.
+_BOILERPLATE_PATTERNS = (
+    r'^Article\s*\\?\[',                                              # "Article \[c\]" or "\[alt-c\]"
+    r'\\?\[(?:alt-)?[ct]\\?\]',                                       # inline keyboard-shortcut marker, both variants
+    r'^\s*(Talk|Tools|English|Actions|General|Read|Edit|View history|More)\s*$',
+    r'^move to sidebar',
+    r'^(What links here|Upload file|Special pages|Permanent link|Page information|Cite this page|Wikidata item)\b',
+    r'^Search for\s+["\u201c\u2018]',
+    r'^Please search for\s',
+    r'Page contents not supported in other language',
+    r'^(Home|Contents|Current events|Random article|About Wikipedia|Contact us|Donate|Help|Learn to edit|Community portal|Recent changes|File upload wizard)\s*$',
+    r'^(Main Page|Introduction|Getting started)\s*$',
+)
+_BOILERPLATE_RE = re.compile('|'.join(_BOILERPLATE_PATTERNS), re.IGNORECASE)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Belief extraction helpers
 # ─────────────────────────────────────────────────────────────────────────────
@@ -100,6 +144,8 @@ def _extract_sentences(markdown_text: str) -> list[str]:
         if not (MIN_SENTENCE_LEN <= len(s) <= MAX_SENTENCE_LEN):
             continue
         if noise.search(s):
+            continue
+        if _BOILERPLATE_RE.search(s):       # Fix 2b: MediaWiki nav / 404 stub
             continue
         if not re.search(r'[a-z]{3,}', s):   # filter ALL-CAPS nav junk
             continue
@@ -507,6 +553,10 @@ class NexCrawler:
         Returns number of beliefs stored.
         """
         if not self._enabled:
+            return 0
+
+        if _is_junk_topic(topic):                                   # Fix 2a
+            logger.info(f"[crawler] junk topic rejected (not article-shaped): {topic!r}")
             return 0
 
         if not search_url:

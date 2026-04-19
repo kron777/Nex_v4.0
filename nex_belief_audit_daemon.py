@@ -5,6 +5,7 @@ Nightly auto-quarantine of hollow beliefs.
 Runs as Phase 0 of nightly consolidation, or standalone.
 Stops whack-a-mole permanently.
 """
+import nex_db_gatekeeper  # write-serialization + PRAGMA busy_timeout/WAL on every sqlite3.connect
 import sqlite3, re, logging, time
 from pathlib import Path
 

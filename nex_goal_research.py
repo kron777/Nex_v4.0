@@ -3,6 +3,7 @@
 nex_goal_research.py — reads active goals, finds belief gaps, drives curiosity.
 Run every 2 hours via cron.
 """
+import nex_db_gatekeeper  # write-serialization + PRAGMA busy_timeout/WAL on every sqlite3.connect
 import sys, sqlite3, time, importlib.util
 
 # Load nex_llm explicitly — avoids picking up wrong copy from nex/ subdirectory

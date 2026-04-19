@@ -3,6 +3,7 @@
 nex_session_compressor.py — compresses session_history pairs into
 episodic_memory with significance scoring. Run daily.
 """
+import nex_db_gatekeeper  # write-serialization + PRAGMA busy_timeout/WAL on every sqlite3.connect
 import sys, sqlite3, time, hashlib
 sys.path.insert(0, '/home/rr/Desktop/nex')
 

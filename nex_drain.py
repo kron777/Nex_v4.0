@@ -15,6 +15,7 @@ Usage:
 Output per cycle:
   cycle 01 | reinforcement_learning(+12) + bayesian_inference(+12) + chinese_room(+12) = +36 | db=723 | 4.1s
 """
+import nex_db_gatekeeper  # write-serialization + PRAGMA busy_timeout/WAL on every sqlite3.connect (fork workers inherit)
 import sys, json, sqlite3, logging, inspect, traceback, time
 import multiprocessing as mp
 from pathlib import Path

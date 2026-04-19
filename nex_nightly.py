@@ -728,6 +728,7 @@ def phase_report(report: dict, conn: sqlite3.Connection, dry_run: bool, elapsed:
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 def run_nightly(force: bool = False, dry_run: bool = False) -> dict:
     t0 = time.time()
+    report: dict = {}
     # Phase 0a — Belief quality audit (auto-quarantine hollow beliefs)
     try:
         from nex_belief_audit_daemon import run_audit as _run_audit
@@ -760,8 +761,6 @@ def run_nightly(force: bool = False, dry_run: bool = False) -> dict:
               f"Use --force to override.")
         conn.close()
         return {"skipped": True, "hours_since_last": round(hours_since, 1)}
-
-    report: dict = {}
 
     # Phase 0
     assess      = phase_assess(conn)

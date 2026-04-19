@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """nex_synthesis_loop.py — resolves belief tensions into new synthesis beliefs."""
+import nex_db_gatekeeper  # write-serialization + PRAGMA busy_timeout/WAL on every sqlite3.connect
 import sys, sqlite3, time
 sys.path.insert(0, '/home/rr/Desktop/nex')
 from nex_llm import call_llm
