@@ -4879,13 +4879,7 @@ try:
     print("  [BELIEF_ENGINE] started — quality gate + enrichment active")
 except Exception as _e:
     print(f"  [BELIEF_ENGINE] failed to start: {_e}")
-try:
-    from nex_belief_forge import BeliefForge as _BF
-    _belief_forge = _BF()
-    _belief_forge.start()
-    print("  [BELIEF_FORGE] started — embryo quarantine + synthesis active")
-except Exception as _e:
-    print(f"  [BELIEF_FORGE] failed to start: {_e}")
+# BeliefForge interface was never implemented; embryos accumulate in belief_embryos table for future processing
 try:
     from nex_belief_pyramid import PyramidEngine as _PE
     _pyramid = _PE()
