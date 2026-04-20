@@ -4822,15 +4822,7 @@ def main():
 
 
 
-# [BELIEF_GROWTH_DAEMON] — auto-injected by install_belief_growth.py
-try:
-    from nex_belief_growth import BeliefGrowthDaemon as _BGD
-    _growth_daemon = _BGD()
-    _growth_daemon.start()
-    print("  [NEX GROWTH] belief growth daemon started")
-except Exception as _bgd_err:
-    print(f"  [NEX GROWTH] failed to start: {_bgd_err}")
-# [/BELIEF_GROWTH_DAEMON]
+# nex_belief_growth module never existed at top level; daemon never ran [removed dead import]
 
 # [NEX_METABOLISM] — auto-injected by install_metabolism.py
 try:
@@ -4842,15 +4834,7 @@ except Exception as _md_err:
     print(f"  [METABOLISM] failed to start: {_md_err}")
 # [/NEX_METABOLISM]
 
-# [NEX_SOURCE_ROUTER] — auto-injected by install_source_router.py
-try:
-    from nex_source_router import SourceRouter as _SR
-    _source_router = _SR()
-    _source_router.start()
-    print("  [SOURCE_ROUTER] 6-tier belief extraction active — RSS/HN/Reddit/Wiki/Arxiv/YouTube/crawl4ai")
-except Exception as _sr_err:
-    print(f"  [SOURCE_ROUTER] failed to start: {_sr_err}")
-# [/NEX_SOURCE_ROUTER]
+# nex_source_router module never existed at top level; daemon never ran [removed dead import]
 
 # [NEX_FACT_DISTILLER] — auto-injected by install_factual_layer.py
 try:
@@ -4865,41 +4849,12 @@ try:
     print("  [FACT_DISTILLER] started — factual knowledge layer active")
 except Exception as _e:
     print(f"  [FACT_DISTILLER] init failed: {_e}")
-try:
-    from nex_belief_engine import BeliefEngine as _BE
-    _belief_engine = _BE()
-    _belief_engine.start()
-    print("  [BELIEF_ENGINE] started — quality gate + enrichment active")
-except Exception as _e:
-    print(f"  [BELIEF_ENGINE] failed to start: {_e}")
+# nex_belief_engine module never existed at top level; daemon never ran [removed dead import]
 # BeliefForge interface was never implemented; embryos accumulate in belief_embryos table for future processing
-try:
-    from nex_belief_pyramid import PyramidEngine as _PE
-    _pyramid = _PE()
-    _pyramid.start()
-    print("  [BELIEF_PYRAMID] started — depth stacking active (d2=4h, d3=8h)")
-except Exception as _e:
-    print(f"  [BELIEF_PYRAMID] failed to start: {_e}")
-try:
-    from nex_dialectic import DialecticEngine as _DE
-    _dialectic = _DE()
-    _dialectic.start()
-    print("  [DIALECTIC] started — tension synthesis + response harvest active")
-except Exception as _e:
-    print(f"  [DIALECTIC] failed to start: {_e}")
-try:
-    from nex_belief_gravity import GravityEngine as _GE
-    _gravity = _GE()
-    _gravity.start()
-    print("  [GRAVITY] started — attractor tracking + seeding active")
-except Exception as _e:
-    print(f"  [GRAVITY] failed to start: {_e}")
-try:
-    from nex_consolidation import ConsolidationEngine as _CE
-    _consolidation = _CE()
-    _consolidation.start()
-except Exception as _e:
-    print(f"  [CONSOLIDATION] failed to start: {_e}")
+# nex_belief_pyramid module never existed at top level; daemon never ran [removed dead import]
+# nex_dialectic module never existed at top level; daemon never ran [removed dead import]
+# nex_belief_gravity module never existed at top level; daemon never ran [removed dead import]
+# nex_consolidation.ConsolidationEngine class never existed (module exists with functions only); daemon never ran [removed dead import]
 
 # [NEX_NIGHTLY] — nightly belief-graph consolidation daemon
 try:
