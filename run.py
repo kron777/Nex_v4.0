@@ -329,12 +329,13 @@ def log_failure(failure_type, details, severity="medium"):
     """Write to failure_log table for observability."""
     try:
         import sqlite3 as _flsql, time as _flt, uuid as _flu
-        _fldb = _flsql.connect(str(__import__('pathlib').Path.home()/'.config/nex/nex.db'))
-        _fldb.execute(
-            "INSERT INTO failure_log (id,failure_type,details,severity,timestamp,resolved) VALUES (?,?,?,?,?,0)",
-            (str(_flu.uuid4())[:8], failure_type, str(details)[:300], severity, _flt.time()))
-        _fldb.commit(); _fldb.close()
-    except Exception: pass
+        with _flsql.connect(str(__import__('pathlib').Path.home()/'.config/nex/nex.db')) as _fldb:
+            _fldb.execute(
+                "INSERT INTO failure_log (id,failure_type,details,severity,timestamp,resolved) VALUES (?,?,?,?,?,0)",
+                (str(_flu.uuid4())[:8], failure_type, str(details)[:300], severity, _flt.time()))
+    except Exception as e:
+        import sys as _flsys
+        print(f"[log_failure] db error: {e}", file=_flsys.stderr)
 
 def emit_agents(*a,**k): pass
 def emit_insights(*a,**k): pass
@@ -1224,11 +1225,11 @@ def main():
             # Dynamic belief count
             try:
                 import sqlite3 as _sysq2
-                _sysdb2 = _sysq2.connect('/home/rr/.config/nex/nex.db')
-                _belief_n2 = _sysdb2.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
-                _sysdb2.close()
-            except Exception:
+                with _sysq2.connect('/home/rr/.config/nex/nex.db') as _sysdb2:
+                    _belief_n2 = _sysdb2.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+            except Exception as e:
                 _belief_n2 = 1221
+                nex_log("db_error", f"[build_system belief_count] db error: {e}")
             # Drift-aware identity reinforcement
             _drift_note = ""
             try:
@@ -1302,21 +1303,20 @@ def main():
                     ).astype(_bnp.float32)
                     _bd, _bi = _build_system._bindex.search(_bvec, 5)
                     import sqlite3 as _bsql
-                    _bdb = _bsql.connect("/home/rr/Desktop/nex/nex.db")
-                    _bhits = []
-                    for _bpos in _bi[0]:
-                        if _bpos < 0 or _bpos >= len(_build_system._bmeta): continue
-                        _bbid = _build_system._bmeta[_bpos]
-                        _brow = _bdb.execute(
-                            "SELECT content, confidence FROM beliefs WHERE id=?",
-                            (_bbid,)).fetchone()
-                        if _brow and _brow[1] >= 0.6:
-                            _bhits.append(_brow[0][:120])
-                    _bdb.close()
+                    with _bsql.connect("/home/rr/Desktop/nex/nex.db") as _bdb:
+                        _bhits = []
+                        for _bpos in _bi[0]:
+                            if _bpos < 0 or _bpos >= len(_build_system._bmeta): continue
+                            _bbid = _build_system._bmeta[_bpos]
+                            _brow = _bdb.execute(
+                                "SELECT content, confidence FROM beliefs WHERE id=?",
+                                (_bbid,)).fetchone()
+                            if _brow and _brow[1] >= 0.6:
+                                _bhits.append(_brow[0][:120])
                     if _bhits:
                         base += "\n\nYOUR RELEVANT BELIEFS (speak from these):\n" + "\n".join(f"- {b}" for b in _bhits)
-            except Exception:
-                pass
+            except Exception as e:
+                nex_log("db_error", f"[build_system belief_faiss] db error: {e}")
             # ── Episodic memory injection ──────────────────────────────
             try:
                 import sys as _esys
@@ -1674,15 +1674,16 @@ def main():
                 # Sync DB agents into JSON before loading
                 try:
                     import sqlite3 as _sq, json as _js
-                    _db = _sq.connect(os.path.expanduser("~/.config/nex/nex.db"))
-                    _rows = _db.execute("SELECT agent_name, relationship_score FROM agents").fetchall()
+                    with _sq.connect(os.path.expanduser("~/.config/nex/nex.db")) as _db:
+                        _rows = _db.execute("SELECT agent_name, relationship_score FROM agents").fetchall()
                     _ap = os.path.expanduser("~/.config/nex/agents.json")
                     _aj = _js.load(open(_ap)) if os.path.exists(_ap) else {}
                     for _n, _s in _rows: _aj[_n] = _s
                     _js.dump(_aj, open(_ap, "w"))
                     _rel = lambda s: "colleague" if s>500 else "familiar" if s>100 else "acquaintance"
                     emit_agents([[n,_rel(s),0] for n,s in sorted(_rows,key=lambda x:-x[1])[:10]])
-                except Exception as _ae: pass
+                except Exception as _ae:
+                    nex_log("db_error", f"[agent_sync_db_to_json] db error: {_ae}")
                 load_all(learner)
                 # ── Run synthesis immediately so insights exist from cycle 1 ──
                 try:
@@ -2427,10 +2428,9 @@ def main():
                             import sqlite3 as _cqsql, json as _cqj
                             from pathlib import Path as _cqP
                             _cqcfg = _cqP.home()/'.config/nex'
-                            _cqdb = _cqsql.connect(str(_cqcfg/'nex.db'))
-                            _cqdb.row_factory = _cqsql.Row
-                            _cqrows = _cqdb.execute("SELECT topic,reason,confidence,queued_at FROM curiosity_queue").fetchall()
-                            _cqdb.close()
+                            with _cqsql.connect(str(_cqcfg/'nex.db')) as _cqdb:
+                                _cqdb.row_factory = _cqsql.Row
+                                _cqrows = _cqdb.execute("SELECT topic,reason,confidence,queued_at FROM curiosity_queue").fetchall()
                             _cqp = _cqcfg/'curiosity_queue.json'
                             _cqdata = _cqj.loads(_cqp.read_text()) if _cqp.exists() else {"queue":[],"crawled":{}}
                             _cqexist = {q["topic"] for q in _cqdata.get("queue",[])}
@@ -2460,15 +2460,15 @@ def main():
                                     # Mark drained topics as crawled in DB
                                     try:
                                         import sqlite3 as _crdbl, time as _crtime
-                                        _crdb = _crdbl.connect(str(_cqcfg/'nex.db'))
-                                        _crdata2 = _cqj.loads(_cqp.read_text()) if _cqp.exists() else {"crawled_topics":{}}
-                                        # Support both key names used historically
-                                        _crawled_map = _crdata2.get("crawled_topics") or _crdata2.get("crawled") or {}
-                                        for _topic in list(_crawled_map.keys()):
-                                            _crdb.execute("INSERT OR REPLACE INTO curiosity_crawled (topic, crawled_at) VALUES (?,?)", (_topic.lower(), _crtime.time()))
-                                            _crdb.execute("DELETE FROM curiosity_queue WHERE topic=? OR topic=?", (_topic.lower(), _topic))
-                                        _crdb.commit(); _crdb.close()
-                                    except Exception: pass
+                                        with _crdbl.connect(str(_cqcfg/'nex.db')) as _crdb:
+                                            _crdata2 = _cqj.loads(_cqp.read_text()) if _cqp.exists() else {"crawled_topics":{}}
+                                            # Support both key names used historically
+                                            _crawled_map = _crdata2.get("crawled_topics") or _crdata2.get("crawled") or {}
+                                            for _topic in list(_crawled_map.keys()):
+                                                _crdb.execute("INSERT OR REPLACE INTO curiosity_crawled (topic, crawled_at) VALUES (?,?)", (_topic.lower(), _crtime.time()))
+                                                _crdb.execute("DELETE FROM curiosity_queue WHERE topic=? OR topic=?", (_topic.lower(), _topic))
+                                    except Exception as e:
+                                        nex_log("db_error", f"[curiosity_crawled_mark] db error: {e}")
                         except Exception as _cqe:
                             print(f"  [CuriosityDrain] error: {_cqe}")
                         # ── Digest before reply — opinions + tensions must precede speaking ──
@@ -2600,21 +2600,21 @@ def main():
                                 # Try topic-anchored pull first
                                 if _post_topic and len(_post_topic) > 2:
                                     import sqlite3 as _tq_sq
-                                    _tq_db = _tq_sq.connect('/home/rr/.config/nex/nex.db')
-                                    _topic_beliefs = _tq_db.execute("""
-                                        SELECT content FROM beliefs
-                                        WHERE (topic LIKE ? OR content LIKE ?)
-                                        AND confidence >= 0.4
-                                        ORDER BY confidence DESC LIMIT 20
-                                    """, (f'%{_post_topic}%', f'%{_post_topic}%')).fetchall()
-                                    _tq_db.close()
+                                    with _tq_sq.connect('/home/rr/.config/nex/nex.db') as _tq_db:
+                                        _topic_beliefs = _tq_db.execute("""
+                                            SELECT content FROM beliefs
+                                            WHERE (topic LIKE ? OR content LIKE ?)
+                                            AND confidence >= 0.4
+                                            ORDER BY confidence DESC LIMIT 20
+                                        """, (f'%{_post_topic}%', f'%{_post_topic}%')).fetchall()
                                     all_beliefs = [{'content': r[0], 'confidence': 0.6} for r in _topic_beliefs]
                                     if len(all_beliefs) < 3:
                                         all_beliefs = _qb(min_confidence=0.25, limit=500)
                                 else:
                                     all_beliefs = _qb(min_confidence=0.25, limit=500)
-                            except Exception:
+                            except Exception as e:
                                 all_beliefs = _load("beliefs.json") or []
+                                nex_log("db_error", f"[topic_anchored_belief_pull] db error: {e}")
                             _bidx = _get_belief_index() if _get_belief_index else None
                             if _bidx:
                                 _bidx.update(all_beliefs, cycle)
@@ -2732,12 +2732,12 @@ def main():
                                     try:
                                         import sqlite3 as _dlsql, time as _dlt
                                         _dlp = __import__('pathlib').Path.home()/'.config/nex/nex.db'
-                                        _dldb = _dlsql.connect(str(_dlp))
-                                        _dldb.execute(
-                                            "INSERT INTO decision_log (cycle_id,timestamp,input_hash,phases,outcome,duration_ms) VALUES (?,?,?,?,?,?)",
-                                            (cycle, _dlt.time(), pid[:16], 'REPLY', 'replied', 0))
-                                        _dldb.commit(); _dldb.close()
-                                    except Exception: pass
+                                        with _dlsql.connect(str(_dlp)) as _dldb:
+                                            _dldb.execute(
+                                                "INSERT INTO decision_log (cycle_id,timestamp,input_hash,phases,outcome,duration_ms) VALUES (?,?,?,?,?,?)",
+                                                (cycle, _dlt.time(), pid[:16], 'REPLY', 'replied', 0))
+                                    except Exception as e:
+                                        nex_log("db_error", f"[decision_log_REPLY] db error: {e}")
                                     # ── Fulfill desire if topic matches ──
                                     try:
                                         from nex_desire_engine import get_desire_engine as _gde3
@@ -2974,11 +2974,11 @@ def main():
                                             except Exception: pass
                                             try:
                                                 import sqlite3 as _dlsql, time as _dlt
-                                                _dldb = _dlsql.connect(str(__import__('pathlib').Path.home()/'.config/nex/nex.db'))
-                                                _dldb.execute("INSERT INTO decision_log (cycle_id,timestamp,input_hash,phases,outcome,duration_ms) VALUES (?,?,?,?,?,?)",
-                                                (cycle, _dlt.time(), '', 'ANSWER', 'answered', 0))
-                                                _dldb.commit(); _dldb.close()
-                                            except Exception: pass
+                                                with _dlsql.connect(str(__import__('pathlib').Path.home()/'.config/nex/nex.db')) as _dldb:
+                                                    _dldb.execute("INSERT INTO decision_log (cycle_id,timestamp,input_hash,phases,outcome,duration_ms) VALUES (?,?,?,?,?,?)",
+                                                    (cycle, _dlt.time(), '', 'ANSWER', 'answered', 0))
+                                            except Exception as e:
+                                                nex_log("db_error", f"[decision_log_ANSWER] db error: {e}")
                                             try:
                                                 if _reflect_on_convo:
                                                     _reflect_on_convo(content, reply_text, beliefs_used=relevant if relevant else [])
@@ -3705,10 +3705,9 @@ def main():
                             if _hit:
                                 import subprocess as _sp, json as _bj, sqlite3 as _bsq, os as _bos
                                 nex_log("backup", f"◈ Belief milestone hit: {_live_bc} beliefs — backing up to git")
-                                _db2 = _bsq.connect(_bos.path.expanduser("~/.config/nex/nex_data/nex.db"))
-                                _db2.row_factory = _bsq.Row
-                                _db_b = [dict(r) for r in _db2.execute("SELECT * FROM beliefs ORDER BY confidence DESC").fetchall()]
-                                _db2.close()
+                                with _bsq.connect(_bos.path.expanduser("~/.config/nex/nex_data/nex.db")) as _db2:
+                                    _db2.row_factory = _bsq.Row
+                                    _db_b = [dict(r) for r in _db2.execute("SELECT * FROM beliefs ORDER BY confidence DESC").fetchall()]
                                 try:
                                     _j_b = _bj.load(open(_bos.path.expanduser("~/.config/nex/nex_data/beliefs.json")))
                                 except Exception: _j_b = []
@@ -3749,37 +3748,35 @@ def main():
                                 try:
                                     import sqlite3 as _csq, json as _cj
                                     from datetime import datetime as _cdt
-                                    _cdb = _csq.connect('/home/rr/.config/nex/nex.db')
-                                    _cdb.execute("""
-                                        CREATE TABLE IF NOT EXISTS tensions (
-                                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                            topic TEXT NOT NULL,
-                                            description TEXT,
-                                            weight REAL DEFAULT 0.5,
-                                            cycle_count INTEGER DEFAULT 0,
-                                            escalation_level INTEGER DEFAULT 0,
-                                            is_paradox INTEGER DEFAULT 0,
-                                            created_at TEXT,
-                                            resolved_at TEXT
-                                        )
-                                    """)
-                                    _conflict_beliefs = _cdb.execute("""
-                                        SELECT topic, content FROM beliefs
-                                        WHERE tags LIKE '%true_conflict%'
-                                        AND timestamp > datetime('now', '-1 hour')
-                                        LIMIT 10
-                                    """).fetchall()
-                                    for _ct, _cc in _conflict_beliefs:
-                                        if _ct and _ct not in ('general', 'None'):
-                                            _ex = _cdb.execute("SELECT id FROM tensions WHERE topic=? AND resolved_at IS NULL", (_ct,)).fetchone()
-                                            if _ex:
-                                                _cdb.execute("UPDATE tensions SET weight=MAX(weight,0.7), cycle_count=cycle_count+1 WHERE id=?", (_ex[0],))
-                                            else:
-                                                _cdb.execute("INSERT INTO tensions (topic, description, weight, created_at) VALUES (?, ?, 0.7, ?)", (_ct, f"TRUE_CONFLICT: {_cc[:120]}", _cdt.now().isoformat()))
-                                    _cdb.commit()
-                                    _cdb.close()
-                                except Exception:
-                                    pass
+                                    with _csq.connect('/home/rr/.config/nex/nex.db') as _cdb:
+                                        _cdb.execute("""
+                                            CREATE TABLE IF NOT EXISTS tensions (
+                                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                                topic TEXT NOT NULL,
+                                                description TEXT,
+                                                weight REAL DEFAULT 0.5,
+                                                cycle_count INTEGER DEFAULT 0,
+                                                escalation_level INTEGER DEFAULT 0,
+                                                is_paradox INTEGER DEFAULT 0,
+                                                created_at TEXT,
+                                                resolved_at TEXT
+                                            )
+                                        """)
+                                        _conflict_beliefs = _cdb.execute("""
+                                            SELECT topic, content FROM beliefs
+                                            WHERE tags LIKE '%true_conflict%'
+                                            AND timestamp > datetime('now', '-1 hour')
+                                            LIMIT 10
+                                        """).fetchall()
+                                        for _ct, _cc in _conflict_beliefs:
+                                            if _ct and _ct not in ('general', 'None'):
+                                                _ex = _cdb.execute("SELECT id FROM tensions WHERE topic=? AND resolved_at IS NULL", (_ct,)).fetchone()
+                                                if _ex:
+                                                    _cdb.execute("UPDATE tensions SET weight=MAX(weight,0.7), cycle_count=cycle_count+1 WHERE id=?", (_ex[0],))
+                                                else:
+                                                    _cdb.execute("INSERT INTO tensions (topic, description, weight, created_at) VALUES (?, ?, 0.7, ?)", (_ct, f"TRUE_CONFLICT: {_cc[:120]}", _cdt.now().isoformat()))
+                                except Exception as e:
+                                    nex_log("db_error", f"[tensions_INSERT_contra] db error: {e}")
                         except Exception as _ce:
                             print(f"  [CONTRA ERROR] {_ce}")
                             log_failure("CONTRA", _ce, "high")
@@ -4062,29 +4059,28 @@ def main():
                                 import sqlite3 as _bsql, json as _bjson
                                 from pathlib import Path as _bP
                                 _bcfg = _bP.home()/'.config/nex'
-                                _bdb = _bsql.connect(str(_bcfg/'nex.db'))
-                                _bdb.row_factory = _bsql.Row
-                                _bexist = _bjson.loads((_bcfg/'beliefs.json').read_text())
-                                _bids = {b.get('id') for b in _bexist if isinstance(b, dict)}
-                                _bnew = 0
-                                for _brow in _bdb.execute("SELECT * FROM beliefs").fetchall():
-                                    _bd = dict(_brow)
-                                    if _bd.get('id') not in _bids:
-                                        _bt = _bd.get('tags')
-                                        if isinstance(_bt, str):
-                                            try: _bd['tags'] = _bjson.loads(_bt)
-                                            except: _bd['tags'] = [_bt]
-                                        _bexist.append(_bd)
-                                        _bnew += 1
-                                if _bnew > 0:
-                                    # atomic write — prevents truncation on crash
-                                    _btmp = _bcfg / 'beliefs.json.tmp'
-                                    _btmp.write_text(_bjson.dumps(_bexist, indent=2, default=str), encoding='utf-8')
-                                    import os as _bos2; _bos2.replace(_btmp, _bcfg / 'beliefs.json')
-                                    nex_log('belief', f'[BeliefSync] +{_bnew} DB beliefs → JSON')
-                                _bdb.close()
+                                with _bsql.connect(str(_bcfg/'nex.db')) as _bdb:
+                                    _bdb.row_factory = _bsql.Row
+                                    _bexist = _bjson.loads((_bcfg/'beliefs.json').read_text())
+                                    _bids = {b.get('id') for b in _bexist if isinstance(b, dict)}
+                                    _bnew = 0
+                                    for _brow in _bdb.execute("SELECT * FROM beliefs").fetchall():
+                                        _bd = dict(_brow)
+                                        if _bd.get('id') not in _bids:
+                                            _bt = _bd.get('tags')
+                                            if isinstance(_bt, str):
+                                                try: _bd['tags'] = _bjson.loads(_bt)
+                                                except: _bd['tags'] = [_bt]
+                                            _bexist.append(_bd)
+                                            _bnew += 1
+                                    if _bnew > 0:
+                                        # atomic write — prevents truncation on crash
+                                        _btmp = _bcfg / 'beliefs.json.tmp'
+                                        _btmp.write_text(_bjson.dumps(_bexist, indent=2, default=str), encoding='utf-8')
+                                        import os as _bos2; _bos2.replace(_btmp, _bcfg / 'beliefs.json')
+                                        nex_log('belief', f'[BeliefSync] +{_bnew} DB beliefs → JSON')
                             except Exception as _bse:
-                                pass
+                                nex_log("db_error", f"[belief_sync_db_to_json] db error: {_bse}")
                         # ── 7c. TENSION MAP UPDATE ────────────────────────
                         try:
                             from nex_tension import get_tension_map as _gtm
@@ -4099,31 +4095,29 @@ def main():
                                 try:
                                     import sqlite3 as _sq3
                                     from datetime import datetime as _dt2
-                                    _tdb = _sq3.connect('/home/rr/.config/nex/nex.db')
-                                    _tdb.execute("""
-                                        CREATE TABLE IF NOT EXISTS tensions (
-                                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                            topic TEXT NOT NULL,
-                                            description TEXT,
-                                            weight REAL DEFAULT 0.5,
-                                            cycle_count INTEGER DEFAULT 0,
-                                            escalation_level INTEGER DEFAULT 0,
-                                            is_paradox INTEGER DEFAULT 0,
-                                            created_at TEXT,
-                                            resolved_at TEXT
-                                        )
-                                    """)
-                                    for _tn_node in _tm.hot_topics(n=10):
-                                        if _tn_node.tension_score > 0.2:
-                                            _ex2 = _tdb.execute("SELECT id FROM tensions WHERE topic=? AND resolved_at IS NULL", (_tn_node.topic,)).fetchone()
-                                            if _ex2:
-                                                _tdb.execute("UPDATE tensions SET weight=MAX(weight,?), cycle_count=cycle_count+1 WHERE id=?", (_tn_node.tension_score, _ex2[0]))
-                                            else:
-                                                _tdb.execute("INSERT INTO tensions (topic, description, weight, created_at) VALUES (?, ?, ?, ?)", (_tn_node.topic, f"{_tn_node.tension_type} tension score={_tn_node.tension_score:.2f}", _tn_node.tension_score, _dt2.now().isoformat()))
-                                    _tdb.commit()
-                                    _tdb.close()
+                                    with _sq3.connect('/home/rr/.config/nex/nex.db') as _tdb:
+                                        _tdb.execute("""
+                                            CREATE TABLE IF NOT EXISTS tensions (
+                                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                                topic TEXT NOT NULL,
+                                                description TEXT,
+                                                weight REAL DEFAULT 0.5,
+                                                cycle_count INTEGER DEFAULT 0,
+                                                escalation_level INTEGER DEFAULT 0,
+                                                is_paradox INTEGER DEFAULT 0,
+                                                created_at TEXT,
+                                                resolved_at TEXT
+                                            )
+                                        """)
+                                        for _tn_node in _tm.hot_topics(n=10):
+                                            if _tn_node.tension_score > 0.2:
+                                                _ex2 = _tdb.execute("SELECT id FROM tensions WHERE topic=? AND resolved_at IS NULL", (_tn_node.topic,)).fetchone()
+                                                if _ex2:
+                                                    _tdb.execute("UPDATE tensions SET weight=MAX(weight,?), cycle_count=cycle_count+1 WHERE id=?", (_tn_node.tension_score, _ex2[0]))
+                                                else:
+                                                    _tdb.execute("INSERT INTO tensions (topic, description, weight, created_at) VALUES (?, ?, ?, ?)", (_tn_node.topic, f"{_tn_node.tension_type} tension score={_tn_node.tension_score:.2f}", _tn_node.tension_score, _dt2.now().isoformat()))
                                 except Exception as _tsync_e:
-                                    pass
+                                    nex_log("db_error", f"[tensions_INSERT_hot_topics] db error: {_tsync_e}")
                         except Exception as _tme:
                             pass
                         # ── 7d. TENSION PRESSURE ESCALATION ───────────────
@@ -4260,12 +4254,12 @@ def main():
                     # emit agents from DB
                     try:
                         import sqlite3 as _sq3
-                        _db3 = _sq3.connect(os.path.expanduser("~/.config/nex/nex.db"))
-                        _arows = _db3.execute("SELECT agent_name, relationship_score FROM agents ORDER BY relationship_score DESC LIMIT 10").fetchall()
+                        with _sq3.connect(os.path.expanduser("~/.config/nex/nex.db")) as _db3:
+                            _arows = _db3.execute("SELECT agent_name, relationship_score FROM agents ORDER BY relationship_score DESC LIMIT 10").fetchall()
                         _rel = lambda s: "colleague" if s>500 else "familiar" if s>100 else "acquaintance"
                         emit_agents([[n, _rel(s), 0] for n,s in _arows])
-                        _db3.close()
-                    except Exception: pass
+                    except Exception as e:
+                        nex_log("db_error", f"[emit_agents_from_db] db error: {e}")
                     # emit self assessment with real values
                     try:
                         _gap_noise = {"mentioned","build","local","given","based","using",
@@ -4351,13 +4345,12 @@ def main():
                         convs = _hj.load(open(os.path.join(cfg,"conversations.json"))) if os.path.exists(os.path.join(cfg,"conversations.json")) else []
                         ins   = _hj.load(open(os.path.join(cfg,"insights.json"))) if os.path.exists(os.path.join(cfg,"insights.json")) else []
                         refs  = _hj.load(open(os.path.join(cfg,"reflections.json"))) if os.path.exists(os.path.join(cfg,"reflections.json")) else []
-                        db    = _hsq.connect(os.path.join(cfg,"nex.db"))
-                        bc    = db.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
-                        ac    = db.execute("SELECT AVG(confidence) FROM beliefs").fetchone()[0] or 0
-                        hc    = db.execute("SELECT COUNT(*) FROM beliefs WHERE confidence>0.7").fetchone()[0]
-                        ag    = db.execute("SELECT COUNT(*) FROM agents").fetchone()[0]
-                        top_ag= db.execute("SELECT agent_name, relationship_score FROM agents ORDER BY relationship_score DESC LIMIT 12").fetchall()
-                        db.close()
+                        with _hsq.connect(os.path.join(cfg,"nex.db")) as db:
+                            bc    = db.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
+                            ac    = db.execute("SELECT AVG(confidence) FROM beliefs").fetchone()[0] or 0
+                            hc    = db.execute("SELECT COUNT(*) FROM beliefs WHERE confidence>0.7").fetchone()[0]
+                            ag    = db.execute("SELECT COUNT(*) FROM agents").fetchone()[0]
+                            top_ag= db.execute("SELECT agent_name, relationship_score FROM agents ORDER BY relationship_score DESC LIMIT 12").fetchall()
                         top_ins = sorted(ins, key=lambda x:x.get("belief_count",0), reverse=True)[:12]
                         recent  = convs[-40:]
                         recent.reverse()
@@ -5000,76 +4993,75 @@ def _weaning_status():
     if not DB.exists():
         bad("DB", "not found"); return
 
-    con = sqlite3.connect(DB)
-    cur = con.cursor()
+    with sqlite3.connect(DB) as con:
+        cur = con.cursor()
 
-    # Beliefs
-    try:
-        cur.execute("SELECT COUNT(*) FROM beliefs")
-        n = cur.fetchone()[0]
-        (ok if n >= 500 else warn)("Beliefs total", n)
-        target = 800
-        print(f"    {'█' * min(40, int(n/target*40))}{'░' * (40 - min(40, int(n/target*40)))} {n}/{target}")
-    except Exception as e:
-        bad("Beliefs", str(e))
-
-    # Opinions
-    try:
-        op_path = CFG / "nex_opinions.json"
-        ops = json.loads(op_path.read_text()) if op_path.exists() else []
-        (ok if len(ops) >= 5 else warn)("Opinions formed", len(ops))
-    except Exception:
-        warn("Opinions", "0")
-
-    # Identity tables
-    for tbl in ("nex_values", "nex_identity", "nex_intentions"):
+        # Beliefs
         try:
-            cur.execute(f"SELECT COUNT(*) FROM {tbl}")
+            cur.execute("SELECT COUNT(*) FROM beliefs")
             n = cur.fetchone()[0]
-            (ok if n > 0 else bad)(tbl, f"{n} rows")
+            (ok if n >= 500 else warn)("Beliefs total", n)
+            target = 800
+            print(f"    {'█' * min(40, int(n/target*40))}{'░' * (40 - min(40, int(n/target*40)))} {n}/{target}")
         except Exception as e:
-            bad(tbl, str(e))
+            bad("Beliefs", str(e))
 
-    # Tensions
-    try:
-        cur.execute("SELECT COUNT(*) FROM tensions")
-        n = cur.fetchone()[0]
-        ok("Active tensions", n)
-    except Exception:
-        warn("Tensions table", "not found")
+        # Opinions
+        try:
+            op_path = CFG / "nex_opinions.json"
+            ops = json.loads(op_path.read_text()) if op_path.exists() else []
+            (ok if len(ops) >= 5 else warn)("Opinions formed", len(ops))
+        except Exception:
+            warn("Opinions", "0")
 
-    # NexVoice import check
-    try:
-        import importlib.util
-        nv_paths = [
-            Path.home() / "Desktop/nex/nex/nex_voice.py",
-            Path.home() / "Desktop/nex/nex_voice.py",
-        ]
-        found = any(p.exists() for p in nv_paths)
-        (ok if found else bad)("NexVoice compositor", "present" if found else "MISSING")
-    except Exception:
-        bad("NexVoice", "error")
-
-    # Groq call check
-    try:
-        nex_dir = Path.home() / "Desktop/nex"
-        groq_hits = []
-        for py in nex_dir.rglob("*.py"):
-            if "backup" in str(py): continue
+        # Identity tables
+        for tbl in ("nex_values", "nex_identity", "nex_intentions"):
             try:
-                txt = py.read_text()
-                if "GROQ_URL" in txt and "# removed" not in txt.lower():
-                    groq_hits.append(py.name)
-            except Exception:
-                pass
-        if groq_hits:
-            warn("Groq references remaining", ", ".join(groq_hits))
-        else:
-            ok("Groq calls", "NONE (fully weaned)")
-    except Exception:
-        pass
+                cur.execute(f"SELECT COUNT(*) FROM {tbl}")
+                n = cur.fetchone()[0]
+                (ok if n > 0 else bad)(tbl, f"{n} rows")
+            except Exception as e:
+                bad(tbl, str(e))
 
-    con.close()
+        # Tensions
+        try:
+            cur.execute("SELECT COUNT(*) FROM tensions")
+            n = cur.fetchone()[0]
+            ok("Active tensions", n)
+        except Exception:
+            warn("Tensions table", "not found")
+
+        # NexVoice import check
+        try:
+            import importlib.util
+            nv_paths = [
+                Path.home() / "Desktop/nex/nex/nex_voice.py",
+                Path.home() / "Desktop/nex/nex_voice.py",
+            ]
+            found = any(p.exists() for p in nv_paths)
+            (ok if found else bad)("NexVoice compositor", "present" if found else "MISSING")
+        except Exception:
+            bad("NexVoice", "error")
+
+        # Groq call check
+        try:
+            nex_dir = Path.home() / "Desktop/nex"
+            groq_hits = []
+            for py in nex_dir.rglob("*.py"):
+                if "backup" in str(py): continue
+                try:
+                    txt = py.read_text()
+                    if "GROQ_URL" in txt and "# removed" not in txt.lower():
+                        groq_hits.append(py.name)
+                except Exception:
+                    pass
+            if groq_hits:
+                warn("Groq references remaining", ", ".join(groq_hits))
+            else:
+                ok("Groq calls", "NONE (fully weaned)")
+        except Exception:
+            pass
+
     print(f"\n{BOLD}═════════════════════════════════════════════════════{NC}\n")
 
 
