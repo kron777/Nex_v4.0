@@ -314,7 +314,7 @@ class BeliefArchitect:
                 for keep_id, remove_id in pairs:
                     # Boost keeper slightly
                     conn.execute(
-                        "UPDATE beliefs SET confidence = MIN(0.99, confidence + 0.02) WHERE id=?",
+                        "UPDATE beliefs SET confidence = MIN(0.99, confidence + 0.02) WHERE id=? AND locked=0",
                         (keep_id,)
                     )
                     conn.execute("DELETE FROM beliefs WHERE id=?", (remove_id,))

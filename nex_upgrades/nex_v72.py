@@ -583,7 +583,7 @@ class IdentityGravity:
                     self.decayed += 1
                 with _db() as c:
                     c.execute(
-                        "UPDATE beliefs SET confidence=MAX(0.05,MIN(confidence+?,0.99)) WHERE id=?",
+                        "UPDATE beliefs SET confidence=MAX(0.05,MIN(confidence+?,0.99)) WHERE id=? AND locked=0",
                         (adj, r["id"])
                     )
                     # commit handled by _db() context manager
