@@ -162,15 +162,21 @@ class _GatedCursor(sqlite3.Cursor):
                 _track_wait(t0)
                 STATS['writes_serialized'] += 1
                 t_exec = time.perf_counter()
-                result = super().execute(sql, *args, **kwargs)
-                elapsed = time.perf_counter() - t_exec
-                if elapsed > SQLITE_BLOCK_THRESHOLD_S:
-                    STATS['sqlite_blocked_events'] += 1
-                    log.warning(
-                        f"[gatekeeper sqlite-blocked] inner super().execute took {elapsed:.1f}s "
-                        f"tid={threading.get_ident()} sql={(sql[:80] if sql else '')!r}"
-                    )
-                return result
+                raised = False
+                try:
+                    return super().execute(sql, *args, **kwargs)
+                except BaseException:
+                    raised = True
+                    raise
+                finally:
+                    elapsed = time.perf_counter() - t_exec
+                    if elapsed > SQLITE_BLOCK_THRESHOLD_S:
+                        STATS['sqlite_blocked_events'] += 1
+                        log.warning(
+                            f"[gatekeeper sqlite-blocked] inner super().execute took {elapsed:.1f}s "
+                            f"status={'raised' if raised else 'completed'} "
+                            f"tid={threading.get_ident()} sql={(sql[:80] if sql else '')!r}"
+                        )
             finally:
                 _release_write_lock()
         STATS['reads_passed_through'] += 1
@@ -184,15 +190,21 @@ class _GatedCursor(sqlite3.Cursor):
                 _track_wait(t0)
                 STATS['writes_serialized'] += 1
                 t_exec = time.perf_counter()
-                result = super().executemany(sql, *args, **kwargs)
-                elapsed = time.perf_counter() - t_exec
-                if elapsed > SQLITE_BLOCK_THRESHOLD_S:
-                    STATS['sqlite_blocked_events'] += 1
-                    log.warning(
-                        f"[gatekeeper sqlite-blocked] inner super().executemany took {elapsed:.1f}s "
-                        f"tid={threading.get_ident()} sql={(sql[:80] if sql else '')!r}"
-                    )
-                return result
+                raised = False
+                try:
+                    return super().executemany(sql, *args, **kwargs)
+                except BaseException:
+                    raised = True
+                    raise
+                finally:
+                    elapsed = time.perf_counter() - t_exec
+                    if elapsed > SQLITE_BLOCK_THRESHOLD_S:
+                        STATS['sqlite_blocked_events'] += 1
+                        log.warning(
+                            f"[gatekeeper sqlite-blocked] inner super().executemany took {elapsed:.1f}s "
+                            f"status={'raised' if raised else 'completed'} "
+                            f"tid={threading.get_ident()} sql={(sql[:80] if sql else '')!r}"
+                        )
             finally:
                 _release_write_lock()
         STATS['reads_passed_through'] += 1
@@ -213,15 +225,21 @@ class _GatedConnection(sqlite3.Connection):
                 _track_wait(t0)
                 STATS['writes_serialized'] += 1
                 t_exec = time.perf_counter()
-                result = super().execute(sql, *args, **kwargs)
-                elapsed = time.perf_counter() - t_exec
-                if elapsed > SQLITE_BLOCK_THRESHOLD_S:
-                    STATS['sqlite_blocked_events'] += 1
-                    log.warning(
-                        f"[gatekeeper sqlite-blocked] inner super().execute took {elapsed:.1f}s "
-                        f"tid={threading.get_ident()} sql={(sql[:80] if sql else '')!r}"
-                    )
-                return result
+                raised = False
+                try:
+                    return super().execute(sql, *args, **kwargs)
+                except BaseException:
+                    raised = True
+                    raise
+                finally:
+                    elapsed = time.perf_counter() - t_exec
+                    if elapsed > SQLITE_BLOCK_THRESHOLD_S:
+                        STATS['sqlite_blocked_events'] += 1
+                        log.warning(
+                            f"[gatekeeper sqlite-blocked] inner super().execute took {elapsed:.1f}s "
+                            f"status={'raised' if raised else 'completed'} "
+                            f"tid={threading.get_ident()} sql={(sql[:80] if sql else '')!r}"
+                        )
             finally:
                 _release_write_lock()
         STATS['reads_passed_through'] += 1
@@ -235,15 +253,21 @@ class _GatedConnection(sqlite3.Connection):
                 _track_wait(t0)
                 STATS['writes_serialized'] += 1
                 t_exec = time.perf_counter()
-                result = super().executemany(sql, *args, **kwargs)
-                elapsed = time.perf_counter() - t_exec
-                if elapsed > SQLITE_BLOCK_THRESHOLD_S:
-                    STATS['sqlite_blocked_events'] += 1
-                    log.warning(
-                        f"[gatekeeper sqlite-blocked] inner super().executemany took {elapsed:.1f}s "
-                        f"tid={threading.get_ident()} sql={(sql[:80] if sql else '')!r}"
-                    )
-                return result
+                raised = False
+                try:
+                    return super().executemany(sql, *args, **kwargs)
+                except BaseException:
+                    raised = True
+                    raise
+                finally:
+                    elapsed = time.perf_counter() - t_exec
+                    if elapsed > SQLITE_BLOCK_THRESHOLD_S:
+                        STATS['sqlite_blocked_events'] += 1
+                        log.warning(
+                            f"[gatekeeper sqlite-blocked] inner super().executemany took {elapsed:.1f}s "
+                            f"status={'raised' if raised else 'completed'} "
+                            f"tid={threading.get_ident()} sql={(sql[:80] if sql else '')!r}"
+                        )
             finally:
                 _release_write_lock()
         STATS['reads_passed_through'] += 1
