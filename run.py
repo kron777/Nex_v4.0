@@ -4836,19 +4836,7 @@ except Exception as _md_err:
 
 # nex_source_router module never existed at top level; daemon never ran [removed dead import]
 
-# [NEX_FACT_DISTILLER] — auto-injected by install_factual_layer.py
-try:
-    from nex_fact_distiller import FactDistiller as _FD, ensure_schema as _fd_schema
-    import os as _os
-    for _db in [_os.path.expanduser("~/Desktop/nex/nex.db"),
-                _os.path.expanduser("~/.config/nex/nex.db")]:
-        if _os.path.exists(_db):
-            _fd_schema(_db)
-    _fact_distiller = _FD()
-    _fact_distiller.start()
-    print("  [FACT_DISTILLER] started — factual knowledge layer active")
-except Exception as _e:
-    print(f"  [FACT_DISTILLER] init failed: {_e}")
+# nex_fact_distiller module never existed at top level; daemon never ran [removed dead import]
 # nex_belief_engine module never existed at top level; daemon never ran [removed dead import]
 # BeliefForge interface was never implemented; embryos accumulate in belief_embryos table for future processing
 # nex_belief_pyramid module never existed at top level; daemon never ran [removed dead import]
