@@ -863,7 +863,7 @@ class FailureMemorySystem:
                         conn.execute("""
                             UPDATE beliefs
                             SET confidence = MAX(confidence - 0.10, 0.05), last_referenced = ?
-                            WHERE id = ?
+                            WHERE id = ? AND locked=0
                         """, (time.time(), belief_id))
                         # commit handled by _db() context manager
                 except Exception:
@@ -1016,7 +1016,7 @@ class BeliefMarket:
                     conn.execute("""
                         UPDATE beliefs
                         SET confidence = MAX(confidence - ?, 0.03), last_referenced=?
-                        WHERE id=?
+                        WHERE id=? AND locked=0
                     """, (self.DECAY_EXTRA, now, bid))
                     self._weights[bid] = 0.5
                 # commit handled by _db() context manager

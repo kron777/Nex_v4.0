@@ -533,7 +533,7 @@ class TemporalIntelligenceV2:
                 decay = self.DECAY[cls]
                 with _db() as c:
                     c.execute(
-                        "UPDATE beliefs SET confidence=MAX(0.05,confidence-?) WHERE id=?",
+                        "UPDATE beliefs SET confidence=MAX(0.05,confidence-?) WHERE id=? AND locked=0",
                         (decay, r["id"])
                     )
                 self.classified += 1

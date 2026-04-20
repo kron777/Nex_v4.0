@@ -782,7 +782,7 @@ class CausalTraceUtilization:
                         self.reinforced += 1
                     elif neg >= 2 and pos == 0:
                         c.execute(
-                            "UPDATE beliefs SET confidence=MAX(confidence-0.04,0.05) WHERE id=?",
+                            "UPDATE beliefs SET confidence=MAX(confidence-0.04,0.05) WHERE id=? AND locked=0",
                             (bid,)
                         )
                         self.penalised += 1

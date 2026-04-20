@@ -140,16 +140,16 @@ def _u2_apply(row, decision: str, path):
     try:
         if decision == "OVERRIDE_A":
             conn.execute("UPDATE beliefs SET confidence=MIN(confidence+0.05,0.95) WHERE id=?", (row["aid"],))
-            conn.execute("UPDATE beliefs SET confidence=MAX(confidence-0.10,0.10) WHERE id=?", (row["bid"],))
+            conn.execute("UPDATE beliefs SET confidence=MAX(confidence-0.10,0.10) WHERE id=? AND locked=0", (row["bid"],))
         elif decision == "OVERRIDE_B":
             conn.execute("UPDATE beliefs SET confidence=MIN(confidence+0.05,0.95) WHERE id=?", (row["bid"],))
-            conn.execute("UPDATE beliefs SET confidence=MAX(confidence-0.10,0.10) WHERE id=?", (row["aid"],))
+            conn.execute("UPDATE beliefs SET confidence=MAX(confidence-0.10,0.10) WHERE id=? AND locked=0", (row["aid"],))
         elif decision == "MERGE":
             avg = round((row["aconf"] + row["bconf"]) / 2, 4)
             conn.execute("UPDATE beliefs SET confidence=? WHERE id=?", (avg, row["aid"]))
             conn.execute("DELETE FROM beliefs WHERE id=? AND locked=0", (row["bid"],))
         elif decision == "UNCERTAINTY":
-            conn.execute("UPDATE beliefs SET confidence=0.35 WHERE id IN (?,?)",
+            conn.execute("UPDATE beliefs SET confidence=0.35 WHERE id IN (?,?) AND locked=0",
                          (row["aid"], row["bid"]))
         import time
         conn.execute("INSERT OR REPLACE INTO u2_reviewed (aid,bid,decision,reviewed_at) VALUES (?,?,?,?)", (row["aid"], row["bid"], decision, time.time()))

@@ -274,7 +274,7 @@ class BeliefArchitect:
             # Decay all beliefs slightly
             conn.execute(
                 "UPDATE beliefs SET confidence = MAX(?, confidence - ?) "
-                "WHERE confidence > ?",
+                "WHERE confidence > ? AND locked=0",
                 (self.DECAY_FLOOR, self.DECAY_RATE, self.DECAY_FLOOR)
             )
             # Prune beliefs that have decayed to the floor
