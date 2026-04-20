@@ -134,7 +134,7 @@ class Layer1_ContentReservoir:
 
     def load(self, limit: int = 5000):
         """Load beliefs into neuron pool."""
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, isolation_level=None)
         conn.row_factory = sqlite3.Row
 
         # FIX D: cap confidence=1.0 at 0.65 (over-reinforced academic imports)
@@ -333,7 +333,7 @@ class Layer3_TensionDetector:
             return []
 
         try:
-            conn = sqlite3.connect(db_path)
+            conn = sqlite3.connect(db_path, isolation_level=None)
             conn.row_factory = sqlite3.Row
 
             # Build set of fired IDs as a string for SQL IN clause
@@ -727,7 +727,7 @@ class PredictionErrorLoop:
                 gaps_to_seed.append(topic)
                 # FIX E: wire to actual DB
                 try:
-                    conn = sqlite3.connect(self.db_path)
+                    conn = sqlite3.connect(self.db_path, isolation_level=None)
                     conn.execute("""
                         INSERT OR IGNORE INTO gaps
                             (term, frequency, context, priority)
@@ -753,7 +753,7 @@ class PredictionErrorLoop:
         if not fired_neurons:
             return
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = sqlite3.connect(self.db_path, isolation_level=None)
             updates = []
             for n in fired_neurons:
                 topic_surprise = surprise.get(

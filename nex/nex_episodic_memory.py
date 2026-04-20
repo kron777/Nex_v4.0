@@ -79,7 +79,7 @@ def _db():
             db_path = alt
         else:
             db_path = DB_PATH
-        conn = sqlite3.connect(str(db_path), timeout=3)
+        conn = sqlite3.connect(str(db_path), timeout=3, isolation_level=None)
         conn.row_factory = sqlite3.Row
         return conn
     except Exception:

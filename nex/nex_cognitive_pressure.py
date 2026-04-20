@@ -162,7 +162,7 @@ def run_pressure_metric(cycle=0, llm_fn=None, verbose=False):
     if not DB_PATH.exists():
         return {}
 
-    db = sqlite3.connect(str(DB_PATH))
+    db = sqlite3.connect(str(DB_PATH), isolation_level=None)
     state = _load_state()
 
     pressure, belief_count = _compute_pressure(db)
@@ -272,7 +272,7 @@ def get_evolution_score():
     """
     if not DB_PATH.exists():
         return 0
-    db = sqlite3.connect(str(DB_PATH))
+    db = sqlite3.connect(str(DB_PATH), isolation_level=None)
     try:
         # Beliefs added today
         added = db.execute("""

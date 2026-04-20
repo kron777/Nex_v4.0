@@ -106,7 +106,15 @@ def _release_write_lock():
 
 # ── Watchdog ──────────────────────────────────────────────────────────
 def _watchdog_loop():
-    """Periodic check — log warning if lock has been held longer than threshold."""
+    """Periodic check — log warning if lock held >threshold; opportunistic WAL truncate when idle.
+
+    Runs every WATCHDOG_INTERVAL_S seconds. Two responsibilities:
+      1. If a writer holds the lock longer than WATCHDOG_WARN_THRESHOLD_S, log it.
+      2. Every 6 intervals (~60s), if NO writer is active, issue
+         PRAGMA wal_checkpoint(TRUNCATE) to reclaim cosmetic WAL file space.
+         Skipped silently when a holder is active (don't compete with a live writer).
+    """
+    checkpoint_counter = 0
     while True:
         try:
             time.sleep(WATCHDOG_INTERVAL_S)
@@ -114,15 +122,30 @@ def _watchdog_loop():
                 holder_tid = _LOCK_OWNER.get('tid')
                 holder_acquired_at = _LOCK_OWNER.get('acquired_at')
                 holder_sql = _LOCK_OWNER.get('sql')
-            if holder_tid is None or holder_acquired_at is None:
-                continue
-            held = time.time() - holder_acquired_at
-            if held > WATCHDOG_WARN_THRESHOLD_S:
-                STATS['watchdog_warnings'] += 1
-                log.warning(
-                    f"[gatekeeper watchdog] write lock held {held:.1f}s "
-                    f"by tid={holder_tid} sql={holder_sql!r}"
-                )
+
+            # Warn-if-held check (no-op when no holder)
+            if holder_tid is not None and holder_acquired_at is not None:
+                held = time.time() - holder_acquired_at
+                if held > WATCHDOG_WARN_THRESHOLD_S:
+                    STATS['watchdog_warnings'] += 1
+                    log.warning(
+                        f"[gatekeeper watchdog] write lock held {held:.1f}s "
+                        f"by tid={holder_tid} sql={holder_sql!r}"
+                    )
+
+            # Opportunistic WAL truncate every 6 intervals (~60s) when idle.
+            checkpoint_counter += 1
+            if checkpoint_counter >= 6:
+                checkpoint_counter = 0
+                if holder_tid is None:
+                    try:
+                        import os
+                        db_path = os.path.expanduser("~/Desktop/nex/nex.db")
+                        conn = sqlite3.connect(db_path, timeout=2)
+                        conn.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+                        conn.close()
+                    except Exception as e:
+                        log.debug(f"[gatekeeper watchdog] checkpoint skip: {e}")
         except Exception as e:
             log.exception(f"[gatekeeper watchdog] internal error: {e}")
 
