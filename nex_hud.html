@@ -249,6 +249,18 @@ body::after{
 .sline.d-port .ss{color:var(--purple);} .sline.d-port .sm{color:#dd99ff;}
 .sline.d-info .ss{color:var(--dim);}    .sline.d-info .sm{color:#8ab4cc;}
 
+/* ── Dedup counter + flash ── */
+.sline .dedup-count{
+  margin-left:6px;font-size:9px;color:var(--dim);opacity:0.8;flex-shrink:0;
+}
+.sline.dedup-flash{
+  animation:dedup-pulse 200ms ease-out;
+}
+@keyframes dedup-pulse{
+  0%  {background:rgba(128,128,255,0.2);}
+  100%{background:transparent;}
+}
+
 .sline.f-replied .ss{color:var(--purple);}
 .sline.f-posted  .ss{color:var(--green);}
 .sline.f-learnt  .ss{color:var(--yellow);}
@@ -487,10 +499,58 @@ function classifyDebug(msg) {
   return 'd-info';
 }
 
+// ── Debug Stream dedup ───────────────────────────────────────────
+// Signature strips volatile parts (numbers, tids, ids, whitespace) so
+// near-identical events collapse. 60s window: repeats increment the
+// existing line's counter badge and flash its background. Older
+// entries GC'd so long-quiet sigs don't block new bursts.
+const DEDUP_WINDOW_MS = 60000;
+const DEDUP_GC_MS     = 120000;
+const DEDUP_MAX       = 200;
+const _dedupMap = new Map();  // sig -> {element, count, firstTs, lastTs}
+
+function sigFor(msg) {
+  return msg
+    .replace(/tid=\d+/g, 'tid=#')
+    .replace(/id=\d+/g, 'id=#')
+    .replace(/\d+(\.\d+)?s?/g, '#')
+    .replace(/\s+/g, ' ')
+    .slice(0, 120);
+}
+
+function _dedupGc(now) {
+  if (_dedupMap.size < DEDUP_MAX) {
+    for (const [k, v] of _dedupMap) {
+      if (now - v.lastTs > DEDUP_GC_MS) _dedupMap.delete(k);
+    }
+  } else {
+    // Hard cap: drop oldest
+    const sorted = [...(_dedupMap.entries())].sort((a,b)=>a[1].lastTs - b[1].lastTs);
+    const drop = sorted.slice(0, Math.max(1, _dedupMap.size - DEDUP_MAX + 1));
+    for (const [k] of drop) _dedupMap.delete(k);
+  }
+}
+
 let _lastDebugMsg = '';
 function pushDebug(time, src, msg) {
-  if (msg === _lastDebugMsg) return;
+  if (msg === _lastDebugMsg) return;  // fast-path: exact-prior identical
   _lastDebugMsg = msg;
+
+  const now = Date.now();
+  const sig = sigFor(msg);
+  const hit = _dedupMap.get(sig);
+  if (hit && (now - hit.lastTs) < DEDUP_WINDOW_MS) {
+    // Increment counter on existing line + flash
+    hit.count += 1;
+    hit.lastTs = now;
+    const badge = hit.element.querySelector('.dedup-count');
+    if (badge) badge.textContent = '× ' + hit.count;
+    hit.element.classList.remove('dedup-flash');
+    void hit.element.offsetWidth;  // force reflow so animation re-triggers
+    hit.element.classList.add('dedup-flash');
+    return;
+  }
+
   const box = $('debug-box');
   const cls = classifyDebug(msg);
   const pfx = cls==='d-err'?'✗':cls==='d-warn'?'!':cls==='d-ok'?'✓':cls==='d-port'?'⬡':'·';
@@ -499,8 +559,11 @@ function pushDebug(time, src, msg) {
   div.innerHTML =
     `<span class="st">${time}</span>` +
     `<span class="ss">[${(src||'SYS').slice(0,8)}]</span>` +
-    `<span class="sm">${pfx} ${escHtml(msg)}</span>`;
+    `<span class="sm">${pfx} ${escHtml(msg)}</span>` +
+    `<span class="dedup-count"></span>`;
   appendLine(box, div, 'debug-count');
+  _dedupMap.set(sig, {element: div, count: 1, firstTs: now, lastTs: now});
+  _dedupGc(now);
 }
 
 const _respQueue = [];
