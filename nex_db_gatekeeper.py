@@ -23,6 +23,7 @@ LOCK_RETRY_ATTEMPTS = 3       # total attempts before raising TimeoutError
 LOCK_RETRY_SLEEP_S = 0.1      # back-off between attempts
 WATCHDOG_INTERVAL_S = 10      # how often watchdog wakes
 WATCHDOG_WARN_THRESHOLD_S = 30  # only log if held longer than this
+SQLITE_BLOCK_THRESHOLD_S = 5  # log when inner super().execute() blocks longer than this
 
 # ── Lock + owner tracking ────────────────────────────────────────────
 _WRITE_LOCK = threading.RLock()
@@ -37,6 +38,7 @@ STATS = {
     'max_lock_wait_ms': 0.0,
     'lock_timeouts': 0,
     'watchdog_warnings': 0,
+    'sqlite_blocked_events': 0,
 }
 
 _WRITE_RE = re.compile(
@@ -159,7 +161,16 @@ class _GatedCursor(sqlite3.Cursor):
             try:
                 _track_wait(t0)
                 STATS['writes_serialized'] += 1
-                return super().execute(sql, *args, **kwargs)
+                t_exec = time.perf_counter()
+                result = super().execute(sql, *args, **kwargs)
+                elapsed = time.perf_counter() - t_exec
+                if elapsed > SQLITE_BLOCK_THRESHOLD_S:
+                    STATS['sqlite_blocked_events'] += 1
+                    log.warning(
+                        f"[gatekeeper sqlite-blocked] inner super().execute took {elapsed:.1f}s "
+                        f"tid={threading.get_ident()} sql={(sql[:80] if sql else '')!r}"
+                    )
+                return result
             finally:
                 _release_write_lock()
         STATS['reads_passed_through'] += 1
@@ -172,7 +183,16 @@ class _GatedCursor(sqlite3.Cursor):
             try:
                 _track_wait(t0)
                 STATS['writes_serialized'] += 1
-                return super().executemany(sql, *args, **kwargs)
+                t_exec = time.perf_counter()
+                result = super().executemany(sql, *args, **kwargs)
+                elapsed = time.perf_counter() - t_exec
+                if elapsed > SQLITE_BLOCK_THRESHOLD_S:
+                    STATS['sqlite_blocked_events'] += 1
+                    log.warning(
+                        f"[gatekeeper sqlite-blocked] inner super().executemany took {elapsed:.1f}s "
+                        f"tid={threading.get_ident()} sql={(sql[:80] if sql else '')!r}"
+                    )
+                return result
             finally:
                 _release_write_lock()
         STATS['reads_passed_through'] += 1
@@ -192,7 +212,16 @@ class _GatedConnection(sqlite3.Connection):
             try:
                 _track_wait(t0)
                 STATS['writes_serialized'] += 1
-                return super().execute(sql, *args, **kwargs)
+                t_exec = time.perf_counter()
+                result = super().execute(sql, *args, **kwargs)
+                elapsed = time.perf_counter() - t_exec
+                if elapsed > SQLITE_BLOCK_THRESHOLD_S:
+                    STATS['sqlite_blocked_events'] += 1
+                    log.warning(
+                        f"[gatekeeper sqlite-blocked] inner super().execute took {elapsed:.1f}s "
+                        f"tid={threading.get_ident()} sql={(sql[:80] if sql else '')!r}"
+                    )
+                return result
             finally:
                 _release_write_lock()
         STATS['reads_passed_through'] += 1
@@ -205,7 +234,16 @@ class _GatedConnection(sqlite3.Connection):
             try:
                 _track_wait(t0)
                 STATS['writes_serialized'] += 1
-                return super().executemany(sql, *args, **kwargs)
+                t_exec = time.perf_counter()
+                result = super().executemany(sql, *args, **kwargs)
+                elapsed = time.perf_counter() - t_exec
+                if elapsed > SQLITE_BLOCK_THRESHOLD_S:
+                    STATS['sqlite_blocked_events'] += 1
+                    log.warning(
+                        f"[gatekeeper sqlite-blocked] inner super().executemany took {elapsed:.1f}s "
+                        f"tid={threading.get_ident()} sql={(sql[:80] if sql else '')!r}"
+                    )
+                return result
             finally:
                 _release_write_lock()
         STATS['reads_passed_through'] += 1
