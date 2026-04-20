@@ -1731,13 +1731,69 @@ class BeliefIndex:
         except Exception as e:
             print(f"[BeliefIndex] disk cache save failed: {e}")
 
-    def update(self, beliefs, cycle_num=0):
-        """Rebuild matrix if due or belief count changed."""
-        due = (cycle_num - self._cycle) >= self._refresh
-        size_changed = len(beliefs) != len(self._texts)
-        if not (due or size_changed):
+    def update(self, beliefs, cycle_num=0):  # noqa: ARG002 — beliefs arg is advisory, ignored
+        """Ensure the npz cache reflects the current belief DB.
+
+        The ``beliefs`` argument is advisory — kept in the signature for
+        backward compatibility with callers at run.py:2621/2849/3151 that
+        pass filtered subsets. It is IGNORED for the actual index decision.
+        The cache is always sized from and populated with ALL beliefs in
+        ~/Desktop/nex/nex.db. This prevents those callers from clobbering
+        the shared cache with partial content, which was the root cause of
+        the pre-C.2-B bug where the cache held only 20 of 5920 embeddings.
+
+        Rebuild triggers (either is sufficient):
+          - cycle_num has advanced >= self._refresh since last rebuild
+          - DB belief count != current cache size
+
+        Fast no-op path otherwise. The DB count probe is a single indexed
+        SELECT COUNT(*) — sub-millisecond at 5-6k rows. If the probe fails
+        (DB locked, path missing), the call returns early leaving the
+        existing cache intact; skips are logged at most once per 100.
+        """
+        import sqlite3
+        from pathlib import Path
+
+        db_path = Path.home() / "Desktop/nex/nex.db"
+
+        # Cheap DB-count probe. Failure leaves cache intact and logs
+        # throttled at 1/100 to avoid spam on persistent lock.
+        try:
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2)
+            full_count = conn.execute(
+                "SELECT COUNT(*) FROM beliefs "
+                "WHERE content IS NOT NULL AND LENGTH(content) > 0"
+            ).fetchone()[0]
+            conn.close()
+        except Exception as _db_e:
+            if not hasattr(BeliefIndex, "_db_skip_count"):
+                BeliefIndex._db_skip_count = 0
+            BeliefIndex._db_skip_count += 1
+            if BeliefIndex._db_skip_count == 1 or BeliefIndex._db_skip_count % 100 == 0:
+                print(f"[BeliefIndex.update] DB count skip #{BeliefIndex._db_skip_count}: {_db_e}")
             return
-        texts = [b.get("content", "") for b in beliefs if b.get("content")]
+
+        due = (cycle_num - self._cycle) >= self._refresh
+        size_mismatch = full_count != len(self._texts)
+        if not (due or size_mismatch):
+            return
+
+        # Rebuild from full DB — `beliefs` arg is ignored. ORDER BY id
+        # matches rebuild_faiss.py so the two semantic layers have
+        # parallel row ordering (useful for cross-layer diffs).
+        try:
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
+            rows = conn.execute(
+                "SELECT id, content FROM beliefs "
+                "WHERE content IS NOT NULL AND LENGTH(content) > 0 "
+                "ORDER BY id"
+            ).fetchall()
+            conn.close()
+        except Exception as e:
+            print(f"[BeliefIndex.update] DB fetch failed (cache kept): {e}")
+            return
+
+        texts = [r[1] for r in rows]
         if not texts:
             return
         # Always store texts for keyword fallback
