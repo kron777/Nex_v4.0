@@ -60,7 +60,7 @@ def _db() -> Optional[sqlite3.Connection]:
     if not _DB_PATH.exists():
         return None
     try:
-        con = sqlite3.connect(str(_DB_PATH), timeout=3)
+        con = sqlite3.connect(str(_DB_PATH), timeout=3, isolation_level=None)
         con.row_factory = sqlite3.Row
         return con
     except Exception:

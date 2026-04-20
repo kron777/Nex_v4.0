@@ -12,7 +12,7 @@ DB_PATH = Path("/media/rr/NEX/nex_core/nex.db")
 def get_user_profile(user_id: str = "terminal") -> dict:
     """Read user_model table — what we know about this user."""
     try:
-        db = sqlite3.connect(str(DB_PATH), timeout=2)
+        db = sqlite3.connect(str(DB_PATH), timeout=2, isolation_level=None)
         rows = db.execute(
             "SELECT key, value, confidence FROM user_model"
         ).fetchall()
@@ -24,7 +24,7 @@ def get_user_profile(user_id: str = "terminal") -> dict:
 def get_conversation_state(conversation_id: str) -> dict:
     """Read interlocutor_graphs for this conversation."""
     try:
-        db = sqlite3.connect(str(DB_PATH), timeout=2)
+        db = sqlite3.connect(str(DB_PATH), timeout=2, isolation_level=None)
         row = db.execute(
             "SELECT state_json, turn_count FROM interlocutor_graphs WHERE conversation_id=?",
             (conversation_id,)
@@ -42,7 +42,7 @@ def update_conversation_state(conversation_id: str, query: str,
                                response: str, topics: list):
     """Update interlocutor_graphs after each exchange."""
     try:
-        db = sqlite3.connect(str(DB_PATH), timeout=2)
+        db = sqlite3.connect(str(DB_PATH), timeout=2, isolation_level=None)
         row = db.execute(
             "SELECT state_json, turn_count FROM interlocutor_graphs WHERE conversation_id=?",
             (conversation_id,)
@@ -249,7 +249,7 @@ class InterlocutorGraph:
         # Boost wisdom beliefs that produced landing
         if delta["landed"]:
             try:
-                db = sqlite3.connect(str(DB_PATH), timeout=2)
+                db = sqlite3.connect(str(DB_PATH), timeout=2, isolation_level=None)
                 db.execute(
                     "UPDATE nex_wisdom SET use_count=use_count+1 "
                     "WHERE id=(SELECT id FROM nex_wisdom ORDER BY use_count ASC LIMIT 1)"
@@ -262,7 +262,7 @@ class InterlocutorGraph:
     def persist(self):
         """Write current state to DB."""
         try:
-            db = sqlite3.connect(str(DB_PATH), timeout=2)
+            db = sqlite3.connect(str(DB_PATH), timeout=2, isolation_level=None)
             state = {
                 "topics_seen":   self.topics_seen,
                 "depth_signals": self.depth_signals,

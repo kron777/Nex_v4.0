@@ -50,7 +50,7 @@ def _is_noise(text):
 # ─────────────────────────────────────────────────────────────
 
 def _db():
-    con = sqlite3.connect(str(DB_PATH), timeout=10)
+    con = sqlite3.connect(str(DB_PATH), timeout=10, isolation_level=None)
     con.row_factory = sqlite3.Row
     return con
 

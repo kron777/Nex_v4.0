@@ -37,6 +37,17 @@ try:
     _TDG_AVAILABLE = True
 except Exception:
     _TDG_AVAILABLE = False
+
+# ── Entropy regime (phase-dependent behaviour) ───────────────────
+_ENTROPY_REGIME = None
+try:
+    from nex_entropy_regime import EntropyRegime as _ER
+    _er_instance = _ER()
+    _ENTROPY_REGIME = _er_instance.current_state()
+    print(f"[ENTROPY] regime={_ENTROPY_REGIME['regime']['name']} "
+          f"phi={_ENTROPY_REGIME['phi_proxy']:.3f}")
+except Exception as _er_e:
+    print(f"[ENTROPY] unavailable: {_er_e}")
 import json
 import time
 from pathlib import Path
@@ -81,7 +92,7 @@ def _db() -> Optional[sqlite3.Connection]:
     if not DB_PATH.exists():
         return None
     try:
-        con = sqlite3.connect(str(DB_PATH), timeout=3)
+        con = sqlite3.connect(str(DB_PATH), timeout=3, isolation_level=None)
         con.row_factory = sqlite3.Row
         return con
     except Exception:
@@ -1054,15 +1065,20 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
         _deduped.append((_score, _b))
     # Domain guard — hard filter on top_beliefs after dedup
     # Fallback: if filter yields < 3 beliefs, relax to unfiltered top scored
+    # ── Entropy regime activation spread ────────────────────────
+    _belief_cap = 8  # default
+    if _ENTROPY_REGIME and _ENTROPY_REGIME.get("regime"):
+        _belief_cap = _ENTROPY_REGIME["regime"].get("activation_spread", 8)
+    # ─────────────────────────────────────────────────────────────
     if _expanded_topics:
         _filtered = [b for _, b in _deduped
-                     if (b.get("topic") or "general") in _expanded_topics][:8]
+                     if (b.get("topic") or "general") in _expanded_topics][:_belief_cap]
         if len(_filtered) >= 3:
             top_beliefs = _filtered
         else:
-            top_beliefs = [b for _, b in _deduped[:8]]
+            top_beliefs = [b for _, b in _deduped[:_belief_cap]]
     else:
-        top_beliefs = [b for _, b in _deduped[:8]]
+        top_beliefs = [b for _, b in _deduped[:_belief_cap]]
 
     # ── Lead belief guard — promote Tier 1 sources to front ──────────────
     # nex_reasoning inferred beliefs should never displace seeded/high-quality
@@ -1104,6 +1120,10 @@ def reason(orient_result: dict, conversation_history: list = None) -> dict:
 
     # Cross-domain retrieval — beliefs from adjacent topics
     # ── Inject pre-reasoned position into system prompt ─────────────────
+    try:
+        _rr_check = reason_result
+    except NameError:
+        reason_result = {}
     if reason_result.get("pre_reasoned_position"):
         _pre_pos_str = reason_result["pre_reasoned_position"]
         # Inject into system context for EXPRESS step
@@ -2010,6 +2030,21 @@ def express(
     # ── Epistemic temperature from activation engine ───────────────────────
     _etemp = orient_result.get("_epistemic_temp", 0.5)
     _vdir  = orient_result.get("_voice_directive", "")
+    # ── Entropy regime directive ─────────────────────────────────
+    _entropy_directive = ""
+    if _ENTROPY_REGIME and _ENTROPY_REGIME.get("regime"):
+        _entropy_directive = _ENTROPY_REGIME["regime"].get("directive", "")
+        # Refresh regime every ~60s (don't recompute every call)
+        _er_age = time.time() - _ENTROPY_REGIME.get("computed_at", 0)
+        if _er_age > 60:
+            try:
+                _ENTROPY_REGIME.update(_er_instance.current_state())
+            except Exception:
+                pass
+    # Merge with thermodyn directive
+    if _entropy_directive:
+        _vdir = f"{_vdir} {_entropy_directive}".strip()
+    # ─────────────────────────────────────────────────────────────
     # Override tone based on field temperature
     if _etemp < 0.2:
         tone = "confident"
@@ -2019,6 +2054,14 @@ def express(
         tone = "exploratory"
     else:
         tone = "uncertain"
+    # ── Entropy regime tone modulation ───────────────────────────
+    if _ENTROPY_REGIME and _ENTROPY_REGIME.get("regime"):
+        _regime_name = _ENTROPY_REGIME["regime"].get("name", "")
+        if _regime_name == "EXPLOIT":
+            tone = "confident"    # settled knowledge, speak with authority
+        elif _regime_name == "CRISIS":
+            tone = "uncertain"    # coherence at risk, be cautious
+    # ─────────────────────────────────────────────────────────────
     # ─────────────────────────────────────────────────────────────────────
     cross_domain  = reason_result.get("cross_domain", [])
     common_thread = reason_result.get("common_thread", "")
@@ -2923,6 +2966,54 @@ class SoulLoop:
                 _lf2.write(_json2.dumps({"role":"assistant","content":reply,"timestamp":_time2.time()}) + "\n")
         except Exception:
             pass
+
+        # ── Self-orientation: boost self-knowledge for self-referential queries ──
+        try:
+            import re as _sore
+            _self_patterns = [
+                r'what are you', r'describe yourself', r'your architecture',
+                r'how do you think', r'how do you work', r'what.s missing',
+                r'who are you', r'what are you made', r'your belief',
+                r'your soul loop', r'your entropy', r'echomind',
+                r'how do you learn', r'how do you improve', r'your intentions',
+                r'what is fi', r'how do you research', r'are you complete',
+            ]
+            if any(_sore.search(p, query.lower()) for p in _self_patterns):
+                import sqlite3 as _soql
+                _sodb = _soql.connect('/media/rr/NEX/nex_core/nex.db', timeout=5)
+                _self_beliefs = _sodb.execute(
+                    "SELECT id, content, confidence, topic FROM beliefs "
+                    "WHERE source='architectural_self_model' "
+                    "ORDER BY confidence DESC LIMIT 5"
+                ).fetchall()
+                _sodb.close()
+                if _self_beliefs and isinstance(result.get("reasoning_chain"), dict):
+                    _existing = result["reasoning_chain"].get("beliefs", [])
+                    for _sb in _self_beliefs:
+                        _existing.insert(0, {
+                            "id": _sb[0], "content": _sb[1],
+                            "confidence": _sb[2], "topic": _sb[3],
+                            "source": "self_orientation"
+                        })
+                    result["reasoning_chain"]["beliefs"] = _existing[:10]
+        except Exception:
+            pass
+        # ──────────────────────────────────────────────────────────────────────
+
+        # ── EchoMind — self-referential learning ─────────────────────
+        try:
+            from nex_echo_mind import EchoMind as _EM
+            _echo = _EM()
+            _echo_beliefs = reason_result.get("beliefs", []) if reason_result else []
+            _echo.process(
+                query=query,
+                response=reply,
+                beliefs_fired=_echo_beliefs,
+                regime_state=_ENTROPY_REGIME,
+            )
+        except Exception:
+            import traceback; traceback.print_exc()  # DEBUG
+        # ──────────────────────────────────────────────────────────────
 
         # Strip loop phrases before returning
         for _lp in ["bridge:truth", "different domain", "What does bridge:", "Sounds like a different", "↔", "bridge:cognitive", "bridge:alignment", "bridge:truth-seeking", "have to do with a different", "The interesting thing about bridge"]:

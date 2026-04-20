@@ -319,7 +319,7 @@ def retrieve_beliefs_by_intent(intent: str, query: str, n: int = 6) -> list:
     # ─────────────────────────────────────────────────────────────────────
 
     try:
-        db = sqlite3.connect(str(DB_PATH), timeout=3)
+        db = sqlite3.connect(str(DB_PATH), timeout=3, isolation_level=None)
         topics = INTENT_BELIEF_TOPICS.get(intent, [])
 
         # Primary: match by topic column (exact categorized topics)
@@ -525,7 +525,7 @@ def _load_history_from_db():
     try:
         import sqlite3
         from pathlib import Path
-        db = sqlite3.connect(str(Path.home() / "Desktop/nex/nex.db"))
+        db = sqlite3.connect(str(Path.home() / "Desktop/nex/nex.db"), isolation_level=None)
         rows = db.execute("""SELECT role, content FROM session_history
             ORDER BY timestamp DESC LIMIT ?""", (HISTORY_LEN * 2,)).fetchall()
         db.close()
@@ -1400,7 +1400,7 @@ def generate(query: str) -> str:
     try:
         import sqlite3, time as _time
         from pathlib import Path as _Path
-        _db = sqlite3.connect(str(_Path.home() / "Desktop/nex/nex.db"))
+        _db = sqlite3.connect(str(_Path.home() / "Desktop/nex/nex.db"), isolation_level=None)
         _now = _time.time()
         _db.execute("INSERT INTO session_history (user_id,role,content,timestamp,topic) VALUES (?,?,?,?,?)",
             ("default", "user", query[:500], _now - 1, intent or ""))

@@ -125,7 +125,7 @@ Make it specific, confident, and in your voice."""
 def _ensure_indexes():
     """Create DB indexes for fast querying at scale."""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, isolation_level=None)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_beliefs_topic ON beliefs(topic)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_beliefs_confidence ON beliefs(confidence DESC)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_beliefs_topic_conf ON beliefs(topic, confidence DESC)")
@@ -138,7 +138,7 @@ def _ensure_indexes():
 def _vacuum_db():
     """Reclaim DB space after deletions."""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, isolation_level=None)
         conn.execute("VACUUM")
         conn.close()
         log.info("  [Architect] DB vacuumed")
@@ -148,7 +148,7 @@ def _vacuum_db():
 def _db_health():
     """Return DB health stats."""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, isolation_level=None)
         total      = conn.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
         topics     = conn.execute("SELECT COUNT(DISTINCT topic) FROM beliefs").fetchone()[0]
         avg_conf   = conn.execute("SELECT AVG(confidence) FROM beliefs").fetchone()[0] or 0
@@ -270,7 +270,7 @@ class BeliefArchitect:
     def _run_decay(self):
         """Gently decay confidence of all beliefs. Prune those that hit the floor."""
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = sqlite3.connect(DB_PATH, isolation_level=None)
             # Decay all beliefs slightly
             conn.execute(
                 "UPDATE beliefs SET confidence = MAX(?, confidence - ?) "
@@ -294,7 +294,7 @@ class BeliefArchitect:
     def _run_dedup(self):
         """Remove near-duplicate beliefs within each topic."""
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = sqlite3.connect(DB_PATH, isolation_level=None)
             topics = conn.execute(
                 "SELECT DISTINCT topic FROM beliefs"
             ).fetchall()
@@ -331,7 +331,7 @@ class BeliefArchitect:
     def _run_compression(self):
         """Merge weak overlapping beliefs into stronger ones."""
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = sqlite3.connect(DB_PATH, isolation_level=None)
             # Find topics with many weak beliefs
             topics = conn.execute(
                 "SELECT topic, COUNT(*) as c FROM beliefs "
@@ -399,7 +399,7 @@ class BeliefArchitect:
         If a topic has >15% of all beliefs, prune its lowest-confidence ones.
         """
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = sqlite3.connect(DB_PATH, isolation_level=None)
             total = conn.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
             max_per_topic = int(total * self.MAX_TOPIC_RATIO)
 

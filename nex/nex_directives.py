@@ -87,7 +87,7 @@ _decay_frozen_until = 0
 @contextmanager
 def _conn(db_path=None):
     path = db_path or DB_PATH
-    conn = sqlite3.connect(str(path), timeout=10)
+    conn = sqlite3.connect(str(path), timeout=10, isolation_level=None)
     conn.row_factory = sqlite3.Row
     try:
         yield conn
