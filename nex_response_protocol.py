@@ -283,6 +283,13 @@ except Exception as _re:
     _RESIDUE_OK = False
     print(f"[NRP] nex_residue unavailable: {_re}")
 
+try:
+    from nex_register_selector import register_selector as _register_selector
+    from nex_register_selector import REGISTER_PREFIXES as _REGISTER_PREFIXES
+    _SELECTOR_OK = True
+except Exception as _se:
+    _SELECTOR_OK = False
+
 # Current session ID — set per-request from nex_api
 _current_session_id: str = "default"
 
@@ -519,6 +526,16 @@ def _call_llm(system: str, prompt: str, temperature: float = TEMPERATURE) -> str
 _budget = ResponseBudget()
 _history = deque(maxlen=HISTORY_LEN)  # (query, response) pairs
 _last_intent = None  # pronoun tracking
+_register_history: deque = deque(maxlen=6)  # voice register usage history
+
+# ── FocalSet 2B: attention state on hot path ────────────────────────────────
+try:
+    from nex_focal_set import FocalSet as _FocalSet
+    _FOCAL_SET = _FocalSet(K=4, max_priority_delta=0.25, min_hold_ticks=5)
+except Exception:
+    _FOCAL_SET = None
+_focal_tick = 0
+_FOCAL_LOG_PATH = "/tmp/nex_focal.log"
 
 def _load_history_from_db():
     """Load recent session history from DB on startup."""
@@ -608,6 +625,43 @@ def _live_bridge_fire(belief_text: str, intent: str, query: str) -> str | None:
     return random.choice(candidates)
 
 
+def _build_focal_candidates(beliefs_raw: list, current_tick: int) -> dict:
+    """Convert [(text, score)] belief list to FocalSet candidates dict."""
+    candidates = {}
+    for belief in (beliefs_raw or []):
+        if isinstance(belief, (list, tuple)) and len(belief) >= 2:
+            text, score = str(belief[0]), float(belief[1])
+        else:
+            text, score = str(belief), 0.5
+        if not text.strip():
+            continue
+        bid = str(abs(hash(text)) % 10**9)
+        candidates[bid] = {
+            "last_activation_tick": current_tick,
+            "tension": score,
+            "edge_count": 1,
+        }
+    return candidates
+
+
+def _log_focal_event(event, focal_set) -> None:
+    import json as _json
+    entry = {
+        "tick": event.tick,
+        "mode": event.mode,
+        "added": sorted(event.added),
+        "removed": sorted(event.removed),
+        "blocked": sorted(event.blocked),
+        "focal_current": sorted(focal_set.get_focal_ids()),
+        "top_priorities": sorted(
+            focal_set.get_priorities().items(),
+            key=lambda x: -x[1]
+        )[:5],
+    }
+    with open(_FOCAL_LOG_PATH, "a") as _fl:
+        _fl.write(_json.dumps(entry) + "\n")
+
+
 def generate(query: str) -> str:
     # ── EARLY identity load — must be before compiler/cache short-circuits ──
     _identity_ctx = ""
@@ -638,7 +692,7 @@ def generate(query: str) -> str:
     _deep_intent = False  # set True if deep intent fast-path fires
     # Reset interlocutor weights for this call
     # (weights are set externally via nrp_set_interlocutor_weights)
-    global _budget, _history
+    global _budget, _history, _register_history
 
 
     # ── WARMTH PRE-PROCESS ────────────────────────────────────────
@@ -741,6 +795,23 @@ def generate(query: str) -> str:
     except Exception:
         beliefs = retrieve_beliefs_by_intent(intent, query)
         belief_text = "\n".join(f"- {b}" for b in beliefs) if beliefs else "(drawing from general knowledge)"
+
+    # ── FocalSet 2B: log attention state on every chat ────────────────
+    global _focal_tick
+    _focal_tick += 1
+    try:
+        if _FOCAL_SET is not None:
+            if _activation_result is not None:
+                _focal_raw = [(b.content, b.confidence) for b in _activation_result.top(8)]
+            else:
+                _focal_raw = [(b.strip("- ").strip(), 0.5)
+                              for b in belief_text.split("\n") if b.strip("- ").strip()]
+            _focal_candidates = _build_focal_candidates(_focal_raw, _focal_tick)
+            _focal_event = _FOCAL_SET.update(_focal_candidates, _focal_tick)
+            _log_focal_event(_focal_event, _FOCAL_SET)
+    except Exception:
+        pass  # 2B must never break generation
+    # ──────────────────────────────────────────────────────────────────
 
     # ── IFR Engine: forge reasoning destination ──────────────────────
     _ifr_result  = {}
@@ -1237,6 +1308,28 @@ def generate(query: str) -> str:
         if not response:
             response = "This sits at the edge of what I can resolve right now."
     # ─────────────────────────────────────────────────────────────────────
+    # ── Register selector: inject voice register into system prompt ───────
+    _selected_register = None
+    if _SELECTOR_OK:
+        try:
+            _tension_score = (
+                0.65 if _ifr_result.get('tension', {}).get('tension_type') == 'open'
+                else 0.3
+            )
+            _coverage = min(1.0, _belief_count / 8.0)
+            _selected_register = _register_selector(
+                operation="chat",
+                topic=intent,
+                recent_history=list(_register_history),
+                belief_tension_score=_tension_score,
+                belief_coverage=_coverage,
+            )
+            _reg_prefix = _REGISTER_PREFIXES.get(_selected_register, "")
+            if _reg_prefix:
+                system = _reg_prefix + "\n\n" + system
+        except Exception:
+            pass
+    # ─────────────────────────────────────────────────────────────────────
     if not response or len(response.strip()) < 25:
         # Response too short — regenerate with explicit instruction
         response = _call_llm(system, prompt + "\n\nGive a complete answer of at least 2 sentences.")
@@ -1363,6 +1456,8 @@ def generate(query: str) -> str:
     _budget.record(response, intent)
     _last_intent = intent
     _history.append((query, response))
+    if _selected_register:
+        _register_history.append(_selected_register)
 
     # ── LIVE WORLD UPDATE ─────────────────────────────────────────
     try:
