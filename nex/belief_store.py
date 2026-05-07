@@ -92,7 +92,7 @@ def _belief_id(content):
 # ── SQLite setup ──────────────────────────────────────────────────────────────
 def get_db():
     os.makedirs(CONFIG_DIR, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, isolation_level=None)
     conn.row_factory = sqlite3.Row
     _ensure_schema(conn)
     return conn

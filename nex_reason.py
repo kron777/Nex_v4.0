@@ -50,7 +50,7 @@ _tfidf_cache: dict = {}   # key = belief_count, value = (vectorizer, matrix, bel
 
 # ── DB helpers ────────────────────────────────────────────────────
 def _db():
-    return sqlite3.connect(str(DB_PATH), timeout=10, check_same_thread=False)
+    return sqlite3.connect(str(DB_PATH), timeout=10, check_same_thread=False, isolation_level=None)
 
 
 # ── belief loading ────────────────────────────────────────────────

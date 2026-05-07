@@ -30,7 +30,7 @@ Wisdom principle:"""
 
 
 def _db():
-    db = sqlite3.connect(str(DB_PATH), timeout=5)
+    db = sqlite3.connect(str(DB_PATH), timeout=5, isolation_level=None)
     db.row_factory = sqlite3.Row
     return db
 

@@ -143,7 +143,7 @@ def _flag_residue_for_review(
     review their content for relevance.
     """
     try:
-        db = sqlite3.connect(str(DB_PATH), timeout=5)
+        db = sqlite3.connect(str(DB_PATH), timeout=5, isolation_level=None)
         db.execute("""
             CREATE TABLE IF NOT EXISTS residue_review (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,

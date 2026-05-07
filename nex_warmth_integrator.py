@@ -28,7 +28,7 @@ _tag_db = None
 def _get_tag_db():
     global _tag_db
     if _tag_db is None:
-        _tag_db = sqlite3.connect(str(DB_PATH))
+        _tag_db = sqlite3.connect(str(DB_PATH), isolation_level=None)
         _tag_db.row_factory = sqlite3.Row
         from nex_word_tag_schema import init_db
         init_db(_tag_db)
@@ -72,7 +72,19 @@ def extract_key_words(text: str, min_len=4, top_n=20) -> list:
 
 # ── PRE-PROCESSOR ─────────────────────────────────────────────
 
-def pre_process(question: str) -> dict:
+# DEPRECATED 2026-04-18 — short-circuit all warmth calls to no-ops
+def _warmth_noop_pre(question, *a, **kw):
+    return {
+        'depth_ceiling': 3, 'identity_vector': 0.0,
+        'search_budget': 'full', 'hot_words': [], 'cold_words': [],
+        'pre_loaded': {}, 'emotional_register': 0.0,
+        'word_count': 0, 'hot_ratio': 0.0,
+    }
+
+def _warmth_noop_cot(*a, **kw): return None
+def _warmth_noop_post(*a, **kw): return None
+
+def _original_pre_process(question: str) -> dict:
     """
     Run before generating response.
     Returns warmth context that guides response generation.
@@ -468,3 +480,9 @@ if __name__ == "__main__":
         print(json.dumps(ctx, indent=2))
         print()
         pipeline_report()
+
+
+# ── DEPRECATION ALIASES ── (2026-04-18)
+pre_process = _warmth_noop_pre
+cot_gate = _warmth_noop_cot
+post_process = _warmth_noop_post

@@ -30,7 +30,7 @@ def boost_activated_beliefs(belief_ids: list, amount: float = BOOST_AMOUNT):
     """Slightly increase confidence of beliefs that were used in a response."""
     if not belief_ids:
         return 0
-    db = sqlite3.connect(str(DB))
+    db = sqlite3.connect(str(DB), isolation_level=None)
     updated = 0
     for bid in belief_ids:
         try:
@@ -51,7 +51,7 @@ def penalise_contradiction_beliefs(belief_ids: list, amount: float = PENALTY_AMO
     """Reduce confidence of beliefs involved in contradictions."""
     if not belief_ids:
         return 0
-    db = sqlite3.connect(str(DB))
+    db = sqlite3.connect(str(DB), isolation_level=None)
     updated = 0
     for bid in belief_ids:
         try:
@@ -126,7 +126,7 @@ def record_exchange(
 
     # 4. Log to DB
     try:
-        db = sqlite3.connect(str(DB))
+        db = sqlite3.connect(str(DB), isolation_level=None)
         db.execute("""
             CREATE TABLE IF NOT EXISTS feedback_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -703,9 +703,11 @@ def generate(query: str) -> str:
         from nex_word_tag_schema import init_db
         from nex_warmth_integrator import pre_process, cot_gate
         _warmth_db = sqlite3.connect(
-            str(Path.home() / "Desktop/nex/nex.db"))
+            str(Path.home() / "Desktop/nex/nex.db"), isolation_level=None)
         _warmth_db.row_factory = sqlite3.Row
         init_db(_warmth_db)
+        _warmth_db.close()
+        _warmth_db = None
         _warmth_ctx = pre_process(query)
     except Exception as _we:
         pass
@@ -763,7 +765,7 @@ def generate(query: str) -> str:
                 if _kws & _nc_words:
                     _nc_topic = _t; break
             if _nc_topic:
-                _nc_db = _nc_sq.connect('/home/rr/Desktop/nex/nex.db', timeout=2)
+                _nc_db = _nc_sq.connect('/home/rr/Desktop/nex/nex.db', timeout=2, isolation_level=None)
                 _nc_row = _nc_db.execute(
                     "SELECT content FROM beliefs WHERE source='nex_core' "
                     "AND topic=? AND confidence=1.0 ORDER BY RANDOM() LIMIT 1",
@@ -1586,7 +1588,7 @@ def generate(query: str) -> str:
     try:
         import sqlite3 as _nr_sq, time as _nr_t
         if _activation_result is not None:
-            _nr_db = _nr_sq.connect('/media/rr/NEX/nex_core/nex.db', timeout=2)
+            _nr_db = _nr_sq.connect('/media/rr/NEX/nex_core/nex.db', timeout=2, isolation_level=None)
             _nr_session = str(hash(query + str(int(_nr_t.time() // 3600))))
             _nr_ts = _nr_t.time()
             _utterance_content = set()

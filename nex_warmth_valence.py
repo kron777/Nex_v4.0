@@ -41,7 +41,7 @@ MAX_CHAIN_DEPTH    = 3      # hops from source
 
 
 def _get_db():
-    db = sqlite3.connect(str(DB_PATH))
+    db = sqlite3.connect(str(DB_PATH), isolation_level=None)
     db.row_factory = sqlite3.Row
     return db
 

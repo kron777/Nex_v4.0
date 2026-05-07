@@ -80,7 +80,7 @@ def _expires() -> str:
 
 
 def _get_db():
-    db = sqlite3.connect(str(DB_PATH))
+    db = sqlite3.connect(str(DB_PATH), isolation_level=None)
     db.executescript(SCHEMA)
     db.commit()
     return db

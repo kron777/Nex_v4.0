@@ -12,7 +12,7 @@ from pathlib import Path
 DB = Path("/media/rr/NEX/nex_core/nex.db")
 
 def _db():
-    db = sqlite3.connect(str(DB), timeout=10)
+    db = sqlite3.connect(str(DB), timeout=10, isolation_level=None)
     db.row_factory = sqlite3.Row
     return db
 

@@ -42,7 +42,7 @@ MIN_SIMILARITY   = 0.35   # minimum cosine similarity to use
 
 
 def _get_db():
-    db = sqlite3.connect(str(DB_PATH))
+    db = sqlite3.connect(str(DB_PATH), isolation_level=None)
     db.row_factory = sqlite3.Row
     return db
 
