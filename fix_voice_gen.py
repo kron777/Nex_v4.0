@@ -55,6 +55,24 @@ from urllib.request import urlopen, Request
 from urllib.error import URLError
 
 sys.path.insert(0, os.path.expanduser("~/Desktop/nex"))
+sys.path.insert(0, "/media/rr/NEX/nex_core")
+from collections import deque
+
+_register_history: deque = deque(maxlen=6)
+try:
+    from nex_register_selector import register_selector as _register_selector
+    from nex_register_selector import REGISTER_PREFIXES as _REGISTER_PREFIXES
+    _SELECTOR_OK = True
+except Exception:
+    _SELECTOR_OK = False
+
+try:
+    from nex_focal_set import FocalSet as _FocalSet
+    _FOCAL_SET = _FocalSet(K=7, max_priority_delta=0.25, min_hold_ticks=5)
+except Exception:
+    _FOCAL_SET = None
+_focal_tick = 0
+_FOCAL_LOG_PATH = "/tmp/nex_focal.log"
 
 from nex.nex_cognition import (
     Context, pass1_parse, pass2_feel, pass3_retrieve,
@@ -151,6 +169,43 @@ Respond as NEX. 2-4 sentences. Speak naturally — do not echo or list the belie
     return prompt
 
 
+def _build_focal_candidates(ctx, current_tick):
+    """Convert ctx.beliefs [(text, score)] to FocalSet candidates.
+    Uses hash(text) as stable bid; retrieval score as tension signal."""
+    candidates = {}
+    for belief in (ctx.beliefs or []):
+        if isinstance(belief, (list, tuple)) and len(belief) >= 2:
+            text, score = str(belief[0]), float(belief[1])
+        else:
+            text, score = str(belief), 0.5
+        if not text.strip():
+            continue
+        bid = str(abs(hash(text)) % 10**9)
+        candidates[bid] = {
+            "last_activation_tick": current_tick,
+            "tension": score,
+            "edge_count": int(getattr(belief, "edge_count", 1)),
+        }
+    return candidates
+
+
+def _log_focal_event(event, focal_set):
+    entry = {
+        "tick": event.tick,
+        "mode": event.mode,
+        "added": sorted(event.added),
+        "removed": sorted(event.removed),
+        "blocked": sorted(event.blocked),
+        "focal_current": sorted(focal_set.get_focal_ids()),
+        "top_priorities": sorted(
+            focal_set.get_priorities().items(),
+            key=lambda x: -x[1]
+        )[:5],
+    }
+    with open(_FOCAL_LOG_PATH, "a") as f:
+        f.write(json.dumps(entry) + "\\n")
+
+
 # ── Main entry points ─────────────────────────────────────────────────────────
 
 def _generate(user_input: str) -> str:
@@ -171,20 +226,48 @@ def _generate(user_input: str) -> str:
     pass4_relate(ctx)
     pass5_position(ctx)
 
+    # ── Register selector ─────────────────────────────────────────────
+    _selected_register = None
+    if _SELECTOR_OK:
+        try:
+            _selected_register = _register_selector(
+                operation="voice_gen",
+                topic=q,
+                recent_history=list(_register_history),
+            )
+        except Exception:
+            pass
+    # ─────────────────────────────────────────────────────────────────
+
+    # ── FocalSet 2A: log attention state (no behavior change) ─────────
+    global _focal_tick
+    _focal_tick += 1
+    try:
+        candidates = _build_focal_candidates(ctx, _focal_tick)
+        event = _FOCAL_SET.update(candidates, _focal_tick)
+        _log_focal_event(event, _FOCAL_SET)
+    except Exception:
+        pass  # 2A must never break voice generation
+    # ──────────────────────────────────────────────────────────────────
+
     if not ctx.beliefs:
         pass6_compose(ctx)
+        if _selected_register:
+            _register_history.append(_selected_register)
         return ctx.response
 
     # Try local Llama
     prompt   = _build_prompt(ctx)
     response = _call_llama(NEX_SYSTEM, prompt)
 
-    if response:
-        return response
+    if not response:
+        # Fallback to belief assembly
+        pass6_compose(ctx)
+        response = ctx.response
 
-    # Fallback to belief assembly
-    pass6_compose(ctx)
-    return ctx.response
+    if _selected_register:
+        _register_history.append(_selected_register)
+    return response
 
 
 # All entry points call the same pipeline

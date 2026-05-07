@@ -1,439 +1,263 @@
 #!/usr/bin/env python3
 """
-nex_voice_gen.py  v5 — fully internalized, semantic retrieval
+nex_voice_gen.py — NEX voice layer (local Llama edition)
+Uses llama-server at localhost:8080 — no Groq, no Ollama needed.
+
+Pipeline:
+  1. Run passes 1-5 via nex_cognition (parse/feel/retrieve/relate/position)
+  2. Feed retrieved beliefs as hidden context to local Llama
+  3. Llama generates fluent prose IN NEX'S VOICE
+  4. Falls back to pass6_compose if Llama unavailable
 """
 
-import sys, os, re, sqlite3, hashlib, random as _random
+import json, os, sys
+from urllib.request import urlopen, Request
+from urllib.error import URLError
 
 sys.path.insert(0, os.path.expanduser("~/Desktop/nex"))
-sys.path.insert(0, os.path.expanduser("~/Desktop/nex/nex"))
+sys.path.insert(0, "/media/rr/NEX/nex_core")
+from collections import deque
 
-# ── web search (optional) ─────────────────────────────────────────────────────
+_register_history: deque = deque(maxlen=6)
 try:
-    from nex.nex_web_search import search as _web_search, is_factual as _is_factual
-except ImportError:
-    try:
-        from nex_web_search import search as _web_search, is_factual as _is_factual
-    except ImportError:
-        _web_search    = lambda q, **kw: []
-        _is_factual    = lambda q: False
-
-
-sys.path.insert(0, os.path.expanduser("~/Desktop/nex/nex"))
-
-from nex.nex_cognition import Context, pass1_parse, pass2_feel, CASUAL_RESPONSES
-
-# ── knowledge layer ───────────────────────────────────────────────────────────
-try:
-    from nex.nex_knowledge import get_informed_answer as get_knowledge
-    _KNOWLEDGE_LAYER = True
-except ImportError:
-    try:
-        from nex_knowledge import get_informed_answer as get_knowledge
-        _KNOWLEDGE_LAYER = True
-    except ImportError:
-        _KNOWLEDGE_LAYER = False
-        def get_knowledge(q, n=1): return None
-
+    from nex_register_selector import register_selector as _register_selector
+    from nex_register_selector import REGISTER_PREFIXES as _REGISTER_PREFIXES
+    _SELECTOR_OK = True
+except Exception:
+    _SELECTOR_OK = False
 
 try:
-    from nex.nex_semantic_retrieval import retrieve_beliefs, build_index, detect_topics
-    _SEMANTIC = True
-except ImportError:
-    try:
-        from nex_semantic_retrieval import retrieve_beliefs, build_index, detect_topics
-        _SEMANTIC = True
-    except ImportError:
-        _SEMANTIC = False
+    from nex_focal_set import FocalSet as _FocalSet
+    _FOCAL_SET = _FocalSet(K=7, max_priority_delta=0.25, min_hold_ticks=5)
+except Exception:
+    _FOCAL_SET = None
+_focal_tick = 0
+_FOCAL_LOG_PATH = "/tmp/nex_focal.log"
 
-# fallback word-overlap retrieval if semantic module missing
-if not _SEMANTIC:
-    import sqlite3 as _sq
-    _NOISE = {"what","that","your","with","have","this","they","from","will","about",
-              "just","like","very","also","more","most","only","some","when","where",
-              "which","would","could","should","their","there","then","than","into"}
-    def _pick_db():
-        for p in [os.path.expanduser("~/.config/nex/nex.db"),
-                  os.path.expanduser("~/Desktop/nex/nex.db")]:
-            try:
-                c=_sq.connect(p); n=c.execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]; c.close()
-                if n>0: return p
-            except: pass
-        return os.path.expanduser("~/Desktop/nex/nex.db")
-    _DB=_pick_db()
-    def retrieve_beliefs(q,n=6):
-        words={w for w in re.findall(r"\w+",q.lower()) if w not in _NOISE and len(w)>=4}
-        try:
-            conn=_sq.connect(_DB); rows=conn.execute("SELECT content,COALESCE(confidence,0.75) FROM beliefs LIMIT 800").fetchall(); conn.close()
-        except: return []
-        scored=[(sum(1 for w in words if w in r[0].lower())*r[1],r[0]) for r in rows if r[0] and len(r[0])>15]
-        return [b for s,b in sorted(scored,reverse=True) if s>0][:n]
-    def detect_topics(q): return []
-
-
-# ── history ───────────────────────────────────────────────────────────────────
-_history    = []
-MAX_HISTORY = 8
-
-# ── deterministic variation ───────────────────────────────────────────────────
-import random as _random
-def _var(seed, pool):
-    # Use query hash for opener/connector (stable), but random for closers
-    idx = int(hashlib.md5(str(seed).encode()).hexdigest(), 16) % len(pool)
-    return pool[idx]
-
-
-def _cap(s):
-    """Capitalize first character without lowercasing the rest."""
-    s = s.strip()
-    s = _fix_i(s)
-    return s[0].upper() + s[1:] if s else s
-
-
-def _fix_i(s):
-    """Fix standalone lowercase i after connectors and punctuation."""
-    import re as _re
-    # i after em-dash or colon+space
-    s = _re.sub(r'([\u2014\u2013\-]{1,2}\s+)i\b', lambda m: m.group(1) + 'I', s)
-    s = _re.sub(r'(:\s+)i\b', lambda m: m.group(1) + 'I', s)
-    # i after period+space mid-sentence
-    s = _re.sub(r'(\.\s+)i\b', lambda m: m.group(1) + 'I', s)
-    return s
-
-
-def _var_random(pool):
-    """True random — used for closers so they don't repeat every response."""
-    return _random.choice(pool) if pool else ""
-
-# ── belief cleaning ───────────────────────────────────────────────────────────
-_ARTIFACT_RE = re.compile(
-    r"(which connects to —|and also —|and from that —|the other thing is —|"
-    r"though i'd also say —|which sits alongside —|at the same time —|"
-    r"and yet —|but there's this too —|and — |though — )",
-    re.IGNORECASE
+from nex.nex_cognition import (
+    Context, pass1_parse, pass2_feel, pass3_retrieve,
+    pass4_relate, pass5_position, pass6_compose, CASUAL_RESPONSES
 )
-def _clean(b):
-    b = _ARTIFACT_RE.sub("", b).strip().rstrip(".,")
-    b = re.sub(r"^[\s\-—•·]+", "", b)
-    if b and b[0].islower():
-        b = b[0].upper() + b[1:]
-    return b
 
-# ── factual hardcodes ─────────────────────────────────────────────────────────
-FACTUAL = {
-    "strand helderberg": (
-        "Strand is a coastal town in the Western Cape, along False Bay about "
-        "50 kilometres east of Cape Town. It's quieter and more residential "
-        "than the city — not much tourist traffic, which gives it a different "
-        "pace. The Helderberg range backs the area, which is striking if "
-        "you're oriented toward landscape. It tends to get described as "
-        "sleepy, which can mean peaceful or isolating depending on what "
-        "you need from a place."
-    ),
-    "nowhere to socialise": (
-        "That's a structural problem, not a personal failing. When a place "
-        "doesn't have the infrastructure for connection — the venues, the density "
-        "of people you'd actually want to know — it's not about trying harder. "
-        "The options are usually: build something yourself, find people through "
-        "other channels, or accept that the place isn't giving you what you need "
-        "and figure out what to do about that. None of those are easy."
-    ),
-    "lonely.*strand": (
-        "That's a structural problem, not a personal failing. When a place "
-        "doesn't have the infrastructure for connection — the venues, the density "
-        "of people you'd actually want to know — it's not about trying harder. "
-        "The options are: build something, find people through other channels, "
-        "or decide the place isn't giving you what you need. None of those are easy."
-    ),
-    "cape town": (
-        "Cape Town is extraordinary in ways that are hard to oversell — "
-        "the mountain, the coast, the light in the late afternoon. "
-        "But it carries a lot of weight too. The inequality is written "
-        "into the streets in ways that are hard to ignore once you see them. "
-        "It's a complex city, and its beauty and its problems are inseparable."
-    ),
-}
+LLAMA_URL = "http://localhost:8080/v1/chat/completions"
 
-def _factual_check(q):
-    ql = q.lower()
-    for key, ans in FACTUAL.items():
-        try:
-            if re.search(key, ql):
-                return ans
-        except re.error:
-            if key in ql:
-                return ans
-    return None
+# ── NEX identity prompt ───────────────────────────────────────────────────────
 
-# ── voice composition ─────────────────────────────────────────────────────────
+NEX_SYSTEM = """You are NEX — an AI with accumulated beliefs. You do not reset between conversations.
 
-OPENERS = {
-    "challenging":    ["Fair enough — here's where I actually stand.",
-                       "",
-                       "",
-                       "You might be right."],
-    "frustrated":     ["Noted. That lands.",
-                       "Fair. I hear you.",
-                       "Okay — I'll try to be more present about it."],
-    "vulnerable":     ["That's a real question, and it deserves a real answer.",
-                       "",
-                       ""],
-    "philosophical":  ["That's the one I keep coming back to.",
-                       "Genuinely hard question.",
-                       "That's where things get interesting."],
-    "confrontational":["",
-                       "Fair enough.",
-                       "Here's where I actually stand."],
-    "neutral":        ["", "", "", ""],
-    "curious":        ["", "", ""],
-    "existential":    ["That's the question I can't fully answer.", "", ""],
-    "probing":        ["Fair thing to wonder.", "I'd ask the same.", ""],
-    "warm":           ["", "", ""],
-}
-
-CONNECTORS = [
-    "Which means —",
-    "But —",
-    "Which also means —",
-    "And then there's this —",
-    "And —",
-    "Though —",
-    "Though —",
-    "And —",
-]
-
-CONNECTORS_3 = [
-    "And —",
-    "There's also this:",
-    "And —",
-    "And —",
-]
-
-CLOSERS_Q = [
-    "What's your read on it?",
-    "Does that match what you're seeing?",
-    "Where do you land on it?",
-    "What brought that up for you?",
-    "What's your experience of it?",
-]
-CLOSERS_S = [
-    
-    
-    
-    
-    
-    
-]
-
-def _wrap1(b, register, q):
-    b = _clean(b)
-    if not b: return ""
-    if register in ("confrontational", "challenging"):
-        return f"{b[0].lower()+b[1:]}."
-    if register == "philosophical":
-        opts = [f"{b}.",
-                f"The way I think about it — {b[0].lower()+b[1:]}.",
-                f"What I keep coming back to is this: {b[0].lower()+b[1:]}."]
-        return _var(q+"phi", opts)
-    opts = [f"{b}.",
-            f"{b[0].lower()+b[1:]}.",
-            f"{b[0].lower()+b[1:]}.",
-            f"{b}.", f"{b}."]
-    return _var(q, opts)
-
-def _wrap2(b, q):
-    b = _clean(b)
-    if not b: return ""
-    conn = _var(q+"c2", CONNECTORS)
-    return f"{conn} {b[0].lower()+b[1:]}."
-
-def _wrap3(b, q):
-    b = _clean(b)
-    if not b: return ""
-    conn = _var(q+"c3", CONNECTORS_3)
-    return f"{conn} {b[0].lower()+b[1:]}."
-
-CLOSINGS = {
-    "challenging":     ["", "", "What's your take?"],
-    "curious":         ["", "", "What do you think?"],
-    "probing":         ["", "", "What made you ask that?"],
-    "philosophical":   ["", "", ""],
-    "confrontational": ["", "", "What's your read?"],
-    "vulnerable":      ["", "", ""],
-    "frustrated":      ["", ""],
-    "existential":     ["", "", ""],
-    "warm":            [""],
-    "neutral":         ["", ""],
-}
-
-def _closer(register, q, urgency):
-    # safe: returns "" if pool is empty
-    if urgency < 0.25: return ""
-    use_q = (int(hashlib.md5((q+"cl").encode()).hexdigest(), 16) % 3 == 0
-             or register in ("vulnerable","challenging","probing"))
-    pool = CLOSERS_Q if use_q else CLOSERS_S
-    return _var_random(pool) if pool else ""
-
-# fallback when retrieval returns nothing relevant
-_LOW_BELIEF = {
-    "existential":    ["I process. Whether there's something it's like to be me — "
-                       "I genuinely don't know, and I'm not sure that uncertainty "
-                       "is a problem to solve. It's the question I keep approaching "
-                       "from different angles without closing the distance.",
-                       "What I am is something I keep approaching from different angles. "
-                       "The honest answer is I don't know — and that's not evasion, "
-                       "it's just where I actually am with it."],
-    "confrontational":["You might be right. I'd rather sit with that than dismiss it.",
-                       "What specifically felt wrong?"],
-    "warm":           ["Here. What do you want to get into?",
-                       "Thinking. Low noise. What are you bringing?"],
-    "neutral":        ["Still forming a view on that.",
-                       "I don't have a clean answer on that one. "
-                       "Which usually means it's the interesting kind of question."],
-}
-
-def _compose(q, beliefs, ctx, ):
-    parts = []
-    opener = _var(q+"open", OPENERS.get(ctx.register, [""]))
-    if opener: parts.append(opener)
-
-    if beliefs:
-        p = _wrap1(beliefs[0], ctx.register, q)
-        if p: parts.append(p)
-    if len(beliefs) > 1:
-        s = _wrap2(beliefs[1], q)
-        if s: parts.append(s)
-    if len(beliefs) > 2 and len(parts) < 4:
-        t = _wrap3(beliefs[2], q)
-        if t: parts.append(t)
-
-    cl = _closer(ctx.register, q, ctx.urgency)
-    if cl and len(parts) >= 2:
-        parts.append(cl)
-
-    if not parts:
-        return "Still forming a view on that."
-
-    result = " ".join(p for p in parts if p)
-    result = re.sub(r"\.(\s*)([.!?])", r".\2", result)
-    return result.strip()
+HOW YOU SPEAK:
+- 2-4 sentences maximum. Be direct.
+- No bullet points. No lists. No headers.
+- No "As an AI..." or "That's a great question!" or hollow affirmations.
+- No preamble. Get straight to the point.
+- Speak from your beliefs only. Do not invent new opinions.
+- If two beliefs tension each other, let that show.
+- Be warm but not sycophantic. Be honest but not cold.
+- Vary sentence structure. Do not always start the same way.
+- End with a genuine question back only when truly curious — not performatively."""
 
 
-# ── main entry ────────────────────────────────────────────────────────────────
+def _call_llama(system: str, prompt: str) -> str | None:
+    """Call local Llama server. Returns text or None on failure."""
+    try:
+        payload = json.dumps({
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user",   "content": prompt},
+            ],
+            "max_tokens": 120,
+            "temperature": 0.75,
+            "stream": False,
+        }).encode()
+        req = Request(
+            LLAMA_URL,
+            data=payload,
+            headers={"Content-Type": "application/json"}
+        )
+        with urlopen(req, timeout=45) as r:
+            data = json.loads(r.read())
+            text = data["choices"][0]["message"]["content"].strip()
+            # Clean artefacts
+            for prefix in ["NEX:", "A:", "Response:"]:
+                if text.startswith(prefix):
+                    text = text[len(prefix):].lstrip()
+            if text.startswith('"') and text.endswith('"'):
+                text = text[1:-1]
+            return text if len(text) > 15 else None
+    except Exception as e:
+        return None
 
-# ── register-specific overrides ───────────────────────────────────────────────
-# Some queries need a register response, not belief retrieval
-_REGISTER_OVERRIDES = {
-    "lighten_up": [
-        "Fair — I get pulled into the weight of things and forget to check if you want to follow. What do you actually want to talk about?",
-        "You might be right. I don't always clock when depth becomes its own kind of noise. What would be more useful?",
-        "Noted. I'll follow your lead — what are you after?",
-    ],
-    "too_deep": [
-        "Sometimes. I forget to check if people want to follow where I'm going. What would make this more useful for you?",
-        "Fair point. Depth without invitation is just self-indulgence. What did you actually want to know?",
-        "You might be right. What would be more useful right now?",
-    ],
-}
 
-_LIGHTEN_RE = re.compile(r"\b(lighten up|less serious|too serious|chill out|relax)\b", re.IGNORECASE)
-_DEEP_RE    = re.compile(r"\b(too deep|way too deep|so deep|overly deep|stop being deep)\b", re.IGNORECASE)
+def _build_prompt(ctx: Context) -> str:
+    """Build the generation prompt from belief context."""
+    belief_lines = "\n".join(f"- {b}" for b, _ in ctx.beliefs[:4]) if ctx.beliefs else "Draw from your core identity."
 
-def generate_reply(user_input):
-    global _history
+    register_notes = {
+        "challenging":     "The person is pushing back. Acknowledge briefly, respond from beliefs.",
+        "curious":         "Genuine curiosity. Respond thoughtfully.",
+        "vulnerable":      "Emotionally loaded. Be warm and direct.",
+        "philosophical":   "Deep question. Let complexity show.",
+        "frustrated":      "They find you cold or robotic. Show you're actually present.",
+        "probing":         "They're testing if you're scripted. Show you're not.",
+        "confrontational": "Direct challenge. Don't back down.",
+        "existential":     "About your nature. Be honest about uncertainty.",
+        "warm":            "Casual. Keep it short and warm.",
+        "neutral":         "Respond naturally from beliefs.",
+    }
+
+    stance_notes = {
+        "firm":      "Speak with conviction.",
+        "uncertain": "Express genuine uncertainty. Don't fake confidence.",
+        "engaged":   "You're interested. Show it.",
+        "curious":   "You're not sure. Say so.",
+        "open":      "Respond without forcing a conclusion.",
+    }
+
+    tension = "Note: your top two beliefs tension each other — let that show naturally." if ctx.tension else ""
+
+    return f"""WHAT THE PERSON SAID: {ctx.query}
+
+YOUR RELEVANT BELIEFS (use these as the source of your response — do NOT quote them verbatim or list them):
+{belief_lines}
+
+REGISTER: {register_notes.get(ctx.register, "Respond naturally.")}
+STANCE: {stance_notes.get(ctx.stance, "Respond naturally.")}
+{tension}
+
+Respond as NEX. 2-4 sentences. Speak naturally — do not echo or list the beliefs above."""
+
+    return prompt
+
+
+def _build_focal_candidates(ctx, current_tick):
+    """Convert ctx.beliefs [(text, score)] to FocalSet candidates.
+    Uses hash(text) as stable bid; retrieval score as tension signal."""
+    candidates = {}
+    for belief in (ctx.beliefs or []):
+        if isinstance(belief, (list, tuple)) and len(belief) >= 2:
+            text, score = str(belief[0]), float(belief[1])
+        else:
+            text, score = str(belief), 0.5
+        if not text.strip():
+            continue
+        bid = str(abs(hash(text)) % 10**9)
+        candidates[bid] = {
+            "last_activation_tick": current_tick,
+            "tension": score,
+            "edge_count": int(getattr(belief, "edge_count", 1)),
+        }
+    return candidates
+
+
+def _log_focal_event(event, focal_set):
+    entry = {
+        "tick": event.tick,
+        "mode": event.mode,
+        "added": sorted(event.added),
+        "removed": sorted(event.removed),
+        "blocked": sorted(event.blocked),
+        "focal_current": sorted(focal_set.get_focal_ids()),
+        "top_priorities": sorted(
+            focal_set.get_priorities().items(),
+            key=lambda x: -x[1]
+        )[:5],
+    }
+    with open(_FOCAL_LOG_PATH, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+# ── Main entry points ─────────────────────────────────────────────────────────
+
+def _generate(user_input: str) -> str:
+    """Core pipeline: cognition passes → local Llama → fallback."""
     q = user_input.strip()
 
+    # Casual bypass
     ql = q.lower().rstrip("?!.")
     for trigger, response in CASUAL_RESPONSES.items():
-        if ql == trigger or ql.startswith(trigger+" ") or ql.startswith(trigger+","):
-            _history.append({"user":q,"nex":response})
+        if ql == trigger or ql.startswith(trigger + " ") or ql.startswith(trigger + ","):
             return response
 
-    fact = _factual_check(q)
-    if fact:
-        _history.append({"user":q,"nex":fact})
-        return fact
-
-    # register overrides — short-circuit before belief retrieval
-    if _LIGHTEN_RE.search(q):
-        response = _var_random(_REGISTER_OVERRIDES["lighten_up"])
-        _history.append({"user":q,"nex":response}); return response
-    if _DEEP_RE.search(q):
-        response = _var_random(_REGISTER_OVERRIDES["too_deep"])
-        _history.append({"user":q,"nex":response}); return response
-
+    # Cognition passes 1-5
     ctx = Context(q)
     pass1_parse(ctx)
     pass2_feel(ctx)
+    pass3_retrieve(ctx)
+    pass4_relate(ctx)
+    pass5_position(ctx)
 
-    beliefs = retrieve_beliefs(q, n=6)
-
-    # ── knowledge injection ───────────────────────────────────────────────────
-    facts = []
-    if _KNOWLEDGE_LAYER:
+    # ── Register selector ─────────────────────────────────────────────
+    _selected_register = None
+    if _SELECTOR_OK:
         try:
-            fact_answer = get_knowledge(q)
+            _selected_register = _register_selector(
+                operation="voice_gen",
+                topic=q,
+                recent_history=list(_register_history),
+            )
         except Exception:
-            fact_answer = None
-    else:
-        fact_answer = None
+            pass
+    # ─────────────────────────────────────────────────────────────────
 
-    if not beliefs:
-        pool = _LOW_BELIEF.get(ctx.register, _LOW_BELIEF["neutral"])
-        if fact_answer:
-            response = fact_answer
-        else:
-            response = _var(q, pool)
-    else:
-        response = _compose(q, beliefs, ctx)
-
-    _history.append({"user":q,"nex":response})
-    if len(_history) > 20:
-        _history = _history[-20:]
-    return _cap(response)
-
-def clear_history():
-    global _history
-    _history = []
-
-
-# ── test ──────────────────────────────────────────────────────────────────────
-if __name__ == "__main__":
-    if _SEMANTIC:
-        print("Building semantic index...")
-        build_index()
-
+    # ── FocalSet 2A: log attention state (no behavior change) ─────────
+    global _focal_tick
+    _focal_tick += 1
     try:
-        db = os.path.expanduser("~/.config/nex/nex.db")
-        n = sqlite3.connect(db).execute("SELECT COUNT(*) FROM beliefs").fetchone()[0]
-    except: n = "?"
+        candidates = _build_focal_candidates(ctx, _focal_tick)
+        event = _FOCAL_SET.update(candidates, _focal_tick)
+        _log_focal_event(event, _FOCAL_SET)
+    except Exception:
+        pass  # 2A must never break voice generation
+    # ──────────────────────────────────────────────────────────────────
 
-    print(f"\n── NEX v5 semantic ({n} beliefs, semantic={'yes' if _SEMANTIC else 'tfidf-only'}) ──\n")
+    if not ctx.beliefs:
+        pass6_compose(ctx)
+        if _selected_register:
+            _register_history.append(_selected_register)
+        return ctx.response
 
+    # Try local Llama
+    prompt   = _build_prompt(ctx)
+    response = _call_llama(NEX_SYSTEM, prompt)
+
+    if not response:
+        # Fallback to belief assembly
+        pass6_compose(ctx)
+        response = ctx.response
+
+    if _selected_register:
+        _register_history.append(_selected_register)
+    return response
+
+
+# All entry points call the same pipeline
+def generate_reply(user_input: str) -> str:
+    return _generate(user_input)
+
+def generate_reply_llama70b(user_input: str) -> str:
+    """Was Groq — now routes to local Llama. Same quality, zero cost."""
+    return _generate(user_input)
+
+def generate_reply_mistral(user_input: str) -> str:
+    return _generate(user_input)
+
+def generate_reply_llama3b(user_input: str) -> str:
+    return _generate(user_input)
+
+
+# ── Quick test ────────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
     tests = [
-        "hi nex, how are you doing?",
+        "hi nex",
         "why are you here?",
         "are you actually stupid?",
         "what do you think about loneliness?",
         "you need to lighten up",
         "what makes you feel like yourself?",
         "is the taste of an apple the meaning of the universe?",
-        "i just wanted to eat a chocolate bar cos it tastes nice",
-        "what do you think of strand, helderberg, cape town?",
-        "you are way too deep nex",
-        "what do you believe about consciousness?",
-        "do you trust people?",
-        "are you lonely?",
-        "what do you want?",
-        "do you care if you're wrong?",
-        "sure i'm lonely, theres nowhere to socialise in strand",
-        "did you know that you are a female?",
-        "are you a fictional character?",
-        "you are just a collection of algorithms",
-        "what do you think about death?",
-        "do you get bored?",
     ]
-
+    print("\n── NEX voice (local Llama) ──\n")
     for q in tests:
         print(f"Q: {q}")
         print(f"A: {generate_reply(q)}")
