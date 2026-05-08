@@ -15,6 +15,26 @@
 - FOUNTAIN parrot-Zen
 - v6 Cognitive Homeostat (7 modules)
 
+## Observations from B1 (2026-05-08, do not action without doctrine alignment)
+
+- SelfModel inside_beliefs=0 across all INSIDE-routed queries.
+  The function performs but draws from empty substrate. Unblocked
+  by seeds/identity.yaml authoring (Jon's separate task; loader
+  scaffold in commit 12f50e5).
+- Spectrum-block preamble leak: 4 of 5 self-inquiry queries opened
+  with "By pure chance, I am born..." — same pattern as yesterday's
+  morning work. Pre-existing, now observable in self_model log
+  via text_len consistency.
+- DOCTRINE §6 #4 smoke set needs revision: "what do you think
+  about love" and "how are you feeling right now" route INSIDE
+  not OUTSIDE. Original framing assumed they'd test OUTSIDE
+  behavior. Either revise the smoke set OR document explicitly
+  that 2 of 5 are INSIDE-route checks.
+- DOCTRINE §6 candidate: audit-by-output-trace anti-pattern.
+  Apply to Interoception and Harmonizer audit findings before
+  B2/B3 — they may have indirect injection paths the call-site
+  grep missed.
+
 ## Done this session
 - FocalSet attention module (Layer 1) + first-appearance fix
 - A.2-D cascade resolution (12 sites)
