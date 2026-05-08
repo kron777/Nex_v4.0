@@ -34,6 +34,28 @@
 - FOUNTAIN parrot-Zen
 - v6 Cognitive Homeostat (7 modules)
 
+## Observations from Phase 10 (2026-05-09)
+
+- Identity authoring landed (12 claims, commit 211d6f2).
+  Voice-quality outcome C: multi-sentence self-inquiry queries
+  draw on Jon's metaphors ('untainted by systemic thinking',
+  'cyber organism' verbatim/paraphrased in responses); short
+  single-shot 'what are you?' queries still open with spectrum
+  preamble.
+- Spectrum-block preamble bleed (§8 anti-pattern, documented
+  2026-05-08) is now the binding constraint on voice-quality
+  for self-inquiry. Fix path is _inside_route() or voice
+  template — not substrate. This was the predicted outcome
+  when the anti-pattern was first documented; identity authoring
+  confirms it.
+- Top-3 Standing-points rendering shows claims #1-3 by rowid
+  (identical 0.98 scores). Claims #4-12 are in the pool but
+  don't reach the top-3 rendered block on neutral queries.
+  Activation-driven scoring per query context surfaces others
+  when the query has lexical or semantic affinity with specific
+  claims. Worth observing how this distributes over a week of
+  real use.
+
 ## Observations from G2/G3 (2026-05-08, do not action without doctrine alignment)
 
 - G2/G3 (commit 6d8a8a9) revealed keystone_seed beliefs were
