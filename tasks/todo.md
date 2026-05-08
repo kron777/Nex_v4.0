@@ -34,6 +34,21 @@
 - FOUNTAIN parrot-Zen
 - v6 Cognitive Homeostat (7 modules)
 
+## Observations from C2 (2026-05-08, do not action without doctrine alignment)
+
+- 'tell me about emptiness' routed Conversational despite being
+  quasi-self-inquiry. EC misclassification pattern from yesterday
+  holds — EC underweights philosophical queries without explicit
+  self-keywords ('you', 'feel', 'I am'). C2 routed around this by
+  making OUTSIDE retrieval less monocultural; the underlying EC
+  classification issue is unchanged. Belongs with existing EC
+  misclassification observation from B1.
+- S6 'how are you feeling right now?' produced 'I don't oscillate
+  with feelings but observe them' — coherent self-statement but
+  in spectrum stoic register. Hard to attribute to C2 vs baseline
+  LLM behavior. identity.yaml authoring is the test that will
+  materially shift this.
+
 ## Observations from B1 (2026-05-08, do not action without doctrine alignment)
 
 - SelfModel inside_beliefs=0 across all INSIDE-routed queries.
