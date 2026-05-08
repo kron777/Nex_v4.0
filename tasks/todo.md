@@ -34,6 +34,15 @@
 - FOUNTAIN parrot-Zen
 - v6 Cognitive Homeostat (7 modules)
 
+## Observations from G2/G3 (2026-05-08, do not action without doctrine alignment)
+
+- G2/G3 (commit 6d8a8a9) revealed keystone_seed beliefs were
+  silently shadowed pre-fix. SelfModel was architecturally
+  designed to ground self-statements in keystone identity
+  content; the monoculture prevented this for an unknown duration.
+  Live impact on voice quality should be observable on next
+  self-inquiry queries even before identity.yaml authoring.
+
 ## Observations from C2 (2026-05-08, do not action without doctrine alignment)
 
 - 'tell me about emptiness' routed Conversational despite being
