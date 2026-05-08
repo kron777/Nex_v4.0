@@ -10,6 +10,25 @@
   when user prompt contains them)
 - nex5: fix [Alpha] metadata leak from belief tags bleeding into
   LLM output (separate pass from deflection rule)
+- Identity.yaml authoring (Jon — unblocks SelfModel inside_beliefs
+  gap; all INSIDE queries return inside_beliefs=0 until this lands)
+- EC misclassification: Philosophical queries classifying as
+  Conversational, membrane silently rescuing — visible in EC log as
+  'membrane_overrode: true' on most INSIDE queries. EC scoring
+  underweights philosophical self-inquiry without obvious self-keywords.
+- Spectrum-block preamble bleed: §8 anti-pattern documented; fix
+  path is _inside_route() or voice template; same preamble line on
+  every INSIDE query regardless of topic (text_len=306-307 in
+  self_model log confirms identical block each time).
+- _BAN_PHRASE_MID subject-flexibility: catch "that question doesn't
+  reach my graph" and "what they said doesn't fit my interior" —
+  pattern only matches 'this/that/the statement|sentence' currently;
+  extend to subject-flexible alternation.
+- Harmonizer active_paradox growth: count is cumulative since
+  startup (28 at Phase 9 close), only cleared via 16h resolution
+  path. If grows unbounded over weeks, revisit resolution cadence.
+  Self-limiting via 48h recency gate in format_for_prompt() but
+  worth tracking over next few sessions.
 
 ## Deferred / fresh-mind
 - FOUNTAIN parrot-Zen
