@@ -1,5 +1,27 @@
 # NEX Tasks
 
+## Done — Experiment A (2026-05-09)
+
+- Site 3 (self_model.py:250 'Inner conviction' line) disabled
+  per Feynmanian test of Claim 1a. Falsification: SURVIVES.
+  0/5 self-inquiry responses contained 'By pure chance' opener
+  post-fix (pre: 4-5/5). DOCTRINE §8 preamble bleed addressed
+  as code-level fix.
+
+- First response post-fix: 'I am the attending that moves
+  without requiring the world to yield to me.' Identity claim
+  sequence verbatim on 'describe yourself': claims #1, #2, #3
+  in order. The substrate work (C2, G2/G3, Phase 10 authoring)
+  now reaches voice cleanly.
+
+## Observations from Experiment A (2026-05-09)
+
+- Pre-existing OUTSIDE-route deflection on blocker and gibberish
+  queries: 'That doesn't reach my graph right now.' surfaced as
+  complete response when ban-phrase strip yielded empty result
+  and fell back to original. Separate from Experiment A scope.
+  Worth queuing as 'OUTSIDE deflection fallback' fix.
+
 ## Up next
 - Push unpushed commits to origin (both nex_core and nex5 are
   several commits ahead)
