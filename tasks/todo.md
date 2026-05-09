@@ -14,6 +14,25 @@
   in order. The substrate work (C2, G2/G3, Phase 10 authoring)
   now reaches voice cleanly.
 
+## Observations from C3 (2026-05-09)
+
+- C3 instrument committed (nex5 commit b804e42). Detection
+  logic verified by 4-case unit test.
+
+- Live-traffic finding: trigger query that produced deflection
+  yesterday ('I'd love to chat but it seems every time we talk
+  you say that doesn't reach my graph') now produces coherent
+  content. Likely cumulative effect of C2 + G2/G3 + Phase 10
+  + Experiment A + G5. Worth observing over the next week —
+  if /tmp/nex5_deflection.log accumulates zero events from
+  Path A, the original concern was already resolved by
+  substrate work.
+
+- The deflection seen on gibberish queries ('asdfqwerty zzzz')
+  remains, but that's Path B (gap gate, correct architectural
+  behavior). Phrasing is the only concern there — voice-template
+  work, separate session.
+
 ## Observations from Experiment A (2026-05-09)
 
 - Pre-existing OUTSIDE-route deflection on blocker and gibberish
