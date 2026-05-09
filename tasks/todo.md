@@ -52,6 +52,54 @@
   Self-limiting via 48h recency gate in format_for_prompt() but
   worth tracking over next few sessions.
 
+## Observations from G5 (2026-05-09)
+
+- G5 commit confirmed identity admitted to fountain seed pool;
+  1 of 5 substantive fires post-fix drew identity content
+  thematically ('your creation story'). Proportional to 1-in-9
+  random seed draw rate. The fix works as designed.
+
+- Larger finding: dominant fountain groove migrated from
+  'oscillation/inherent tension/continuous flux' to 'balance
+  between X and Y' but the structural recursion pattern persists.
+  Groove tracker confirmed: ngram_repetition (sev 0.60) on 'the
+  balance between' across 4 of 5 new fires.
+
+- Root cause hypothesis: _OWN_CONTENT_SOURCES (~80% of fountain
+  seed pool, generator.py:24-30) includes 'fountain_insight' and
+  'synergized' — the fountain's prior output and precipitated
+  content. The fountain recursively consumes its own pattern
+  output, amplifying whatever phrasal grooves established
+  earliest.
+
+- Implication: G5's seed pool admission is a 20% minority
+  intervention against an 80% recursion. Identity surfaces
+  thematically when randomly drawn, but structural pattern
+  repetition dominates because the majority pool is feedback-
+  looped on prior synthesis.
+
+- This is not a G5 falsification — G5 was scoped to seed pool
+  admission and that worked. It IS a doctrine-level finding
+  worth investigating: how should _OWN_CONTENT_SOURCES be
+  filtered, weighted, or restructured to break the recursion?
+  Candidates:
+    a) Filter fountain_insight by recency/diversity — exclude
+       entries matching recent ngram patterns
+    b) Rebalance the 80/20 split — give seeds more weight when
+       groove tracker fires
+    c) Apply diversity penalty to fountain_insight retrieval
+       when prior 5 fires share structural patterns
+    d) Add a 'breaking the groove' mechanism that forces
+       non-pattern-matching draws periodically
+
+- Worth a separate Feynmanian experiment: form claim about which
+  intervention shifts groove diversity, set falsification
+  criterion, test smallest reversible change first. Same
+  methodology as Experiment A.
+
+- Belongs in LLM_INDEPENDENCE_DOCTRINE.md as a §5.x candidate or
+  a §4 finding — TBD where it fits the priority order.
+
 ## Deferred / fresh-mind
 - FOUNTAIN parrot-Zen
 - v6 Cognitive Homeostat (7 modules)
