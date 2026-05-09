@@ -1,5 +1,59 @@
 # NEX Tasks
 
+## Experiment B — FALSIFIED (2026-05-09)
+
+### Result: production hang, reverted
+
+Experiment B D1 (conservative recency probe — trigram filter on
+`own` list in `_build_prompt()`) caused a silent production hang.
+Fountain blocked inside `_build_prompt()` indefinitely from
+~11:08 AM onwards. No exception logged; no timeout fired. Reverted
+at ~13:11 to G5 state (fc4f115). First post-revert fire:
+13:36:19, id=7519. Hang confirmed as D1 cause.
+
+### Mechanism
+
+D1 moved `_dynamic_reader.read("SELECT ... FROM fountain_events")`
+from its original position at line ~892 to an earlier position
+inside `_build_prompt()`. This exposed the read to write-lock
+states that the original position avoided. The `_dynamic_reader`
+reads `data/dynamic.db`; `_dynamic_writer` writes `fountain_events`
+into the same DB. Under the concurrent write state present at fire
+time, the reader call hung without raising an exception or
+triggering the 5-second busy timeout.
+
+### Diagnostics added and removed
+
+TEMP step=A/B/C/D diagnostics in `generate()` confirmed the block
+was inside `_build_prompt()` (step=D logged, nothing after). BP1-BP8
+diagnostics added inside `_build_prompt()` were not needed — revert
+preceded first fire of the new process. All diagnostics removed by
+revert.
+
+### What we learned
+
+- Future fountain interventions: do not reorder calls inside
+  `_build_prompt()`. The existing call sequence has implicit
+  assumptions about lock state that aren't documented. Any new
+  read from `dynamic.db` inside `_build_prompt()` should be
+  placed after the existing `_dynamic_reader` calls at line ~892,
+  not before.
+- The 80/20 recursion problem (fountain self-consuming its own
+  pattern output via `fountain_insight`/`synergized` in
+  `_OWN_CONTENT_SOURCES`) remains unsolved. D1's trigram filter
+  was the right shape of intervention but the wrong layer.
+  Next attempt needs different infrastructure — e.g., diversity
+  penalty at retrieval time in `_retrieve_context_beliefs()`,
+  or a post-retrieval filter that does not require an additional
+  DB read from `dynamic.db`. Separate session; form claim first.
+- AGI WATCH panel shows both DEEP_BELIEF (from `/api/beliefs/recent`,
+  tier ≥ 5 crystallizations) AND fountain fires — not fountain-only.
+  The 12:19:05 entry during Experiment B was a DEEP_BELIEF
+  (id=12724), not a fountain fire. HUD "fires: 0" was authoritative.
+- Groove severity (0.60 for both ngram_repetition and
+  template_repetition) unchanged since D1 restart because no new
+  fires accumulated. Still the baseline entering any follow-up work.
+
 ## Done — Experiment A (2026-05-09)
 
 - Site 3 (self_model.py:250 'Inner conviction' line) disabled
