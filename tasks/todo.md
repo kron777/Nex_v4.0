@@ -1,5 +1,56 @@
 # NEX Tasks
 
+## Done — Phase 15: Goal Manager (2026-05-09)
+
+- DOCTRINE §5 row 8 closed. GoalManager SentienceNode
+  port (Option A minimal). NEX now has explicit goal
+  representation.
+- goals table in conversations.db with optional problem_id
+  FK. _STALE_DAYS=60. Top-1 by priority for injection;
+  top-3 for state arbitration.
+- Always-on belief_text injection: goal is the organizing
+  target each turn, not gated by register or semantic match.
+- REST API at /api/goals (GET/POST/PATCH/complete/cancel).
+- 27/27 tests green. Full suite: 17 broken (matches
+  Phase 13 baseline; zero new regressions).
+- Cross-restart persistence confirmed.
+- Multi-goal priority arbitration correct.
+- Production validation (T1): seeded goal 'validate Phase
+  15 port' surfaced in NEX's response: 'I'm validating
+  Phase 15 port right now.' First-person intention
+  integration confirmed.
+- 8 of 10 §5 priority nodes ✓ DONE.
+- 2 absent: Metacognition (row 9), Generative Imagination
+  (row 10).
+
+## Q4 follow-up — initial goal seeding (Jon's action)
+
+After Phase 15 commit, seed 5 initial real goals via REST
+API. Topics:
+
+  G1: Implement remaining §5 nodes (Metacognition row 9,
+      Generative Imagination row 10)
+  G2: Solve 80/20 fountain recursion (D1 falsified;
+      target _retrieve_context_beliefs())
+  G3: Voice-template / OUTSIDE deflection rework
+      (queued from Experiment A)
+  G4: LLM independence (per LLM_INDEPENDENCE_DOCTRINE §5)
+  G5: ProblemMemory seeding (Phase 13 Q4 — make Phase 13
+      operationally real)
+
+Each via:
+  curl -X POST http://localhost:8765/api/goals \
+    -H "Content-Type: application/json" \
+    -d '{"title": "...", "description": "...", "priority": 0.X, "source": "user"}'
+
+Suggested priority ordering for cognitive impact next
+session: G2 (0.9) > G1 (0.8) > G3 (0.7) > G5 (0.6) > G4 (0.5).
+
+Combined with Phase 13's Q4 (5 problem topics), nex5's
+cognitive substrate becomes operationally real next session:
+NEX has open problems she's holding AND active goals she's
+pursuing. The two compound.
+
 ## Doctrine update — §5 expanded to 10 rows (2026-05-09)
 
 Three new rows added per Sentience 5.5 audit + §1 framing
