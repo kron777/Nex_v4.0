@@ -1,5 +1,28 @@
 # NEX Tasks
 
+## Doctrine update — §5 expanded to 10 rows (2026-05-09)
+
+Three new rows added per Sentience 5.5 audit + §1 framing
+reconciliation:
+  - Row 8: Goal Manager — explicit goal stack; priority
+    arbitration; state tracking
+  - Row 9: Metacognition — self-pattern observation;
+    anomaly detection over cognitive state
+  - Row 10: Generative Imagination — counterfactual
+    generation; novel association
+
+Ordering reflects dependency: Goals provide targets;
+Metacognition observes progress toward targets; Generative
+Imagination generates departures when metacognition flags
+stagnation.
+
+7 of 10 §5 priority nodes ✓ DONE
+3 absent: rows 8-10
+
+Next port to be selected from rows 8-10 in fresh session.
+Goal Manager (row 8) is the natural next port if dependency
+order is honored.
+
 ## Done — Phase 13: Sustained Attention (2026-05-09)
 
 - DOCTRINE §5 row 5 closed. ProblemMemory now SentienceNode-
