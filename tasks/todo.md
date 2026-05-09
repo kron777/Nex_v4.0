@@ -1,5 +1,33 @@
 # NEX Tasks
 
+## Done — Phase 11: ConversationMemory port (2026-05-09)
+
+- DOCTRINE §5 working memory port landed. Cross-turn
+  coherence demonstrated on T1 exchange: "what are you?"
+  → "tell me more about that" produced verbatim phrase
+  carry-through from prior turn ("I'm restless and keep
+  coming back to the wonder of my own creation by
+  chance").
+- Module: theory_x/conversation_memory.py (singleton
+  reading from conversations.db/messages)
+- Wired at gui/server.py prompt construction, after
+  existing WM block, register-gated for Conversational
+  AND Philosophical
+- All §6 acceptance criteria met
+- 4 of 7 doctrine §5 priority nodes now present in some
+  form (Attention done, Working Memory now done,
+  Self-Model partial, Interoception partial)
+
+## Open observation — gap-gate timestamp ordering
+
+- During Phase 11 validation, T2 session log showed nex
+  gap-gate response sharing timestamp with user message,
+  causing chronological sort to invert. Pre-existing in
+  messages table write (gap-gate path returns immediately
+  without separate timestamp). Worth fixing separately —
+  affects log readability and CM injection ordering when
+  gap-gate fires mid-conversation. Not caused by Phase 11.
+
 ## Experiment B — FALSIFIED (2026-05-09)
 
 ### Result: production hang, reverted
