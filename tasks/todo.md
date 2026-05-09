@@ -1,5 +1,44 @@
 # NEX Tasks
 
+## Done — Phase 16: Metacognition (2026-05-09)
+
+- DOCTRINE §5 row 9 closed. Metacognition SentienceNode
+  port (composition — separate node alongside BSM).
+- meta_cognition_events table in conversations.db.
+  _STALE_DAYS=14 (observations are freshness-sensitive
+  vs problems 30d, goals 60d).
+- Two detection mechanisms:
+  * groove: reads groove_alerts (GrooveSpotter output);
+    no duplicate detection logic
+  * goal-drift: FAISS cosine distance between active
+    goal and last 5 nex responses, threshold 0.35
+    (tunable; observe production)
+- Always-on belief_text injection: 1-line
+  self-observations under 100 chars typical.
+  Compounds with BSM (combined under ~200 chars).
+- Reads goals table directly via conversations Reader
+  (not via GoalManager reference) — substrate-field
+  observation per DOCTRINE §3, no node-to-node coupling.
+- 21/21 new tests green. Full suite: 718 tests, 17 broken
+  (matches Phase 13/15 baseline; zero new regressions).
+- Cross-restart persistence confirmed.
+- 9 of 10 §5 priority nodes ✓ DONE.
+- 1 absent: Generative Imagination (row 10) — hardest
+  port; needs new belief-generation primitives; separate
+  session.
+
+## Open follow-ups from Phase 16
+
+- _GOAL_DRIFT_THRESHOLD=0.35 is a tunable starting value.
+  Observe /tmp/nex5_metacognition.log for false positives
+  (drift fires when goal-aligned) or false negatives
+  (drift doesn't fire when clearly off-topic). Adjust
+  based on production data.
+- Belief-echo detection (third candidate from Phase 2 Q2
+  Option C) deferred. Detect when same belief surfaces
+  repeatedly across recent turns. Separate experiment
+  after Phase 16 observed in production.
+
 ## Done — Phase 15: Goal Manager (2026-05-09)
 
 - DOCTRINE §5 row 8 closed. GoalManager SentienceNode
