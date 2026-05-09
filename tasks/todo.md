@@ -1,5 +1,25 @@
 # NEX Tasks
 
+## Done — Phase 12: Executive Control EC-A (2026-05-09)
+
+- DOCTRINE §5 row 3 closed. EC now scores Philosophical
+  independently. 17 keywords + 4 patterns, threshold 0.12,
+  pattern weight 0.25, strict tie-breaking.
+- 5/5 HUD philosophical queries route Philosophical with
+  membrane_overrode=False (EC contributing, not membrane
+  rescue).
+- Boundary cases verified: 'meaning of GDP' stays
+  Conversational; 'consciousness in neural networks' not
+  Philosophical.
+- 30-query regression + 12-query new suite all green.
+- Smoke annotation updated: 'tell me about consciousness'
+  routes Philosophical, produces substrate-grounded output.
+- 3 of 7 doctrine §5 priority nodes now ✓ DONE
+  (Attention, Working Memory, Executive Control).
+- Open follow-up: Option B — CM-informed continuity bias
+  for zero-keyword philosophical follow-ups. Smaller
+  scope after EC-A. Separate experiment.
+
 ## Done — Phase 11: ConversationMemory port (2026-05-09)
 
 - DOCTRINE §5 working memory port landed. Cross-turn
