@@ -1,5 +1,63 @@
 # NEX Tasks
 
+## Done — Phase 17: Novel Association (2026-05-09)
+
+- DOCTRINE §5 row 10a closed. NovelAssociation SentienceNode
+  port. DOCTRINE §5 row 10 split: 10a (Novel Association,
+  ✓ DONE), 10b (Counterfactual Simulation, DEFERRED pending
+  §7 amendment).
+- novel_association_log table in beliefs.db. synthesises
+  edges in belief_edges (permanent graph topology).
+- Detection: cosine threshold 0.72 (normalized, ~0.44 raw);
+  per-branch sampling: small branches (< _BATCH_SIZE=10)
+  fully sampled, large branches capped. Phase 4 finding:
+  recency bias (ORDER BY id DESC cap=2) was excluding key
+  cross-domain connector belief — fixed pre-commit with
+  conditional cap.
+- 20 synthesises edges written on first scan (cognition_science
+  × emerging_tech, sim=0.7234). Annotation injection confirmed
+  injected=true on consecutive chat turns.
+- 30/30 new tests green. Full suite: 749 tests, 16F+1E
+  (matches Phase 16 baseline; zero new regressions).
+  Test fixes: embed_belief LRU cache cleared between test
+  envs (process-level cache, belief_id key, stale across
+  temp DB restarts). ID-based assertions throughout
+  (init_all() seeds koan beliefs with branch_id='systems').
+- All 10 §5 priority nodes now ✓ DONE or explicitly
+  DEFERRED with documented reason.
+
+## Open — Phase 18 investigation (queued, not tonight)
+
+- SUBSTRATE FINDING: T6 promotion path is effectively
+  single-branch (all T1-T6 beliefs are branch_id='systems'
+  or NULL; zero cross-branch pairs in T1-T6).
+  Cross-domain content lives exclusively in T7.
+  NovelAssociation synthesises edges connect T7 beliefs,
+  but BeliefRetriever filters WHERE tier <= 6 — so
+  cognitive-effect path through retrieval is incomplete.
+  Annotations and graph topology grow correctly; retrieval
+  visibility gap remains.
+  Q1: Why is T6 promotion path effectively single-branch?
+      Diagnose stage2_dynamic crystallization and
+      synergizer/fountain branch attribution.
+  Q2: Should retrieval filter change to include T7 for
+      synthesises-connected pairs specifically?
+  Q3: Is T7=impressions / T6+=insights distinction working
+      as designed, or is it a pipeline attribution issue?
+- 10b (Counterfactual Simulation) deferred pending §7
+  amendment conversation.
+
+## Open follow-ups from Phase 16
+
+- _GOAL_DRIFT_THRESHOLD=0.35 is a tunable starting value.
+  Observe /tmp/nex5_metacognition.log for false positives
+  (drift fires when goal-aligned) or false negatives
+  (drift doesn't fire when clearly off-topic). Adjust
+  based on production data.
+- Belief-echo detection deferred. Detect when same belief
+  surfaces repeatedly across recent turns. Separate
+  experiment after Phase 16 observed in production.
+
 ## Done — Phase 16: Metacognition (2026-05-09)
 
 - DOCTRINE §5 row 9 closed. Metacognition SentienceNode
