@@ -1,5 +1,44 @@
 # NEX Tasks
 
+## Done — Phase 13: Sustained Attention (2026-05-09)
+
+- DOCTRINE §5 row 5 closed. ProblemMemory now SentienceNode-
+  conformant: name, tick(), decay(), state().
+- find_matching upgraded to stopwords + ≥2 content-word
+  overlap. Prevents spurious matches on stopword-heavy
+  queries.
+- Auto-close stale problems > 30 days via decay().
+- Registered in theory_x registry inside build_state()
+  (per-build_state, not module-level, because writers/readers
+  are scope-local).
+- 25/25 tests green (9 pre-existing + 16 new). Net
+  test suite improvement: 31 broken → 17 broken.
+- Cross-restart persistence confirmed.
+- Live injection validated: 'consciousness emergence'
+  query matched seeded problem; PM log: matched=1.
+- 5 of 7 doctrine §5 priority nodes now ✓ DONE
+  (Attention, Working Memory, Executive Control,
+  Self-Model, Sustained Attention).
+- 1 partial (Interoception ✓ DONE per current doctrine).
+- 1 absent (Generative Imagination).
+
+## Q4 follow-up — initial problem seeding (Jon's action)
+
+After Phase 13 commit, seed initial open problems via REST
+API. Topics documented in todo:
+  - 80/20 fountain recursion (Experiment B falsified)
+  - Gap-gate timestamp ordering (Phase 11 observation)
+  - Voice-template / OUTSIDE deflection phrasing
+    (Experiment A queued)
+  - LLM independence broader question (LLM_INDEPENDENCE_
+    DOCTRINE §5 priority order)
+  - Generative Imagination port shape (next §5 absent node)
+
+Each becomes a row in open_problems via:
+  curl -X POST http://localhost:8765/api/problems \
+    -H "Content-Type: application/json" \
+    -d '{"title": "...", "description": "..."}'
+
 ## Done — Phase 12: Executive Control EC-A (2026-05-09)
 
 - DOCTRINE §5 row 3 closed. EC now scores Philosophical
